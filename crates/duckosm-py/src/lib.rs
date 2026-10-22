@@ -7,7 +7,7 @@
 //! dr.edge_id_hash(osm_id, source, target)
 //! ```
 
-use duckosm_build::{build as run_build, NetworkMode, NetworkOptions, Params};
+use duckosm_build::{build as run_build, config, NetworkMode, NetworkOptions, Params, Summary};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -82,6 +82,10 @@ fn build<'py>(
     let sum = py
         .detach(|| run_build(&pbf, &out, &p))
         .map_err(PyRuntimeError::new_err)?;
+    summary_dict(py, &sum)
+}
+
+fn summary_dict<'py>(py: Python<'py>, sum: &Summary) -> PyResult<Bound<'py, PyDict>> {
     let res = PyDict::new(py);
     let modes = PyDict::new(py);
     for m in &sum.modes {
@@ -108,6 +112,56 @@ fn build<'py>(
     Ok(res)
 }
 
+/// Build from a duckOSM config file (YAML): the input, the output, the modes and the options come from it.
+///
+/// `pbf_is_cut`: the PBF is already cut to the boundary of the config (this program does not cut).
+/// `strict`: a duckOSM step that this program does not have is an error. With `strict=False` the result
+/// lists it under "skipped". Keys that have no effect here are under "ignored".
+#[pyfunction]
+#[pyo3(signature = (path, *, formats = None, out = None, pbf_is_cut = false, strict = true))]
+fn build_from_config<'py>(
+    py: Python<'py>,
+    path: PathBuf,
+    formats: Option<Vec<String>>,
+    out: Option<PathBuf>,
+    pbf_is_cut: bool,
+    strict: bool,
+) -> PyResult<Bound<'py, PyDict>> {
+    let c = config::read(&path, pbf_is_cut, strict).map_err(PyValueError::new_err)?;
+    let mut p = c.params.clone();
+    set_formats(&mut p, formats)?;
+    let out = out.unwrap_or(c.out.clone());
+    let sum = py
+        .detach(|| run_build(&c.pbf, &out, &p))
+        .map_err(PyRuntimeError::new_err)?;
+    let res = summary_dict(py, &sum)?;
+    res.set_item("skipped", c.skipped.clone())?;
+    res.set_item("ignored", c.ignored.clone())?;
+    Ok(res)
+}
+
+fn set_formats(p: &mut Params, formats: Option<Vec<String>>) -> PyResult<()> {
+    let default = if cfg!(feature = "duckdb") {
+        vec!["duckdb".to_string(), "geoparquet".to_string()]
+    } else {
+        vec!["geoparquet".to_string()]
+    };
+    p.geoparquet = false;
+    p.duckdb = false;
+    for f in formats.unwrap_or(default) {
+        match f.as_str() {
+            "duckdb" => p.duckdb = true,
+            "geoparquet" => p.geoparquet = true,
+            _ => {
+                return Err(PyValueError::new_err(format!(
+                    "unknown format '{f}' (use 'duckdb' or 'geoparquet')"
+                )))
+            }
+        }
+    }
+    Ok(())
+}
+
 /// The stable edge id of duckOSM: `(hash(osm_id, source, target) >> 1)` with the DuckDB hash.
 #[pyfunction]
 fn edge_id_hash(osm_id: i64, source: i64, target: i64) -> i64 {
@@ -117,6 +171,7 @@ fn edge_id_hash(osm_id: i64, source: i64, target: i64) -> i64 {
 #[pymodule]
 fn duckosm_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(build, m)?)?;
+    m.add_function(wrap_pyfunction!(build_from_config, m)?)?;
     m.add_function(wrap_pyfunction!(edge_id_hash, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())

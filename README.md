@@ -32,6 +32,7 @@ Python. Section 11 of the design rates every part.
 # the program (a CLI)
 cargo build --release          # target/release/duckosm-rust
 duckosm-rust area.osm.pbf -o out --name area --modes driving,walking,cycling   # out/area.duckdb and out/*.parquet
+duckosm-rust --config area.yaml --allow-skipped                                # a duckOSM config file
 
 # the Python wheel
 pip install maturin && maturin build --release -m crates/duckosm-py/Cargo.toml    # then pip install the wheel
@@ -41,6 +42,7 @@ pip install maturin && maturin build --release -m crates/duckosm-py/Cargo.toml  
 import duckosm_rust as dr
 res = dr.build("area.osm.pbf", "out/", modes=["driving", "walking"], name="area")
 res["modes"]["driving"]["edges"]
+res = dr.build_from_config("area.yaml", strict=False)   # res["skipped"]: duckOSM steps that are not here
 dr.edge_id_hash(osm_id, source, target)
 ```
 

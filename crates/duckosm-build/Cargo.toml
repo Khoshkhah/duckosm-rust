@@ -14,3 +14,4 @@ snap = ["duckosm-parquet/snap"]
 duckosm-core = { path = "../duckosm-core" }
 duckosm-parquet = { path = "../duckosm-parquet" }
 duckosm-duckdb = { path = "../duckosm-duckdb", optional = true }
+yaml-rust2 = "0.13"

@@ -7,6 +7,8 @@ use duckosm_core::{pbf, sidewalks};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+pub mod config;
+
 pub use duckosm_core::filter::Mode as NetworkMode;
 pub use duckosm_core::network::Options as NetworkOptions;
 

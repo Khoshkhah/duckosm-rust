@@ -167,8 +167,8 @@ Common to both formats:
 ## 4. Python API
 
 Status 2026-10-21: the module `duckosm_rust` exists (crate `duckosm-py`, PyO3 and maturin, one `abi3` wheel for
-Python 3.9 and newer; the build runs without the GIL). It has `build(...)` and `edge_id_hash(...)`. The
-plan below is what it follows. Not done: `build_from_config`. A CI workflow for wheels on 5 systems is written but has never run (no remote); on
+Python 3.9 and newer; the build runs without the GIL). It has `build(...)`, `build_from_config(...)` and `edge_id_hash(...)`. The
+plan below is what it follows. A CI workflow for wheels on 5 systems is written but has never run (no remote); on
 this machine a `manylinux2014` wheel (glibc 2.17 or newer) was built with zig and tested. A plain build here has
 the tag `manylinux_2_35`. See [development.md](development.md).
 
@@ -186,7 +186,21 @@ dr.build_from_config("config/sample_monaco.yaml")   # a subset of the config key
 dr.edge_id_hash(osm_id, source, target)             # same name and result as duckosm.edge_id_hash
 ```
 
-- A config key that the Rust core does not support is an error. It is never ignored.
+- `build_from_config(path, formats=None, out=None, pbf_is_cut=False, strict=True)` and the CLI option
+  `--config` read a duckOSM config file (`duckosm-build/src/config.rs`). The keys and defaults are those of
+  duckOSM. Relative paths resolve against the current folder, as in duckOSM. The rules:
+  - A key that duckOSM does not know is an error (duckOSM only warns; it is almost always a typo).
+  - A key that changes the result and is not supported is an error: `source.type: duckdb`, `boundary.place`,
+    `bbox`, `h3_cell`, `buffer_m`, `clip.predicate` other than `intersects`, `clip.min_component_edges` > 1.
+  - The program does not cut the PBF. With a boundary, the caller must say that the PBF is already cut
+    (`pbf_is_cut=True`, CLI `--pbf-is-cut`). The component filter then runs as in duckOSM (with a boundary
+    and `build_graph` on).
+  - A duckOSM step that the program does not have (the edge graph, H3, turn restrictions, `features.*`, the
+    drawing order, the bus routes, the sea, the OSM fixes, the checks, the report, the maps, the multimodal
+    graph) is an error. Most of them are on by default in duckOSM, so a usual config needs `strict=False`
+    (CLI `--allow-skipped`). The result then lists them under `skipped`.
+  - Keys that only tune DuckDB in duckOSM (`memory_limit`, `threads`, `simplify_batches`, `clip_strategy`,
+    `h3_resolution`) have no effect. The result lists them under `ignored`.
 - Python duckOSM can later call this API with a config option `engine: rust`. Rust then builds the
   network and Python continues the other steps in DuckDB (section 12).
 
