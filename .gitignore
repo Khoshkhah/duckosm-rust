@@ -1,0 +1,7 @@
+/target/
+*.so
+*.pyd
+*.whl
+__pycache__/
+.venv/
+/tests/local/

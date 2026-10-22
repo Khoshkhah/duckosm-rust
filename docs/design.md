@@ -1,0 +1,301 @@
+# Design of duckosm-core
+
+Status: draft for review by Kaveh. Date: 2026-10-21. No Rust code exists yet.
+
+This document is based on duckOSM 0.6.0 (git tag `v0.6.0`) and DuckDB 1.5.3. The numbers come from
+`monaco.duckdb` in the duckOSM folder, built on 2026-10-21. The experiments in section 5 are in
+[tools/edge_id_reference.py](../tools/edge_id_reference.py).
+
+## 1. Goal and non-goals
+
+**Goal.** Read an `.osm.pbf` file and write the same road edges and nodes as duckOSM, with the same
+`edge_id` values, without Python or DuckDB. Give people three ways to run it:
+
+1. `pip install duckosm-core` (a wheel with a Python API).
+2. One CLI program.
+3. Later, a WebAssembly package for the browser.
+
+**Non-goals.**
+
+- A rewrite of duckOSM. Python duckOSM stays and keeps the exporters (GMNS, SUMO, MATSim, OpenDrive,
+  Lanelet2, railML), routing, elevation and the `features.*` base-map layers.
+- A new `edge_id`. Downstream projects (sensor-matching, SonoFlow, fetching-sweden-data) join on it.
+- A DuckDB output in version 0.1. DuckDB, GeoPandas and GDAL read GeoParquet.
+- Planet-scale builds. The target is a city, a region or a small country.
+
+## 2. What the Python pipeline does today
+
+`DuckOSM(config).run()` in `src/duckosm/importer.py` runs a list of SQL steps in one DuckDB file.
+The next table lists every step and says if the Rust core does it in version 0.1.
+The features of version 0.1 are complete after milestone M2. M3 releases them (section 9).
+
+| # | Python step (file) | Rust in 0.1 | Note |
+|---|---|---|---|
+| 1 | Cut the PBF to the boundary with `osmium` (`importer.py`) | No | The input is a PBF that is already cut. A built-in cut can come later. |
+| 2 | Read OSM into `raw.*` with `ST_READOSM` | Yes | Rust keeps only highway ways, the tags it needs, and the nodes of these ways. |
+| 3 | Load the boundary, boundary cells | No | |
+| 4 | Global junctions (`global_junctions.py`) | Yes | Needed in every mode: a footway that crosses a road cuts the road. |
+| 5 | Filter roads per mode (`road_filter.py`): class, access, one-way direction, lanes | Yes | Driving in M1. Walking and cycling in M2. |
+| 6 | OSM overrides (`osm_overrides.py`) | No | Open question 5. |
+| 7 | Cut ways into edges at junctions, join the node coordinates, compute `length_m` (`graph_simplifier.py`) | Yes | |
+| 8 | Split self-loops, same-direction parallel arcs and antiparallel pairs with virtual nodes (`node_id < 0`) | Yes | Needed for a unique `(osm_id, source, target)`. |
+| 9 | Merge same-road chains, write `edge_id_map` (`_contract_chains`) | Yes | M2. In Monaco driving this changes no edge. |
+| 10 | Add the reverse edge of each two-way way | Yes | |
+| 11 | Compute `edge_id` and `edge_ref`, check that they are unique, correct `length_m` of split edges | Yes | |
+| 12 | Move private roads, bus-only roads and pedestrian streets to `private_edges` | Yes | A filter on `access` and `highway`. |
+| 13 | Component filter (keep the largest connected part) | Yes | Python runs it only when a boundary is set. Rust uses an option. |
+| 14 | Connect dangling paths, mark dismount edges | No | The golden build switches `connectivity_rescue` off. |
+| 15 | Speeds, travel-time costs, walk and cycle type | No | The Rust output has the raw `maxspeed` text, not `maxspeed_kmh` and `cost_s`. |
+| 16 | Turn restrictions, edge graph | No | Turn restrictions need the OSM relations. |
+| 17 | H3 cells | No | |
+| 18 | Multimodal graph, `features.*`, bus routes, lane profile, drawing order | No | |
+| 19 | `edge_id_hash` macros, metadata, time zone, report, maps | No | Python keeps these. |
+
+### Facts that decide if the results are equal
+
+The Rust code must copy these behaviors of the Python code. Some look like faults, but a different
+choice gives different `edge_id` values.
+
+- A way tagged `oneway=-1` is turned round in the filter. After that, its first node is its source.
+- A road is cut at the global road junctions. A footway or path is cut at every junction of any mode.
+- A node without coordinates leaves the node list without an error (an inner join in SQL).
+- The split step chooses which arc to split with `length_m` before the length correction in step 11.
+  The tie-break is the text order of `refs::VARCHAR`, for example `'[10, 2]'` before `'[2, 3]'`.
+  This is text order, not number order.
+- The midpoint and the two halves of a split arc come from planar interpolation in degrees (GEOS),
+  not from the haversine length. Each half gets `length_m / 2`. Step 11 then corrects the halves
+  that are more than 0.1 % wrong.
+- `length_m` is a 32-bit float. It is the haversine sum of the vertex distances, with the Earth
+  diameter `12742000` m.
+- The reverse edge of a one-way way exists only for a bus lane. Its `access` is `bus`.
+- `edge_ref` numbers the forward edges of a way by the position of the source node in the original node list. A virtual node comes last.
+
+## 3. Architecture
+
+```mermaid
+flowchart LR
+    PBF[(".osm.pbf")] --> CORE
+    subgraph WS["Cargo workspace"]
+        CORE["duckosm-core (lib)<br/>read, filter, junctions, segment,<br/>split, merge, edge_id"]
+        PQ["duckosm-parquet (lib)<br/>GeoParquet writer"]
+        CLI["duckosm-cli (bin)"]
+        PY["duckosm-py<br/>PyO3 + maturin wheel"]
+        WASM["duckosm-wasm<br/>wasm-bindgen (M4)"]
+        CORE --> PQ
+        CORE --> CLI
+        PQ --> CLI
+        CORE --> PY
+        PQ --> PY
+        CORE --> WASM
+        PQ --> WASM
+    end
+    PQ -.-> OUT[("edges_driving.parquet<br/>nodes_driving.parquet<br/>layers.json")]
+```
+
+`duckosm-core` has no file or thread code. It reads from a `Read` value and sends rows to a `Sink`
+trait. This lets the same code run in the CLI, in Python and in the browser.
+
+### Crate choices
+
+| Need | Choice | Why |
+|---|---|---|
+| PBF reader | `osmpbf` 0.3.8 | It streams blocks, so memory stays small. `osmpbfreader` 0.19.1 loads whole objects into a map, which uses more memory. `osmpbf` must use a pure-Rust zlib for WebAssembly. M0 checks this. |
+| Geometry | Own functions, plus `geo-types` for the types | Rust needs only haversine, planar interpolation and substring on a line. These are about 100 lines. The `geo` crate adds a large dependency for little use. Tests compare the results with DuckDB. |
+| Parquet and Arrow | `parquet` and `arrow-array` (version 60, pinned) | These are the standard crates. They release a new major version often, so the project pins the exact version. |
+| GeoParquet | Own code on top of `parquet`: a WKB column and the `geo` metadata key | The format needs only a binary column and one JSON text. The `geoparquet` crate (0.9.0) is still 0.x and changes its API. Revisit it after 1.0. |
+| CLI | `clap` 4 | The usual choice. |
+| Python binding | `pyo3` 0.30 with `maturin` 1.15, `abi3` wheel | One wheel for each system works for all Python 3.9+ versions. The GIL is released during a build. |
+| WebAssembly | `wasm-bindgen` | M4. |
+| Parallel work | `rayon`, behind a feature | Off for WebAssembly. |
+| Hash | Own module, no dependency | About 25 lines. See section 5. |
+
+Versions come from crates.io on 2026-10-21.
+
+### Output
+
+For each mode the Rust core writes files with the same names as `duckosm export-gis -f geoparquet`:
+`edges_<mode>.parquet`, `nodes_<mode>.parquet` and `layers.json`. It also writes
+`private_edges_<mode>.parquet`. roadstyle, mapstyle and the GeoLibre plugin can then read the folder.
+
+- Edge columns: `edge_id`, `edge_ref`, `source`, `target`, `osm_id`, `highway`, `name`, `maxspeed`,
+  `oneway`, `lanes`, `surface`, `access`, `junction`, `layer`, `bridge`, `tunnel`, `service`, `refs`,
+  `is_reverse`, `length_m`, `geometry`. Types are the same as in the DuckDB `edges` table.
+  `geometry` is WKB in longitude and latitude (EPSG:4326).
+- Node columns: `node_id`, `geometry`.
+- The rows are sorted by `edge_id` and `node_id`. Two runs give identical files.
+- `refs` is a list column. `export-gis` does not write it. Rust writes it by default, because the
+  tests need it. The option `--no-refs` removes it.
+
+## 4. Python API plan
+
+The names follow duckOSM. The keyword names are the config keys of duckOSM.
+
+```python
+import duckosm_core as dc
+
+res = dc.build("monaco.osm.pbf", "out/", modes=["driving", "walking"],
+               merge_segments=True, global_junctions=True, keep_largest_component=True)
+res.counts          # {"driving": {"edges": 2765, "nodes": 1719}, ...}
+res.files           # {"edges_driving": "out/edges_driving.parquet", ...}
+
+dc.build_from_config("config/sample_monaco.yaml")   # a subset of the config keys
+dc.edge_id_hash(osm_id, source, target)             # same name and result as duckosm.edge_id_hash
+```
+
+- A config key that the Rust core does not support is an error. It is never ignored.
+- A later version can add `engine: rust` to duckOSM. Rust then builds the network and Python
+  continues the other steps in DuckDB. Open question 6.
+
+## 5. The edge_id problem
+
+duckOSM defines `edge_id = (hash(osm_id, source, target) >> 1)::BIGINT` with the DuckDB function
+`hash()`. A virtual node gets `-(hash(osm_id, source, refs::VARCHAR) >> 2)`. The docs say that `hash()`
+is internal to DuckDB and can change in a new **major** version. The code pins `duckdb>=1.0.0,<2`.
+
+### What the experiments show
+
+DuckDB 1.5.3, 2026-10-21. The script is `tools/edge_id_reference.py`.
+
+1. **`edge_id` is a pure function of three integers.** All 25,641 edges in Monaco (driving 2,765,
+   walking 11,752, cycling 11,124) match the formula. No `is_reverse` and no row number are in it.
+2. **The hash can be written in 25 lines.** For `BIGINT` arguments, DuckDB 1.5.3 computes
+   `mix(x)`, then combines the next argument with `((h ^ (h >> 32)) * C) ^ mix(y)`.
+   `mix` is `x ^= x >> 32; x *= C; x ^= x >> 32; x *= C; x ^= x >> 32` and
+   `C = 0xd6e8feb86659fd93`. A negative integer is read as an unsigned 64-bit value.
+   2,000 random triples, including the full 64-bit range, give no difference.
+3. **The text hash can be written too.** For a `VARCHAR`, the start value is
+   `0xe17a1465 ^ (length * 0xc6a4a7935bd1e995)`. For each 8-byte word (little endian, padded with
+   zero bytes): `h = (h ^ word) * C`. The end is `mix(h)`. 2,000 random strings, and the
+   virtual-node form `(osm_id, source, refs::VARCHAR)`, give no difference.
+4. **The result is not stable across DuckDB versions, even minor versions.**
+
+   | DuckDB | `hash(1,2,3)` as BIGINT | `hash('[1, 2, 3]')` |
+   |---|---|---|
+   | 1.0.0 and 1.1.3 | `17668602753667955124` | `10944178924961040006` |
+   | 1.2.2 | `12722334483198565868` | `10944178924961040006` |
+   | 1.3.2, 1.4.4, 1.5.3 | `12722334483198565868` | `12537961803640074991` |
+
+   The integer hash changed in 1.2. The text hash changed in 1.3. The pin `<2` does not protect the
+   ids. A database that was built with DuckDB 1.0 or 1.1 has other `edge_id` values than one built
+   with 1.5.3. Edges next to a virtual node also differ in 1.2.
+
+### Options
+
+| Option | What it means | For | Against |
+|---|---|---|---|
+| A. Freeze v2 as a written spec | Rust implements the hash above. The spec has test vectors from DuckDB. | Same ids as today, so no downstream change. No dependency on DuckDB. Easy to test. | The text hash has an odd rule that is only a copy of DuckDB. |
+| B. New v3 hash plus a crosswalk | Define a new id, for example XXH3 over fixed bytes. Write a table `v2 -> v3`. | A clean spec. | Every downstream project must re-match. Rust can write the crosswalk, but no gain today. |
+| C. Call DuckDB from Rust | Link the DuckDB library to compute `hash()`. | Always equal to DuckDB. | Breaks the aim: no DuckDB in the wheel, and it does not work in WebAssembly. |
+
+### Recommendation: option A
+
+1. Freeze v2 as the spec "DuckDB 1.3 and later". Keep the reference in `tools/edge_id_reference.py`
+   and write test vectors from DuckDB into `tests/vectors/edge_id.json`.
+2. Run a check against DuckDB 1.3, 1.4 and 1.5 in the test suite. A new DuckDB version that changes
+   `hash()` then fails a test and does not change ids in silence.
+3. Do not define v3 now. If DuckDB changes `hash()` again, duckOSM can keep v2 by calling the
+   reference function instead of `hash()`. A v3 is then a free choice and not an emergency.
+4. Ask Kaveh if any database that downstream projects use came from DuckDB older than 1.2.
+   Open question 3.
+
+## 6. Test plan
+
+Rule: a skipped test is not a pass.
+
+1. **Hash vectors.** The Rust `edge_id` module gives the values in `tests/vectors/edge_id.json`.
+   The script makes the file with DuckDB, so a change in DuckDB shows up as a diff.
+2. **Golden Monaco.** `tools/make_golden.py` runs duckOSM `v0.6.0` with DuckDB 1.5.3 on the cut
+   Monaco PBF (about 600 KB). The config is in `tests/golden/`: no `osm_overrides`,
+   `connectivity_rescue: false`, `merge_segments` on, and a second run with it off. The script
+   writes one Parquet file for each mode, sorted by `edge_id`. Three modes need about 1.5 MB
+   (measured with zstd compression), so the files go into the repository.
+3. **Compare every row.** The test joins the Rust output and the golden file on `edge_id`.
+   - The set of `edge_id` values must be equal. This is the first milestone.
+   - `source`, `target`, `osm_id`, `is_reverse`, `oneway`, `highway`, `name`, `lanes`, `surface`,
+     `access`, `junction`, `layer`, `bridge`, `tunnel`, `service`, `refs` and `edge_ref` must be equal.
+   - `length_m` must differ by less than 1e-6 of its value. The value is a 32-bit float.
+   - Every vertex must differ by less than 1e-9 degrees.
+   - On failure the test prints the first 20 different rows.
+4. **Small fixtures.** Hand-made OSM files test each rule of section 2: `oneway=-1`, a self-loop, a
+   figure-8 way, an antiparallel pair, a node without coordinates, a footway that crosses a road.
+   Each fixture has an expected result that is written down in the test.
+5. **Invariants on any input.** `(osm_id, source, target)` is unique. Each edge geometry starts and
+   ends at the coordinates of its nodes. The sum of the edge lengths of a way equals the length of the way, within 0.1 %.
+6. **Local goldens.** Larger areas (Tartu has virtual nodes, Estonia is a scale test) are built with
+   the same script. They stay in `tests/local/`, which git ignores.
+
+## 7. Memory and streaming
+
+Reference size: the Estonia database has 13,189,432 nodes, 1,633,374 ways, 186,080 driving ways and
+738,655 driving edges.
+
+The build reads the file in passes and never loads the whole file:
+
+1. **Pass 1, ways.** Keep the highway ways with only the tags the filters use. Store the node lists
+   in one array. Count how often each node is used. This gives the junctions.
+2. **Pass 2, nodes.** Keep the coordinates of the nodes that a kept way uses. Each entry is 16 bytes
+   (node id and two 32-bit coordinates). The upper bound for Estonia is 13.2 M x 16 B = 211 MB.
+3. **Pass 3, edges.** Cut, split and measure each way on its own. This part is parallel.
+   Only the merge step and the component filter need all edges together. 739 K edges fit in memory.
+4. **Write.** Write Parquet in row groups of 64 K rows.
+
+Targets for M3, to be measured: Estonia in less than 2 GB of memory. The time target is open until
+the first measurement.
+
+**WebAssembly.** One tab has at most 4 GB of address space, so the target is a city or a small
+region. The code uses one thread (no `rayon`) and no C libraries. The `parquet` crate must use a
+compression that is pure Rust. The input comes from a `Read` value over data from JavaScript.
+M0 includes a check that `duckosm-core` builds for `wasm32-unknown-unknown`.
+
+## 8. Risks
+
+| Risk | Effect | Action |
+|---|---|---|
+| DuckDB changes `hash()` again | New builds of Python duckOSM get other ids than Rust | Section 5: tests against DuckDB 1.3 to 1.5, and a spec. |
+| Float and geometry differences between Rust and GEOS | A near-tie in a split choice can change an `edge_id` | Same formulas, same 32-bit rounding, tests on Monaco and Tartu. |
+| Python duckOSM changes after v0.6.0 | Golden files go out of date | Pin the tag. Make the golden files again at each duckOSM release. A difference needs a decision about which side is right. |
+| Python order is not defined for ties (`row_number()` over equal keys) | A golden file can change between runs | Check in M0: build Monaco twice and compare. |
+| The two engines drift | Different results in time | Golden tests in both repositories. |
+| A crate does not build for WebAssembly | M4 slips | Spike in M0. |
+| `arrow` and `parquet` release a new major version often | Build breaks on update | Pin exact versions. Update on purpose. |
+| The name contains "duck" | The DuckDB trademark question for duckOSM can apply here too | Open question 2. |
+| One maintainer | Scope grows | Keep the non-goals. Ship M3 before M4. |
+
+## 9. Milestones
+
+| M | Content | Exit criteria |
+|---|---|---|
+| M0 | Setup. Install Rust (with approval). Cargo workspace. `edge_id` module. Golden and vector files. | `cargo test` passes the hash vectors. Golden files are in the repository. The Monaco double build gives equal files. `duckosm-core` and `osmpbf` build for `wasm32-unknown-unknown`, or the report says why not. |
+| M1 | Monaco, driving. All steps in the table that are marked "Yes", for driving, without `merge_segments`. | All 2,765 `edge_id` values equal the golden file. All columns in section 6 pass. GeoPandas and DuckDB read the output. |
+| M2 | Walking and cycling. `merge_segments` and `edge_id_map`. `lanes`. `private_edges`. | The same checks pass for the three modes, with `merge_segments` on and off. Tartu passes as a local golden. |
+| M3 | Release 0.1.0. CLI, Python wheel, config subset, `layers.json`. | A fresh virtual environment runs `pip install` and builds Monaco with an equal result. The CLI binary does the same. The Estonia numbers are written down. Wheels build for Linux, macOS and Windows. |
+| M4 | WebAssembly and large areas. | A browser page turns a city PBF into GeoParquet. Estonia meets the targets. Optional: speeds and costs, turn restrictions. |
+
+## 10. Open questions for Kaveh
+
+1. Can I install Rust on this machine with `rustup`? Steps are in [development.md](development.md).
+2. What are the final names: repository, PyPI package, Python module, CLI program? The name has
+   "duck" in it. The PyPI release of duckOSM waits for the DuckDB trademark reply, so this can apply.
+3. Do you accept option A for `edge_id` (section 5)? Are there databases, used by sensor-matching,
+   SonoFlow or fetching-sweden-data, that DuckDB older than 1.2 built? Their ids are different.
+4. Is version 0.1 without speeds, costs, turn restrictions, the edge graph and connector edges
+   acceptable? Which of these comes first after 0.1?
+5. OSM overrides change ways before the graph is built. Can the Rust core read the YAML file for the
+   way rules, or must Python apply them to the PBF first?
+6. Do you want `engine: rust` in duckOSM later (Rust for the network, Python for the rest), or two
+   separate tools?
+7. Cut to the boundary: keep `osmium` outside, or add a polygon cut to the Rust core in M3 or M4?
+8. Which PBF is the scale test? I use Estonia because its database exists, but the PBF is not in the
+   repository.
+
+## Terms
+
+- **PBF**: the binary file format of OpenStreetMap data.
+- **GeoParquet**: a column file format for geodata. It is a Parquet file with a `geo` metadata key.
+- **WKB**: well-known binary, a byte format for geometry.
+- **Crate**: a Rust package. A **workspace** holds more than one crate.
+- **Wheel**: a Python package file that you install with `pip`. **PyO3** and **maturin** build it.
+- **WebAssembly (WASM)**: code that runs in the browser.
+- **Virtual node**: a node with `node_id < 0` that duckOSM adds in the middle of an edge to make
+  `(osm_id, source, target)` unique.
+- **Golden file**: a saved output of the Python duckOSM. Tests compare the Rust output with it.
