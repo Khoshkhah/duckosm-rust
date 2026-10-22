@@ -66,34 +66,35 @@ cargo build --release --target wasm32-unknown-unknown -p duckosm-wasm
 wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/pkg target/wasm32-unknown-unknown/release/duckosm_wasm.wasm
 ```
 
-Open the demo page. A browser does not load a module from a `file://` address, so use a local
-server:
+Open the page (`index.html`, the plan is [browser.md](browser.md)). A browser does not load a module from
+a `file://` address, so use a local server:
 
 ```bash
 python3 -m http.server 8000 -d crates/duckosm-wasm/www
 ```
 
-Then go to `http://localhost:8000`, select a PBF file and click **Run**. The build runs on the main
-thread, so the tab does not respond until the build ends.
+Then go to `http://localhost:8000`, choose a PBF file, the modes and an optional OSM fixes file, and click
+**Build**. The build runs in a Web Worker (`build_worker.js`). The page loads the tables into duckdb-wasm, so you
+can run SQL on them. It gives the Parquet files and `load.sql`, which makes a `.duckdb` file from them
+(`duckdb area.duckdb < load.sql`). The page loads duckdb-wasm from cdn.jsdelivr.net.
 
-Run the same `.wasm` file in Node. The script writes the four Parquet files and prints the time and
-the WebAssembly memory:
-
-```bash
-node crates/duckosm-wasm/www/run_node.mjs tests/data/monaco.osm.pbf out-wasm
-```
-
-Compare with the native output. The test `bytes_equal_files` writes the native files with the path
-functions to `target/tmp/duckosm-wasm-native/`. Run it with `-p duckosm-wasm`, because a test of
-the full workspace turns on `zstd`:
+Run the same `.wasm` file in Node. The script writes all files and prints the time and the WebAssembly memory:
 
 ```bash
-cargo test --release -p duckosm-wasm
-cmp target/tmp/duckosm-wasm-native/edges_driving.parquet out-wasm/edges_driving.parquet
+node crates/duckosm-wasm/www/run_node.mjs tests/data/monaco.osm.pbf out-wasm driving,walking,cycling [fixes.yaml]
 ```
 
-Do the `cmp` step for the other three files too. `tools/compare_with_duckosm.py` also reads the
-`out-wasm` folder.
+Checks:
+
+```bash
+cargo test --release -p duckosm-wasm     # the browser build equals duckosm_build::build, byte for byte (Monaco, 3 modes, a fixes file)
+python crates/duckosm-wasm/www/e2e.py tests/data/monaco.osm.pbf out-page --fixes fixes.yaml   # the page in headless Chromium (Playwright)
+```
+
+The test writes its files to `target/tmp/duckosm-wasm-native/`. Compare them with `cmp` to the files of
+`run_node.mjs` or `e2e.py` (built with the same fixes text as the test). `e2e.py` also prints the times of
+the page as JSON.
+
 ## Check the OSM fixes
 
 `monaco.duckdb` of duckOSM is built with its OSM fixes file, so all driving rows must be equal:

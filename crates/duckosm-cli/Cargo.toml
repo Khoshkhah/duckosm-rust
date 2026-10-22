@@ -13,5 +13,5 @@ default = ["duckdb"]
 duckdb = ["duckosm-build/duckdb"]
 
 [dependencies]
-duckosm-build = { path = "../duckosm-build", default-features = false }
+duckosm-build = { path = "../duckosm-build", default-features = false, features = ["zstd"] }
 clap = { version = "4", features = ["derive"] }

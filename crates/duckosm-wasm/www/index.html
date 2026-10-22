@@ -3,59 +3,205 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>duckosm-rust in the browser</title>
+<title>duckOSM in the browser</title>
 <style>
-  body { font: 16px/1.5 system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
-  label, button { display: block; margin: 0.75rem 0; }
-  a { display: block; }
+  :root { --bg: #fff; --fg: #1d1d1f; --muted: #6e6e73; --line: #d2d2d7; --accent: #0a66c2; --code: #f5f5f7; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1c1c1e; --fg: #f2f2f7; --muted: #a1a1a6; --line: #3a3a3c; --accent: #4ea1ff; --code: #2c2c2e; }
+  }
+  body { font: 15px/1.5 system-ui, sans-serif; background: var(--bg); color: var(--fg); max-width: 60rem; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.5rem; margin-bottom: 0.2rem; }
+  h2 { font-size: 1.1rem; margin-top: 2rem; }
+  p.note { color: var(--muted); margin-top: 0; }
+  fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 1rem 0; }
+  label { margin-right: 1rem; }
+  button { font: inherit; padding: 0.35rem 0.9rem; border-radius: 6px; border: 1px solid var(--line); background: var(--code); color: var(--fg); cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  textarea { width: 100%; box-sizing: border-box; font: 13px/1.4 ui-monospace, monospace; background: var(--code); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 0.5rem; }
+  pre { background: var(--code); padding: 0.6rem; border-radius: 6px; overflow-x: auto; font-size: 13px; }
+  table { border-collapse: collapse; font-size: 13px; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--line); padding: 0.2rem 0.5rem; text-align: left; white-space: nowrap; }
+  a { color: var(--accent); }
+  #files a { display: inline-block; margin-right: 1rem; }
 </style>
 </head>
 <body>
-<h1>duckosm-rust</h1>
-<p>Select an <code>.osm.pbf</code> file. The road network is built in this tab: the file does not go to a server.</p>
-<label>PBF file <input id="pbf" type="file" accept=".pbf"></label>
-<label>Mode
-  <select id="mode"><option>driving</option><option>walking</option><option>cycling</option></select>
-</label>
-<button id="run" disabled>Run</button>
-<p id="status">Loading the WebAssembly module…</p>
-<div id="files"></div>
-<script type="module">
-import init, { build } from "./pkg/duckosm_wasm.js";
+<h1>duckOSM in the browser</h1>
+<p class="note">duckosm-rust builds duckOSM's tables in this tab, and DuckDB (duckdb-wasm) keeps them for SQL. No server, no Python. The file does not leave your computer.</p>
 
+<fieldset>
+  <legend>1. Input</legend>
+  <p><label>PBF file (already cut to the area) <input id="pbf" type="file" accept=".pbf"></label></p>
+  <p>Modes:
+    <label><input type="checkbox" name="mode" value="driving" checked> driving</label>
+    <label><input type="checkbox" name="mode" value="walking" checked> walking</label>
+    <label><input type="checkbox" name="mode" value="cycling" checked> cycling</label>
+  </p>
+  <p><label>OSM fixes file (optional, duckOSM <code>osm_overrides</code>) <input id="fixes" type="file" accept=".yaml,.yml"></label></p>
+  <button id="run">Build</button>
+</fieldset>
+
+<pre id="status">Loading DuckDB…</pre>
+
+<h2>2. SQL</h2>
+<textarea id="sql" rows="4">SELECT highway, count(*) AS edges, round(sum(length_m) / 1000, 1) AS km
+FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
+<p><button id="query" disabled>Run the query</button></p>
+<div id="result"></div>
+
+<h2>3. Download</h2>
+<p><button id="duckdb" disabled>Download load.sql</button> It makes a <code>.duckdb</code> file from the Parquet files below: <code>duckdb area.duckdb &lt; load.sql</code></p>
+<div id="files"></div>
+
+<script type="module">
+// duckdb-wasm with DuckDB 1.5: the GEOMETRY type of the tables is core from 1.5 (the version that the
+// geolibre-roadstyle spike tested, docs/browser.md).
+const DUCKDB = "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.33.1-dev57.0/+esm";
 const $ = (id) => document.getElementById(id);
-await init();
-$("status").textContent = "Ready.";
-$("run").disabled = false;
+const log = (s) => ($("status").textContent = s);
+const t0 = performance.now();
+const since = () => ((performance.now() - t0) / 1000).toFixed(2) + " s";
+let db = null, conn = null, tables = [];
+
+const MACROS = `
+CREATE OR REPLACE MACRO edge_id_hash(osm_id, source, target) AS
+    (hash(osm_id::BIGINT, source::BIGINT, target::BIGINT) >> 1)::BIGINT;
+CREATE OR REPLACE MACRO edge_id_hash_v1(osm_id, source, target, is_reverse) AS
+    (hash(osm_id::BIGINT, source::BIGINT, target::BIGINT, is_reverse::BOOLEAN) >> 1)::BIGINT;`;
+
+async function startDuckDB() {
+  const duckdb = await import(DUCKDB);
+  const bundle = await duckdb.selectBundle(duckdb.getJsDelivrBundles());
+  const url = URL.createObjectURL(new Blob([`importScripts("${bundle.mainWorker}");`], { type: "text/javascript" }));
+  const d = new duckdb.AsyncDuckDB(new duckdb.VoidLogger(), new Worker(url));
+  await d.instantiate(bundle.mainModule, bundle.pthreadWorker);
+  URL.revokeObjectURL(url);
+  return d;
+}
+
+const duckReady = startDuckDB().then(async (d) => {
+  db = d;
+  conn = await db.connect();
+  window.timings = { duckdbStart: (performance.now() - t0) / 1000 };
+  log(`DuckDB is ready (${since()}). Choose a PBF file and click Build.`);
+});
+duckReady.catch((e) => log("DuckDB did not start: " + e));
+
+const worker = new Worker(new URL("./build_worker.js", import.meta.url), { type: "module" });
+
+function buildInWorker(msg) {
+  return new Promise((resolve, reject) => {
+    worker.onmessage = ({ data }) => {
+      if (data.step) log(data.step + "…");
+      else if (data.error) reject(new Error(data.error));
+      else resolve(data);
+    };
+    worker.postMessage(msg, [msg.pbf]);
+  });
+}
+
+// the tables of a file name: edges_driving.parquet -> schema driving, table edges
+const split = (name) => {
+  const base = name.replace(/\.parquet$/, "");
+  const mode = base.slice(base.lastIndexOf("_") + 1);
+  return { mode, table: base.slice(0, base.lastIndexOf("_")) };
+};
 
 $("run").onclick = async () => {
   const file = $("pbf").files[0];
-  if (!file) { $("status").textContent = "Select a PBF file first."; return; }
-  const mode = $("mode").value;
+  if (!file) return log("Choose a PBF file first.");
+  const modes = [...document.querySelectorAll("input[name=mode]:checked")].map((c) => c.value).join(",");
+  if (!modes) return log("Choose at least one mode.");
+  $("run").disabled = $("query").disabled = $("duckdb").disabled = true;
   $("files").replaceChildren();
-  $("status").textContent = `Running on ${file.name}…`;
-  $("run").disabled = true;
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  // ponytail: runs on the main thread, so the tab does not respond until the build ends.
-  // Move build() to a Web Worker if large areas make this a problem.
-  await new Promise((r) => setTimeout(r, 50));
+  $("result").replaceChildren();
   try {
-    const t0 = performance.now();
-    const net = build(bytes, mode);
-    $("status").textContent = `${net.summary} in ${((performance.now() - t0) / 1000).toFixed(2)} s.`;
-    for (const name of ["edges", "nodes", "private_edges", "edge_id_map"]) {
+    const start = performance.now();
+    const fixes = $("fixes").files[0] ? await $("fixes").files[0].text() : null;
+    const pbf = await file.arrayBuffer();
+    const out = await buildInWorker({ pbf, modes, fixes });
+    const built = performance.now();
+    await duckReady;
+    log("loading the tables into DuckDB…");
+    tables = [];
+    for (const [name, bytes] of Object.entries(out.files)) {
+      const { mode, table } = split(name);
+      // registerFileBuffer moves the buffer into DuckDB's worker, so DuckDB gets a copy and the page keeps the
+      // file for its download link. ponytail: two copies of each file; read them back from DuckDB if memory matters.
+      await db.registerFileBuffer(name, bytes.slice());
+      await conn.query(`CREATE SCHEMA IF NOT EXISTS ${mode}`);
+      // the same SQL as the native .duckdb writer (crates/duckosm-duckdb)
+      const select = table === "nodes" ? "SELECT node_id, geometry AS geom" : "SELECT *";
+      await conn.query(`CREATE OR REPLACE TABLE ${mode}.${table} AS ${select} FROM read_parquet('${name}')`);
+      tables.push({ mode, table, name, bytes });
+    }
+    await conn.query(MACROS);
+    const ready = performance.now();
+    window.timings = Object.assign(window.timings || {}, {
+      wasmLoad: out.seconds.load, build: out.seconds.build,
+      tables: (ready - built) / 1000, clickToQuery: (ready - start) / 1000, memoryMiB: out.memoryMiB,
+    });
+    log(`${out.summary}\n\nbuild ${out.seconds.build.toFixed(2)} s (module load ${out.seconds.load.toFixed(2)} s), ` +
+        `tables into DuckDB ${((ready - built) / 1000).toFixed(2)} s, ready for SQL ${((ready - start) / 1000).toFixed(2)} s after the click, ` +
+        `${out.memoryMiB} MiB WebAssembly memory.`);
+    for (const t of tables) {
       const a = document.createElement("a");
-      const blob = new Blob(net[name], { type: "application/vnd.apache.parquet" });
-      a.href = URL.createObjectURL(blob);
-      a.download = `${name}_${mode}.parquet`;
-      a.textContent = `${a.download} (${blob.size.toLocaleString()} bytes)`;
+      a.href = URL.createObjectURL(new Blob([t.bytes], { type: "application/vnd.apache.parquet" }));
+      a.download = t.name;
+      a.textContent = `${t.name} (${t.bytes.length.toLocaleString()} bytes)`;
       $("files").append(a);
     }
-    net.free();
+    $("query").disabled = $("duckdb").disabled = false;
   } catch (e) {
-    $("status").textContent = `Error: ${e.message ?? e}`;
+    log("Error: " + e.message);
   }
   $("run").disabled = false;
+};
+
+const show = (v) => (v === null || v === undefined ? "NULL" : v instanceof Uint8Array ? `(${v.length} bytes)` : typeof v === "object" ? JSON.stringify(v, (k, x) => (typeof x === "bigint" ? x.toString() : x)) : String(v));
+
+$("query").onclick = async () => {
+  try {
+    const t = performance.now();
+    const res = await conn.query($("sql").value);
+    const cols = res.schema.fields.map((f) => f.name);
+    const rows = res.toArray().slice(0, 200);
+    const table = document.createElement("table");
+    table.innerHTML = "<tr>" + cols.map((c) => `<th>${c}</th>`).join("") + "</tr>";
+    for (const r of rows) {
+      const tr = document.createElement("tr");
+      for (const c of cols) {
+        const td = document.createElement("td");
+        td.textContent = show(r[c]);
+        tr.append(td);
+      }
+      table.append(tr);
+    }
+    const note = document.createElement("p");
+    note.className = "note";
+    note.textContent = `${res.numRows.toLocaleString()} rows in ${((performance.now() - t) / 1000).toFixed(3)} s` + (res.numRows > 200 ? " (the first 200 are shown)" : "");
+    $("result").replaceChildren(note, table);
+  } catch (e) {
+    $("result").textContent = "Error: " + e.message;
+  }
+};
+
+// duckdb-wasm (1.33.1-dev57.0) keeps a written .duckdb file locked after DETACH, so the page cannot give that
+// file. load.sql makes it from the Parquet files, with the SQL of the native .duckdb writer:
+// `duckdb area.duckdb < load.sql` in the folder of the files.
+$("duckdb").onclick = () => {
+  const lines = ["-- duckOSM tables from the Parquet files of duckosm-rust in the browser.",
+    "-- In the folder of the files: duckdb area.duckdb < load.sql"];
+  for (const m of [...new Set(tables.map((t) => t.mode))]) lines.push(`CREATE SCHEMA IF NOT EXISTS ${m};`);
+  for (const t of tables) {
+    const select = t.table === "nodes" ? "SELECT node_id, geometry AS geom" : "SELECT *";
+    lines.push(`CREATE TABLE ${t.mode}.${t.table} AS ${select} FROM read_parquet('${t.name}');`);
+  }
+  lines.push(MACROS.trim());
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([lines.join("\n") + "\n"], { type: "text/plain" }));
+  a.download = "load.sql";
+  a.click();
 };
 </script>
 </body>

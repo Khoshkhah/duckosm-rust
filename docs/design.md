@@ -18,7 +18,11 @@ Give people three ways to run it:
 
 1. `pip install duckosm-rust` (a wheel with a Python API).
 2. One CLI program.
-3. Later, a WebAssembly package for the browser.
+3. A WebAssembly package for the browser.
+
+**Decision (Kaveh, 2026-10-22): the main goal is item 3, that duckOSM runs in the browser.** The speed of the
+native program is a side effect. The plan is in [browser.md](browser.md): first the data without the map, then
+the map.
 
 The CLI and the wheel write a `.duckdb` file by default, with the same tables as duckOSM. They also
 write GeoParquet. This needs DuckDB inside the program (section 3). The WebAssembly package has no
@@ -374,11 +378,12 @@ modes (section 6, item 6d). The time target is open until
 the first measurement.
 
 **WebAssembly.** One tab has at most 4 GB of address space, so the target is a city or a small
-region. The crate `duckosm-wasm` has one function, `build(pbf_bytes, mode)`. It uses the default
-options of the CLI and returns the Parquet files of one mode: `edges`, `nodes`,
-`private_edges` and `edge_id_map`. The page `crates/duckosm-wasm/www/index.html` reads a PBF file
-in the tab, runs `build` and gives the files as downloads. [development.md](development.md) tells
-how to build and test it.
+region. Since 2026-10-22, the browser is the main goal ([browser.md](browser.md)). The crate
+`duckosm-wasm` has one function, `build(pbf_bytes, modes, fixes_yaml)`. It uses the default options
+of the CLI and returns all files of the chosen modes, with the edge graph and the turn restrictions,
+written by `duckosm_build::write_tables` (the native build uses the same function). The page
+`crates/duckosm-wasm/www/index.html` builds in a Web Worker, loads the tables into duckdb-wasm for SQL,
+and gives the files. [development.md](development.md) tells how to build and test it.
 
 - `pbf::read_ways_bytes` and `pbf::read_coords_bytes` read the PBF from a byte slice
   (`ElementReader::new(Cursor<&[u8]>)`). The path functions use the same parse code.
@@ -386,9 +391,9 @@ how to build and test it.
   `write_edge_id_map_to`). In WebAssembly, the writer sends the bytes to JavaScript in parts of
   1 MB, so the output files are not in the WebAssembly memory. Each file is an array of
   `Uint8Array` parts, and `new Blob(parts)` gives the file.
-- `build` runs the same steps as `duckosm_build::build`: the sidewalk rule for the walking mode,
-  and the columns from `EdgeCols::of(mode, options)`. It cannot call `build` itself, because `build`
-  uses files and a clock (`Instant::now` panics in `wasm32-unknown-unknown`).
+- `build` runs the same steps as `duckosm_build::build`: the OSM fixes (`parse_osm_fixes`, from the
+  text), the relations, the sidewalk rule, then each mode with `write_tables`. It cannot call `build`
+  itself, because `build` uses files and a clock (`Instant::now` panics in `wasm32-unknown-unknown`).
 - `osmpbf` uses `rayon`. In WebAssembly, `rayon` cannot start threads, so it does all the work on
   the current thread. It does not panic.
 - `parquet` uses Snappy. The `zstd` feature needs a C compiler for WebAssembly (`clang`), so it

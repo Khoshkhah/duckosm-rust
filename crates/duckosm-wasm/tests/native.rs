@@ -1,38 +1,57 @@
-//! The byte functions (PBF bytes in, Parquet bytes out) give the same files as the path functions.
-//! The test also writes the files to target/tmp/duckosm-wasm-native: compare them with `cmp` to
-//! the output of the WebAssembly build (run_node.mjs). Use `cargo test -p duckosm-wasm` for that,
-//! because a build of the full workspace turns on zstd.
+//! The browser build (`run`, PBF bytes in) writes the same files as the native build (`duckosm_build::build`),
+//! byte for byte: all three modes, the edge graph, the turn restrictions and an OSM fixes file. The files of
+//! `run` go to target/tmp/duckosm-wasm-native: compare them with `cmp` to the output of the WebAssembly
+//! module (`www/run_node.mjs`).
 
+use duckosm_build::{build, Params};
 use duckosm_core::filter::Mode;
-use duckosm_core::network::{build_network, Options};
-use duckosm_core::pbf;
-use duckosm_parquet::EdgeCols;
 use std::path::PathBuf;
 
+const FIXES: &str = "overrides:\n  - osm_id: 93137596\n    lanes: 1\n";
+
 #[test]
-fn bytes_equal_files() {
-    let pbf_path =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/data/monaco.osm.pbf");
-    let got = duckosm_wasm::run(&std::fs::read(&pbf_path).unwrap(), "driving", Vec::new).unwrap();
+fn browser_build_equals_native_build() {
+    let pbf = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/data/monaco.osm.pbf");
+    let tmp = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
+    let (native, wasm) = (tmp.join("duckosm-native"), tmp.join("duckosm-wasm-native"));
+    std::fs::create_dir_all(&wasm).unwrap();
+    let fixes = tmp.join("fixes.yaml");
+    std::fs::write(&fixes, FIXES).unwrap();
 
-    let ways = pbf::read_ways(&pbf_path).unwrap();
-    let coords = pbf::read_coords(&pbf_path, &ways).unwrap();
-    let net = build_network(&ways, &coords, Mode::Driving, &Options::default()).unwrap();
-    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("duckosm-wasm-native");
-    std::fs::create_dir_all(&dir).unwrap();
-    let p = |n: &str| dir.join(format!("{n}_driving.parquet"));
-    let oc = EdgeCols::of(Mode::Driving, &Options::default());
-    duckosm_parquet::write_edges(&p("edges"), &net.edges, oc).unwrap();
-    duckosm_parquet::write_edges(&p("private_edges"), &net.private_edges, oc).unwrap();
-    duckosm_parquet::write_nodes(&p("nodes"), &net.nodes).unwrap();
-    duckosm_parquet::write_edge_id_map(&p("edge_id_map"), &net.edge_id_map).unwrap();
+    let p = Params {
+        modes: vec![Mode::Driving, Mode::Walking, Mode::Cycling],
+        geoparquet: true,
+        duckdb: false,
+        osm_fixes: Some(fixes),
+        ..Params::default()
+    };
+    build(&pbf, &native, &p).unwrap();
+    let mut names = Vec::new();
+    duckosm_wasm::run(
+        &std::fs::read(&pbf).unwrap(),
+        "driving,walking,cycling",
+        Some(FIXES),
+        |name| {
+            names.push(name.to_string());
+            std::fs::File::create(wasm.join(name)).map_err(|e| e.to_string())
+        },
+    )
+    .unwrap();
 
-    assert!(!net.edges.is_empty());
-    assert_eq!(got.edges, std::fs::read(p("edges")).unwrap());
-    assert_eq!(
-        got.private_edges,
-        std::fs::read(p("private_edges")).unwrap()
-    );
-    assert_eq!(got.nodes, std::fs::read(p("nodes")).unwrap());
-    assert_eq!(got.edge_id_map, std::fs::read(p("edge_id_map")).unwrap());
+    let mut want: Vec<String> = std::fs::read_dir(&native)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
+        .filter(|n| n.ends_with(".parquet"))
+        .collect();
+    want.sort();
+    names.sort();
+    assert_eq!(names, want, "the same files");
+    assert!(names.contains(&"edge_graph_walking.parquet".to_string()));
+    for n in &names {
+        let (a, b) = (
+            std::fs::read(native.join(n)).unwrap(),
+            std::fs::read(wasm.join(n)).unwrap(),
+        );
+        assert!(a == b, "{n} differs");
+    }
 }

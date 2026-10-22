@@ -430,9 +430,15 @@ const TURN_TYPES: [&str; 10] = [
 /// Read a duckOSM OSM fixes file (`osm_overrides`). The rules for the arrows of the lanes and the
 /// `turn_restrictions` give extra turn restrictions (the driving mode).
 pub fn read_osm_fixes(path: &Path) -> Result<OsmFixes, String> {
-    let err = |e: String| format!("{}: {e}", path.display());
-    let text = std::fs::read_to_string(path).map_err(|e| err(e.to_string()))?;
-    let docs = YamlLoader::load_from_str(&text).map_err(|e| err(e.to_string()))?;
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    parse_osm_fixes(&text, &path.display().to_string())
+}
+
+/// The same as [`read_osm_fixes`], from the text of the file (the browser has no files). `label` names the
+/// file in the error messages.
+pub fn parse_osm_fixes(text: &str, label: &str) -> Result<OsmFixes, String> {
+    let err = |e: String| format!("{label}: {e}");
+    let docs = YamlLoader::load_from_str(text).map_err(|e| err(e.to_string()))?;
     let empty = yaml_rust2::yaml::Hash::new();
     let root = match docs.first() {
         None | Some(Yaml::Null) => &empty,

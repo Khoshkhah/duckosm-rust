@@ -51,7 +51,7 @@ dr.edge_id_hash(osm_id, source, target)
 ```
 
 ```bash
-# the browser page (WebAssembly): build it, then open http://localhost:8000 and select a PBF file
+# the browser page (WebAssembly): build it, then open http://localhost:8000, select a PBF file, build, and run SQL
 cargo build --release --target wasm32-unknown-unknown -p duckosm-wasm
 wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/pkg target/wasm32-unknown-unknown/release/duckosm_wasm.wasm
 python3 -m http.server 8000 -d crates/duckosm-wasm/www

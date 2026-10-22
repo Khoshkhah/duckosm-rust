@@ -5,13 +5,15 @@ edition.workspace = true
 license.workspace = true
 
 [features]
-default = ["duckdb"]
+default = ["duckdb", "zstd"]
 duckdb = ["dep:duckosm-duckdb"]
 # Pure-Rust compression for the GeoParquet files (WebAssembly); the default is zstd.
 snap = ["duckosm-parquet/snap"]
+# zstd is a C library: the browser build (duckosm-wasm) leaves it out and uses snap.
+zstd = ["duckosm-parquet/zstd"]
 
 [dependencies]
 duckosm-core = { path = "../duckosm-core" }
-duckosm-parquet = { path = "../duckosm-parquet" }
+duckosm-parquet = { path = "../duckosm-parquet", default-features = false }
 duckosm-duckdb = { path = "../duckosm-duckdb", optional = true }
 yaml-rust2 = "0.13"

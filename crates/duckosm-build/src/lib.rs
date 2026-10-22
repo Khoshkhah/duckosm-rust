@@ -3,8 +3,10 @@
 
 use duckosm_core::filter::Mode;
 use duckosm_core::fixes::OsmFixes;
+use duckosm_core::model::Network;
 use duckosm_core::network::{build_network_with, Options};
 use duckosm_core::{pbf, sidewalks};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -70,29 +72,38 @@ pub struct Summary {
     pub sidewalk_roads: usize,
 }
 
-/// The tables of the edge graph and the turn restrictions that the options made, as plain Parquet.
-fn write_graph(
-    dir: &Path,
-    mode: &str,
-    g: &duckosm_core::graph::Graph,
-    sum: &mut Summary,
+/// Write the tables of one mode, each to a writer from `file`, which gets the file name (for example
+/// `edges_driving.parquet`). The native build and the browser build (duckosm-wasm) both use it, so they
+/// write the same tables: the edges, the private edges, the nodes, `edge_id_map` (with `merge_segments`),
+/// and the tables of the edge graph and the turn restrictions that the options made.
+pub fn write_tables<W: Write + Send>(
+    net: &Network,
+    mode: Mode,
+    opts: &Options,
+    mut file: impl FnMut(&str) -> Result<W, String>,
 ) -> Result<(), String> {
-    let mut file = |table: &str| -> Result<std::fs::File, String> {
-        let path = dir.join(format!("{table}_{mode}.parquet"));
-        sum.files.push((format!("{table}_{mode}"), path.clone()));
-        std::fs::File::create(&path).map_err(|e| e.to_string())
-    };
+    use duckosm_parquet as pq;
+    let n = mode.name();
+    let mut out = |table: &str| file(&format!("{table}_{n}.parquet"));
+    let oc = pq::EdgeCols::of(mode, opts);
+    pq::write_edges_to(out("edges")?, &net.edges, oc)?;
+    pq::write_edges_to(out("private_edges")?, &net.private_edges, oc)?;
+    pq::write_nodes_to(out("nodes")?, &net.nodes)?;
+    if opts.merge_segments {
+        pq::write_edge_id_map_to(out("edge_id_map")?, &net.edge_id_map)?;
+    }
+    let g = &net.graph;
     if let Some(rows) = &g.edge_graph {
-        duckosm_parquet::write_edge_graph_to(file("edge_graph")?, rows)?;
+        pq::write_edge_graph_to(out("edge_graph")?, rows)?;
     }
     if let Some(rows) = &g.turn_permission {
-        duckosm_parquet::write_turn_permission_to(file("turn_permission")?, rows)?;
+        pq::write_turn_permission_to(out("turn_permission")?, rows)?;
     }
     if let Some(rows) = &g.turn_restrictions {
-        duckosm_parquet::write_turn_restrictions_to(file("turn_restrictions")?, rows)?;
+        pq::write_turn_restrictions_to(out("turn_restrictions")?, rows)?;
     }
     if let Some(rows) = &g.turn_path_restrictions {
-        duckosm_parquet::write_turn_path_restrictions_to(file("turn_path_restrictions")?, rows)?;
+        pq::write_turn_path_restrictions_to(out("turn_path_restrictions")?, rows)?;
     }
     Ok(())
 }
@@ -169,33 +180,13 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
     for mode in &p.modes {
         let net = build_network_with(&ways, &coords, *mode, &p.options, &fixes, &relations)?;
         lap(&format!("build {}", mode.name()), &mut sum);
-        let oc = duckosm_parquet::EdgeCols::of(*mode, &p.options);
         let n = mode.name();
-        let put = |kind: &str, file: String, sum: &mut Summary| {
-            sum.files.push((format!("{kind}_{n}"), pq_dir.join(file)));
-        };
-        duckosm_parquet::write_edges(&pq_dir.join(format!("edges_{n}.parquet")), &net.edges, oc)?;
-        put("edges", format!("edges_{n}.parquet"), &mut sum);
-        duckosm_parquet::write_edges(
-            &pq_dir.join(format!("private_edges_{n}.parquet")),
-            &net.private_edges,
-            oc,
-        )?;
-        put(
-            "private_edges",
-            format!("private_edges_{n}.parquet"),
-            &mut sum,
-        );
-        duckosm_parquet::write_nodes(&pq_dir.join(format!("nodes_{n}.parquet")), &net.nodes)?;
-        put("nodes", format!("nodes_{n}.parquet"), &mut sum);
-        if p.options.merge_segments {
-            duckosm_parquet::write_edge_id_map(
-                &pq_dir.join(format!("edge_id_map_{n}.parquet")),
-                &net.edge_id_map,
-            )?;
-            put("edge_id_map", format!("edge_id_map_{n}.parquet"), &mut sum);
-        }
-        write_graph(&pq_dir, n, &net.graph, &mut sum)?;
+        write_tables(&net, *mode, &p.options, |name| {
+            let path = pq_dir.join(name);
+            sum.files
+                .push((name.trim_end_matches(".parquet").to_string(), path.clone()));
+            std::fs::File::create(&path).map_err(|e| e.to_string())
+        })?;
         lap(&format!("write geoparquet {n}"), &mut sum);
         sum.modes.push(ModeSummary {
             mode: *mode,
