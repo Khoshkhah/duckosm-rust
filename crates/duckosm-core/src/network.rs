@@ -5,9 +5,10 @@
 use crate::filter::{self, Mode, ModeWay, NON_ROAD};
 use crate::geom::{self, Pt};
 use crate::hash;
-use crate::model::{Edge, MapRow, Network, Node, Stats, Way};
+use crate::model::{Attrs, Edge, MapRow, Network, Node, Stats, Way};
 use crate::util::{FxHashMap, FxHashSet};
 use rstar::{primitives::GeomWithData, RTree, AABB};
+use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 pub struct Options {
@@ -94,7 +95,7 @@ fn local_junctions(mw: &[ModeWay]) -> FxHashMap<i64, bool> {
     let mut cnt: FxHashMap<i64, (u32, u32, u32)> = FxHashMap::default();
     for w in mw {
         let n = w.refs.len();
-        let is_road = !NON_ROAD.contains(&w.highway.as_str());
+        let is_road = !NON_ROAD.contains(&w.attrs.highway.as_str());
         for (pos, &node) in w.refs.iter().enumerate() {
             let c = cnt.entry(node).or_default();
             c.0 += 1;
@@ -208,7 +209,7 @@ pub fn build_network(
     // 1. Cut every way into forward edges.
     let mut fwd: Vec<Fwd> = Vec::new();
     for (wi, w) in mw.iter().enumerate() {
-        let is_road = !NON_ROAD.contains(&w.highway.as_str());
+        let is_road = !NON_ROAD.contains(&w.attrs.highway.as_str());
         let split: Vec<bool> = w
             .refs
             .iter()
@@ -243,22 +244,14 @@ pub fn build_network(
             fwd.push(Fwd {
                 e: Edge {
                     edge_id: 0,
-                    edge_ref: None,
+                    seq: None,
                     source: refs[0],
                     target: refs[refs.len() - 1],
                     osm_id: w.id,
-                    highway: w.highway.clone(),
-                    name: w.name.clone(),
-                    maxspeed: w.maxspeed.clone(),
+                    attrs: w.attrs.clone(),
                     oneway: w.oneway,
                     lanes: w.lanes_fwd,
-                    surface: w.surface.clone(),
                     access: w.access.clone(),
-                    junction: w.junction.clone(),
-                    layer: w.layer.clone(),
-                    bridge: w.bridge.clone(),
-                    tunnel: w.tunnel.clone(),
-                    service: w.service.clone(),
                     refs,
                     geometry,
                     is_reverse: false,
@@ -377,7 +370,6 @@ pub fn build_network(
     fwd = split_arcs(fwd, &sel, &mut virtual_nodes);
 
     // 5. Add the reverse edge of each two-way way (and of a one-way way with a bus lane).
-    let mut edges: Vec<Edge> = Vec::with_capacity(fwd.len() * 2);
     let mut rev: Vec<Edge> = Vec::new();
     for f in &fwd {
         let w = &mw[f.way];
@@ -387,7 +379,7 @@ pub fn build_network(
             r.target = f.e.source;
             r.lanes = w.lanes_bwd;
             if f.e.oneway {
-                r.access = Some("bus".to_string());
+                r.access = Some(Arc::from("bus"));
             }
             r.refs.reverse();
             r.geometry.reverse();
@@ -400,6 +392,7 @@ pub fn build_network(
             rev.push(r);
         }
     }
+    let mut edges: Vec<Edge> = Vec::with_capacity(fwd.len() + rev.len());
     edges.extend(fwd.into_iter().map(|f| f.e));
     edges.extend(rev);
 
@@ -473,9 +466,10 @@ pub fn build_network(
     // 9. Move private roads, bus-only roads and pedestrian streets to private_edges.
     let moved = |e: &Edge| {
         matches!(e.access.as_deref(), Some("private") | Some("bus"))
-            || (mode == Mode::Driving && e.highway == "pedestrian")
+            || (mode == Mode::Driving && e.attrs.highway == "pedestrian")
     };
-    let (private_edges, mut edges): (Vec<Edge>, Vec<Edge>) = edges.into_iter().partition(moved);
+    // extract_if keeps the order, and it does not make a second copy of all edges like partition
+    let private_edges: Vec<Edge> = edges.extract_if(.., |e| moved(e)).collect();
     stats.private_edges = private_edges.len();
     if !private_edges.is_empty() {
         prune_nodes(&mut nodes, &edges);
@@ -571,8 +565,7 @@ fn set_refs_and_ids(edges: &mut [Edge], raw_refs: &FxHashMap<i64, &Vec<i64>>) {
                 .map_or(2_000_000_000usize, |p| p + 1);
             v.binary_search(&(pos, s, t)).ok().map(|i| i + 1)
         });
-        e.edge_ref =
-            seq.map(|q| format!("{}#{}{}", e.osm_id, q, if e.is_reverse { 'r' } else { 'f' }));
+        e.seq = seq.map(|q| q as u32);
     }
 }
 
@@ -628,18 +621,7 @@ fn keep_largest(edges: &mut Vec<Edge>) {
 
 /// Do two edges agree on every attribute that the merge compares?
 fn same_road(a: &Edge, b: &Edge) -> bool {
-    a.highway == b.highway
-        && a.name == b.name
-        && a.oneway == b.oneway
-        && a.maxspeed == b.maxspeed
-        && a.lanes == b.lanes
-        && a.surface == b.surface
-        && a.access == b.access
-        && a.junction == b.junction
-        && a.layer == b.layer
-        && a.bridge == b.bridge
-        && a.tunnel == b.tunnel
-        && a.service == b.service
+    a.attrs == b.attrs && a.oneway == b.oneway && a.lanes == b.lanes && a.access == b.access
 }
 
 struct Chain {
@@ -671,7 +653,7 @@ fn merge_chains(
         let rows: Vec<&(usize, bool)> = halves
             .iter()
             .filter(|(i, _)| {
-                !(NON_ROAD.contains(&fwd[*i].e.highway.as_str()) && gj.contains_key(&node))
+                !(NON_ROAD.contains(&fwd[*i].e.attrs.highway.as_str()) && gj.contains_key(&node))
             })
             .collect();
         if rows.len() != 2 {
@@ -834,7 +816,7 @@ fn connect_paths(
         let key = (e.source.min(e.target), e.source.max(e.target));
         und.entry(key)
             .and_modify(|v| v.0 = v.0.min(e.osm_id))
-            .or_insert((e.osm_id, e.highway.clone()));
+            .or_insert((e.osm_id, e.attrs.highway.clone()));
     }
     // 2. for each node: how many segments touch it, the other end and way of the last one, the smallest osm_id
     struct Touch {
@@ -942,31 +924,29 @@ fn connect_paths(
     let first_new = edges.len();
     for (a, b, hw, dist, osm_id) in &pairs {
         let seq = rank[osm_id].binary_search(&(*a.min(b), *a.max(b))).unwrap() + 1;
+        let attrs = Arc::new(Attrs {
+            highway: hw.clone(),
+            name: None,
+            maxspeed: None,
+            surface: None,
+            junction: None,
+            layer: None,
+            bridge: None,
+            tunnel: None,
+            service: None,
+        });
         for (s, t, is_reverse) in [(*a, *b, false), (*b, *a, true)] {
             let (ns, nt) = (nodes[by_id[&s]], nodes[by_id[&t]]);
             edges.push(Edge {
                 edge_id: hash::edge_id(*osm_id, s, t),
-                edge_ref: Some(format!(
-                    "{}#{}{}",
-                    osm_id,
-                    seq,
-                    if is_reverse { 'r' } else { 'f' }
-                )),
+                seq: Some(seq as u32),
                 source: s,
                 target: t,
                 osm_id: *osm_id,
-                highway: hw.clone(),
-                name: None,
-                maxspeed: None,
+                attrs: attrs.clone(),
                 oneway: false,
                 lanes: None,
-                surface: None,
                 access: None,
-                junction: None,
-                layer: None,
-                bridge: None,
-                tunnel: None,
-                service: None,
                 refs: vec![s, t],
                 geometry: vec![(ns.lon, ns.lat), (nt.lon, nt.lat)],
                 is_reverse,
@@ -988,7 +968,7 @@ fn connect_paths(
         let walked: Vec<(String, i64, i64)> = edges[..first_new]
             .iter()
             .filter(|e| e.osm_id > 0 && e.dismount == Some(true))
-            .map(|e| (e.highway.clone(), e.source, e.target))
+            .map(|e| (e.attrs.highway.clone(), e.source, e.target))
             .collect();
         let mut by_node: FxHashMap<(&str, i64), ()> = FxHashMap::default();
         for (hw, s, t) in &walked {
@@ -998,9 +978,10 @@ fn connect_paths(
         let flags: Vec<bool> = edges[first_new..]
             .iter()
             .map(|e| {
-                matches!(e.highway.as_str(), "footway" | "pedestrian")
-                    && (by_node.contains_key(&(e.highway.as_str(), e.source))
-                        || by_node.contains_key(&(e.highway.as_str(), e.target)))
+                let hw = e.attrs.highway.as_str();
+                matches!(hw, "footway" | "pedestrian")
+                    && (by_node.contains_key(&(hw, e.source))
+                        || by_node.contains_key(&(hw, e.target)))
             })
             .collect();
         for (e, f) in edges[first_new..].iter_mut().zip(flags) {

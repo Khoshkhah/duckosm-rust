@@ -64,6 +64,7 @@ fn ways_of<R: Read + Send>(reader: ElementReader<R>) -> Result<Vec<Way>, String>
         )
         .map_err(|e| e.to_string())?;
     ways.sort_by_key(|w| w.id);
+    ways.shrink_to_fit(); // the merge of the blocks leaves up to half of the capacity unused
     Ok(ways)
 }
 

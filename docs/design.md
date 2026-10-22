@@ -347,20 +347,49 @@ how to build and test it.
   is off.
 - The `.duckdb` writer has no WebAssembly build.
 
-Measured on 2026-10-21, driving, with the same `.wasm` file in Node 24 and in headless Chromium:
+Measured on 2026-10-21, driving, with the same `.wasm` file in Node 24 and in headless Chromium.
+The `.wasm` file is 4.2 MB (0.74 MB with gzip, `wasm-opt` is not used). The native program uses all
+threads.
 
-| Item | Result |
-|---|---|
-| Size of `duckosm_wasm_bg.wasm` | 4.2 MB (4,229,045 bytes), 0.74 MB with gzip. `wasm-opt` is not used. |
-| Monaco | 0.07 s in Node, 0.09 s in Chromium, 9 MiB of WebAssembly memory. The four files are equal, byte for byte, to the native output with Snappy. `tools/compare_with_duckosm.py` gives the same result as for the native output. |
-| Stockholm county, 70 MB PBF | 8.8 s, 1,144 MiB. |
-| Estonia, 121 MB PBF, 769,662 edges | 15.0 s in Node, 12.0 s in Chromium, 1,249 MiB. All rows of the four files are equal to the native output. The native program takes 16.2 s and 1.45 GB on one thread, and 7.6 s and 1.85 GB on all threads. |
-| Kentucky, 148 MB PBF | Fails at 3,560 MiB: an allocation fails, and the module stops with `RuntimeError: unreachable`. On one thread, the native program also needs 4.3 GB. |
+| Area | PBF | Node | Chromium | WebAssembly memory | Native program |
+|---|---|---|---|---|---|
+| Monaco | 0.6 MB | 0.07 s | 0.09 s | 8 MiB | 0.04 s |
+| Stockholm county | 70 MB | 5.7 s | Not measured | 710 MiB | Not measured |
+| Estonia, 769,662 edges | 121 MB | 9.5 s | 9.3 s | 994 MiB | 4.4 s, 1.30 GB |
+| Kentucky, 2,114,699 edges | 148 MB | 22.8 s | 22.9 s | 3,006 MiB | 14.4 s, 3.41 GB |
+| Iran | 219 MB | Fails at 3,420 MiB | Not measured | | Not measured |
 
-The largest area that fits is between Estonia and Kentucky. The memory of the core sets this limit,
-not WebAssembly. The speed is near the speed of the native program on one thread. The memory plan
-above is not done: each way keeps its own `Vec<i64>` of nodes, and the coordinates are in a hash
-map of two `f64` values for each node. When this plan is done, larger areas can fit.
+For Monaco, the four files are equal, byte for byte, to the native output with Snappy.
+`tools/compare_with_duckosm.py` gives the same result as for the native output. For Estonia and
+Kentucky, all rows of the four files are equal to the native output. Kentucky is the largest area
+that fits. When an area does not fit, an allocation fails, and the module stops with
+`RuntimeError: unreachable`.
+
+**Changes that make the memory smaller (2026-10-21).** A counting allocator measured the heap after
+each step of `build_network`, on Kentucky, on one thread. Before the changes, the peak was 5,665 MiB
+in step 9, and Kentucky did not fit in WebAssembly. After the changes, the peak is 2,695 MiB:
+
+- The edges of a way share one `Arc<Attrs>`, which holds the 9 columns that come from the way.
+  Before, each edge had its own copy of each string. An `Edge` now has 128 bytes, not 360 bytes,
+  and it does not allocate strings.
+- An edge keeps `seq`. The writer makes the `edge_ref` text (`Edge::edge_ref`).
+- Step 9 moves the private edges out with `Vec::extract_if`. Before, `partition` made a second copy
+  of all the edges.
+- Step 5 allocates the exact capacity, not twice the number of forward edges. `read_ways` releases
+  the capacity that the list of ways does not use.
+
+The output did not change. The native program is also faster: Kentucky takes 14.4 s, not 44.6 s,
+and Estonia takes 4.4 s, not 7.6 s.
+
+These items are now the largest (Kentucky, one thread):
+
+- The `Tags` of each way: 33 fields of 16 bytes (528 bytes), kept during the full build. This is
+  about 340 MB.
+- The coordinates: a hash map with 24 bytes for each node, plus the unused capacity. This is
+  400 MiB. The plan in this section (16 bytes for each node) is not done. A sorted `Vec` with a
+  binary search uses less memory, but each lookup is slower.
+- The hash maps of `global_junctions` and `local_junctions`. Each one adds about 560 MiB while it
+  is built.
 
 ## 8. Risks
 
@@ -385,7 +414,7 @@ map of two `f64` values for each node. When this plan is done, larger areas can 
 | M1 | Monaco, driving. All steps in the table that are marked "Yes", for driving, without `merge_segments`. | All 2,765 `edge_id` values equal the golden file. All columns in section 6 pass. GeoPandas and DuckDB read the output. **Reached in the spike** for the output in `.duckdb` and GeoParquet (see [benchmark.md](benchmark.md) for the speed; only Monaco is tested). |
 | M2 | Walking and cycling. `merge_segments` and `edge_id_map`. `lanes`. `private_edges`. | The same checks pass for the three modes, with `merge_segments` on and off. Tartu passes as a local golden (done, see section 6). **Reached on Monaco on 2026-10-21** for 9 variants (`merge_segments` and `global_junctions` on or off, the component filter, the sidewalk rule, the connector, the connector with the component filter, and everything on with speeds and the walk and cycle types) in the three modes: 0 rows differ in `edges`, `private_edges`, `nodes` and `edge_id_map`. Tartu is done (section 6). The sidewalk rule finds the same 46 roads in Monaco as duckOSM. It is a geometric rule with float thresholds, so a different area can give a difference at a threshold. It assumes right-hand traffic, as duckOSM does. |
 | M3 | Release 0.1.0. CLI, Python wheel, config subset, `layers.json`. | A fresh virtual environment runs `pip install` and builds Monaco with an equal result. The CLI binary does the same. The Estonia numbers are written down. Wheels build for Linux, macOS and Windows. |
-| M4 | WebAssembly and large areas. | A browser page turns a city PBF into GeoParquet. Estonia meets the targets. Optional: speeds and costs, turn restrictions. **Browser page done on 2026-10-21** (section 7): Monaco gives the same bytes as the native output, and Estonia fits in 1.25 GiB. Not done: the large-area targets of the native program. |
+| M4 | WebAssembly and large areas. | A browser page turns a city PBF into GeoParquet. Estonia meets the targets. Optional: speeds and costs, turn restrictions. **Browser page done on 2026-10-21** (section 7): Monaco gives the same bytes as the native output. Estonia uses 994 MiB, and Kentucky (148 MB PBF) fits in 3,006 MiB. Not done: the large-area targets of the native program. |
 
 ## 10. Long-term vision
 

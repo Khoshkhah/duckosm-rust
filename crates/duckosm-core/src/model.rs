@@ -1,6 +1,7 @@
 //! The data types: OSM ways as read, edges and nodes as written.
 
 use crate::geom::Pt;
+use std::sync::Arc;
 
 /// The OSM tags that the driving network step reads. Other tags are not kept.
 #[derive(Default, Clone, Debug)]
@@ -110,37 +111,55 @@ pub struct Way {
     pub tags: Tags,
 }
 
-/// A row of the `edges` table.
-#[derive(Clone, Debug)]
-pub struct Edge {
-    pub edge_id: i64,
-    pub edge_ref: Option<String>,
-    pub source: i64,
-    pub target: i64,
-    pub osm_id: i64,
+/// The columns of an edge that come from its way and are the same on all its edges.
+/// The edges of a way share one copy, so an edge does not keep its own strings.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Attrs {
     pub highway: String,
     pub name: Option<String>,
     pub maxspeed: Option<String>,
-    pub oneway: bool,
-    pub lanes: Option<i32>,
     pub surface: Option<String>,
-    pub access: Option<String>,
     pub junction: Option<String>,
     pub layer: Option<String>,
     pub bridge: Option<String>,
     pub tunnel: Option<String>,
     pub service: Option<String>,
+}
+
+/// A row of the `edges` table.
+#[derive(Clone, Debug)]
+pub struct Edge {
+    pub edge_id: i64,
+    /// The number in `edge_ref` (see [`Edge::edge_ref`]).
+    pub seq: Option<u32>,
+    pub source: i64,
+    pub target: i64,
+    pub osm_id: i64,
+    pub attrs: Arc<Attrs>,
+    pub oneway: bool,
+    pub lanes: Option<i32>,
+    /// Not in `attrs`: the reverse edge of a bus lane gets "bus".
+    pub access: Option<Arc<str>>,
     pub refs: Vec<i64>,
     pub geometry: Vec<Pt>,
     pub is_reverse: bool,
     pub length_m: f32,
     /// Cycling only: the edge is walked, not ridden. None in the other modes.
     pub dismount: Option<bool>,
-    /// With the speed step: the speed in km/h (the raw `maxspeed` is then None) and the travel time.
+    /// With the speed step: the speed in km/h (the writer then leaves out the raw `maxspeed`) and the
+    /// travel time.
     pub maxspeed_kmh: Option<f32>,
     pub cost_s: Option<f32>,
     /// Walking: `walk_type`. Cycling: `cycle_type`. None in the driving mode, or without the step.
     pub ftype: Option<&'static str>,
+}
+
+impl Edge {
+    /// `edge_ref`: `{osm_id}#{seq}{f|r}`.
+    pub fn edge_ref(&self) -> Option<String> {
+        let dir = if self.is_reverse { 'r' } else { 'f' };
+        self.seq.map(|q| format!("{}#{q}{dir}", self.osm_id))
+    }
 }
 
 /// A row of the `nodes` table. A virtual node has `node_id < 0`.

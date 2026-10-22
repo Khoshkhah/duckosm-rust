@@ -1,7 +1,8 @@
 //! The road filter of duckOSM (`RoadFilter`): which ways are in the network of a mode, and their
 //! one-way direction, access and lanes. Modes: driving, walking, cycling.
 
-use crate::model::{Tags, Way};
+use crate::model::{Attrs, Tags, Way};
+use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
@@ -189,18 +190,10 @@ pub struct ModeWay {
     pub id: i64,
     /// Node ids; reversed for a one-way way against its drawing (`oneway=-1`).
     pub refs: Vec<i64>,
-    pub highway: String,
-    pub name: Option<String>,
-    pub maxspeed: Option<String>,
+    pub attrs: Arc<Attrs>,
     pub oneway: bool,
     pub bus_back: bool,
-    pub surface: Option<String>,
-    pub service: Option<String>,
-    pub access: Option<String>,
-    pub junction: Option<String>,
-    pub layer: Option<String>,
-    pub bridge: Option<String>,
-    pub tunnel: Option<String>,
+    pub access: Option<Arc<str>>,
     pub lanes_fwd: Option<i32>,
     pub lanes_bwd: Option<i32>,
     pub dismount: Option<bool>,
@@ -583,18 +576,20 @@ pub fn mode_way(w: &Way, mode: Mode, cycling_dismount: bool) -> Option<ModeWay> 
     Some(ModeWay {
         id: w.id,
         refs,
-        highway,
-        name: s(&t.name),
-        maxspeed: s(&t.maxspeed),
+        attrs: Arc::new(Attrs {
+            highway,
+            name: s(&t.name),
+            maxspeed: s(&t.maxspeed),
+            surface: s(&t.surface),
+            junction: s(&t.junction),
+            layer: s(&t.layer),
+            bridge: s(&t.bridge),
+            tunnel: s(&t.tunnel),
+            service: s(&t.service),
+        }),
         oneway: dir != 0,
         bus_back: mode == Mode::Driving && dir != 0 && contra,
-        surface: s(&t.surface),
-        service: s(&t.service),
-        access,
-        junction: s(&t.junction),
-        layer: s(&t.layer),
-        bridge: s(&t.bridge),
-        tunnel: s(&t.tunnel),
+        access: access.map(Arc::from),
         lanes_fwd,
         lanes_bwd,
         dismount: if dismount { Some(pushes_bike(t)) } else { None },

@@ -72,7 +72,7 @@ pub fn driving_kmh(maxspeed: Option<&str>, highway: &str) -> f64 {
         .map_or(DEFAULT_DRIVING_KMH, |(_, v)| *v)
 }
 
-/// Set `maxspeed_kmh` (and `cost_s`) on the edges, and drop the raw `maxspeed`.
+/// Set `maxspeed_kmh` (and `cost_s`) on the edges. The writer then leaves out the raw `maxspeed`.
 pub fn apply(edges: &mut [Edge], mode: Mode, costs: bool) {
     for e in edges.iter_mut() {
         let kmh = match mode {
@@ -84,10 +84,9 @@ pub fn apply(edges: &mut [Edge], mode: Mode, costs: bool) {
                     CYCLING_KMH
                 }
             }
-            Mode::Driving => driving_kmh(e.maxspeed.as_deref(), &e.highway),
+            Mode::Driving => driving_kmh(e.attrs.maxspeed.as_deref(), &e.attrs.highway),
         } as f32;
         e.maxspeed_kmh = Some(kmh);
-        e.maxspeed = None;
         if costs {
             // (length_m / 1000.0) / maxspeed_kmh * 3600.0 in FLOAT; a speed that is not above 0 counts as 50
             let per_km = e.length_m / 1000.0f32;

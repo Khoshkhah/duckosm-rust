@@ -38,8 +38,8 @@ fn monaco_driving_equals_duckosm() {
             (e.is_reverse as i32).to_string(),
             e.lanes.map_or(String::new(), |l| l.to_string()),
             format!("{:08x}", e.length_m.to_bits()),
-            e.edge_ref.clone().unwrap_or_else(|| "None".into()),
-            e.highway.clone(),
+            e.edge_ref().unwrap_or_else(|| "None".into()),
+            e.attrs.highway.clone(),
         ];
         if got.iter().map(String::as_str).ne(f[1..].iter().copied()) {
             bad.push(format!(
