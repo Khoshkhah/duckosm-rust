@@ -16,9 +16,10 @@ struct Cli {
     /// The name of the area: the .duckdb file is <out>/<name>.duckdb.
     #[arg(long, default_value = "area")]
     name: String,
-    /// Output formats, comma separated: duckdb, geoparquet.
-    #[arg(short, long, default_value = "duckdb,geoparquet")]
-    format: String,
+    /// Output formats, comma separated: duckdb, geoparquet. Default: both, or geoparquet when this
+    /// program is built without the cargo feature "duckdb".
+    #[arg(short, long)]
+    format: Option<String>,
     /// Do not keep only the largest connected part of the graph.
     #[arg(long)]
     no_component_filter: bool,
@@ -36,7 +37,8 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let cli = Cli::parse();
-    let formats: Vec<&str> = cli.format.split(',').map(str::trim).collect();
+    let default_format = if cfg!(feature = "duckdb") { "duckdb,geoparquet" } else { "geoparquet" };
+    let formats: Vec<&str> = cli.format.as_deref().unwrap_or(default_format).split(',').map(str::trim).collect();
     for f in &formats {
         if !["duckdb", "geoparquet"].contains(f) {
             return Err(format!("unknown format '{f}' (use duckdb or geoparquet)"));

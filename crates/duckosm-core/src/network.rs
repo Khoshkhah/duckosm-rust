@@ -94,7 +94,7 @@ fn segments(split: &[bool]) -> Vec<Vec<usize>> {
         }
     }
     let mut groups: Vec<(Option<usize>, Vec<usize>)> = Vec::new();
-    let mut push =
+    let push =
         |key: Option<usize>, i: usize, groups: &mut Vec<(Option<usize>, Vec<usize>)>| match groups
             .iter_mut()
             .rev()

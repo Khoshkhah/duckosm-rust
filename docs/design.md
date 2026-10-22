@@ -296,7 +296,7 @@ M0 includes a check that `duckosm-core` builds for `wasm32-unknown-unknown`.
 | The two engines drift | Different results in time | Golden tests in both repositories. |
 | A crate does not build for WebAssembly | M4 slips | Spike in M0. |
 | `arrow` and `parquet` release a new major version often | Build breaks on update | Pin exact versions. Update on purpose. |
-| The bundled DuckDB makes the build slow and the program large | The first build takes several minutes. The release program is 56 MB (with DuckDB). | The `duckdb` feature is optional. A user who needs only GeoParquet builds without it. |
+| The bundled DuckDB makes the build slow and the program large | The first build takes several minutes. The release program is 56 MB with DuckDB and 7.9 MB without it. | The `duckdb` feature is optional. A user who needs only GeoParquet builds without it. |
 | The name contains "duck" | The DuckDB trademark question for duckOSM can apply here too | Open question 2. |
 | One maintainer | Scope grows | Keep the non-goals. Ship M3 before M4. |
 
