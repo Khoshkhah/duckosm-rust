@@ -150,3 +150,13 @@ in duckOSM use the same call for lists that can be large (for example `component
   benchmark because duckOSM runs it only with a boundary).
 - **The `.duckdb` writer** loads the GeoParquet files with DuckDB, so `--format duckdb` includes writing
   GeoParquet to disk first.
+
+## Update: the lane profile fix
+
+The fix is on the branch `fix-lane-profile-insert` of duckOSM (worktree `/home/kaveh/projects/duckOSM-lanefix`, one
+commit, not merged, not pushed). The step now writes its rows with one `INSERT ... SELECT` from a DataFrame.
+On a copy of `monaco.duckdb`: 10.9 s before and 0.21 s after (3,176 rows). `driving.lane_profile` has the same
+rows and the same column types (checked with `EXCEPT` in both directions). The tests `test_lane_profile.py`,
+`test_lane_routing.py`, `test_road_filter_lanes.py`, `test_gmns.py`, `test_levels.py` and `test_sumo.py` pass
+(88 tests). The other `executemany` calls on large lists (see above) are not changed.
+The benchmark tables on this page were measured before the fix.
