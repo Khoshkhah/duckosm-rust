@@ -211,9 +211,11 @@ DuckDB 1.5.3, 2026-10-21. The script is `tools/edge_id_reference.py`.
    |---|---|---|
    | 1.0.0 and 1.1.3 | `17668602753667955124` | `10944178924961040006` |
    | 1.2.2 | `12722334483198565868` | `10944178924961040006` |
-   | 1.3.2, 1.4.4, 1.5.3 | `12722334483198565868` | `12537961803640074991` |
+   | 1.3.2, 1.4.4, 1.5.3, 1.5.6 (bundled in the Rust program) | `12722334483198565868` | `12537961803640074991` |
+   | 2.0.0 (released 2026-10-21; needs Python 3.11 or newer) | `12722334483198565868` | `12537961803640074991` |
 
-   The integer hash changed in 1.2. The text hash changed in 1.3. The pin `<2` does not protect the
+   The integer hash changed in 1.2. The text hash changed in 1.3. DuckDB 2.0.0 has the same hash as
+   1.3 to 1.5 (4,000 random checks, tested on the day of its release). The pin `<2` does not protect the
    ids. A database that was built with DuckDB 1.0 or 1.1 has other `edge_id` values than one built
    with 1.5.3. Edges next to a virtual node also differ in 1.2.
 
