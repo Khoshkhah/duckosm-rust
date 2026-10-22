@@ -59,3 +59,24 @@ See [benchmark.md](benchmark.md). The runner is `bench/run_bench.py`.
 cargo build --release -p duckosm-core --target wasm32-unknown-unknown
 cargo build --release -p duckosm-parquet --no-default-features --features snap --target wasm32-unknown-unknown
 ```
+
+## Check another area (example: Tartu)
+
+Build the golden with duckOSM, then run duckosm-rust with the matching flags and compare. The yaml is
+`tests/data/golden_monaco_modes.yaml` with `pbf_path` changed and the switches set (see the comments in it).
+
+```bash
+# duckOSM (in an empty folder; the lane profile step is switched off because it is slow and not part of the network step)
+python bench/python_steps.py g.yaml --no-lane-profile
+# duckosm-rust, same settings as g.yaml (here: no boundary, merge on, global junctions on, sidewalk rule on, connector on)
+duckosm-rust area.osm.pbf -o out --format geoparquet --modes driving,walking,cycling --no-component-filter
+python tools/compare_with_duckosm.py golden.duckdb out walking
+```
+
+Switches: `--no-merge-segments`, `--no-global-junctions`, `--no-sidewalk-inference`, `--no-connect-paths`,
+`--no-component-filter`. With a boundary in the yaml (and `build_graph`, `process_speeds` and
+`calculate_costs` on, because duckOSM runs the component filter only then), give duckosm-rust the cut file
+that duckOSM wrote in `pbf/` and leave the component filter on.
+
+Known difference: a connector between two facing dangling ends can have the other direction label
+(`edge_ref`, `is_reverse`, sometimes `highway`). See section 6 of the design.

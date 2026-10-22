@@ -276,7 +276,20 @@ Rule: a skipped test is not a pass.
    Each fixture has an expected result that is written down in the test.
 5. **Invariants on any input.** `(osm_id, source, target)` is unique. Each edge geometry starts and
    ends at the coordinates of its nodes. The sum of the edge lengths of a way equals the length of the way, within 0.1 %.
-6. **Local goldens.** Larger areas (Tartu has virtual nodes, Estonia is a scale test) are built with
+6a. **Tartu (done, 2026-10-21).** The cut file `pbf/tartu.smart.b433d09b44.osm.pbf` of duckOSM (3 MB, 273,651
+   nodes, 45,619 ways), all three modes, three variants. Python builds with `bench/python_steps.py` and the
+   config `tests/data/golden_monaco_modes.yaml` (the commands are in [development.md](development.md)).
+
+   | Variant | Settings | Result |
+   |---|---|---|
+   | t1 | `merge_segments`, `global_junctions`, sidewalk rule and connector on; no boundary | Same edges, private edges and nodes in all modes (driving 28,611 edges; walking 60,978; cycling 59,795). 26 connector rows differ only in `edge_ref`, `is_reverse` or `highway` (the order issue in 3c). |
+   | t2 | as t1, with the Tartu boundary (component filter) | The same, with 28,340, 60,412 and 59,176 edges. 18 connector rows differ in the labels. |
+   | t3 | `global_junctions` off, `merge_segments` on, no sidewalk rule, no connector | Every row equal in all columns, and `edge_id_map` equal (1,045, 2,952 and 2,842 rows). |
+
+   The sidewalk rule finds 104 roads in Tartu. This test is not in `cargo test`: the PBF is 3 MB and the
+   golden databases are large. A run of the program on this file takes 0.5 s for the three modes (one run, no
+   benchmark).
+6b. **Local goldens.** Larger areas (Tartu has virtual nodes, Estonia is a scale test) are built with
    the same script. They stay in `tests/local/`, which git ignores.
 
 ## 7. Memory and streaming
@@ -331,7 +344,7 @@ Checked on 2026-10-21 (`cargo build --target wasm32-unknown-unknown`, compile on
 |---|---|---|
 | M0 | Setup and spike. Rust installed. Cargo workspace. `edge_id` module. Golden files. A CLI that builds the driving network of one PBF and writes `.duckdb` and GeoParquet. | `cargo test` passes the hash vectors and the Monaco golden test. **Done on 2026-10-21.** The Python output is the same on each run (two golden builds of Monaco: 0 rows differ). The build for `wasm32-unknown-unknown` is checked for compile only (section 7). |
 | M1 | Monaco, driving. All steps in the table that are marked "Yes", for driving, without `merge_segments`. | All 2,765 `edge_id` values equal the golden file. All columns in section 6 pass. GeoPandas and DuckDB read the output. **Reached in the spike** for the output in `.duckdb` and GeoParquet (see [benchmark.md](benchmark.md) for the speed; only Monaco is tested). |
-| M2 | Walking and cycling. `merge_segments` and `edge_id_map`. `lanes`. `private_edges`. | The same checks pass for the three modes, with `merge_segments` on and off. Tartu passes as a local golden. **Reached on Monaco on 2026-10-21** for 8 variants (`merge_segments` and `global_junctions` on or off, the component filter, the sidewalk rule, the connector, and the connector with the component filter) in the three modes: 0 rows differ in `edges`, `private_edges`, `nodes` and `edge_id_map`. Not done: Tartu. The sidewalk rule finds the same 46 roads in Monaco as duckOSM. It is a geometric rule with float thresholds, so a different area can give a difference at a threshold. It assumes right-hand traffic, as duckOSM does. |
+| M2 | Walking and cycling. `merge_segments` and `edge_id_map`. `lanes`. `private_edges`. | The same checks pass for the three modes, with `merge_segments` on and off. Tartu passes as a local golden (done, see section 6). **Reached on Monaco on 2026-10-21** for 8 variants (`merge_segments` and `global_junctions` on or off, the component filter, the sidewalk rule, the connector, and the connector with the component filter) in the three modes: 0 rows differ in `edges`, `private_edges`, `nodes` and `edge_id_map`. Tartu is done (section 6). The sidewalk rule finds the same 46 roads in Monaco as duckOSM. It is a geometric rule with float thresholds, so a different area can give a difference at a threshold. It assumes right-hand traffic, as duckOSM does. |
 | M3 | Release 0.1.0. CLI, Python wheel, config subset, `layers.json`. | A fresh virtual environment runs `pip install` and builds Monaco with an equal result. The CLI binary does the same. The Estonia numbers are written down. Wheels build for Linux, macOS and Windows. |
 | M4 | WebAssembly and large areas. | A browser page turns a city PBF into GeoParquet. Estonia meets the targets. Optional: speeds and costs, turn restrictions. |
 
