@@ -151,8 +151,12 @@ with a name, as a duckOSM config with `name` and `boundary`. Decisions:
 
 **Result of B4 (2026-10-22).** Done:
 - `boundary.rs` reads a boundary (a FeatureCollection, a Feature, a Polygon or a MultiPolygon). A point on the
-  border is inside, as in osmium. `pbf::read_area` cuts in three passes: the nodes inside; the ways with a node
-  inside and the restriction relations; the coordinates of the nodes of these ways.
+  border is inside, as in osmium. `pbf::read_area` cuts in three passes, and each pass reads only the blocks of
+  the file that it needs:
+  1. The node blocks: the nodes inside, and the position and the range of node IDs of each block. In a file
+     sorted by type (`Sort.Type_then_ID`, as all Geofabrik files), the pass stops at the first block of ways.
+  2. From the first block of ways: the ways with a node inside, and the restriction relations.
+  3. Only the node blocks that hold a node of these ways outside the boundary (Tartu: 173 of 1,649 blocks).
 - The CLI has `--boundary`, the Python package `boundary=`, and a config with a boundary needs no osmium.
 - The wasm module has `build_area(blob, boundary, ...)`. It reads the region file piece by piece (`Blob.slice`
   and `FileReaderSync` in the worker), so the file is not copied into WebAssembly memory. `build_osm_json` also
@@ -176,13 +180,17 @@ Checks:
 | Tartu from the Estonia file (121 MB) | Time | Memory |
 |---|---|---|
 | osmium cut (duckOSM) | 1.97 s | |
-| duckosm-rust native, cut and build | 1.25 s | 310 MB |
-| duckosm-rust native on one thread | 9.4 s (before the restrictions moved into pass 2) | 180 MB |
-| The page: cut and build | 8.7 s (11.3 s with a fourth pass for the restrictions) | 116 MiB WebAssembly memory |
+| duckosm-rust native, cut and build | 0.97 s | 220 MB |
+| duckosm-rust native on one thread | 2.4 s (the cut 1.9 s) | 110 MB |
+| The page: cut and build | 3.7 s | 81 MiB WebAssembly memory |
 | The page with the cut file (B3) | 0.9–1.0 s | 77 MiB |
 
-The page runs on one thread, so the three passes over the region file take most of the time. The file is read
-from the disk each time; a file kept in the browser storage (OPFS) does not make it faster. Not done: keep the
+The first version read all blocks in each pass, and the restrictions in a fourth pass: the page took 11.3 s
+and 116 MiB, and native on one thread 9.4 s. On one thread, passes 1 and 2 now take 0.9 s each, and they must
+unzip each block one time (1.4 s for all blocks of Estonia). So more speed in the page needs more threads. The
+`zlib-rs` unzip code was 4 % faster than the default `miniz_oxide` in the page and not faster natively, so it is
+not used. The file is read from the disk each time; a file kept in the browser storage (OPFS) does not make it
+faster. Not done: keep the
 region file in OPFS (the user selects the file again, which costs nothing), and an automatic download of the
 extract (it needs a server with CORS).
 

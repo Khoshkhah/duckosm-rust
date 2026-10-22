@@ -7,10 +7,10 @@ use duckosm_core::filter::Mode;
 use duckosm_core::fixes::OsmFixes;
 use duckosm_core::network::{build_network_with, Options};
 use duckosm_core::osmjson::OsmJson;
-use duckosm_core::pbf::ElementReader;
+use duckosm_core::pbf::BlobReader;
 use duckosm_core::{pbf, sidewalks};
 use js_sys::{Array, Object, Reflect, Uint8Array};
-use std::io::{self, BufReader, BufWriter, Read, Write};
+use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
 use wasm_bindgen::prelude::*;
 use web_sys::{Blob, FileReaderSync};
 
@@ -41,8 +41,12 @@ impl Write for JsParts {
     }
 }
 
+/// A file that the cut can read and seek in.
+pub trait Source: Read + Seek + Send {}
+impl<T: Read + Seek + Send> Source for T {}
+
 /// A new reader of a PBF file for each pass of the cut.
-pub type Open<'a> = &'a dyn Fn() -> Result<ElementReader<Box<dyn Read + Send + 'a>>, String>;
+pub type Open<'a> = &'a dyn Fn() -> Result<BlobReader<Box<dyn Source + 'a>>, String>;
 
 /// The input of a build: the bytes of a `.osm.pbf` file, OSM JSON (the output of the Overpass API), or a region
 /// PBF and a boundary (the PBF is cut to the boundary, as osmium's `complete_ways` does).
@@ -54,33 +58,66 @@ pub enum Input<'a> {
 }
 
 /// Reads a browser `Blob` (a `File` that the user chose) piece by piece, so the region file is never in the
-/// WebAssembly memory as a whole. `FileReaderSync` exists only in a worker: the page builds in one.
+/// WebAssembly memory as a whole. `FileReaderSync` exists only in a worker: the page builds in one. It reads 4 MB
+/// at a time (one call to the browser costs more than the copy) and keeps them, so a seek into these 4 MB
+/// reads nothing more.
 struct BlobRead {
     blob: Blob,
     reader: FileReaderSync,
-    pos: f64,
+    pos: u64,
+    buf: Vec<u8>,
+    buf_at: u64,
+}
+
+impl BlobRead {
+    fn new(blob: Blob) -> Result<BlobRead, String> {
+        Ok(BlobRead {
+            blob,
+            reader: FileReaderSync::new().map_err(|e| format!("{e:?}"))?,
+            pos: 0,
+            buf: Vec::new(),
+            buf_at: 0,
+        })
+    }
 }
 
 // SAFETY: osmpbf needs Send. This module has one thread (no atomics), so the value never moves to another thread.
 unsafe impl Send for BlobRead {}
 
 impl Read for BlobRead {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let size = self.blob.size();
-        if self.pos >= size || buf.is_empty() {
+    fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
+        let size = self.blob.size() as u64;
+        if self.pos >= size || out.is_empty() {
             return Ok(0);
         }
-        let end = (self.pos + buf.len() as f64).min(size);
-        let js = |e: JsValue| io::Error::other(format!("{e:?}"));
-        let part = self
-            .blob
-            .slice_with_f64_and_f64(self.pos, end)
-            .map_err(js)?;
-        let bytes = Uint8Array::new(&self.reader.read_as_array_buffer(&part).map_err(js)?.into());
-        let n = bytes.length() as usize;
-        bytes.copy_to(&mut buf[..n]);
-        self.pos += n as f64;
+        if self.pos < self.buf_at || self.pos >= self.buf_at + self.buf.len() as u64 {
+            let end = (self.pos + (4 << 20)).min(size);
+            let js = |e: JsValue| io::Error::other(format!("{e:?}"));
+            let part = self
+                .blob
+                .slice_with_f64_and_f64(self.pos as f64, end as f64)
+                .map_err(js)?;
+            self.buf =
+                Uint8Array::new(&self.reader.read_as_array_buffer(&part).map_err(js)?.into())
+                    .to_vec();
+            self.buf_at = self.pos;
+        }
+        let from = (self.pos - self.buf_at) as usize;
+        let n = out.len().min(self.buf.len() - from);
+        out[..n].copy_from_slice(&self.buf[from..from + n]);
+        self.pos += n as u64;
         Ok(n)
+    }
+}
+
+impl Seek for BlobRead {
+    fn seek(&mut self, to: SeekFrom) -> io::Result<u64> {
+        self.pos = match to {
+            SeekFrom::Start(n) => n,
+            SeekFrom::Current(d) => self.pos.saturating_add_signed(d),
+            SeekFrom::End(d) => (self.blob.size() as u64).saturating_add_signed(d),
+        };
+        Ok(self.pos)
     }
 }
 
@@ -94,17 +131,9 @@ pub fn build_area(
     fixes_yaml: Option<String>,
 ) -> Result<Output, JsError> {
     let boundary = Boundary::parse(boundary).map_err(|e| JsError::new(&e))?;
-    let open = || -> Result<ElementReader<Box<dyn Read + Send>>, String> {
-        let reader = FileReaderSync::new().map_err(|e| format!("{e:?}"))?;
-        let r = BlobRead {
-            blob: region.clone(),
-            reader,
-            pos: 0.0,
-        };
-        Ok(ElementReader::new(Box::new(BufReader::with_capacity(
-            4 << 20,
-            r,
-        ))))
+    let open = || -> Result<BlobReader<Box<dyn Source>>, String> {
+        let r: Box<dyn Source> = Box::new(BlobRead::new(region.clone())?);
+        BlobReader::new_seekable(r).map_err(|e| e.to_string())
     };
     js_build(Input::Area(&open, &boundary), modes, fixes_yaml)
 }
@@ -118,8 +147,9 @@ pub fn build_area_bytes(
     fixes_yaml: Option<String>,
 ) -> Result<Output, JsError> {
     let boundary = Boundary::parse(boundary).map_err(|e| JsError::new(&e))?;
-    let open = || -> Result<ElementReader<Box<dyn Read + Send + '_>>, String> {
-        Ok(ElementReader::new(Box::new(io::Cursor::new(region))))
+    let open = || -> Result<BlobReader<Box<dyn Source + '_>>, String> {
+        let r: Box<dyn Source> = Box::new(io::Cursor::new(region));
+        BlobReader::new_seekable(r).map_err(|e| e.to_string())
     };
     js_build(Input::Area(&open, &boundary), modes, fixes_yaml)
 }

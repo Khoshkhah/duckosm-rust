@@ -61,8 +61,7 @@ fn browser_build_equals_native_build() {
 #[test]
 fn browser_area_build_equals_native_build() {
     use duckosm_core::boundary::Boundary;
-    use duckosm_core::pbf::ElementReader;
-    use std::io::Read;
+    use duckosm_core::pbf::BlobReader;
 
     let data = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/data");
     let (pbf, geojson) = (
@@ -86,10 +85,9 @@ fn browser_area_build_equals_native_build() {
 
     let boundary = Boundary::parse(&std::fs::read_to_string(&geojson).unwrap()).unwrap();
     let bytes = std::fs::read(&pbf).unwrap();
-    let open = || -> Result<ElementReader<Box<dyn Read + Send + '_>>, String> {
-        Ok(ElementReader::new(Box::new(std::io::Cursor::new(
-            &bytes[..],
-        ))))
+    let open = || -> Result<BlobReader<Box<dyn duckosm_wasm::Source + '_>>, String> {
+        let r: Box<dyn duckosm_wasm::Source> = Box::new(std::io::Cursor::new(&bytes[..]));
+        BlobReader::new_seekable(r).map_err(|e| e.to_string())
     };
     let mut names = Vec::new();
     duckosm_wasm::run(
