@@ -89,3 +89,21 @@ python3 -m venv .venv && .venv/bin/pip install maturin
 .venv/bin/maturin build --release -m crates/duckosm-py/Cargo.toml --no-default-features -o wheels_small   # without DuckDB: 2 MB
 python3 -m venv /tmp/t && /tmp/t/bin/pip install wheels/duckosm_rust-*.whl duckdb && /tmp/t/bin/python tests/test_wheel.py
 ```
+
+## Wheels for other systems
+
+`.github/workflows/ci.yml` builds the wheel on 5 targets (Linux x86_64 and aarch64 with manylinux 2_28, macOS
+x86_64 and arm64, Windows x64), plus the sdist, runs `tests/test_wheel.py` on each wheel, runs the Rust tests and
+the WebAssembly compile check. **It has never run**: the repository has no remote. It does not publish.
+
+What was checked on this machine (Linux x86_64, 2026-10-21):
+
+```bash
+pip install maturin ziglang
+maturin build --release --zig --compatibility manylinux2014 -m crates/duckosm-py/Cargo.toml -o wheels   # 13.6 MB, glibc 2.17 or newer
+maturin sdist -m crates/duckosm-py/Cargo.toml -o sdist                                                  # 46 KB, contains all crates
+```
+
+The `manylinux2014` wheel with DuckDB needs only glibc 2.17 (it has no libstdc++ dependency) and passed
+`tests/test_wheel.py` in a new virtual environment. The wheel from a plain `maturin build` needs glibc 2.35.
+Not checked: macOS, Windows, aarch64, and a real old Linux distribution.

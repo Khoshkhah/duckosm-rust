@@ -168,8 +168,9 @@ Common to both formats:
 
 Status 2026-10-21: the module `duckosm_rust` exists (crate `duckosm-py`, PyO3 and maturin, one `abi3` wheel for
 Python 3.9 and newer; the build runs without the GIL). It has `build(...)` and `edge_id_hash(...)`. The
-plan below is what it follows. Not done: `build_from_config`, and wheels for other systems (the wheel built
-on this machine has the tag `manylinux_2_35`, so it needs glibc 2.35 or newer).
+plan below is what it follows. Not done: `build_from_config`. A CI workflow for wheels on 5 systems is written but has never run (no remote); on
+this machine a `manylinux2014` wheel (glibc 2.17 or newer) was built with zig and tested. A plain build here has
+the tag `manylinux_2_35`. See [development.md](development.md).
 
 The names follow duckOSM. The keyword names are the config keys of duckOSM.
 
