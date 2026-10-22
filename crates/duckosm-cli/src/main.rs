@@ -27,6 +27,12 @@ struct Cli {
     /// Cycling without the footways that are walked (dismount).
     #[arg(long)]
     no_cycling_dismount: bool,
+    /// Cut each mode at its own junctions (duckOSM option global_junctions: false).
+    #[arg(long)]
+    no_global_junctions: bool,
+    /// Do not join the chains of edges that are one road (duckOSM option merge_segments).
+    #[arg(long)]
+    no_merge_segments: bool,
     /// Do not keep only the largest connected part of the graph.
     #[arg(long)]
     no_component_filter: bool,
@@ -85,6 +91,8 @@ fn run() -> Result<(), String> {
     let opts = Options {
         keep_largest_component: !cli.no_component_filter,
         cycling_dismount: !cli.no_cycling_dismount,
+        merge_segments: !cli.no_merge_segments,
+        global_junctions: !cli.no_global_junctions,
     };
     let pq_dir = if formats.contains(&"geoparquet") {
         cli.out.clone()
@@ -112,6 +120,12 @@ fn run() -> Result<(), String> {
             dis,
         )?;
         duckosm_parquet::write_nodes(&pq_dir.join(format!("nodes_{n}.parquet")), &net.nodes)?;
+        if opts.merge_segments {
+            duckosm_parquet::write_edge_id_map(
+                &pq_dir.join(format!("edge_id_map_{n}.parquet")),
+                &net.edge_id_map,
+            )?;
+        }
         lap(&format!("write geoparquet {n}"), &mut t);
     }
     if formats.contains(&"duckdb") {

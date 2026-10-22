@@ -32,10 +32,22 @@ fn write_mode(con: &Connection, parquet_dir: &Path, mode: &str) -> Result<(), St
         "CREATE SCHEMA {mode};
          CREATE TABLE {mode}.edges AS SELECT * FROM read_parquet('{e}');
          CREATE TABLE {mode}.private_edges AS SELECT * FROM read_parquet('{pe}');
-         CREATE TABLE {mode}.nodes AS SELECT node_id, geometry AS geom FROM read_parquet('{n}');",
+         CREATE TABLE {mode}.nodes AS SELECT node_id, geometry AS geom FROM read_parquet('{n}');
+         {map}",
         e = p("edges"),
         pe = p("private_edges"),
         n = p("nodes"),
+        map = if parquet_dir
+            .join(format!("edge_id_map_{mode}.parquet"))
+            .exists()
+        {
+            format!(
+                "CREATE TABLE {mode}.edge_id_map AS SELECT * FROM read_parquet('{}');",
+                p("edge_id_map")
+            )
+        } else {
+            String::new()
+        },
     );
     con.execute_batch(&sql).map_err(|e| e.to_string())?;
     Ok(())

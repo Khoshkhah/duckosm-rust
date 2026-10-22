@@ -7,7 +7,7 @@ use arrow_array::builder::{
 use arrow_array::{ArrayRef, RecordBatch};
 use arrow_schema::{DataType, Field, Schema};
 use duckosm_core::geom::Pt;
-use duckosm_core::model::{Edge, Node};
+use duckosm_core::model::{Edge, MapRow, Node};
 use parquet::arrow::ArrowWriter;
 use parquet::basic::Compression;
 use parquet::file::metadata::KeyValue;
@@ -231,6 +231,51 @@ pub fn write_nodes(path: &Path, rows: &[Node]) -> Result<(), String> {
             g.append_value(point_wkb((n.lon, n.lat)));
         }
         let cols: Vec<ArrayRef> = vec![Arc::new(id.finish()), Arc::new(g.finish())];
+        w.write(&RecordBatch::try_new(schema.clone(), cols).map_err(err)?)
+            .map_err(err)?;
+    }
+    w.close().map_err(err)?;
+    Ok(())
+}
+
+/// Write `edge_id_map` as a plain Parquet file (no geometry).
+pub fn write_edge_id_map(path: &Path, rows: &[MapRow]) -> Result<(), String> {
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("old_edge_id", DataType::Int64, false),
+        Field::new("new_edge_id", DataType::Int64, false),
+        Field::new("seq", DataType::Int32, false),
+        Field::new("is_reverse", DataType::Boolean, false),
+        Field::new("osm_id", DataType::Int64, false),
+    ]));
+    let plain = WriterProperties::builder()
+        .set_compression(compression())
+        .build();
+    let mut w = ArrowWriter::try_new(
+        File::create(path).map_err(err)?,
+        schema.clone(),
+        Some(plain),
+    )
+    .map_err(err)?;
+    for chunk in rows.chunks(ROW_GROUP) {
+        let mut old = Int64Builder::with_capacity(chunk.len());
+        let mut new = Int64Builder::with_capacity(chunk.len());
+        let mut seq = Int32Builder::with_capacity(chunk.len());
+        let mut rev = BooleanBuilder::with_capacity(chunk.len());
+        let mut osm = Int64Builder::with_capacity(chunk.len());
+        for m in chunk {
+            old.append_value(m.old_edge_id);
+            new.append_value(m.new_edge_id);
+            seq.append_value(m.seq);
+            rev.append_value(m.is_reverse);
+            osm.append_value(m.osm_id);
+        }
+        let cols: Vec<ArrayRef> = vec![
+            Arc::new(old.finish()),
+            Arc::new(new.finish()),
+            Arc::new(seq.finish()),
+            Arc::new(rev.finish()),
+            Arc::new(osm.finish()),
+        ];
         w.write(&RecordBatch::try_new(schema.clone(), cols).map_err(err)?)
             .map_err(err)?;
     }

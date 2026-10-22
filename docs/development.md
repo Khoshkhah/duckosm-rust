@@ -36,10 +36,10 @@ The binary is `target/release/duckosm-rust`. `--timing` prints the time of each 
 folder, with `duckosm build --config`). Then compare every row, column and geometry byte:
 
 ```bash
-python tools/compare_with_duckosm.py monaco_golden.duckdb out/monaco.duckdb   # or the GeoParquet folder
+python tools/compare_with_duckosm.py monaco_golden.duckdb out/monaco.duckdb [driving|walking|cycling]   # or the GeoParquet folder
 ```
 
-`tools/make_golden.py` writes `tests/data/monaco_driving_edges.tsv` from such a database.
+`tests/data/golden_monaco_modes.yaml` is the config of the three-mode golden (four variants; the comments say which lines to change). `tools/make_golden_summary.py` writes `tests/data/monaco_modes_summary.tsv` from those databases. `tools/make_golden.py` writes `tests/data/monaco_driving_edges.tsv` from such a database.
 `tools/edge_id_reference.py` is the `edge_id` hash in plain Python. It compares itself with the
 installed DuckDB, and with every edge of a duckOSM database:
 

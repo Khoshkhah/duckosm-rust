@@ -1,6 +1,6 @@
 # duckosm-rust
 
-Status: **spike**. The driving network of Monaco equals the output of duckOSM (every row). See [docs/design.md](docs/design.md) and [docs/benchmark.md](docs/benchmark.md).
+Status: **spike**. The driving, walking and cycling networks of Monaco equal the output of duckOSM (every row), with and without `merge_segments`. See [docs/design.md](docs/design.md) and [docs/benchmark.md](docs/benchmark.md).
 
 `duckosm-rust` is the Rust part of [duckOSM](https://github.com/Khoshkhah/duckOSM). It is a Cargo
 workspace. The first crate, `duckosm-core`, reads an `.osm.pbf` file and writes the road edges and

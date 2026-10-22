@@ -44,16 +44,16 @@ The features of version 0.1 are complete after milestone M2. M3 releases them (s
 | 2 | Read OSM into `raw.*` with `ST_READOSM` | Yes | Rust keeps only highway ways, the tags it needs, and the nodes of these ways. |
 | 3 | Load the boundary, boundary cells | No | |
 | 4 | Global junctions (`global_junctions.py`) | Yes | Needed in every mode: a footway that crosses a road cuts the road. |
-| 5 | Filter roads per mode (`road_filter.py`): class, access, one-way direction, lanes | Yes | Driving in M1. Walking and cycling in M2. |
+| 5 | Filter roads per mode (`road_filter.py`): class, access, one-way direction, lanes | Yes | Driving, walking and cycling are done. The dismount flag of cycling is done. The sidewalk rule (`separate_sidewalks.py`, step 5b) is not. |
 | 6 | OSM overrides (`osm_overrides.py`) | No | Open question 5. |
 | 7 | Cut ways into edges at junctions, join the node coordinates, compute `length_m` (`graph_simplifier.py`) | Yes | |
 | 8 | Split self-loops, same-direction parallel arcs and antiparallel pairs with virtual nodes (`node_id < 0`) | Yes | Needed for a unique `(osm_id, source, target)`. |
-| 9 | Merge same-road chains, write `edge_id_map` (`_contract_chains`) | Yes | M2. In Monaco driving this changes no edge. |
+| 9 | Merge same-road chains, write `edge_id_map` (`_contract_chains`) | Yes | Done (2026-10-21). With `global_junctions` on, Monaco has no chains to merge in any mode, so the merge is tested with `global_junctions: false` (section 6). |
 | 10 | Add the reverse edge of each two-way way | Yes | |
 | 11 | Compute `edge_id` and `edge_ref`, check that they are unique, correct `length_m` of split edges | Yes | |
 | 12 | Move private roads, bus-only roads and pedestrian streets to `private_edges` | Yes | A filter on `access` and `highway`. |
 | 13 | Component filter (keep the largest connected part) | Yes | Python runs it only when a boundary is set. Rust uses an option. |
-| 14 | Connect dangling paths, mark dismount edges | No | The golden build switches `connectivity_rescue` off. |
+| 14 | Connect dangling paths, mark dismount edges | Dismount: yes. Connect: no | The golden build switches `connectivity_rescue` off. |
 | 15 | Speeds, travel-time costs, walk and cycle type | No | The Rust output has the raw `maxspeed` text, not `maxspeed_kmh` and `cost_s`. |
 | 16 | Turn restrictions, edge graph | No | Turn restrictions need the OSM relations. |
 | 17 | H3 cells | No | |
@@ -254,6 +254,12 @@ Rule: a skipped test is not a pass.
    - `length_m` must differ by less than 1e-6 of its value. The value is a 32-bit float.
    - Every vertex must differ by less than 1e-9 degrees.
    - On failure the test prints the first 20 different rows.
+3b. **Three modes, four variants (done).** `tests/modes.rs` builds the sample file of Monaco in driving, walking
+   and cycling, with `merge_segments` and `global_junctions` on or off, and compares the counts and a checksum
+   of every edge and private edge with duckOSM (`tests/data/monaco_modes_summary.tsv`, made by
+   `tools/make_golden_summary.py`). With `global_junctions` on, Monaco has no mergeable chain (duckOSM
+   gives 0 rows in `edge_id_map`), so the variants with it off give the real test of the merge: 114, 265
+   and 291 chains in driving, walking and cycling, and 361, 1,124 and 1,159 rows in `edge_id_map`.
 4. **Small fixtures.** Hand-made OSM files test each rule of section 2: `oneway=-1`, a self-loop, a
    figure-8 way, an antiparallel pair, a node without coordinates, a footway that crosses a road.
    Each fixture has an expected result that is written down in the test.
@@ -314,7 +320,7 @@ Checked on 2026-10-21 (`cargo build --target wasm32-unknown-unknown`, compile on
 |---|---|---|
 | M0 | Setup and spike. Rust installed. Cargo workspace. `edge_id` module. Golden files. A CLI that builds the driving network of one PBF and writes `.duckdb` and GeoParquet. | `cargo test` passes the hash vectors and the Monaco golden test. **Done on 2026-10-21.** The Python output is the same on each run (two golden builds of Monaco: 0 rows differ). The build for `wasm32-unknown-unknown` is checked for compile only (section 7). |
 | M1 | Monaco, driving. All steps in the table that are marked "Yes", for driving, without `merge_segments`. | All 2,765 `edge_id` values equal the golden file. All columns in section 6 pass. GeoPandas and DuckDB read the output. **Reached in the spike** for the output in `.duckdb` and GeoParquet (see [benchmark.md](benchmark.md) for the speed; only Monaco is tested). |
-| M2 | Walking and cycling. `merge_segments` and `edge_id_map`. `lanes`. `private_edges`. | The same checks pass for the three modes, with `merge_segments` on and off. Tartu passes as a local golden. |
+| M2 | Walking and cycling. `merge_segments` and `edge_id_map`. `lanes`. `private_edges`. | The same checks pass for the three modes, with `merge_segments` on and off. Tartu passes as a local golden. **Reached on Monaco on 2026-10-21** for 4 variants (`merge_segments` and `global_junctions` on or off) in the three modes: 0 rows differ in `edges`, `private_edges`, `nodes` and `edge_id_map`. Not done: the sidewalk rule, the dangling-path connector, Tartu. |
 | M3 | Release 0.1.0. CLI, Python wheel, config subset, `layers.json`. | A fresh virtual environment runs `pip install` and builds Monaco with an equal result. The CLI binary does the same. The Estonia numbers are written down. Wheels build for Linux, macOS and Windows. |
 | M4 | WebAssembly and large areas. | A browser page turns a city PBF into GeoParquet. Estonia meets the targets. Optional: speeds and costs, turn restrictions. |
 

@@ -61,3 +61,15 @@ d = q("""SELECT count(*) FILTER (WHERE a.length_m IS DISTINCT FROM b.length_m),
 print(f"   length_m: {d[0]} rows differ at all, {d[1]} by more than 1e-4 relative, largest difference {d[2]}")
 compare("private_edges", "p_priv", "r_priv", "edge_id", COLS)
 compare("nodes", "p_nodes", "r_nodes", "node_id", [])
+
+# edge_id_map: one row per piece of each merged edge (only when both sides have it)
+if OUT.endswith(".duckdb"):
+    try:
+        con.execute(f"CREATE VIEW p_map AS SELECT * FROM py.{MODE}.edge_id_map")
+        con.execute(f"CREATE VIEW r_map AS SELECT * FROM rs.{MODE}.edge_id_map")
+        n_p, n_r = q("SELECT count(*) FROM p_map")[0][0], q("SELECT count(*) FROM r_map")[0][0]
+        only_p = q("SELECT count(*) FROM (SELECT * FROM p_map EXCEPT SELECT * FROM r_map)")[0][0]
+        only_r = q("SELECT count(*) FROM (SELECT * FROM r_map EXCEPT SELECT * FROM p_map)")[0][0]
+        print(f"\n== edge_id_map: python {n_p}, rust {n_r}, only in python {only_p}, only in rust {only_r}")
+    except duckdb.Error:
+        print("\n== edge_id_map: not in both databases")

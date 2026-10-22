@@ -136,7 +136,19 @@ pub struct Network {
     pub edges: Vec<Edge>,
     pub private_edges: Vec<Edge>,
     pub nodes: Vec<Node>,
+    /// One row for each piece of each merged edge (only with `merge_segments`).
+    pub edge_id_map: Vec<MapRow>,
     pub stats: Stats,
+}
+
+/// A row of `edge_id_map`: the piece `old_edge_id` is part of the merged edge `new_edge_id`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MapRow {
+    pub old_edge_id: i64,
+    pub new_edge_id: i64,
+    pub seq: i32,
+    pub is_reverse: bool,
+    pub osm_id: i64,
 }
 
 #[derive(Default, Debug, Clone)]
@@ -147,6 +159,8 @@ pub struct Stats {
     pub self_loops_split: usize,
     pub parallel_split: usize,
     pub antiparallel_split: usize,
+    pub merged_chains: usize,
+    pub merged_pieces: usize,
     pub private_edges: usize,
     pub dropped_by_component_filter: usize,
 }

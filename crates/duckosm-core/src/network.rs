@@ -5,7 +5,7 @@
 use crate::filter::{self, Mode, ModeWay, NON_ROAD};
 use crate::geom::{self, Pt};
 use crate::hash;
-use crate::model::{Edge, Network, Node, Stats, Way};
+use crate::model::{Edge, MapRow, Network, Node, Stats, Way};
 use crate::util::{FxHashMap, FxHashSet};
 
 #[derive(Clone, Debug)]
@@ -14,6 +14,10 @@ pub struct Options {
     pub keep_largest_component: bool,
     /// Cycling also gets footways and pedestrian streets, as edges that are walked (`dismount`).
     pub cycling_dismount: bool,
+    /// Cut the roads at one set of junctions for all modes (duckOSM `options.global_junctions`, on by default).
+    pub global_junctions: bool,
+    /// Join the chains of edges that are one road (duckOSM `options.merge_segments`, on by default).
+    pub merge_segments: bool,
 }
 
 impl Default for Options {
@@ -21,6 +25,8 @@ impl Default for Options {
         Options {
             keep_largest_component: true,
             cycling_dismount: true,
+            merge_segments: true,
+            global_junctions: true,
         }
     }
 }
@@ -66,22 +72,27 @@ fn global_junctions(ways: &[Way]) -> FxHashMap<i64, bool> {
         .collect()
 }
 
-/// `junctions`: the nodes where the ways of this mode meet, or end.
-fn local_junctions(mw: &[ModeWay]) -> FxHashSet<i64> {
-    let mut cnt: FxHashMap<i64, (u32, u32)> = FxHashMap::default();
+/// `junctions`: the nodes where the ways of this mode meet, or end. The value is `is_road_junction`.
+fn local_junctions(mw: &[ModeWay]) -> FxHashMap<i64, bool> {
+    // (ways, way ends, road way ends) at each node
+    let mut cnt: FxHashMap<i64, (u32, u32, u32)> = FxHashMap::default();
     for w in mw {
         let n = w.refs.len();
+        let is_road = !NON_ROAD.contains(&w.highway.as_str());
         for (pos, &node) in w.refs.iter().enumerate() {
             let c = cnt.entry(node).or_default();
             c.0 += 1;
             if pos == 0 || pos + 1 == n {
                 c.1 += 1;
+                if is_road {
+                    c.2 += 1;
+                }
             }
         }
     }
     cnt.into_iter()
         .filter(|(_, c)| c.0 > 1 || c.1 > 0)
-        .map(|(n, _)| n)
+        .map(|(n, c)| (n, c.0 > 1 || c.2 > 0))
         .collect()
 }
 
@@ -166,7 +177,11 @@ pub fn build_network(
         ways_read: all_ways.len(),
         ..Default::default()
     };
-    let gj = global_junctions(all_ways);
+    let gj = if opts.global_junctions {
+        global_junctions(all_ways)
+    } else {
+        FxHashMap::default()
+    };
     let mw: Vec<ModeWay> = all_ways
         .iter()
         .filter_map(|w| filter::mode_way(w, mode, opts.cycling_dismount))
@@ -182,10 +197,16 @@ pub fn build_network(
             .refs
             .iter()
             .map(|n| {
-                if is_road {
-                    gj.get(n) == Some(&true)
+                if opts.global_junctions {
+                    if is_road {
+                        gj.get(n) == Some(&true)
+                    } else {
+                        lj.contains_key(n) || gj.contains_key(n)
+                    }
+                } else if is_road {
+                    lj.get(n) == Some(&true)
                 } else {
-                    lj.contains(n) || gj.contains_key(n)
+                    lj.contains_key(n)
                 }
             })
             .collect();
@@ -265,6 +286,16 @@ pub fn build_network(
         stats.self_loops_split += 1;
     }
     let mut fwd = out;
+
+    // 2b. Merge the chains of edges that are one road.
+    let mut edge_id_map: Vec<MapRow> = Vec::new();
+    if opts.merge_segments {
+        let (merged, map, n_chains, n_pieces) = merge_chains(fwd, &gj, coords);
+        fwd = merged;
+        edge_id_map = map;
+        stats.merged_chains = n_chains;
+        stats.merged_pieces = n_pieces;
+    }
 
     // 3. Split same-direction parallel arcs (all but the shortest of each group).
     let mut groups: FxHashMap<(i64, i64, i64), Vec<usize>> = FxHashMap::default();
@@ -411,6 +442,7 @@ pub fn build_network(
         edges,
         private_edges,
         nodes,
+        edge_id_map,
         stats,
     })
 }
@@ -534,4 +566,189 @@ fn keep_largest(edges: &mut Vec<Edge>) {
         i += 1;
         keep
     });
+}
+
+/// Do two edges agree on every attribute that the merge compares?
+fn same_road(a: &Edge, b: &Edge) -> bool {
+    a.highway == b.highway
+        && a.name == b.name
+        && a.oneway == b.oneway
+        && a.maxspeed == b.maxspeed
+        && a.lanes == b.lanes
+        && a.surface == b.surface
+        && a.access == b.access
+        && a.junction == b.junction
+        && a.layer == b.layer
+        && a.bridge == b.bridge
+        && a.tunnel == b.tunnel
+        && a.service == b.service
+}
+
+struct Chain {
+    start: i64,
+    end: i64,
+    edges: Vec<usize>,
+    refs: Vec<i64>,
+}
+
+/// Join each maximal chain of forward edges that are the same road into one edge (`_contract_chains`).
+/// Returns the new forward edges, the rows of `edge_id_map`, the number of chains and of pieces.
+fn merge_chains(
+    fwd: Vec<Fwd>,
+    gj: &FxHashMap<i64, bool>,
+    coords: &Coords,
+) -> (Vec<Fwd>, Vec<MapRow>, usize, usize) {
+    // the two half-edges of each forward edge: (edge index, true at its source)
+    let mut inc: FxHashMap<i64, Vec<(usize, bool)>> = FxHashMap::default();
+    for (i, f) in fwd.iter().enumerate() {
+        inc.entry(f.e.source).or_default().push((i, true));
+        inc.entry(f.e.target).or_default().push((i, false));
+    }
+    // contraction nodes: real, exactly two half-edges (after the junction rule), agreeing edges
+    let mut node2: FxHashSet<i64> = FxHashSet::default();
+    for (&node, halves) in &inc {
+        if node <= 0 || gj.get(&node) == Some(&true) {
+            continue;
+        }
+        let rows: Vec<&(usize, bool)> = halves
+            .iter()
+            .filter(|(i, _)| {
+                !(NON_ROAD.contains(&fwd[*i].e.highway.as_str()) && gj.contains_key(&node))
+            })
+            .collect();
+        if rows.len() != 2 {
+            continue;
+        }
+        let (a, b) = (&fwd[rows[0].0].e, &fwd[rows[1].0].e);
+        let one_in_one_out = (rows[0].1 as u8 + rows[1].1 as u8) == 1;
+        if (a.oneway || b.oneway) && !one_in_one_out {
+            continue;
+        }
+        if same_road(a, b) {
+            node2.insert(node);
+        }
+    }
+    if node2.is_empty() {
+        return (fwd, Vec::new(), 0, 0);
+    }
+    let oriented = |i: usize, at_source: bool| -> Vec<i64> {
+        let r = &fwd[i].e.refs;
+        if at_source {
+            r.clone()
+        } else {
+            r.iter().rev().copied().collect()
+        }
+    };
+    let mut chains: Vec<Chain> = Vec::new();
+    for (i, f) in fwd.iter().enumerate() {
+        for (at_source, node, other) in [
+            (true, f.e.source, f.e.target),
+            (false, f.e.target, f.e.source),
+        ] {
+            if node2.contains(&node) || !node2.contains(&other) {
+                continue;
+            }
+            // walk from this terminal through the contraction nodes
+            let mut stack: Vec<(Vec<usize>, i64, Vec<i64>)> =
+                vec![(vec![i], other, oriented(i, at_source))];
+            while let Some((edges, cur, refs)) = stack.pop() {
+                if !node2.contains(&cur) {
+                    let ok = edges.len() > 1
+                        && node != cur
+                        && if f.e.oneway { at_source } else { node < cur };
+                    if ok {
+                        chains.push(Chain {
+                            start: node,
+                            end: cur,
+                            edges,
+                            refs,
+                        });
+                    }
+                    continue;
+                }
+                let last = *edges.last().unwrap();
+                for &(j, j_at_source) in &inc[&cur] {
+                    if j == last || edges.contains(&j) {
+                        continue;
+                    }
+                    let mut e2 = edges.clone();
+                    e2.push(j);
+                    let mut r2 = refs.clone();
+                    r2.extend(oriented(j, j_at_source).into_iter().skip(1));
+                    let next = if j_at_source {
+                        fwd[j].e.target
+                    } else {
+                        fwd[j].e.source
+                    };
+                    stack.push((e2, next, r2));
+                }
+            }
+        }
+    }
+    if chains.is_empty() {
+        return (fwd, Vec::new(), 0, 0);
+    }
+    chains.sort_by_key(|c| (c.edges[0], c.start, c.end));
+    let removed: FxHashSet<usize> = chains
+        .iter()
+        .flat_map(|c| c.edges.iter().copied())
+        .collect();
+    let n_pieces = removed.len();
+    let mut map: Vec<MapRow> = Vec::new();
+    let mut merged: Vec<Fwd> = Vec::with_capacity(fwd.len());
+    for c in &chains {
+        let first = &fwd[c.edges[0]];
+        let geometry: Vec<Pt> = c
+            .refs
+            .iter()
+            .filter_map(|n| coords.get(n).copied())
+            .collect();
+        if geometry.len() < 2 {
+            continue;
+        }
+        let mut e = first.e.clone();
+        e.source = c.start;
+        e.target = c.end;
+        e.refs = c.refs.clone();
+        e.length_m = geom::line_length_m(&geometry);
+        e.geometry = geometry;
+        e.is_reverse = false;
+        let new_fwd = hash::edge_id(e.osm_id, e.source, e.target);
+        let new_rev = hash::edge_id(e.osm_id, e.target, e.source);
+        for (k, &pi) in c.edges.iter().enumerate() {
+            let p = &fwd[pi].e;
+            let pos = |n: i64| c.refs.iter().position(|&x| x == n).map_or(0, |x| x + 1);
+            let against = pos(p.source) > pos(p.target);
+            let (a, b) = if pos(p.source) < pos(p.target) {
+                (p.source, p.target)
+            } else {
+                (p.target, p.source)
+            };
+            map.push(MapRow {
+                old_edge_id: hash::edge_id(p.osm_id, a, b),
+                new_edge_id: new_fwd,
+                seq: k as i32 + 1,
+                is_reverse: against,
+                osm_id: p.osm_id,
+            });
+            if !e.oneway {
+                map.push(MapRow {
+                    old_edge_id: hash::edge_id(p.osm_id, b, a),
+                    new_edge_id: new_rev,
+                    seq: k as i32 + 1,
+                    is_reverse: !against,
+                    osm_id: p.osm_id,
+                });
+            }
+        }
+        merged.push(Fwd { e, way: first.way });
+    }
+    let n_chains = merged.len();
+    for (i, f) in fwd.into_iter().enumerate() {
+        if !removed.contains(&i) {
+            merged.push(f);
+        }
+    }
+    map.sort_by_key(|m| (m.new_edge_id, m.seq, m.old_edge_id));
+    (merged, map, n_chains, n_pieces)
 }

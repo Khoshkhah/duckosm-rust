@@ -57,8 +57,8 @@ def main():
         jobs.append(("duckOSM 0.6.0: `duckosm build --config config.yaml`", [VENV / "duckosm", "build", "--config", cfg], e2e_runs, None))
     jobs.append(("duckOSM 0.6.0: same, lane profile off (`bench/python_steps.py config.yaml --no-lane-profile`)",
                  [VENV / "python", HERE / "python_steps.py", cfg, "--no-lane-profile"], a.runs, PY_NET_STEPS))
-    jobs.append(("duckosm-rust: `--format duckdb`", [RUST, pbf, "-o", work / "rs_db", "--name", a.label, "--no-component-filter", "--format", "duckdb", "--timing"], a.runs, RS_NET_STEPS))
-    jobs.append(("duckosm-rust: `--format geoparquet`", [RUST, pbf, "-o", work / "rs_pq", "--no-component-filter", "--format", "geoparquet", "--timing"], a.runs, RS_NET_STEPS))
+    jobs.append(("duckosm-rust: `--format duckdb`", [RUST, pbf, "-o", work / "rs_db", "--name", a.label, "--no-component-filter", "--no-merge-segments", "--format", "duckdb", "--timing"], a.runs, RS_NET_STEPS))
+    jobs.append(("duckosm-rust: `--format geoparquet`", [RUST, pbf, "-o", work / "rs_pq", "--no-component-filter", "--no-merge-segments", "--format", "geoparquet", "--timing"], a.runs, RS_NET_STEPS))
     rows = []
     for name, cmd, runs, net in jobs:
         for k in range(runs + 1):           # run 0 is the warm-up
