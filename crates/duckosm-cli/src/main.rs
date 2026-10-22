@@ -61,6 +61,12 @@ struct Cli {
     /// Do not keep only the largest connected part of the graph.
     #[arg(long, conflicts_with = "config")]
     no_component_filter: bool,
+    /// Do not build edge_graph and turn_permission (duckOSM option build_graph: false).
+    #[arg(long, conflicts_with = "config")]
+    no_graph: bool,
+    /// Do not build turn_restrictions and turn_path_restrictions (duckOSM option extract_restrictions: false).
+    #[arg(long, conflicts_with = "config")]
+    no_restrictions: bool,
     /// A duckOSM OSM fixes file (YAML). With --config, it replaces the config's osm_overrides.
     #[arg(long, value_name = "FILE")]
     fixes: Option<PathBuf>,
@@ -109,6 +115,8 @@ fn run() -> Result<(), String> {
             process_speeds: !cli.no_speeds,
             calculate_costs: !cli.no_speeds && !cli.no_costs,
             functional_types: !cli.no_functional_types,
+            build_graph: !cli.no_graph,
+            extract_restrictions: !cli.no_restrictions,
         };
         (
             cli.pbf.clone().unwrap(),
@@ -143,14 +151,16 @@ fn run() -> Result<(), String> {
     }
     for m in &sum.modes {
         eprintln!(
-            "{}: {} edges, {} nodes, {} private edges, {} connectors, {} edge_id_map rows, {} OSM fixes",
+            "{}: {} edges, {} nodes, {} private edges, {} connectors, {} edge_id_map rows, {} OSM fixes, {} edge_graph rows, {} turn restrictions",
             m.mode.name(),
             m.edges,
             m.nodes,
             m.private_edges,
             m.connectors,
             m.edge_id_map,
-            m.osm_fixes
+            m.osm_fixes,
+            m.edge_graph,
+            m.turn_restrictions
         );
     }
     if cli.timing {

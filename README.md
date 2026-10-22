@@ -1,6 +1,6 @@
 # duckosm-rust
 
-Status: **the network step is complete, release 0.1.0 is in preparation**. The driving, walking and cycling networks of Monaco, Tartu and Estonia equal the output of duckOSM (every row of every table; only the direction labels of some connectors differ, which duckOSM does not fix). Estonia takes 19 s and 1.5 GB, against 1,545 s and 10 GB in duckOSM. Python duckOSM can use it with `options.engine: rust`. A WebAssembly build runs the same network step in a browser tab. See [docs/design.md](docs/design.md) and [docs/benchmark.md](docs/benchmark.md).
+Status: **the network step is complete, release 0.1.0 is in preparation**. The driving, walking and cycling networks of Monaco, Tartu and Estonia equal the output of duckOSM (every row of every table; only the direction labels of some connectors differ, which duckOSM does not fix). Estonia takes 19 s and 1.5 GB, against 1,545 s and 10 GB in duckOSM. It also builds the edge graph and the turn restrictions. Python duckOSM can use it with `options.engine: rust`. A WebAssembly build runs the same network step in a browser tab. See [docs/design.md](docs/design.md) and [docs/benchmark.md](docs/benchmark.md).
 
 The repository is [Khoshkhah/duckosm-rust](https://github.com/Khoshkhah/duckosm-rust) (private).
 

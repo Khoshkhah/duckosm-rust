@@ -11,7 +11,7 @@
 
 use crate::Params;
 use duckosm_core::filter::Mode;
-use duckosm_core::fixes::{NewNode, NewWay, OsmFixes, WayFix};
+use duckosm_core::fixes::{NewNode, NewWay, OsmFixes, TurnFix, WayFix};
 use duckosm_core::network::Options;
 use std::path::{Path, PathBuf};
 use yaml_rust2::{Yaml, YamlLoader};
@@ -274,13 +274,11 @@ pub fn read(path: &Path, pbf_is_cut: bool, strict: bool) -> Result<FromConfig, S
     // the steps of duckOSM that are not here (on by default in duckOSM)
     let build_graph = options.bool("build_graph", true)?;
     for (key, default, what) in [
-        ("build_graph", true, "the graph of legal turns (edge_graph)"),
         (
             "h3_indexing",
             true,
             "the H3 cells (from_cell, to_cell, lca_res, h3_cell)",
         ),
-        ("extract_restrictions", true, "the turn restrictions"),
         ("build_features", true, "the base-map layers (features.*)"),
         (
             "levels",
@@ -350,6 +348,8 @@ pub fn read(path: &Path, pbf_is_cut: bool, strict: bool) -> Result<FromConfig, S
         process_speeds: options.bool("process_speeds", true)?,
         calculate_costs: options.bool("calculate_costs", true)?,
         functional_types: options.bool("functional_types", true)?,
+        build_graph,
+        extract_restrictions: options.bool("extract_restrictions", true)?,
     };
     if opts.calculate_costs && !opts.process_speeds {
         return Err("config: options.calculate_costs needs options.process_speeds".into());
@@ -412,9 +412,23 @@ const FIX_RULE: [&str; 13] = [
     "note",
 ];
 const FIX_NEW_WAY: [&str; 6] = ["id", "nodes", "tags", "tags_from", "source", "note"];
+const FIX_TURN: [&str; 5] = ["from_way", "via_node", "to_way", "restriction", "note"];
+/// The restriction types that the edge graph understands (duckOSM `_ALLOWED_RESTRICTIONS`).
+const TURN_TYPES: [&str; 10] = [
+    "no_u_turn",
+    "no_left_turn",
+    "no_right_turn",
+    "no_straight_on",
+    "no_entry",
+    "no_exit",
+    "only_straight_on",
+    "only_left_turn",
+    "only_right_turn",
+    "only_u_turn",
+];
 
 /// Read a duckOSM OSM fixes file (`osm_overrides`). The rules for the arrows of the lanes and the
-/// `turn_restrictions` are read but not used (they are not part of the network step).
+/// `turn_restrictions` give extra turn restrictions (the driving mode).
 pub fn read_osm_fixes(path: &Path) -> Result<OsmFixes, String> {
     let err = |e: String| format!("{}: {e}", path.display());
     let text = std::fs::read_to_string(path).map_err(|e| err(e.to_string()))?;
@@ -570,6 +584,38 @@ pub fn read_osm_fixes(path: &Path) -> Result<OsmFixes, String> {
                 .transpose()?,
         });
     }
+    // duckOSM RestrictionProcessor._inject_overrides: the id is -(position), from -1. A rule without
+    // the three ids, or with a type that the edge graph does not understand, is skipped.
+    for (i, r) in list("turn_restrictions")?.iter().enumerate() {
+        let h = r
+            .as_hash()
+            .ok_or_else(|| err("each rule in turn_restrictions must be a map".into()))?;
+        keys(h, &FIX_TURN, "a rule of turn_restrictions")?;
+        let s = Section {
+            name: "turn_restrictions",
+            map: Some(h),
+        };
+        let id = |k: &str| s.get(k).and_then(|v| v.as_i64());
+        let (Some(from_way), Some(via_node), Some(to_way)) =
+            (id("from_way"), id("via_node"), id("to_way"))
+        else {
+            continue;
+        };
+        let restriction = s
+            .str("restriction")
+            .map_err(err)?
+            .unwrap_or_else(|| "no_u_turn".into());
+        if !TURN_TYPES.contains(&restriction.as_str()) {
+            continue;
+        }
+        fixes.turn_restrictions.push(TurnFix {
+            id: -(i as i64 + 1),
+            restriction,
+            from_way,
+            via_node,
+            to_way,
+        });
+    }
     Ok(fixes)
 }
 
@@ -600,7 +646,8 @@ mod tests {
             "overrides:\n  - osm_id: 93137596\n    lanes: 1\n    note: Larvotto\n  - osm_id: 1\n    \
              exclude_modes: [walking]\n    keep_nodes: [5, 6]\n    tags: {highway: residential, lanes: 2}\n    \
              turn_lanes_forward: left|through\nnew_ways:\n  - id: 9000000000001\n    source: nvdb:1\n    \
-             nodes: [5, [7.4, 43.7]]\n    tags_from: 1\nturn_restrictions:\n  - from_way: 1\n",
+             nodes: [5, [7.4, 43.7]]\n    tags_from: 1\nturn_restrictions:\n  - from_way: 1\n  - {from_way: 2, via_node: 3, to_way: 4, restriction: no_left_turn}\n  \
+             - {from_way: 5, via_node: 6, to_way: 7, restriction: bad_turn}\n",
         );
         let fixes = read_osm_fixes(&f).unwrap();
         assert_eq!(fixes.ways.len(), 2);
@@ -612,6 +659,13 @@ mod tests {
         );
         assert_eq!(r.tags[1], ("lanes".to_string(), "2".to_string()));
         assert_eq!(fixes.new_ways[0].nodes.len(), 2);
+        // the first rule has no via node and the third an unknown type: only the second is kept, with id -2
+        let t = &fixes.turn_restrictions;
+        assert_eq!(t.len(), 1);
+        assert_eq!(
+            (t[0].id, t[0].restriction.as_str(), t[0].via_node),
+            (-2, "no_left_turn", 3)
+        );
         let bad = write("overrides:\n  - osm_id: 1\n    lane: 2\n");
         assert!(read_osm_fixes(&bad).unwrap_err().contains("'lane'"));
 
@@ -621,7 +675,8 @@ mod tests {
         let coords = pbf::read_coords(&pbf_path, &ways).unwrap();
         let lanes = |fx: &OsmFixes| {
             let net =
-                build_network_with(&ways, &coords, Mode::Driving, &Options::default(), fx).unwrap();
+                build_network_with(&ways, &coords, Mode::Driving, &Options::default(), fx, &[])
+                    .unwrap();
             let l: Vec<_> = net
                 .edges
                 .iter()
@@ -643,7 +698,7 @@ mod tests {
     fn defaults_need_strict_off() {
         let c = write(&format!("name: m\noutput_path: out\npbf_path: {}\n", pbf()));
         let e = read(&c, false, true).unwrap_err();
-        assert!(e.contains("build_graph"), "{e}");
+        assert!(e.contains("h3_indexing"), "{e}");
         let r = read(&c, false, false).unwrap();
         assert!(r.skipped.iter().any(|s| s.contains("h3_indexing")));
         assert_eq!(r.params.name, "m");

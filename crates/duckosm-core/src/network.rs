@@ -5,6 +5,7 @@
 use crate::filter::{self, Mode, ModeWay, NON_ROAD};
 use crate::fixes::OsmFixes;
 use crate::geom::{self, Pt};
+use crate::graph::{Graph, Relation};
 use crate::hash;
 use crate::model::{Attrs, Edge, MapRow, Network, Node, Stats, Way};
 use crate::util::{FxHashMap, FxHashSet};
@@ -31,6 +32,11 @@ pub struct Options {
     pub functional_types: bool,
     /// Join the chains of edges that are one road (duckOSM `options.merge_segments`, on by default).
     pub merge_segments: bool,
+    /// Build `edge_graph` and `turn_permission` (duckOSM `options.build_graph`, on by default).
+    pub build_graph: bool,
+    /// Build `turn_restrictions` and `turn_path_restrictions` in the driving mode (duckOSM
+    /// `options.extract_restrictions`, on by default). They need the relations of the PBF.
+    pub extract_restrictions: bool,
 }
 
 impl Default for Options {
@@ -45,6 +51,8 @@ impl Default for Options {
             process_speeds: true,
             calculate_costs: true,
             functional_types: true,
+            build_graph: true,
+            extract_restrictions: true,
         }
     }
 }
@@ -226,17 +234,19 @@ pub fn build_network(
     mode: Mode,
     opts: &Options,
 ) -> Result<Network, String> {
-    build_network_with(all_ways, coords, mode, opts, &OsmFixes::default())
+    build_network_with(all_ways, coords, mode, opts, &OsmFixes::default(), &[])
 }
 
-/// The network of one mode, with the per-mode rules of the OSM fixes. The other rules act on the
-/// ways before (`OsmFixes::apply_to_ways`).
+/// The network of one mode, with the per-mode rules of the OSM fixes (the other rules act on the
+/// ways before: `OsmFixes::apply_to_ways`), and the `type=restriction` relations of the PBF
+/// (`pbf::read_restrictions`).
 pub fn build_network_with(
     all_ways: &[Way],
     coords: &Coords,
     mode: Mode,
     opts: &Options,
     fixes: &OsmFixes,
+    relations: &[Relation],
 ) -> Result<Network, String> {
     let mut stats = Stats {
         ways_read: all_ways.len(),
@@ -499,13 +509,35 @@ pub fn build_network_with(
         prune_nodes(&mut nodes, &edges);
     }
 
-    // 10. Keep the largest connected part.
+    // 9b. Turn restrictions (driving) and the edge graph, before the component filter as in duckOSM.
+    let mut graph = Graph::default();
+    if opts.extract_restrictions && mode == Mode::Driving {
+        let (tr, paths) =
+            crate::graph::restrictions(relations, &fixes.turn_restrictions, &mw, &edges);
+        graph.turn_restrictions = Some(tr);
+        graph.turn_path_restrictions = Some(paths);
+    }
+    if opts.build_graph {
+        let (rows, permission) = crate::graph::edge_graph(
+            mode,
+            &edges,
+            &private_edges,
+            graph.turn_restrictions.as_deref(),
+        );
+        graph.edge_graph = Some(rows);
+        graph.turn_permission = Some(permission);
+    }
+
+    // 10. Keep the largest connected part. It also removes the graph rows of the dropped edges.
     if opts.keep_largest_component && !edges.is_empty() {
         let before = edges.len();
+        let ids: FxHashSet<i64> = edges.iter().map(|e| e.edge_id).collect();
         keep_largest(&mut edges);
         stats.dropped_by_component_filter = before - edges.len();
         if before != edges.len() {
             prune_nodes(&mut nodes, &edges);
+            let kept: FxHashSet<i64> = edges.iter().map(|e| e.edge_id).collect();
+            graph.prune(&ids.difference(&kept).copied().collect());
         }
     }
 
@@ -519,6 +551,7 @@ pub fn build_network_with(
         private_edges,
         nodes,
         edge_id_map,
+        graph,
         stats,
     })
 }

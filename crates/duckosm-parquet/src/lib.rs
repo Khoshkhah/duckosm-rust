@@ -8,6 +8,7 @@ use arrow_array::{ArrayRef, RecordBatch};
 use arrow_schema::{DataType, Field, Schema};
 use duckosm_core::filter::Mode;
 use duckosm_core::geom::Pt;
+use duckosm_core::graph::{GraphRow, TurnPath, TurnPermission, TurnRestriction};
 use duckosm_core::model::{Edge, MapRow, Node};
 use duckosm_core::network::Options;
 use parquet::arrow::ArrowWriter;
@@ -343,4 +344,154 @@ pub fn write_edge_id_map_to<W: Write + Send>(out: W, rows: &[MapRow]) -> Result<
     }
     w.close().map_err(err)?;
     Ok(())
+}
+
+/// Write the rows of a plain table (no geometry), in row groups of `ROW_GROUP`.
+fn write_rows<W: Write + Send, T>(
+    out: W,
+    fields: Vec<Field>,
+    rows: &[T],
+    columns: impl Fn(&[T]) -> Vec<ArrayRef>,
+) -> Result<(), String> {
+    let schema = Arc::new(Schema::new(fields));
+    let plain = WriterProperties::builder()
+        .set_compression(compression())
+        .build();
+    let mut w = ArrowWriter::try_new(out, schema.clone(), Some(plain)).map_err(err)?;
+    for chunk in rows.chunks(ROW_GROUP) {
+        w.write(&RecordBatch::try_new(schema.clone(), columns(chunk)).map_err(err)?)
+            .map_err(err)?;
+    }
+    w.close().map_err(err)?;
+    Ok(())
+}
+
+fn i64s(rows: impl Iterator<Item = i64>) -> ArrayRef {
+    let mut b = Int64Builder::new();
+    rows.for_each(|v| b.append_value(v));
+    Arc::new(b.finish())
+}
+
+fn texts<'a>(rows: impl Iterator<Item = Option<&'a str>>) -> ArrayRef {
+    let mut b = StringBuilder::new();
+    rows.for_each(|v| b.append_option(v));
+    Arc::new(b.finish())
+}
+
+fn field(name: &str, t: DataType) -> Field {
+    Field::new(name, t, true)
+}
+
+/// Write `edge_graph` (`via_edge` is `to_edge`).
+pub fn write_edge_graph_to<W: Write + Send>(out: W, rows: &[GraphRow]) -> Result<(), String> {
+    let fields = vec![
+        field("from_edge", DataType::Int64),
+        field("to_edge", DataType::Int64),
+        field("via_edge", DataType::Int64),
+        field("cost", DataType::Float32),
+        field("uses", DataType::Utf8),
+    ];
+    write_rows(out, fields, rows, |c| {
+        let mut cost = Float32Builder::with_capacity(c.len());
+        c.iter().for_each(|r| cost.append_option(r.cost));
+        vec![
+            i64s(c.iter().map(|r| r.from_edge)),
+            i64s(c.iter().map(|r| r.to_edge)),
+            i64s(c.iter().map(|r| r.to_edge)),
+            Arc::new(cost.finish()),
+            texts(c.iter().map(|r| Some(r.uses))),
+        ]
+    })
+}
+
+/// Write `turn_restrictions`.
+pub fn write_turn_restrictions_to<W: Write + Send>(
+    out: W,
+    rows: &[TurnRestriction],
+) -> Result<(), String> {
+    let fields = vec![
+        field("restriction_id", DataType::Int64),
+        field("restriction_type", DataType::Utf8),
+        field("except_vehicles", DataType::Utf8),
+        field("applies_to", DataType::Utf8),
+        field("condition", DataType::Utf8),
+        field("via_node", DataType::Int64),
+        field("from_edge_id", DataType::Int64),
+        field("to_edge_id", DataType::Int64),
+    ];
+    write_rows(out, fields, rows, |c| {
+        vec![
+            i64s(c.iter().map(|r| r.restriction_id)),
+            texts(c.iter().map(|r| Some(r.restriction_type.as_str()))),
+            texts(c.iter().map(|r| r.except_vehicles.as_deref())),
+            texts(c.iter().map(|r| r.applies_to.as_deref())),
+            texts(c.iter().map(|r| r.condition.as_deref())),
+            i64s(c.iter().map(|r| r.via_node)),
+            i64s(c.iter().map(|r| r.from_edge_id)),
+            i64s(c.iter().map(|r| r.to_edge_id)),
+        ]
+    })
+}
+
+/// Write `turn_permission`.
+pub fn write_turn_permission_to<W: Write + Send>(
+    out: W,
+    rows: &[TurnPermission],
+) -> Result<(), String> {
+    let fields = vec![
+        field("from_edge", DataType::Int64),
+        field("to_edge", DataType::Int64),
+        field("allowed", DataType::Boolean),
+        field("vehicles", DataType::Utf8),
+        field("except_vehicles", DataType::Utf8),
+        field("condition", DataType::Utf8),
+        field("restriction_id", DataType::Int64),
+    ];
+    write_rows(out, fields, rows, |c| {
+        let mut allowed = BooleanBuilder::with_capacity(c.len());
+        c.iter().for_each(|r| allowed.append_value(r.allowed));
+        vec![
+            i64s(c.iter().map(|r| r.from_edge)),
+            i64s(c.iter().map(|r| r.to_edge)),
+            Arc::new(allowed.finish()),
+            texts(c.iter().map(|r| r.vehicles.as_deref())),
+            texts(c.iter().map(|r| r.except_vehicles.as_deref())),
+            texts(c.iter().map(|r| r.condition.as_deref())),
+            i64s(c.iter().map(|r| r.restriction_id)),
+        ]
+    })
+}
+
+/// Write `turn_path_restrictions` (`via_edges` is a list).
+pub fn write_turn_path_restrictions_to<W: Write + Send>(
+    out: W,
+    rows: &[TurnPath],
+) -> Result<(), String> {
+    let fields = vec![
+        field("restriction_id", DataType::Int64),
+        field("restriction_type", DataType::Utf8),
+        field("except_vehicles", DataType::Utf8),
+        field("applies_to", DataType::Utf8),
+        field("condition", DataType::Utf8),
+        field("from_edge", DataType::Int64),
+        list_field("via_edges"),
+        field("to_edge", DataType::Int64),
+    ];
+    write_rows(out, fields, rows, |c| {
+        let mut via = ListBuilder::new(Int64Builder::new());
+        for r in c {
+            via.values().append_slice(&r.via_edges);
+            via.append(true);
+        }
+        vec![
+            i64s(c.iter().map(|r| r.restriction_id)),
+            texts(c.iter().map(|r| Some(r.restriction_type.as_str()))),
+            texts(c.iter().map(|r| r.except_vehicles.as_deref())),
+            texts(c.iter().map(|r| r.applies_to.as_deref())),
+            texts(c.iter().map(|r| r.condition.as_deref())),
+            i64s(c.iter().map(|r| r.from_edge)),
+            Arc::new(via.finish()),
+            i64s(c.iter().map(|r| r.to_edge)),
+        ]
+    })
 }

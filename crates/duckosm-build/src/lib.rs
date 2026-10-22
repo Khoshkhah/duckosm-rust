@@ -55,6 +55,8 @@ pub struct ModeSummary {
     pub connectors: usize,
     /// The per-mode OSM fixes that matched a way of this mode.
     pub osm_fixes: usize,
+    pub edge_graph: usize,
+    pub turn_restrictions: usize,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -66,6 +68,33 @@ pub struct Summary {
     pub steps: Vec<(String, f64)>,
     /// Roads that got `sidewalk=separate`.
     pub sidewalk_roads: usize,
+}
+
+/// The tables of the edge graph and the turn restrictions that the options made, as plain Parquet.
+fn write_graph(
+    dir: &Path,
+    mode: &str,
+    g: &duckosm_core::graph::Graph,
+    sum: &mut Summary,
+) -> Result<(), String> {
+    let mut file = |table: &str| -> Result<std::fs::File, String> {
+        let path = dir.join(format!("{table}_{mode}.parquet"));
+        sum.files.push((format!("{table}_{mode}"), path.clone()));
+        std::fs::File::create(&path).map_err(|e| e.to_string())
+    };
+    if let Some(rows) = &g.edge_graph {
+        duckosm_parquet::write_edge_graph_to(file("edge_graph")?, rows)?;
+    }
+    if let Some(rows) = &g.turn_permission {
+        duckosm_parquet::write_turn_permission_to(file("turn_permission")?, rows)?;
+    }
+    if let Some(rows) = &g.turn_restrictions {
+        duckosm_parquet::write_turn_restrictions_to(file("turn_restrictions")?, rows)?;
+    }
+    if let Some(rows) = &g.turn_path_restrictions {
+        duckosm_parquet::write_turn_path_restrictions_to(file("turn_path_restrictions")?, rows)?;
+    }
+    Ok(())
 }
 
 /// `layers.json`: the list of the edge and node files with their counts, as `duckosm export-gis`
@@ -119,6 +148,13 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
     let mut coords = pbf::read_coords(pbf_path, &ways)?;
     fixes.add_new_nodes(&mut ways, &mut coords);
     lap("read nodes", &mut sum);
+    let relations = if p.options.extract_restrictions && p.modes.contains(&Mode::Driving) {
+        let r = pbf::read_restrictions(pbf_path)?;
+        lap("read restrictions", &mut sum);
+        r
+    } else {
+        Vec::new()
+    };
     if p.infer_sidewalks && p.modes.contains(&Mode::Walking) {
         sum.sidewalk_roads = sidewalks::infer_separate_sidewalks(&mut ways, &coords);
         lap("sidewalk rule", &mut sum);
@@ -131,7 +167,7 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
     };
     std::fs::create_dir_all(&pq_dir).map_err(|e| e.to_string())?;
     for mode in &p.modes {
-        let net = build_network_with(&ways, &coords, *mode, &p.options, &fixes)?;
+        let net = build_network_with(&ways, &coords, *mode, &p.options, &fixes, &relations)?;
         lap(&format!("build {}", mode.name()), &mut sum);
         let oc = duckosm_parquet::EdgeCols::of(*mode, &p.options);
         let n = mode.name();
@@ -159,6 +195,7 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
             )?;
             put("edge_id_map", format!("edge_id_map_{n}.parquet"), &mut sum);
         }
+        write_graph(&pq_dir, n, &net.graph, &mut sum)?;
         lap(&format!("write geoparquet {n}"), &mut sum);
         sum.modes.push(ModeSummary {
             mode: *mode,
@@ -168,6 +205,8 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
             edge_id_map: net.edge_id_map.len(),
             connectors: net.stats.connectors,
             osm_fixes: net.stats.osm_fixes,
+            edge_graph: net.graph.edge_graph.as_ref().map_or(0, Vec::len),
+            turn_restrictions: net.graph.turn_restrictions.as_ref().map_or(0, Vec::len),
         });
     }
     if p.geoparquet {

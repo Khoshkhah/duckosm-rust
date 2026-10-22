@@ -50,6 +50,21 @@ fn write_mode(con: &Connection, parquet_dir: &Path, mode: &str) -> Result<(), St
         },
     );
     con.execute_batch(&sql).map_err(|e| e.to_string())?;
+    // the edge graph and the turn restrictions, when the options made them
+    for table in [
+        "edge_graph",
+        "turn_permission",
+        "turn_restrictions",
+        "turn_path_restrictions",
+    ] {
+        if parquet_dir.join(format!("{table}_{mode}.parquet")).exists() {
+            con.execute_batch(&format!(
+                "CREATE TABLE {mode}.{table} AS SELECT * FROM read_parquet('{}');",
+                p(table)
+            ))
+            .map_err(|e| e.to_string())?;
+        }
+    }
     Ok(())
 }
 

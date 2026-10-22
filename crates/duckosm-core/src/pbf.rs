@@ -1,6 +1,7 @@
 //! Read an `.osm.pbf` file: the highway ways first, then the coordinates of the nodes they use.
 
 use crate::filter;
+use crate::graph::{MemberType, Relation};
 use crate::model::{Tags, Way};
 use crate::network::Coords;
 use crate::util::FxHashSet;
@@ -34,6 +35,57 @@ pub fn read_coords(path: &Path, ways: &[Way]) -> Result<Coords, String> {
 /// Pass 2 on the bytes of a `.osm.pbf` file.
 pub fn read_coords_bytes(pbf: &[u8], ways: &[Way]) -> Result<Coords, String> {
     coords_of(from_bytes(pbf), ways)
+}
+
+/// Pass 3: the `type=restriction` relations (the turn restrictions), sorted by id.
+pub fn read_restrictions(path: &Path) -> Result<Vec<Relation>, String> {
+    restrictions_of(open(path)?)
+}
+
+/// Pass 3 on the bytes of a `.osm.pbf` file.
+pub fn read_restrictions_bytes(pbf: &[u8]) -> Result<Vec<Relation>, String> {
+    restrictions_of(from_bytes(pbf))
+}
+
+fn restrictions_of<R: Read + Send>(reader: ElementReader<R>) -> Result<Vec<Relation>, String> {
+    let mut rels = reader
+        .par_map_reduce(
+            |el| {
+                let mut v = Vec::new();
+                if let Element::Relation(r) = el {
+                    // duckOSM: map_extract(tags, 'type')[1] = 'restriction'
+                    if r.tags().find(|t| t.0 == "type").map(|t| t.1) == Some("restriction") {
+                        v.push(Relation {
+                            id: r.id(),
+                            tags: r
+                                .tags()
+                                .map(|(k, x)| (k.to_string(), x.to_string()))
+                                .collect(),
+                            members: r
+                                .members()
+                                .map(|m| {
+                                    let t = match m.member_type {
+                                        osmpbf::RelMemberType::Node => MemberType::Node,
+                                        osmpbf::RelMemberType::Way => MemberType::Way,
+                                        osmpbf::RelMemberType::Relation => MemberType::Relation,
+                                    };
+                                    (m.member_id, t, m.role().unwrap_or("").to_string())
+                                })
+                                .collect(),
+                        });
+                    }
+                }
+                v
+            },
+            Vec::new,
+            |mut a, mut b| {
+                a.append(&mut b);
+                a
+            },
+        )
+        .map_err(|e| e.to_string())?;
+    rels.sort_by_key(|r| r.id);
+    Ok(rels)
 }
 
 fn ways_of<R: Read + Send>(reader: ElementReader<R>) -> Result<Vec<Way>, String> {

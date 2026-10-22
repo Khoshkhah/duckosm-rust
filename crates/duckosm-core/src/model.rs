@@ -229,6 +229,8 @@ pub struct Network {
     pub nodes: Vec<Node>,
     /// One row for each piece of each merged edge (only with `merge_segments`).
     pub edge_id_map: Vec<MapRow>,
+    /// The edge graph and the turn restrictions (`build_graph`, `extract_restrictions`).
+    pub graph: crate::graph::Graph,
     pub stats: Stats,
 }
 

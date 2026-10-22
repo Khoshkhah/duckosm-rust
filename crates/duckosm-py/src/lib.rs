@@ -23,7 +23,7 @@ use std::path::PathBuf;
     merge_segments = true, global_junctions = true, keep_largest_component = true,
     cycling_dismount = true, infer_separate_sidewalks = true, connectivity_rescue = true,
     connect_snap_m = 10.0, process_speeds = true, calculate_costs = true, functional_types = true,
-    osm_overrides = None
+    osm_overrides = None, build_graph = true, extract_restrictions = true
 ))]
 #[allow(clippy::too_many_arguments)]
 fn build<'py>(
@@ -44,6 +44,8 @@ fn build<'py>(
     calculate_costs: bool,
     functional_types: bool,
     osm_overrides: Option<PathBuf>,
+    build_graph: bool,
+    extract_restrictions: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let mut p = Params {
         name,
@@ -80,6 +82,8 @@ fn build<'py>(
         process_speeds,
         calculate_costs,
         functional_types,
+        build_graph,
+        extract_restrictions,
     };
     // the build runs without the GIL, so other Python threads go on
     let sum = py
@@ -99,6 +103,8 @@ fn summary_dict<'py>(py: Python<'py>, sum: &Summary) -> PyResult<Bound<'py, PyDi
         d.set_item("edge_id_map", m.edge_id_map)?;
         d.set_item("connectors", m.connectors)?;
         d.set_item("osm_fixes", m.osm_fixes)?;
+        d.set_item("edge_graph", m.edge_graph)?;
+        d.set_item("turn_restrictions", m.turn_restrictions)?;
         modes.set_item(m.mode.name(), d)?;
     }
     res.set_item("modes", modes)?;

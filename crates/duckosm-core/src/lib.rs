@@ -3,6 +3,7 @@
 pub mod filter;
 pub mod fixes;
 pub mod geom;
+pub mod graph;
 pub mod hash;
 pub mod model;
 pub mod network;

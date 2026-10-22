@@ -75,7 +75,12 @@ pub fn run<W: Write + Send>(
 ) -> Result<Files<W>, String> {
     let mode = Mode::parse(mode)
         .ok_or_else(|| format!("unknown mode '{mode}' (use driving, walking or cycling)"))?;
-    let opts = Options::default();
+    // the page writes only the four network files, so the edge graph would only use memory
+    let opts = Options {
+        build_graph: false,
+        extract_restrictions: false,
+        ..Options::default()
+    };
     let mut ways = pbf::read_ways_bytes(pbf_bytes)?;
     let coords = pbf::read_coords_bytes(pbf_bytes, &ways)?;
     // the same steps as duckosm_build::build, which uses files and a clock (none in WebAssembly)

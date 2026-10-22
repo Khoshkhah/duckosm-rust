@@ -56,10 +56,22 @@ pub struct NewWay {
     pub tags_from: Option<i64>,
 }
 
+/// One rule of the `turn_restrictions` list: a turn restriction that OSM does not have.
+#[derive(Clone, Debug)]
+pub struct TurnFix {
+    /// `-(position in the list)`, from -1: the ids of duckOSM, clear of the OSM relation ids.
+    pub id: i64,
+    pub restriction: String,
+    pub from_way: i64,
+    pub via_node: i64,
+    pub to_way: i64,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct OsmFixes {
     pub ways: Vec<WayFix>,
     pub new_ways: Vec<NewWay>,
+    pub turn_restrictions: Vec<TurnFix>,
 }
 
 impl OsmFixes {
@@ -272,6 +284,7 @@ mod tests {
                     tags_from: None,
                 },
             ],
+            turn_restrictions: vec![],
         };
         fixes.apply_to_ways(&mut ways).unwrap();
         assert_eq!(
@@ -345,6 +358,7 @@ mod tests {
                 },
             ],
             new_ways: vec![],
+            turn_restrictions: vec![],
         };
         assert_eq!(fixes.apply_to_mode(&mut mw, Mode::Driving), 3);
         assert_eq!((mw[0].lanes_fwd, mw[0].lanes_bwd), (Some(1), None));

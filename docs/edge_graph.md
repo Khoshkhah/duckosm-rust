@@ -1,7 +1,20 @@
 # Design: the turn restrictions and the edge graph in Rust
 
-Status: proposal of 2026-10-22, waits for the approval of Kaveh (design section 12, item 4). This is the
-part "Later, 2nd" of section 11 of [design.md](design.md). Its Python sources are
+Status: approved by Kaveh and done on 2026-10-22 (version 0.2.0). This is the part "Later, 2nd" of
+section 11 of [design.md](design.md).
+
+**Result.** Every row of every table is equal to duckOSM, compared with all columns:
+
+| Area | `edge_graph` (driving, walking, cycling) | `turn_restrictions` | `turn_permission` | `turn_path_restrictions` |
+|---|---|---|---|---|
+| Monaco, no component filter | 7,348, 36,850, 32,750 | 43 | 0 | 0 |
+| Monaco, cut, with the component filter | 6,567, 34,764, 31,013 | 38 | 0 | 0 |
+| Tartu (12 conditional rules, 8 with exceptions) | 74,467, 195,228, 188,839 | 81 | 19 | 5 |
+
+`cargo test` runs the two Monaco variants (`crates/duckosm-core/tests/graph.rs`, golden file
+`tests/data/monaco_graph_summary.tsv` from `tools/make_golden_graph.py`). One fix was necessary during the
+test: a half of a split edge can have one node in `refs`, and then its end has no way (in the SQL,
+`refs[2]` is NULL). Its Python sources are
 `processors/restrictions.py` (233 lines) and `processors/edge_graph.py` (210 lines) of duckOSM.
 
 ## Why this part is next

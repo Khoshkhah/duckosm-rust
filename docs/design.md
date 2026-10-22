@@ -55,7 +55,7 @@ The features of version 0.1 are complete after milestone M2. M3 releases them (s
 | 13 | Component filter (keep the largest connected part) | Yes | Python runs it only when a boundary is set. Rust uses an option. |
 | 14 | Connect dangling paths, mark dismount edges | Yes | Done (2026-10-21). The connector adds the same edges as duckOSM. See the note on connector direction in section 6. |
 | 15 | Speeds, travel-time costs, walk and cycle type | Yes | Done (2026-10-21). Speeds and costs: `maxspeed_kmh` replaces `maxspeed`, and `cost_s` is added, with the `f32` arithmetic of the SQL. `--no-speeds` and `--no-costs` switch them off (then the raw `maxspeed` stays). `walk_type` (walking) and `cycle_type` (cycling) are written as in duckOSM (`filter.rs`; a cycling edge that is walked has the type `dismount`); `--no-functional-types` switches them off. |
-| 16 | Turn restrictions, edge graph | No | Turn restrictions need the OSM relations. |
+| 16 | Turn restrictions, edge graph | Yes | Done on 2026-10-22 (`graph.rs`, [edge_graph.md](edge_graph.md)): `edge_graph`, `turn_permission`, and in driving `turn_restrictions` and `turn_path_restrictions`, with the synthetic rules of the OSM fixes. Options `build_graph` and `extract_restrictions` (CLI `--no-graph`, `--no-restrictions`). |
 | 17 | H3 cells | No | |
 | 18 | Multimodal graph, `features.*`, bus routes, lane profile, drawing order | No | |
 | 19 | `edge_id_hash` macros, metadata, time zone, report, maps | No | Python keeps these. |
@@ -153,7 +153,9 @@ writes this part of what duckOSM writes today (checked in `monaco.duckdb` of 202
 | `<mode>.nodes` | Yes. `node_id` and `geom`. The column `h3_cell` is not written. |
 | `<mode>.private_edges` | Yes. |
 | `main.edge_id_hash`, `main.edge_id_hash_v1` (macros) | Yes. The same SQL as `edge_id.py`. They call the `hash()` of the DuckDB in the file, so they agree with the ids only for DuckDB 1.3 and later (section 5). |
-| `edge_graph`, `turn_*`, `lane_profile`, `edge_id_map`, `virtual_nodes`, `way_nodes`, `ways` | No. |
+| `<mode>.edge_id_map` | Yes (with `merge_segments`). |
+| `<mode>.edge_graph`, `<mode>.turn_permission`, `driving.turn_restrictions`, `driving.turn_path_restrictions` | Yes (with `build_graph` and `extract_restrictions`, both on by default). |
+| `lane_profile`, `virtual_nodes`, `way_nodes`, `ways` | No. `virtual_nodes`, `way_nodes` and `ways` are intermediate tables of duckOSM; the virtual nodes are in `nodes`. |
 | `main.global_junctions`, `main.boundary`, `main.visualization_metadata`, `raw.*`, `features.*`, `bus.*`, `mm.*`, `visualization.*` | No. |
 
 Python duckOSM can read the file and continue with the steps that are not ported. The DuckDB in the
@@ -201,7 +203,7 @@ dr.edge_id_hash(osm_id, source, target)             # same name and result as du
   - The program does not cut the PBF. With a boundary, the caller must say that the PBF is already cut
     (`pbf_is_cut=True`, CLI `--pbf-is-cut`). The component filter then runs as in duckOSM (with a boundary
     and `build_graph` on).
-  - A duckOSM step that the program does not have (the edge graph, H3, turn restrictions, `features.*`, the
+  - A duckOSM step that the program does not have (H3, `features.*`, the
     drawing order, the bus routes, the sea, the checks, the report, the maps, the multimodal
     graph) is an error. Most of them are on by default in duckOSM, so a usual config needs `strict=False`
     (CLI `--allow-skipped`). The result then lists them under `skipped`.
@@ -515,7 +517,7 @@ proposal: high gain and low effort first.
 | Network build: road filter, global junctions, graph simplifier, edge_id, private split, component filter (`processors/`) | about 1,500 | **Now** | Pure CPU. Large data. It is the main cost of a build. Section 2. |
 | GeoParquet output (part of `gis.py`) | small | **Now** | Rust writes it itself. |
 | Speeds, costs, walk and cycle type, dismount, lane profile (`processors/`) | about 450 | **Later, 1st** | Rules for one edge at a time. They need only the tags that Rust already reads. |
-| Turn restrictions, edge graph (`processors/restrictions.py`, `edge_graph.py`) | about 440 | **Later, 2nd** | Pure CPU. The edge graph is large. Needs the OSM relations. Design proposal: [edge_graph.md](edge_graph.md) (2026-10-22, waits for approval). |
+| Turn restrictions, edge graph (`processors/restrictions.py`, `edge_graph.py`) | about 440 | **Done** (2026-10-22) | Pure CPU. The edge graph is large. Needs the OSM relations. See [edge_graph.md](edge_graph.md). |
 | Dangling-path connector, H3 cells (`path_connector.py`, `h3_indexer.py`, `utils/h3_calc.py`) | about 320 | **Later, 3rd** | Pure CPU. A Rust H3 crate exists (`h3o`). |
 | Routing: shortest path, point routing, lane routing, directions | about 1,100 | **Later, 4th** | Graph search is a good fit for Rust and gives a large speed gain. The export to networkx stays in Python, because networkx is a Python library. |
 | GMNS and crossings (`gmns.py`, `crossings.py`, `gmns_sumo.py`, `gmns_check.py`) | about 2,900 | **Later, 5th** | Large, CPU heavy, and uses shapely and numpy today. The lane rules still change, so port a table only when its rules are stable. |
@@ -572,7 +574,7 @@ Decision (Kaveh, 2026-10-21): the repository is `duckosm-rust`.
    SonoFlow or fetching-sweden-data, that DuckDB older than 1.2 built? Their ids are different.
 4. ~~Is version 0.1 without speeds, costs, turn restrictions, the edge graph and connector edges
    acceptable?~~ Speeds, costs and the connectors are done (closed on 2026-10-22). The edge graph and the
-   turn restrictions are the next part (section 11, "Later, 2nd").
+   turn restrictions are done too (section 11).
 5. ~~OSM overrides change ways before the graph is built. Can the Rust core read the YAML file for the
    way rules, or must Python apply them to the PBF first?~~ Decided by Kaveh on 2026-10-22: the Rust core
    reads the YAML file. Done (section 6, item 6c).

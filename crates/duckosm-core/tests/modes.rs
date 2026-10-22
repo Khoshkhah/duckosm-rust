@@ -69,6 +69,9 @@ fn three_modes_equal_duckosm() {
             process_speeds: speeds,
             calculate_costs: speeds,
             functional_types: variant.ends_with("_ft"),
+            // the edge graph has its own golden test (graph.rs)
+            build_graph: false,
+            extract_restrictions: false,
         };
         let net = if cf {
             build_network(&cut_ways, &cut_coords, mode, &opts)
