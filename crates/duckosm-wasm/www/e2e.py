@@ -1,5 +1,5 @@
-"""The page in headless Chromium (Playwright): build an area, run a query, and download the Parquet files and
-load.sql. Prints the times of the page as JSON (docs/browser.md, steps B3 and B4).
+"""The page in headless Chromium (Playwright): build an area, run a query, show the roads map (a picture in
+map.png), and download the Parquet files and load.sql. Prints the times of the page as JSON (docs/browser.md, steps B3 and B4).
 
     python crates/duckosm-wasm/www/e2e.py <file.osm.pbf> <out folder> [--boundary area.geojson] [--modes driving,walking,cycling] [--fixes file.yaml]
 
@@ -74,6 +74,12 @@ with sync_playwright() as p:
     }))""")
     for name, data in files:
         (out / name).write_bytes(base64.b64decode(data))
+    # the roads map (map/): its note, and a picture of it
+    page.wait_for_function("/layers;|failed/.test(document.getElementById('mapnote').textContent)", timeout=600_000)
+    print("map:", page.inner_text("#mapnote"))
+    page.wait_for_function("window.duckMap && window.duckMap.loaded()", timeout=600_000)   # the tiles are cut and drawn
+    print("map view:", page.evaluate("(() => { const m = window.duckMap; return {center: m.getCenter(), zoom: m.getZoom()}; })()"))
+    page.locator("#map").screenshot(path=str(out / "map.png"))
     print(json.dumps(page.evaluate("window.timings")))
     browser.close()
 server.shutdown()

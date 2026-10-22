@@ -213,5 +213,28 @@ faster. Not done: keep the
 region file in OPFS (the user selects the file again, which costs nothing), and an automatic download of the
 extract (it needs a server with CORS).
 
-**After B4: the visualization part.** The map from the tables in duckdb-wasm, with the Rust style module of
-geolibre-roadstyle. It needs the base-map layers and the drawing order in Rust (or a page without them).
+**M1: the roads map (2026-10-22).** Done. After the build, the page shows the roads on a MapLibre map (5.24.0), in the
+style of roadstyle:
+1. duckdb-wasm writes `roads.parquet` from the tables. `www/map/roads_sql.js` is a copy of geolibre-roadstyle's
+   `spike/worker/roads_sql.js` with one more option: `{levels: "tags"}`. The page has no level area, so the
+   drawing levels come from roadstyle's `compute_levels(method="tags")`, written in SQL: from layer, bridge
+   and tunnel, and the levels of the roads at each end node.
+2. roadstyle's Rust module (geolibre-roadstyle `spike/rust`, commit `38cd2aa`, built by `build.sh` into
+   `www/map/pkg/`) makes the complete MapLibre style in a worker (`www/map/map_worker.js`), with the look
+   `www/map/look.json` ("google" colors). A new worker for each style gives the memory back.
+3. MapLibre draws the style. The one-way arrow comes from `roadstyle:images`. A click on a road shows its data.
+
+- The choices: the roads of all modes or of one mode, and the base map: Esri light gray (the default),
+  OpenStreetMap, or none. These are roadstyle's keyless raster maps; CARTO's tiles now need a key.
+- There is no base map from the data: duckOSM's `features.*` tables are not built in Rust yet.
+
+| | Roads table (SQL) | Style (Rust) | Style memory | Map ready |
+|---|---|---|---|---|
+| Monaco | 0.2–0.4 s | 0.7–1.1 s | 296 MiB | 1.4–2.3 s |
+| Tartu (63,965 roads) | 0.8 s | 5.8–6.1 s | 1,388 MiB | 9.1–9.3 s, then MapLibre cuts the tiles |
+
+The style holds the roads as inline GeoJSON (Tartu: about 226 MB of text). This is the limit for larger areas:
+roadstyle's module stops at 100,000 roads. A smaller style needs another way to give the roads to MapLibre (for
+example vector tiles), in geolibre-roadstyle.
+
+**After M1:** duckOSM's base-map layers (`features.*`) in Rust, then the style can draw them.

@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>duckOSM in the browser</title>
+<!-- MapLibre: the version of roadstyle (the styles of the roads map come from its Rust module) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
 <style>
   :root { --bg: #fff; --fg: #1d1d1f; --muted: #6e6e73; --line: #d2d2d7; --accent: #0a66c2; --code: #f5f5f7; }
   @media (prefers-color-scheme: dark) {
@@ -23,6 +26,8 @@
   th, td { border: 1px solid var(--line); padding: 0.2rem 0.5rem; text-align: left; white-space: nowrap; }
   a { color: var(--accent); }
   #files a { display: inline-block; margin-right: 1rem; }
+  #map { height: 60vh; min-height: 320px; border: 1px solid var(--line); border-radius: 8px; }
+  .maplibregl-popup-content { color: #1d1d1f; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -58,17 +63,26 @@ The input is an area: a boundary and a name. Make the boundary with the <a href=
 
 <pre id="status">Loading DuckDB…</pre>
 
-<h2>2. SQL</h2>
+<h2>2. Map</h2>
+<p><label>Roads of <select id="mapmode"><option value="all">all modes</option><option value="driving">driving</option>
+  <option value="walking">walking</option><option value="cycling">cycling</option></select></label>
+  <label>Base map <select id="basemap"><option value="esri_gray">light gray (Esri)</option><option value="osm">OpenStreetMap</option>
+  <option value="">none</option></select></label>
+  <span id="mapnote" class="note">The map comes after the build.</span></p>
+<div id="map"></div>
+
+<h2>3. SQL</h2>
 <textarea id="sql" rows="4">SELECT highway, count(*) AS edges, round(sum(length_m) / 1000, 1) AS km
 FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
 <p><button id="query" disabled>Run the query</button></p>
 <div id="result"></div>
 
-<h2>3. Download</h2>
+<h2>4. Download</h2>
 <p><button id="duckdb" disabled>Download load.sql</button> It makes a <code>.duckdb</code> file from the Parquet files below: <code>duckdb area.duckdb &lt; load.sql</code></p>
 <div id="files"></div>
 
 <script type="module">
+import { writeRoads } from "./map/roads_sql.js";
 // duckdb-wasm with DuckDB 1.5: the GEOMETRY type of the tables is core from 1.5 (the version that the
 // geolibre-roadstyle spike tested, docs/browser.md).
 const DUCKDB = "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.33.1-dev57.0/+esm";
@@ -249,11 +263,96 @@ $("run").onclick = async () => {
       $("files").append(a);
     }
     $("query").disabled = $("duckdb").disabled = false;
+    showMap(true);
   } catch (e) {
     log("Error: " + e.message);
   }
   $("run").disabled = false;
 };
+
+// The roads map: duckdb-wasm writes roads.parquet from the tables (map/roads_sql.js, the drawing levels from the tags), roadstyle's Rust
+// module makes the MapLibre style in a worker (map/map_worker.js), and MapLibre draws it. The page has no features.* tables, so the base map
+// is a raster map (setBase).
+let map = null, mapRun = 0;
+
+// the base map under the roads: roadstyle's keyless raster maps (roadstyle basemaps.py; CARTO's tiles now need a key)
+const BASEMAPS = {
+  esri_gray: { tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"],
+               attribution: "Tiles © Esri", maxzoom: 16 },
+  osm: { tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], attribution: "© OpenStreetMap contributors", maxzoom: 19 },
+};
+
+function setBase() {
+  if (map.getLayer("base")) map.removeLayer("base");
+  if (map.getSource("base")) map.removeSource("base");
+  const b = BASEMAPS[$("basemap").value];
+  if (!b) return;
+  map.addSource("base", { type: "raster", tileSize: 256, ...b });
+  const above = map.getStyle().layers.find((l) => l.type !== "background");      // under the roads, over the background
+  map.addLayer({ id: "base", type: "raster", source: "base" }, above && above.id);
+}
+$("basemap").onchange = () => map && setBase();
+
+// the style's own images (the one-way arrow): roadstyle:images, {name: {url, sdf, pixelRatio}} (as GeoLibre's roadstyle plugin adds them)
+const addImages = (m, images) => Promise.all(Object.entries(images || {}).map(([n, v]) => new Promise((done) => {
+  const o = typeof v === "string" ? { url: v } : v, img = new Image();
+  img.onload = () => { if (!m.hasImage(n)) m.addImage(n, img, { sdf: !!o.sdf, pixelRatio: o.pixelRatio || 1 }); done(); };
+  img.onerror = done;
+  img.src = o.url;
+})));
+
+function styleInWorker(roads, name) {
+  return new Promise((ok, fail) => {
+    const w = new Worker(new URL("./map/map_worker.js", import.meta.url), { type: "module" });
+    w.onmessage = ({ data }) => { w.terminate(); data.error ? fail(new Error(data.error)) : ok(data); };
+    w.onerror = (e) => { w.terminate(); fail(new Error(e.message || "the map worker failed")); };
+    w.postMessage({ roads, name }, [roads.buffer]);
+  });
+}
+
+async function showMap(newArea = false) {
+  if (!tables.length) return;
+  const run = ++mapRun, mode = $("mapmode").value;
+  $("mapnote").textContent = "making the map…";
+  try {
+    const t0 = performance.now();
+    const q = async (sql) => (await conn.query(sql)).toArray().map((r) => r.toJSON());
+    await db.dropFile("roads.parquet").catch(() => {});     // duckdb-wasm does not see a second COPY to a kept file name
+    await writeRoads(q, "memory", mode, { levels: "tags" });
+    const roads = await db.copyFileToBuffer("roads.parquet");
+    const t1 = performance.now();
+    const out = await styleInWorker(roads, areaName);
+    if (run !== mapRun) return;                             // another mode was chosen in the meantime
+    const style = JSON.parse(out.style);
+    if (!map) {
+      // the roads are OpenStreetMap data; window.duckMap: for e2e.py
+      map = window.duckMap = new maplibregl.Map({ container: "map", style, customAttribution: "© OpenStreetMap contributors" });
+      map.addControl(new maplibregl.NavigationControl());
+      const fields = () => (map.getStyle().metadata?.["roadstyle:interaction"]?.popup) || ["name", "highway"];
+      map.on("click", (e) => {
+        const f = map.queryRenderedFeatures(e.point).find((x) => x.source === "roads");
+        if (!f) return;
+        const rows = fields().filter((k) => f.properties[k] != null && f.properties[k] !== "")
+          .map((k) => `<b>${k}</b> ${String(f.properties[k]).replace(/</g, "&lt;")}`);
+        new maplibregl.Popup().setLngLat(e.lngLat).setHTML(rows.join("<br>") || "(no data)").addTo(map);
+      });
+    } else {
+      map.setStyle(style, { diff: false });               // a full load: a diffed style sends no "style.load"
+      if (newArea) map.jumpTo({ center: style.center, zoom: style.zoom });
+    }
+    await new Promise((ok) => map.once("style.load", ok));
+    setBase();
+    await addImages(map, style.metadata?.["roadstyle:images"]);
+    const t2 = performance.now();
+    window.timings = Object.assign(window.timings || {}, { map: { roadsSql: (t1 - t0) / 1000, style: out.seconds,
+      total: (t2 - t0) / 1000, memoryMiB: out.memoryMiB } });
+    $("mapnote").textContent = `${style.layers.length} layers; roads table ${((t1 - t0) / 1000).toFixed(2)} s, style ` +
+      `${out.seconds.toFixed(2)} s (${out.memoryMiB} MiB), map ${((t2 - t0) / 1000).toFixed(2)} s. Click a road for its data.`;
+  } catch (e) {
+    if (run === mapRun) $("mapnote").textContent = "The map failed: " + e.message;
+  }
+}
+$("mapmode").onchange = () => showMap();
 
 const show = (v) => (v === null || v === undefined ? "NULL" : v instanceof Uint8Array ? `(${v.length} bytes)` : typeof v === "object" ? JSON.stringify(v, (k, x) => (typeof x === "bigint" ? x.toString() : x)) : String(v));
 
