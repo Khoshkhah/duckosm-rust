@@ -39,8 +39,8 @@ program reports for its own steps:
 - duckosm-rust (`--timing`): read ways, read nodes, build network.
 
 **Lane profile.** duckOSM always runs the step `_lane_profile` for the driving mode and has no switch for
-it. It is not part of the network step. It is a Python loop that adds a large, fixed cost
-(see "Plain `duckosm build`"). `bench/python_steps.py ... --no-lane-profile` replaces it with an empty
+it. It is not part of the network step. It adds a large cost
+(see "The lane profile step is slow"). `bench/python_steps.py ... --no-lane-profile` replaces it with an empty
 function. The row "lane profile off" is therefore **not** the command `duckosm build`.
 
 ## Results
@@ -58,7 +58,7 @@ function. The row "lane profile off" is therefore **not** the command `duckosm b
 
 | Program | runs | wall min (s) | wall median (s) | peak memory (MB) | network steps min (s) | network steps median (s) |
 |---|---|---|---|---|---|---|
-| duckOSM: `duckosm build --config config.yaml` | 1, not finished | more than 29 min (see below) | - | - | - | - |
+| duckOSM: `duckosm build --config config.yaml` | 1, stopped | more than 33 min (see below) | - | - | - | - |
 | duckOSM: same, lane profile off | 3 | 217.70 | 225.83 | 2,460 | 214.51 | 222.68 |
 | duckosm-rust: `--format duckdb` | 3 | 7.22 | 7.65 | 1,908 | 3.55 | 3.65 |
 | duckosm-rust: `--format geoparquet` | 3 | 6.30 | 7.10 | 1,708 | 4.54 | 5.02 |
@@ -66,11 +66,26 @@ function. The row "lane profile off" is therefore **not** the command `duckosm b
 Wall times of each run (s): duckOSM lane profile off 228.51, 217.70, 225.83; duckosm-rust `duckdb` 7.22, 7.65,
 9.13; `geoparquet` 7.10, 8.45, 6.30.
 
-Plain `duckosm build` on Estonia: I started one run. The steps before the lane profile finished after about
-4 min (21:04 to 21:07, same as the row "lane profile off"). The lane profile step was still running after
-30 min. I stopped waiting at the time of writing, so there is no number and no 3 runs. The step is a Python
-loop over all 845,826 edges (see the caveats). Monaco shows the fixed part: the plain command takes 22-23 s,
-and 1.6 s with the lane profile off.
+Plain `duckosm build` on Estonia: I started one run and stopped it after 33 min, inside the lane profile
+step. The steps before it finished after about 4 min (same as the row "lane profile off"). So there is no
+number and no 3 runs. The cause of the lane profile time is measured (next section).
+
+### The lane profile step is slow because of `executemany`
+
+`driving.lane_profile` is written with `con.executemany("INSERT INTO ... VALUES (?, ?, ...)", rows)`
+(`processors/lane_profile.py`, line 158). Test on a copy of `monaco.duckdb`, on this disk:
+
+| How the rows are inserted | time |
+|---|---|
+| `executemany`, 3,000 rows, one commit for each row (the code of duckOSM) | 30.0 s (10 ms for each row) |
+| `executemany`, 3,000 rows, inside one `BEGIN ... COMMIT` | 1.4 s |
+| 300,000 rows in one `INSERT ... SELECT * FROM <DataFrame>` | 0.2 s |
+
+Monaco has only 3,176 lane rows, and the step takes 28-35 s. Estonia has about 845,000 edges and so
+about 2 million lane rows. At 10 ms for each row, the step needs more than 5 hours. With one
+`INSERT ... SELECT` from a DataFrame it would need seconds for the insert. The Python loop that decides
+the lanes of each edge is a second cost that I did not measure. Other places in duckOSM use the same
+call for large lists (for example `component_filter.py` line 67 and `restrictions.py` line 203).
 
 ### Where the time goes
 
