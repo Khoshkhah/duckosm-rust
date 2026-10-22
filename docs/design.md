@@ -329,6 +329,23 @@ Rule: a skipped test is not a pass.
    Limits: the reader keeps only highway ways and ferry lines, so a `tags` rule or `tags_from` on another
    way has no effect. A tag value that YAML reads as true or false is an error, so write it in quotes. The
    WebAssembly page does not take a fixes file yet.
+6d. **Estonia (done, 2026-10-22).** The scale test: `estonia-latest.osm.pbf` (121 MB), the three modes,
+   everything of the network step on (merge, global junctions, the sidewalk rule, the connector, speeds,
+   costs, the walk and cycle types), the OSM fixes of duckOSM, no boundary. The golden comes from duckOSM
+   with `bench/python_steps.py` and the same settings.
+
+   | | duckosm-rust | duckOSM |
+   |---|---|---|
+   | Time, three modes | 19.2 s (all threads), 23.5 s (one thread) | 1,545 s (the lane profile off) |
+   | Peak memory (RSS) | 1.53 GB (all threads), 1.31 GB (one thread) | 10.2 GB |
+   | Edges: driving, walking, cycling | 821,074, 1,402,628, 1,376,472 | the same |
+
+   Driving: every row of `edges`, `private_edges` and `nodes` is equal in all columns. Walking and cycling:
+   `private_edges`, `nodes` and `edge_id_map` are equal. In `edges`, only connector rows are different
+   (88 in walking and 238 in cycling), in the labels of item 3c and in the columns that come from them
+   (`walk_type`, `cycle_type`, and in cycling `dismount`, `maxspeed_kmh` and `cost_s`). No OSM way is
+   different. The sidewalk rule takes 4.7 s, the longest step. Other jobs used about 1.5 cores of the
+   20 cores during the test.
 
 ## 7. Memory and streaming
 
@@ -345,7 +362,8 @@ The build reads the file in passes and never loads the whole file:
    Only the merge step and the component filter need all edges together. 739 K edges fit in memory.
 4. **Write.** Write Parquet in row groups of 64 K rows.
 
-Targets for M3, to be measured: Estonia in less than 2 GB of memory. The time target is open until
+Targets for M3: Estonia in less than 2 GB of memory. Measured on 2026-10-22: 1.53 GB for the three
+modes (section 6, item 6d). The time target is open until
 the first measurement.
 
 **WebAssembly.** One tab has at most 4 GB of address space, so the target is a city or a small
@@ -377,7 +395,7 @@ is 4.4 MB (0.81 MB with gzip, `wasm-opt` is not used). The native program uses a
 |---|---|---|---|---|---|
 | Monaco | 0.6 MB | 0.08 s | 0.09 s | 11 MiB | 0.04 s |
 | Stockholm county | 70 MB | 5.5 s | Not measured | 537 MiB | Not measured |
-| Estonia, 769,662 edges | 121 MB | 9.7 s | 10.3 s | 676 MiB | 5.2 s, 1.13 GB |
+| Estonia, 769,662 edges | 121 MB | 10.4 s | 9.7 s | 710 MiB | see item 6d |
 | Kentucky, 2,114,699 edges | 148 MB | 22.1 s | 20.1 s | 2,053 MiB | 11.8 s, 3.24 GB |
 | Iran | 219 MB | Fails at 3,816 MiB | Not measured | | Not measured |
 
@@ -386,10 +404,23 @@ connector. The other rows are from 2026-10-21 and 2026-10-22, before the rebase.
 measured again, because the tests use Monaco (and Tartu) only until Kaveh asks for a large area.
 Other jobs used the computer during some measurements, so the times can change by some seconds.
 
+The Estonia row is from 2026-10-22, after the rebase. In Node, the walking mode of Estonia takes 21.6 s
+and 1,460 MiB, and the cycling mode takes 12.4 s and 1,450 MiB.
+
 For Monaco, in the three modes, all rows of the four files are equal to the native output. In the
 driving mode, the files are also equal, byte for byte, to the native output with Snappy (the test
-`bytes_equal_files`). Before the rebase, all rows for Estonia and Kentucky were equal to the native
-output. Kentucky is the largest area that is tested and fits. When an area does not fit, an
+`bytes_equal_files`). For Estonia, driving and cycling are equal on all rows. In walking, one road
+(2 of 1,391,194 edges) is not equal, because of `cos` (see below). Before the rebase, all rows for
+Kentucky were equal to the native output. Kentucky is the largest area that is tested and fits.
+
+**`cos` in WebAssembly.** The sidewalk rule computes a local metre frame with `cos(lat0)`. On Linux,
+Rust and Python duckOSM use the `cos` of glibc. In WebAssembly, Rust uses the `cos` of the `libm`
+crate. For about 2 % of the latitudes from 57 to 60 degrees, the two results are different in the last
+bit. In Estonia, this changes the decision of the rule for one road: the native program and duckOSM
+give `sidewalk=separate` to 578 roads, and WebAssembly to 579 roads. Where the two are different, glibc
+gives the correctly rounded value in 1,025 of 1,037 checked cases, so glibc is not always correct either.
+Thus a different `cos` in Rust cannot make all results equal. The `cos` of macOS and Windows can also
+give such a difference. This is a known limit of a rule with float thresholds. When an area does not fit, an
 allocation fails, and the module stops with `RuntimeError: unreachable`.
 
 **Changes that make the memory smaller (2026-10-21 and 2026-10-22).** Two probes measured the memory
@@ -453,8 +484,8 @@ this size, the build must write the edges while it makes them, and not keep all 
 | M0 | Setup and spike. Rust installed. Cargo workspace. `edge_id` module. Golden files. A CLI that builds the driving network of one PBF and writes `.duckdb` and GeoParquet. | `cargo test` passes the hash vectors and the Monaco golden test. **Done on 2026-10-21.** The Python output is the same on each run (two golden builds of Monaco: 0 rows differ). The build for `wasm32-unknown-unknown` is checked for compile only (section 7). |
 | M1 | Monaco, driving. All steps in the table that are marked "Yes", for driving, without `merge_segments`. | All 2,765 `edge_id` values equal the golden file. All columns in section 6 pass. GeoPandas and DuckDB read the output. **Reached in the spike** for the output in `.duckdb` and GeoParquet (see [benchmark.md](benchmark.md) for the speed; only Monaco is tested). |
 | M2 | Walking and cycling. `merge_segments` and `edge_id_map`. `lanes`. `private_edges`. | The same checks pass for the three modes, with `merge_segments` on and off. Tartu passes as a local golden (done, see section 6). **Reached on Monaco on 2026-10-21** for 9 variants (`merge_segments` and `global_junctions` on or off, the component filter, the sidewalk rule, the connector, the connector with the component filter, and everything on with speeds and the walk and cycle types) in the three modes: 0 rows differ in `edges`, `private_edges`, `nodes` and `edge_id_map`. Tartu is done (section 6). The sidewalk rule finds the same 46 roads in Monaco as duckOSM. It is a geometric rule with float thresholds, so a different area can give a difference at a threshold. It assumes right-hand traffic, as duckOSM does. |
-| M3 | Release 0.1.0. CLI, Python wheel, config subset, `layers.json`. | A fresh virtual environment runs `pip install` and builds Monaco with an equal result. The CLI binary does the same. The Estonia numbers are written down. Wheels build for Linux, macOS and Windows. |
-| M4 | WebAssembly and large areas. | A browser page turns a city PBF into GeoParquet. Estonia meets the targets. Optional: speeds and costs, turn restrictions. **Browser page done on 2026-10-21** (section 7): Monaco gives the same rows as the native output in the three modes. Estonia uses 676 MiB, and Kentucky (148 MB PBF) fits in 2,053 MiB. Not done: the large-area targets of the native program. |
+| M3 | Release 0.1.0. CLI, Python wheel, config subset, `layers.json`. | A fresh virtual environment runs `pip install` and builds Monaco with an equal result. The CLI binary does the same. The Estonia numbers are written down. Wheels build for Linux, macOS and Windows. **Estonia done on 2026-10-22** (section 6, item 6d). The CI built and tested the wheels for Linux, macOS and Windows on 2026-10-22 (Windows without sccache). |
+| M4 | WebAssembly and large areas. | A browser page turns a city PBF into GeoParquet. Estonia meets the targets. Optional: speeds and costs, turn restrictions. **Browser page done on 2026-10-21** (section 7): Monaco gives the same rows as the native output in the three modes. Estonia uses 710 MiB in the driving mode, and Kentucky (148 MB PBF) fits in 2,053 MiB. Not done: the large-area targets of the native program. |
 
 ## 10. Long-term vision
 
@@ -537,8 +568,9 @@ Decision (Kaveh, 2026-10-21): the repository is `duckosm-rust`.
 6. Is the strangler method in section 12 right: Python duckOSM calls the Rust wheel part by part,
    with `engine: rust` as the switch? Or do you want two separate tools?
 7. Cut to the boundary: keep `osmium` outside, or add a polygon cut to the Rust core in M3 or M4?
-8. Large areas are not tested yet. Which PBF is the scale test, and when do you want it? An Estonia PBF
-   is on disk (`osm-traffic-enrichment/map/estonia-latest.osm.pbf`, 121 MB).
+8. ~~Large areas are not tested yet. Which PBF is the scale test, and when do you want it?~~ Decided by
+   Kaveh on 2026-10-22: Estonia (`osm-traffic-enrichment/map/estonia-latest.osm.pbf`, 121 MB). Done
+   (section 6, item 6d).
 
 9. Is the order of the "Later" parts in section 11 right? After a part moves, do you delete its
    Python code or keep it as the reference?

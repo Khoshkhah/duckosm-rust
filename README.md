@@ -57,7 +57,7 @@ wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/pkg target/wasm32-un
 python3 -m http.server 8000 -d crates/duckosm-wasm/www
 ```
 
-In the browser, a city or a region fits: Estonia (121 MB PBF) uses 676 MiB, and Kentucky (148 MB)
+In the browser, a city or a region fits: Estonia (121 MB PBF) uses 710 MiB, and Kentucky (148 MB)
 uses 2,053 MiB of the 4 GB limit. Section 7 of the design has the numbers.
 
 ## Read next
