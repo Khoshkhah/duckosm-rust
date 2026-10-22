@@ -1,4 +1,4 @@
-# CI for duckosm-rust. Not run yet: the repository has no remote. The runner names and action versions
+# CI for duckosm-rust (github.com/Khoshkhah/duckosm-rust). The runner names and action versions
 # come from `maturin generate-ci github` (maturin 1.15.0).
 #
 # The wheels are abi3 (Python 3.9 and newer), so one wheel for each system is enough. They contain DuckDB

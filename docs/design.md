@@ -168,7 +168,8 @@ Common to both formats:
 
 Status 2026-10-21: the module `duckosm_rust` exists (crate `duckosm-py`, PyO3 and maturin, one `abi3` wheel for
 Python 3.9 and newer; the build runs without the GIL). It has `build(...)`, `build_from_config(...)` and `edge_id_hash(...)`. The
-plan below is what it follows. A CI workflow for wheels on 5 systems is written but has never run (no remote); on
+plan below is what it follows. A CI workflow builds the wheels on 5 systems on each push to `main` of the GitHub
+repository `Khoshkhah/duckosm-rust` (private, created on 2026-10-22); on
 this machine a `manylinux2014` wheel (glibc 2.17 or newer) was built with zig and tested. A plain build here has
 the tag `manylinux_2_35`. See [development.md](development.md).
 
