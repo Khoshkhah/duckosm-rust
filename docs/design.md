@@ -1,6 +1,8 @@
-# Design of duckosm-core
+# Design of duckosm-rust
 
 Status: draft for review by Kaveh. Date: 2026-10-21. No Rust code exists yet.
+
+The repository is `duckosm-rust`. It is a Cargo workspace. Its first crate is `duckosm-core`.
 
 This document is based on duckOSM 0.6.0 (git tag `v0.6.0`) and DuckDB 1.5.3. The numbers come from
 `monaco.duckdb` in the duckOSM folder, built on 2026-10-21. The experiments in section 5 are in
@@ -8,17 +10,20 @@ This document is based on duckOSM 0.6.0 (git tag `v0.6.0`) and DuckDB 1.5.3. The
 
 ## 1. Goal and non-goals
 
-**Goal.** Read an `.osm.pbf` file and write the same road edges and nodes as duckOSM, with the same
-`edge_id` values, without Python or DuckDB. Give people three ways to run it:
+**Goal.** The first scope is the core. Read an `.osm.pbf` file and write the same road edges and
+nodes as duckOSM, with the same `edge_id` values, without Python or DuckDB. The long-term goal is
+larger: move every part of duckOSM that suits Rust to Rust, one part at a time (sections 10 to 12).
+Give people three ways to run it:
 
-1. `pip install duckosm-core` (a wheel with a Python API).
+1. `pip install duckosm-rust` (a wheel with a Python API).
 2. One CLI program.
 3. Later, a WebAssembly package for the browser.
 
 **Non-goals.**
 
-- A rewrite of duckOSM. Python duckOSM stays and keeps the exporters (GMNS, SUMO, MATSim, OpenDrive,
-  Lanelet2, railML), routing, elevation and the `features.*` base-map layers.
+- A rewrite of duckOSM in one step. Version 0.1 does only the network step. Python duckOSM stays and
+  keeps the other parts (GMNS, the exporters, routing, elevation, the `features.*` layers) until
+  each part moves (sections 11 and 12).
 - A new `edge_id`. Downstream projects (sensor-matching, SonoFlow, fetching-sweden-data) join on it.
 - A DuckDB output in version 0.1. DuckDB, GeoPandas and GDAL read GeoParquet.
 - Planet-scale builds. The target is a city, a region or a small country.
@@ -92,6 +97,8 @@ flowchart LR
     PQ -.-> OUT[("edges_driving.parquet<br/>nodes_driving.parquet<br/>layers.json")]
 ```
 
+Later crates join this workspace (section 12).
+
 `duckosm-core` has no file or thread code. It reads from a `Read` value and sends rows to a `Sink`
 trait. This lets the same code run in the CLI, in Python and in the browser.
 
@@ -131,20 +138,20 @@ For each mode the Rust core writes files with the same names as `duckosm export-
 The names follow duckOSM. The keyword names are the config keys of duckOSM.
 
 ```python
-import duckosm_core as dc
+import duckosm_rust as dr
 
-res = dc.build("monaco.osm.pbf", "out/", modes=["driving", "walking"],
+res = dr.build("monaco.osm.pbf", "out/", modes=["driving", "walking"],
                merge_segments=True, global_junctions=True, keep_largest_component=True)
 res.counts          # {"driving": {"edges": 2765, "nodes": 1719}, ...}
 res.files           # {"edges_driving": "out/edges_driving.parquet", ...}
 
-dc.build_from_config("config/sample_monaco.yaml")   # a subset of the config keys
-dc.edge_id_hash(osm_id, source, target)             # same name and result as duckosm.edge_id_hash
+dr.build_from_config("config/sample_monaco.yaml")   # a subset of the config keys
+dr.edge_id_hash(osm_id, source, target)             # same name and result as duckosm.edge_id_hash
 ```
 
 - A config key that the Rust core does not support is an error. It is never ignored.
-- A later version can add `engine: rust` to duckOSM. Rust then builds the network and Python
-  continues the other steps in DuckDB. Open question 6.
+- Python duckOSM can later call this API with a config option `engine: rust`. Rust then builds the
+  network and Python continues the other steps in DuckDB (section 12).
 
 ## 5. The edge_id problem
 
@@ -271,10 +278,76 @@ M0 includes a check that `duckosm-core` builds for `wasm32-unknown-unknown`.
 | M3 | Release 0.1.0. CLI, Python wheel, config subset, `layers.json`. | A fresh virtual environment runs `pip install` and builds Monaco with an equal result. The CLI binary does the same. The Estonia numbers are written down. Wheels build for Linux, macOS and Windows. |
 | M4 | WebAssembly and large areas. | A browser page turns a city PBF into GeoParquet. Estonia meets the targets. Optional: speeds and costs, turn restrictions. |
 
-## 10. Open questions for Kaveh
+## 10. Long-term vision
+
+Kaveh wants more than the core. Over time, every part of duckOSM that suits Rust moves to Rust.
+Python duckOSM then becomes a thin layer: the CLI, the config, and the parts that use Python libraries.
+
+The reasons are speed, one install without DuckDB, and the same code in the browser. Three things do
+not change: the tables and the `edge_id` values, the Python API, and the config keys.
+
+A part suits Rust when it is pure CPU work on a large amount of data, and has few Python library
+calls. A part stays in Python when it is glue to an external tool or a Python library.
+
+## 11. Which parts move to Rust
+
+Ratings: **Now** (in version 0.1), **Later** (suits Rust, in the listed order) and **Keep** (stays in
+Python). Line counts come from `src/duckosm` in duckOSM 0.6.0. The order of the "Later" rows is a
+proposal: high gain and low effort first.
+
+| Part (Python files) | Lines | Rating | Why |
+|---|---|---|---|
+| Network build: road filter, global junctions, graph simplifier, edge_id, private split, component filter (`processors/`) | about 1,500 | **Now** | Pure CPU. Large data. It is the main cost of a build. Section 2. |
+| GeoParquet output (part of `gis.py`) | small | **Now** | Rust writes it itself. |
+| Speeds, costs, walk and cycle type, dismount, lane profile (`processors/`) | about 450 | **Later, 1st** | Rules for one edge at a time. They need only the tags that Rust already reads. |
+| Turn restrictions, edge graph (`processors/restrictions.py`, `edge_graph.py`) | about 440 | **Later, 2nd** | Pure CPU. The edge graph is large. Needs the OSM relations. |
+| Dangling-path connector, H3 cells (`path_connector.py`, `h3_indexer.py`, `utils/h3_calc.py`) | about 320 | **Later, 3rd** | Pure CPU. A Rust H3 crate exists (`h3o`). |
+| Routing: shortest path, point routing, lane routing, directions | about 1,100 | **Later, 4th** | Graph search is a good fit for Rust and gives a large speed gain. The export to networkx stays in Python, because networkx is a Python library. |
+| GMNS and crossings (`gmns.py`, `crossings.py`, `gmns_sumo.py`, `gmns_check.py`) | about 2,900 | **Later, 5th** | Large, CPU heavy, and uses shapely and numpy today. The lane rules still change, so port a table only when its rules are stable. |
+| Base-map layers `features.*` (`features/`), bus routes (`bus.py`), multimodal graph (`processors/multimodal.py`) | about 1,100 | **Later, 6th** | Data heavy. The layers need polygons built from OSM relations. DuckDB spatial and GDAL do this today. This is the largest piece of new work. |
+| XML exporters: MATSim, OpenDrive, Lanelet2, railML | about 900 | **Later, 7th** | They only write XML from tables. Easy, but the gain is small. Port when a user asks. |
+| SUMO export (`sumo.py`, `sumo_compare.py`) | about 700 | **Keep** | Uses `sumolib` and the external `netconvert`. |
+| GeoPackage and shapefile export, GIS check (`gis.py`, `gis_debug.py`) | about 900 | **Keep** | GDAL (`ogr2ogr`) and GeoPandas do the work. |
+| Elevation (`elevation.py`) | about 400 | **Keep** | Uses rasterio, pyproj and GDAL. Check again when a Rust GeoTIFF reader is good enough. |
+| Area and boundary: name search, boundary lookup, clip from a parent database (`area.py`, `admin.py`, `extract.py`) | about 520 | **Keep** | Glue to `ogr2ogr`, the Nominatim web service and DuckDB. A polygon cut of the PBF can move later, so `osmium` is not needed. |
+| Maps and drawing order (`viz.py`, `levels.py`, `levels_edit.py`, `route_map.py`, `gmns_viewer.py`) | about 900 | **Keep** | They call roadstyle and mapstyle, which are Python libraries. |
+| CLI, config, validation, report, query, GTFS (`cli.py`, `config.py`, `validate.py`, `report.py`, `query.py`, `gtfs.py`) | about 2,000 | **Keep** | Thin glue (click, YAML, pandas). The Rust CLI has only the ported parts. Rust reads the same config keys. |
+
+## 12. Migration method
+
+The method is the strangler pattern: the new code grows around the old code and replaces it part by part.
+
+1. **One crate for each part.** The Cargo workspace gets a new crate when a part moves. For example,
+   `duckosm-core` (network), then crates for attributes, restrictions, routing and GMNS. The crate names
+   are examples. One Python wheel holds all crates in one module.
+2. **Tables are the interface.** Every part reads and writes tables (Parquet or Arrow), not DuckDB
+   connections. Python reads the Rust output into DuckDB with `read_parquet` and continues. A part can
+   then be Rust or Python, and the other parts do not notice.
+3. **Python duckOSM keeps its API.** The CLI, the config and the function names stay. For each moved
+   part, a config option `engine: rust` (or `python`) chooses the code. The default stays `python`
+   until the Rust part has passed the golden tests in two duckOSM releases.
+4. **A design document first.** Each part gets a short design document and the approval of Kaveh before code.
+5. **A golden test for each step.** The Python output is the reference. A step is done when the Rust
+   output is equal on Monaco and on one more area (section 6). A difference needs a decision about
+   which side is right. The decision goes into `docs/`.
+6. **The ids never change.** `edge_id` and the other keys stay as they are.
+7. **The Python code stays as the reference** until the next release after the default changes. Then
+   Kaveh decides if the code is removed (open question 9).
+
+## 13. Repository name
+
+Decision (Kaveh, 2026-10-21): the repository is `duckosm-rust`.
+
+- The repository is a workspace that holds many crates (section 12). Its name must not be the name of one crate.
+- The first crate keeps the name `duckosm-core`.
+- The name `duckosm-rs` is not used. In the projects of Kaveh, `rs` means roadstyle
+  (`rs.render_edges`, `window.rs*`).
+
+## 14. Open questions for Kaveh
 
 1. Can I install Rust on this machine with `rustup`? Steps are in [development.md](development.md).
-2. What are the final names: repository, PyPI package, Python module, CLI program? The name has
+2. What are the names of the PyPI package, the Python module and the CLI program? The proposal is
+   `duckosm-rust` for the package and the CLI, and `duckosm_rust` for the module. The name has
    "duck" in it. The PyPI release of duckOSM waits for the DuckDB trademark reply, so this can apply.
 3. Do you accept option A for `edge_id` (section 5)? Are there databases, used by sensor-matching,
    SonoFlow or fetching-sweden-data, that DuckDB older than 1.2 built? Their ids are different.
@@ -282,11 +355,13 @@ M0 includes a check that `duckosm-core` builds for `wasm32-unknown-unknown`.
    acceptable? Which of these comes first after 0.1?
 5. OSM overrides change ways before the graph is built. Can the Rust core read the YAML file for the
    way rules, or must Python apply them to the PBF first?
-6. Do you want `engine: rust` in duckOSM later (Rust for the network, Python for the rest), or two
-   separate tools?
+6. Is the strangler method in section 12 right: Python duckOSM calls the Rust wheel part by part,
+   with `engine: rust` as the switch? Or do you want two separate tools?
 7. Cut to the boundary: keep `osmium` outside, or add a polygon cut to the Rust core in M3 or M4?
 8. Which PBF is the scale test? I use Estonia because its database exists, but the PBF is not in the
    repository.
+9. Is the order of the "Later" parts in section 11 right? After a part moves, do you delete its
+   Python code or keep it as the reference?
 
 ## Terms
 
@@ -298,4 +373,5 @@ M0 includes a check that `duckosm-core` builds for `wasm32-unknown-unknown`.
 - **WebAssembly (WASM)**: code that runs in the browser.
 - **Virtual node**: a node with `node_id < 0` that duckOSM adds in the middle of an edge to make
   `(osm_id, source, target)` unique.
+- **Strangler pattern**: a way to replace old code. New code takes over one part at a time, and the old code stays until the last part has moved.
 - **Golden file**: a saved output of the Python duckOSM. Tests compare the Rust output with it.

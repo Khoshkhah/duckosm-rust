@@ -1,10 +1,10 @@
-# duckosm-core
+# duckosm-rust
 
 Status: **design**. There is no Rust code yet.
 
-`duckosm-core` is a Rust core for [duckOSM](https://github.com/Khoshkhah/duckOSM). It reads an
-`.osm.pbf` file and writes the road edges and nodes of duckOSM as GeoParquet files. Every `edge_id`
-is the same as the `edge_id` that duckOSM writes.
+`duckosm-rust` is the Rust part of [duckOSM](https://github.com/Khoshkhah/duckOSM). It is a Cargo
+workspace. The first crate, `duckosm-core`, reads an `.osm.pbf` file and writes the road edges and
+nodes of duckOSM as GeoParquet files. Every `edge_id` is the same as the `edge_id` that duckOSM writes.
 
 ## Goal
 
@@ -16,12 +16,13 @@ Make the first step of duckOSM easy to install and easy to run:
 
 ## How it fits with duckOSM
 
-duckOSM stays as it is. It keeps the exporters (GMNS, SUMO, MATSim, OpenDrive, Lanelet2, railML),
-routing, elevation and the base-map layers. `duckosm-core` is not a rewrite of duckOSM. It does only
-the network step: OSM ways in, edges and nodes out.
+The first scope is the network step: OSM ways in, edges and nodes out. The long-term goal is larger.
+Over time, each part of duckOSM that suits Rust moves to its own crate. Python duckOSM keeps its API
+and calls the Rust wheel part by part. The parts that use Python libraries or external tools stay in
+Python. Section 11 of the design rates every part.
 
 ```text
-.osm.pbf --> duckosm-core --> GeoParquet (edges, nodes) --> roadstyle, mapstyle, GeoPandas, DuckDB
+.osm.pbf --> duckosm-rust --> GeoParquet (edges, nodes) --> roadstyle, mapstyle, GeoPandas, DuckDB
                                                          \-> duckOSM (later: the rest of the pipeline)
 ```
 
