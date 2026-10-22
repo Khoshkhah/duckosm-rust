@@ -108,8 +108,12 @@ flowchart LR
 
 Later crates join this workspace (section 12).
 
-`duckosm-core` has no file or thread code. It reads from a `Read` value and sends rows to a `Sink`
-trait. This lets the same code run in the CLI, in Python and in the browser.
+`duckosm-core` has no file code. It reads from a `Read` value (a file or the bytes of a file) and
+returns the network of one mode in memory (`Network`: the edges, the private edges, the nodes and
+`edge_id_map`). This lets the same code run in the CLI, in Python and in the browser. Decision
+(Kaveh, 2026-10-22): the network stays in memory. A streaming build (rows to a `Sink` while the way
+is cut) is not planned, because the target (a region or a small country, section 1) fits: Estonia uses
+1.5 GB. Section 7 has the limit (Iran, 219 MB, does not fit in 4 GB).
 
 ### Crate choices
 
@@ -135,8 +139,9 @@ chooses one. The WebAssembly build has no `duckdb` feature and writes GeoParquet
 
 **GeoParquet.** For each mode the Rust core writes files with the same names as
 `duckosm export-gis -f geoparquet`: `edges_<mode>.parquet`, `nodes_<mode>.parquet` and
-`private_edges_<mode>.parquet`. `layers.json` is not written yet. roadstyle, mapstyle and the GeoLibre
-plugin can then read the folder.
+`private_edges_<mode>.parquet`, and `layers.json`, the list of the edge and node files with their counts
+(the format of `export-gis`; written since 2026-10-22). roadstyle, mapstyle and the GeoLibre plugin can
+then open the folder.
 
 **DuckDB.** The file `<name>.duckdb` has the tables of duckOSM, with the same column types. Version 0.1
 writes this part of what duckOSM writes today (checked in `monaco.duckdb` of 2026-10-21):
@@ -476,6 +481,7 @@ this size, the build must write the edges while it makes them, and not keep all 
 | The bundled DuckDB makes the build slow and the program large | The first build takes several minutes. The release program is 56 MB with DuckDB and 7.9 MB without it. | The `duckdb` feature is optional. A user who needs only GeoParquet builds without it. |
 | The name contains "duck" | The DuckDB trademark question for duckOSM can apply here too | Open question 2. |
 | One maintainer | Scope grows | Keep the non-goals. Ship M3 before M4. |
+| `cos` differs in the last bit between the C libraries of Linux, macOS, Windows and the `libm` crate (WebAssembly) | The sidewalk rule has float thresholds, so one road in a large area can get a different result on another system (section 7: one road of Estonia in WebAssembly) | Accepted. The golden tests run on Linux. A rule with a tolerance would hide the problem, not remove it. |
 
 ## 9. Milestones
 
@@ -484,7 +490,7 @@ this size, the build must write the edges while it makes them, and not keep all 
 | M0 | Setup and spike. Rust installed. Cargo workspace. `edge_id` module. Golden files. A CLI that builds the driving network of one PBF and writes `.duckdb` and GeoParquet. | `cargo test` passes the hash vectors and the Monaco golden test. **Done on 2026-10-21.** The Python output is the same on each run (two golden builds of Monaco: 0 rows differ). The build for `wasm32-unknown-unknown` is checked for compile only (section 7). |
 | M1 | Monaco, driving. All steps in the table that are marked "Yes", for driving, without `merge_segments`. | All 2,765 `edge_id` values equal the golden file. All columns in section 6 pass. GeoPandas and DuckDB read the output. **Reached in the spike** for the output in `.duckdb` and GeoParquet (see [benchmark.md](benchmark.md) for the speed; only Monaco is tested). |
 | M2 | Walking and cycling. `merge_segments` and `edge_id_map`. `lanes`. `private_edges`. | The same checks pass for the three modes, with `merge_segments` on and off. Tartu passes as a local golden (done, see section 6). **Reached on Monaco on 2026-10-21** for 9 variants (`merge_segments` and `global_junctions` on or off, the component filter, the sidewalk rule, the connector, the connector with the component filter, and everything on with speeds and the walk and cycle types) in the three modes: 0 rows differ in `edges`, `private_edges`, `nodes` and `edge_id_map`. Tartu is done (section 6). The sidewalk rule finds the same 46 roads in Monaco as duckOSM. It is a geometric rule with float thresholds, so a different area can give a difference at a threshold. It assumes right-hand traffic, as duckOSM does. |
-| M3 | Release 0.1.0. CLI, Python wheel, config subset, `layers.json`. | A fresh virtual environment runs `pip install` and builds Monaco with an equal result. The CLI binary does the same. The Estonia numbers are written down. Wheels build for Linux, macOS and Windows. **Estonia done on 2026-10-22** (section 6, item 6d). The CI built and tested the wheels for Linux, macOS and Windows on 2026-10-22 (Windows without sccache). |
+| M3 | Release 0.1.0. CLI, Python wheel, config subset, `layers.json`. | A fresh virtual environment runs `pip install` and builds Monaco with an equal result. The CLI binary does the same. The Estonia numbers are written down. Wheels build for Linux, macOS and Windows. **Estonia done on 2026-10-22** (section 6, item 6d). The CI built and tested the wheels for Linux, macOS and Windows on 2026-10-22 (Windows without sccache). `layers.json` is written. A tag `v*` makes a GitHub Release with the wheels (no PyPI yet, open question 2). |
 | M4 | WebAssembly and large areas. | A browser page turns a city PBF into GeoParquet. Estonia meets the targets. Optional: speeds and costs, turn restrictions. **Browser page done on 2026-10-21** (section 7): Monaco gives the same rows as the native output in the three modes. Estonia uses 710 MiB in the driving mode, and Kentucky (148 MB PBF) fits in 2,053 MiB. Not done: the large-area targets of the native program. |
 
 ## 10. Long-term vision
@@ -534,7 +540,10 @@ The method is the strangler pattern: the new code grows around the old code and 
    then be Rust or Python, and the other parts do not notice.
 3. **Python duckOSM keeps its API.** The CLI, the config and the function names stay. For each moved
    part, a config option `engine: rust` (or `python`) chooses the code. The default stays `python`
-   until the Rust part has passed the golden tests in two duckOSM releases.
+   until the Rust part has passed the golden tests in two duckOSM releases. **Done for the network step
+   on 2026-10-22**: `options.engine: rust` (CLI `--engine rust`) in duckOSM calls `duckosm_rust.build()`
+   one time for all modes and loads the four tables of each mode; RoadFilter and the later steps run in
+   Python as before. See `docs/design/rust_engine.md` in duckOSM.
 4. **A design document first.** Each part gets a short design document and the approval of Kaveh before code.
 5. **A golden test for each step.** The Python output is the reference. A step is done when the Rust
    output is equal on Monaco and on one more area (section 6). A difference needs a decision about
@@ -558,15 +567,19 @@ Decision (Kaveh, 2026-10-21): the repository is `duckosm-rust`.
 2. What are the names of the PyPI package, the Python module and the CLI program? The proposal is
    `duckosm-rust` for the package and the CLI, and `duckosm_rust` for the module. The name has
    "duck" in it. The PyPI release of duckOSM waits for the DuckDB trademark reply, so this can apply.
-3. Do you accept option A for `edge_id` (section 5)? Are there databases, used by sensor-matching,
+3. ~~Do you accept option A for `edge_id` (section 5)?~~ Option A is in use since M0, and every golden
+   test passes with it (closed on 2026-10-22). Open: are there databases, used by sensor-matching,
    SonoFlow or fetching-sweden-data, that DuckDB older than 1.2 built? Their ids are different.
-4. Is version 0.1 without speeds, costs, turn restrictions, the edge graph and connector edges
-   acceptable? Which of these comes first after 0.1?
+4. ~~Is version 0.1 without speeds, costs, turn restrictions, the edge graph and connector edges
+   acceptable?~~ Speeds, costs and the connectors are done (closed on 2026-10-22). The edge graph and the
+   turn restrictions are the next part (section 11, "Later, 2nd").
 5. ~~OSM overrides change ways before the graph is built. Can the Rust core read the YAML file for the
    way rules, or must Python apply them to the PBF first?~~ Decided by Kaveh on 2026-10-22: the Rust core
    reads the YAML file. Done (section 6, item 6c).
-6. Is the strangler method in section 12 right: Python duckOSM calls the Rust wheel part by part,
-   with `engine: rust` as the switch? Or do you want two separate tools?
+6. ~~Is the strangler method in section 12 right: Python duckOSM calls the Rust wheel part by part,
+   with `engine: rust` as the switch?~~ Decided by Kaveh on 2026-10-22: yes. Done for the network step:
+   duckOSM has `options.engine: rust` (duckOSM `docs/design/rust_engine.md`). Its test
+   `tests/test_engine_rust.py` builds the Monaco sample with both engines and compares the tables.
 7. Cut to the boundary: keep `osmium` outside, or add a polygon cut to the Rust core in M3 or M4?
 8. ~~Large areas are not tested yet. Which PBF is the scale test, and when do you want it?~~ Decided by
    Kaveh on 2026-10-22: Estonia (`osm-traffic-enrichment/map/estonia-latest.osm.pbf`, 121 MB). Done

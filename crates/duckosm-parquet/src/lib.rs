@@ -129,9 +129,10 @@ pub fn edges_schema(cols: EdgeCols) -> Schema {
         Field::new("tunnel", DataType::Utf8, true),
         Field::new("service", DataType::Utf8, true),
         list_field("refs"),
+        // the column order of the duckOSM tables: the geometry before is_reverse
+        Field::new("geometry", DataType::Binary, false),
         Field::new("is_reverse", DataType::Boolean, false),
         Field::new("length_m", DataType::Float32, false),
-        Field::new("geometry", DataType::Binary, false),
     ];
     if cols.speeds {
         fields.retain(|f| f.name() != "maxspeed");
@@ -232,9 +233,9 @@ fn edges_batch(schema: &Arc<Schema>, rows: &[Edge], oc: EdgeCols) -> RecordBatch
         Arc::new(tunnel.finish()),
         Arc::new(service.finish()),
         Arc::new(refs.finish()),
+        Arc::new(geometry.finish()),
         Arc::new(is_reverse.finish()),
         Arc::new(length_m.finish()),
-        Arc::new(geometry.finish()),
     ];
     if !oc.speeds {
         cols.insert(7, Arc::new(maxspeed.finish())); // after name

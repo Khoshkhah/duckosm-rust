@@ -68,6 +68,22 @@ pub struct Summary {
     pub sidewalk_roads: usize,
 }
 
+/// `layers.json`: the list of the edge and node files with their counts, as `duckosm export-gis`
+/// writes it, so the roadstyle GeoLibre plugin opens the folder in one step.
+fn write_layers_json(dir: &Path, sum: &Summary) -> Result<(), String> {
+    let mut rows = Vec::new();
+    for m in &sum.modes {
+        let n = m.mode.name();
+        for (kind, count) in [("edges", m.edges), ("nodes", m.nodes)] {
+            rows.push(format!(
+                "  {{\"file\": \"{kind}_{n}.parquet\", \"kind\": \"{kind}\", \"mode\": \"{n}\", \"count\": {count}}}"
+            ));
+        }
+    }
+    let json = format!("{{\"layers\": [\n{}\n]}}\n", rows.join(",\n"));
+    std::fs::write(dir.join("layers.json"), json).map_err(|e| e.to_string())
+}
+
 pub fn parse_modes(s: &str) -> Result<Vec<Mode>, String> {
     s.split(',')
         .map(|m| {
@@ -153,6 +169,11 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
             connectors: net.stats.connectors,
             osm_fixes: net.stats.osm_fixes,
         });
+    }
+    if p.geoparquet {
+        write_layers_json(&pq_dir, &sum)?;
+        sum.files
+            .push(("layers".to_string(), pq_dir.join("layers.json")));
     }
     #[cfg(feature = "duckdb")]
     if p.duckdb {
