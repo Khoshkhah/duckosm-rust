@@ -104,8 +104,9 @@ The drawing tools come from terra-draw 1.38.0 with its MapLibre adapter 1.5.0 (M
 | Polygon | P | Click each vertex. Click the first vertex, or push Enter, to close the polygon. |
 | Circle | C | Drag from the center, or click the center and then a point on the circle. The circle is a polygon of 64 vertices. |
 | Freehand | F | Drag the outline. |
-| Delete shape | Delete | Delete the selected shape. |
-| Clear all | | Delete all shapes. |
+| Merge | | Join the shapes that overlap into one shape on the map. The new shape is a polygon, selected, and the user can edit it. Shapes that do not touch stay separate. The button is on only when shapes overlap. |
+| Delete | Delete | Delete the selected shape. |
+| Clear | | Delete all shapes. |
 
 - When a shape is complete, the tool changes to **Select** and selects the new shape. The user can then move
   it or change it at once, and drag the map. Kaveh found that the first version did not let him move a shape:
@@ -117,7 +118,8 @@ The drawing tools come from terra-draw 1.38.0 with its MapLibre adapter 1.5.0 (M
 - Escape stops the drawing of a shape.
 - A shape that crosses itself is not accepted (terra-draw's validation).
 - When the area comes from a search or a file, a drawn shape replaces it (decision 1).
-- Shapes that overlap are merged into one polygon (decision 2).
+- Shapes that overlap are merged into one polygon in the output (decision 2), also without a click on
+  **Merge**. On the map they stay separate shapes until the user clicks **Merge** (Kaveh, 2026-10-22).
 
 ### 3. File
 
@@ -231,6 +233,7 @@ Done. `python crates/duckosm-wasm/www/boundary_e2e.py` passed with the network:
 | The file `tests/data/monaco.geojson` | 2.39 km². The extracts: `monaco`, `provence-alpes-cote-d-azur`, `alps`. |
 | Two rectangles that overlap, drawn with mouse drags | One Polygon of 8 vertices, `source` is `drawn`. |
 | A drag of the second rectangle (selected after the draw) away from the first | A MultiPolygon of 2 polygons. |
+| A third rectangle over the two, then **Merge** | One Polygon of 12 vertices. **Delete** then removes all of it: it is one shape on the map. |
 | A search for "Monaco" | Nominatim relation 1124039, 79.82 km² (the boundary of the country includes the sea). |
 | The hand-off | `index.html` shows "Monaco, 2.39 km², from the boundary tool." |
 

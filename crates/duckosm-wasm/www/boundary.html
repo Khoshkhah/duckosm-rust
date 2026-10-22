@@ -144,6 +144,7 @@
   <symbol id="i-poly" viewBox="0 0 24 24"><path d="m12 3 8.5 6.2-3.2 10.3H6.7L3.5 9.2Z"/></symbol>
   <symbol id="i-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/></symbol>
   <symbol id="i-free" viewBox="0 0 24 24"><path d="M3 15c2-5 5-8 7-5s1 7 4 7 4-6 7-9"/></symbol>
+  <symbol id="i-merge" viewBox="0 0 24 24"><rect x="3" y="3" width="11" height="11" rx="1"/><rect x="10" y="10" width="11" height="11" rx="1"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
   <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></symbol>
@@ -199,8 +200,9 @@
     <button data-mode="freehand" aria-pressed="false" title="Freehand (F)"><svg><use href="#i-free"/></svg>Freehand</button>
   </div>
   <div class="row">
-    <button id="delete" class="btn" disabled><svg><use href="#i-trash"/></svg>Delete shape</button>
-    <button id="clear" class="btn"><svg><use href="#i-x"/></svg>Clear all</button>
+    <button id="merge" class="btn" disabled title="Join the shapes that overlap into one shape" aria-label="Merge shapes"><svg><use href="#i-merge"/></svg>Merge</button>
+    <button id="delete" class="btn" disabled title="Delete the selected shape (Delete)"><svg><use href="#i-trash"/></svg>Delete</button>
+    <button id="clear" class="btn"><svg><use href="#i-x"/></svg>Clear</button>
   </div>
   <p id="hint" class="hint">Select a tool. A new shape is selected when it is complete: drag it to move it, or drag a point to change it.</p>
 </section>
@@ -501,11 +503,16 @@ addEventListener("keydown", (ev) => {
 });
 
 // the drawn shapes, merged where they overlap
+const shapeFeatures = () => draw.getSnapshot().filter((f) => f.geometry.type === "Polygon" && f.properties.mode !== "select");
+let merged = [];
 async function drawn() {
-  const shapes = draw.getSnapshot().filter((f) => f.geometry.type === "Polygon" && f.properties.mode !== "select").map((f) => f.geometry.coordinates);
+  const shapes = shapeFeatures().map((f) => f.geometry.coordinates);
+  $("merge").disabled = true;
   if (!shapes.length) return area?.props.source === "drawn" ? clearArea() : undefined;
   const { union } = await import("polyclip-ts");
   const polys = shapes.length > 1 ? union(...shapes) : shapes;
+  merged = polys;
+  $("merge").disabled = polys.length >= shapes.length;  // no shapes overlap
   setArea(polys, { name: area?.props.source === "drawn" ? $("name").value : "drawn area", osm_id: null, admin_level: null, source: "drawn" }, { zoom: false });
 }
 draw.on("finish", (id, ctx) => {
@@ -521,6 +528,21 @@ draw.on("change", (ids, type) => {
 draw.on("select", (id) => { selected = id; $("delete").disabled = false; });
 draw.on("deselect", () => { selected = null; $("delete").disabled = true; });
 $("delete").onclick = () => { if (selected != null) { draw.removeFeatures([selected]); selected = null; $("delete").disabled = true; drawn(); } };
+// Merge shapes: the shapes on the map become the polygons of their merge, which the user can edit as polygons.
+// terra-draw accepts at most 9 decimals.
+$("merge").onclick = () => {
+  const old = shapeFeatures().map((f) => f.id);
+  const round = (c) => c.map((r) => r.map(([x, y]) => [+x.toFixed(9), +y.toFixed(9)]));
+  const got = draw.addFeatures(merged.map((c) => ({ type: "Feature", geometry: { type: "Polygon", coordinates: round(c) }, properties: { mode: "polygon" } })));
+  const bad = got.find((r) => !r.valid);
+  if (bad) {
+    draw.removeFeatures(got.filter((r) => r.valid).map((r) => r.id));
+    return status(`The shapes were not merged: ${bad.reason}`, 8000);
+  }
+  draw.removeFeatures(old);
+  tool("select");
+  draw.selectFeature(got[0].id);
+};
 $("clear").onclick = () => { draw.clear(); drawn(); tool("rectangle"); };
 
 // ---- file ----

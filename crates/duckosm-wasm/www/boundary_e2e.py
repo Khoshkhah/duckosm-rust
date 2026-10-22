@@ -1,5 +1,5 @@
-"""The boundary tool in headless Chromium (Playwright): a search, two rectangles drawn with the mouse, a file,
-and the hand-off to index.html. Each output file must have the format of `duckosm boundary`
+"""The boundary tool in headless Chromium (Playwright): a file, rectangles drawn and moved with the mouse, Merge
+shapes, a search, and the hand-off to index.html. Each output file must have the format of `duckosm boundary`
 (docs/boundary_tool.md).
 
     python crates/duckosm-wasm/www/boundary_e2e.py [--no-search]
@@ -94,6 +94,21 @@ with sync_playwright() as p:
     g = f["geometry"]
     assert g["type"] == "MultiPolygon" and len(g["coordinates"]) == 2, g
     print("move: ok,", f["properties"]["area_km2"], "km²")
+
+    # a third rectangle over the two, then Merge shapes: one shape on the map, so Delete shape empties the area
+    n = areas(page)
+    page.click("[data-mode=rectangle]")
+    drag(0.5, 0.45, 0.85, 0.55)
+    boundary(page, n + 1)
+    assert page.is_enabled("#merge")
+    n = areas(page)
+    page.click("#merge")
+    f = boundary(page, n + 1)
+    assert f["geometry"]["type"] == "Polygon", f["geometry"]
+    page.wait_for_function("document.getElementById('merge').disabled && !document.getElementById('delete').disabled")
+    page.click("#delete")
+    page.wait_for_function("document.getElementById('save').disabled")
+    print("merge: ok,", f["properties"]["area_km2"], "km²,", len(f["geometry"]["coordinates"][0]) - 1, "vertices")
 
     # a search
     if not args.no_search:
