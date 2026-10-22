@@ -10,6 +10,7 @@
 | `wasm32-unknown-unknown` target | Installed (`rustup target add`). See section 7 of the design. |
 | `wasm-bindgen` | `wasm-bindgen-cli` 0.2.129, installed with `cargo install` at user level (`~/.cargo/bin`). Its version must be the same as the `wasm-bindgen` crate in `Cargo.lock`. |
 | `node` | Version 24, installed (system). It runs the WebAssembly build without a browser. |
+| `nightly-2026-10-15` with `rust-src` | Installed on 2026-10-22 (`rustup toolchain install`). Only for the WebAssembly module with threads: it builds the standard library again with atomics. |
 
 ## Install Rust
 
@@ -20,6 +21,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profil
 source "$HOME/.cargo/env"
 rustup target add wasm32-unknown-unknown   # M4
 cargo install wasm-bindgen-cli --version 0.2.129 --locked
+rustup toolchain install nightly-2026-10-15 --profile minimal --component rust-src --target wasm32-unknown-unknown
 ```
 
 ## Build and test
@@ -58,19 +60,25 @@ See [benchmark.md](benchmark.md). The runner is `bench/run_bench.py`.
 
 ## WebAssembly
 
-Build the module and the JavaScript bindings into `crates/duckosm-wasm/www/pkg/` (Git ignores this
-folder):
+Build the two modules and their JavaScript bindings (Git ignores both folders):
 
 ```bash
-cargo build --release --target wasm32-unknown-unknown -p duckosm-wasm
-wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/pkg target/wasm32-unknown-unknown/release/duckosm_wasm.wasm
+./crates/duckosm-wasm/build.sh
 ```
 
+- `www/pkg/`: one thread, stable Rust.
+- `www/pkg-threads/`: rayon on Web Workers (`wasm-bindgen-rayon`), nightly Rust. The browser gives
+  WebAssembly threads only to a cross-origin isolated page, so the server must send the headers
+  `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`. Without them,
+  the page uses `pkg/`. duckdb-wasm (from cdn.jsdelivr.net), Nominatim and Overpass work with these headers.
+  `?threads=N` in the address sets the number of threads (the default: the cores, at most 8).
+
 Open the page (`index.html`, the plan is [browser.md](browser.md)). A browser does not load a module from
-a `file://` address, so use a local server:
+a `file://` address, so use a local server. `serve.py` sends the two headers; `python3 -m http.server` does
+not (then the page has one thread):
 
 ```bash
-python3 -m http.server 8000 -d crates/duckosm-wasm/www
+python3 crates/duckosm-wasm/www/serve.py 8000
 ```
 
 Then go to `http://localhost:8000`. Select a boundary (make it with the boundary tool, `boundary.html`), a
@@ -91,7 +99,7 @@ Checks:
 ```bash
 cargo test --release -p duckosm-wasm     # the browser build equals duckosm_build::build, byte for byte (Monaco, 3 modes, a fixes file)
 python crates/duckosm-wasm/www/e2e.py tests/data/monaco.osm.pbf out-page --fixes fixes.yaml   # the page in headless Chromium (Playwright)
-python crates/duckosm-wasm/www/e2e.py tests/data/monaco_sample.osm.pbf out-area --boundary tests/data/monaco.geojson   # the cut to a boundary
+python crates/duckosm-wasm/www/e2e.py tests/data/monaco_sample.osm.pbf out-area --boundary tests/data/monaco.geojson   # the cut to a boundary (add --one-thread for pkg/)
 duckosm-rust tests/data/monaco_sample.osm.pbf --boundary tests/data/monaco.geojson -m driving,walking,cycling -f geoparquet -o out-cli   # the same, native
 ```
 

@@ -7,3 +7,4 @@ __pycache__/
 /tests/local/
 /.claude/
 /crates/duckosm-wasm/www/pkg/
+/crates/duckosm-wasm/www/pkg-threads/

@@ -212,6 +212,8 @@ $("run").onclick = async () => {
       download = { seconds: (performance.now() - d0) / 1000, bytes: got.bytes.byteLength, server: got.server };
       msg = { json: got.bytes, boundary: boundary.text, modes, fixes };
     }
+    // ?threads=N in the address: the size of the thread pool (the default: the cores, at most 8)
+    msg.threads = Number(new URLSearchParams(location.search).get("threads")) || undefined;
     const out = await buildInWorker(msg);
     const built = performance.now();
     await duckReady;
@@ -232,13 +234,13 @@ $("run").onclick = async () => {
     const ready = performance.now();
     window.timings = Object.assign(window.timings || {}, {
       wasmLoad: out.seconds.load, build: out.seconds.build,
-      tables: (ready - built) / 1000, clickToQuery: (ready - start) / 1000, memoryMiB: out.memoryMiB, download,
+      tables: (ready - built) / 1000, clickToQuery: (ready - start) / 1000, memoryMiB: out.memoryMiB, threads: out.threads, download,
     });
     const got = download ? `OSM data from ${download.server}: ${(download.bytes / 2 ** 20).toFixed(1)} MB in ${download.seconds.toFixed(1)} s. ` : "";
     areaName = name;
     log(`${name}\n\n${out.summary}\n\n${got}build ${out.seconds.build.toFixed(2)} s (module load ${out.seconds.load.toFixed(2)} s), ` +
         `tables into DuckDB ${((ready - built) / 1000).toFixed(2)} s, ready for SQL ${((ready - start) / 1000).toFixed(2)} s after the click, ` +
-        `${out.memoryMiB} MiB WebAssembly memory.`);
+        `${out.memoryMiB} MiB WebAssembly memory, ${out.threads} thread(s).`);
     for (const t of tables) {
       const a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([t.bytes], { type: "application/vnd.apache.parquet" }));

@@ -12,6 +12,16 @@ use duckosm_core::{pbf, sidewalks};
 use js_sys::{Array, Object, Reflect, Uint8Array};
 use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
 use wasm_bindgen::prelude::*;
+
+#[cfg(feature = "threads")]
+mod alloc;
+#[cfg(feature = "threads")]
+#[global_allocator]
+static ALLOC: alloc::Cached = alloc::Cached;
+
+/// `initThreadPool(n)` in JavaScript: starts n Web Workers for rayon (the build with the feature "threads").
+#[cfg(feature = "threads")]
+pub use wasm_bindgen_rayon::init_thread_pool;
 use web_sys::{Blob, FileReaderSync};
 
 /// The result of [`build`]. `files` maps each file name (for example `edges_driving.parquet`) to an array
@@ -27,8 +37,8 @@ pub struct Output {
 /// memory (at most 4 GB). The edges file of Kentucky is 400 MB.
 struct JsParts(Array);
 
-// SAFETY: ArrowWriter needs Send. This module has one thread (no atomics), so the value never moves
-// to another thread.
+// SAFETY: ArrowWriter needs Send. The tables are written on the calling thread, also in the build with
+// threads (only the PBF reader uses rayon), so the JavaScript array never moves to another thread.
 unsafe impl Send for JsParts {}
 
 impl Write for JsParts {
@@ -81,7 +91,8 @@ impl BlobRead {
     }
 }
 
-// SAFETY: osmpbf needs Send. This module has one thread (no atomics), so the value never moves to another thread.
+// SAFETY: osmpbf needs Send. `pbf::read_area` reads the blobs on the calling thread and gives only the read
+// bytes to rayon, so the browser objects never move to another thread, also in the build with threads.
 unsafe impl Send for BlobRead {}
 
 impl Read for BlobRead {

@@ -2,19 +2,28 @@
 // In: {pbf: ArrayBuffer} (a file cut to the area), {region: File, boundary: GeoJSON text} (a region file, cut
 // while it is read, piece by piece) or {json: ArrayBuffer, boundary} (OSM JSON from the Overpass API), with
 // {modes: "driving,walking", fixes: text or null}.
-// Out: {step}, then {files: {name: Uint8Array}, summary, seconds: {load, build}, memoryMiB} (the buffers are
-// transferred, not copied), or {error}.
-import init, { build, build_area, build_osm_json } from "./pkg/duckosm_wasm.js";
+// Out: {step}, then {files: {name: Uint8Array}, summary, seconds: {load, build}, memoryMiB, threads} (the
+// buffers are transferred, not copied), or {error}.
+// A cross-origin isolated page (the COOP and COEP headers, www/serve.py) gets the module with threads
+// (pkg-threads, rayon on Web Workers); another page gets the module with one thread (pkg).
 
-let wasm = null;
+let wasm = null, pkg = null, threads = 1;
 
 onmessage = async ({ data }) => {
   try {
     const t0 = performance.now();
     if (!wasm) {
       postMessage({ step: "loading the WebAssembly module" });
-      wasm = await init();
+      const isolated = self.crossOriginIsolated;
+      pkg = await import(isolated ? "./pkg-threads/duckosm_wasm.js" : "./pkg/duckosm_wasm.js");
+      wasm = await pkg.default();
+      if (isolated) {
+        // more than 8 threads gave no more speed on Tartu from the Estonia file, only more memory
+        threads = data.threads || Math.min(navigator.hardwareConcurrency || 4, 8);
+        await pkg.initThreadPool(threads);
+      }
     }
+    const { build, build_area, build_osm_json } = pkg;
     const t1 = performance.now();
     postMessage({ step: "building the networks" });
     const fixes = data.fixes || undefined;
@@ -43,6 +52,7 @@ onmessage = async ({ data }) => {
         seconds: { load: (t1 - t0) / 1000, build: (t2 - t1) / 1000 },
         // WebAssembly memory only grows, so its size is the peak of all builds of this worker
         memoryMiB: Math.round(wasm.memory.buffer.byteLength / 2 ** 20),
+        threads,
       },
       Object.values(files).map((f) => f.buffer),
     );

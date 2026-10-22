@@ -11,13 +11,12 @@ the computer needs the network.
 """
 import argparse
 import base64
-import functools
-import http.server
 import json
 import pathlib
-import threading
 
 from playwright.sync_api import sync_playwright
+
+from serve import start
 
 WWW = pathlib.Path(__file__).resolve().parent
 
@@ -27,18 +26,14 @@ a.add_argument("--boundary")
 a.add_argument("out")
 a.add_argument("--modes", default="driving,walking,cycling")
 a.add_argument("--fixes")
+a.add_argument("--one-thread", action="store_true", help="serve the page without the COOP and COEP headers")
+a.add_argument("--threads", type=int, help="the size of the thread pool (default: the cores, at most 8)")
 args = a.parse_args()
 out = pathlib.Path(args.out)
 out.mkdir(parents=True, exist_ok=True)
 
-class Quiet(http.server.SimpleHTTPRequestHandler):
-    def log_message(self, *_):
-        pass
-
-
-server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Quiet, directory=str(WWW)))
-threading.Thread(target=server.serve_forever, daemon=True).start()
-url = f"http://127.0.0.1:{server.server_address[1]}/index.html"
+server = start(0, isolated=not args.one_thread, quiet=True)
+url = f"http://127.0.0.1:{server.server_address[1]}/index.html" + (f"?threads={args.threads}" if args.threads else "")
 
 with sync_playwright() as p:
     browser = p.chromium.launch()

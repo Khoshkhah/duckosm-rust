@@ -16,3 +16,9 @@ wasm-bindgen = "0.2"
 js-sys = "0.3"
 # read a region file piece by piece from the browser (Blob.slice and FileReaderSync, in the build worker)
 web-sys = { version = "0.3", features = ["Blob", "FileReaderSync"] }
+# WebAssembly threads (docs/development.md, "WebAssembly threads"): rayon gets a pool of Web Workers. Only in the
+# build with the feature "threads", which needs nightly Rust and a page with cross-origin isolation.
+wasm-bindgen-rayon = { version = "1.3", features = ["no-bundler"], optional = true }
+
+[features]
+threads = ["dep:wasm-bindgen-rayon"]

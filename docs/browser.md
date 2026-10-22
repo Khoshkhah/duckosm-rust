@@ -187,9 +187,27 @@ Checks:
 
 The first version read all blocks in each pass, and the restrictions in a fourth pass: the page took 11.3 s
 and 116 MiB, and native on one thread 9.4 s. On one thread, passes 1 and 2 now take 0.9 s each, and they must
-unzip each block one time (1.4 s for all blocks of Estonia). So more speed in the page needs more threads. The
-`zlib-rs` unzip code was 4 % faster than the default `miniz_oxide` in the page and not faster natively, so it is
-not used. The file is read from the disk each time; a file kept in the browser storage (OPFS) does not make it
+unzip each block one time (1.4 s for all blocks of Estonia). The `zlib-rs` unzip code was 4 % faster than the
+default `miniz_oxide` in the page and not faster natively, so it is not used.
+
+**WebAssembly threads (2026-10-22).** A second module (`www/pkg-threads/`, nightly Rust, `wasm-bindgen-rayon`)
+decodes the blocks of the cut on a pool of Web Workers. The page uses it when it is cross-origin isolated
+(`www/serve.py` sends the headers), else the module with one thread. Tartu from the Estonia file, three runs
+each, the computer had a load average of about 6 from other work:
+
+| The page | Build | From the click to the first query | WebAssembly memory |
+|---|---|---|---|
+| One thread (`pkg/`) | 3.8–3.9 s | 4.6–4.9 s | 81 MiB |
+| 8 threads (`pkg-threads/`) | 1.7–1.8 s | 2.5–2.6 s | 130 MiB |
+
+- All 20 tables are equal to the native build on every row, with and without threads (Tartu and Monaco).
+- The allocator of the standard library has one global lock in WebAssembly. With 4 threads, pass 2 (the blocks
+  of ways, millions of small allocations) took 2.2 s instead of 1.2 s. `src/alloc.rs` gives each thread its
+  own lists of free small blocks: pass 2 then took 0.5 s.
+- More than 8 threads gave no more speed, only more memory (20 threads: 195 MiB), so the default is the number
+  of cores, at most 8. The network step after the cut (about 0.8 s) stays on one thread.
+- For a public page, the host must send the two headers. GitHub Pages cannot; a service worker
+  (`coi-serviceworker`) can add them. Not done: the page has no public host yet. The file is read from the disk each time; a file kept in the browser storage (OPFS) does not make it
 faster. Not done: keep the
 region file in OPFS (the user selects the file again, which costs nothing), and an automatic download of the
 extract (it needs a server with CORS).
