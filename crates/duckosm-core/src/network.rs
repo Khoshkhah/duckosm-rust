@@ -501,7 +501,7 @@ pub fn build_network(
     })
 }
 
-/// 2. Split a self-loop with a virtual node in the middle, and push the two halves. Push any other
+/// Step 2: split a self-loop with a virtual node in the middle, and push the two halves. Push any other
 /// edge as it is. Returns true for a self-loop that is split.
 fn push_split_loop(fwd: &mut Vec<Fwd>, f: Fwd, vnodes: &mut Vec<Node>) -> bool {
     if f.e.source != f.e.target {
