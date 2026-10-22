@@ -11,7 +11,8 @@ This document is based on duckOSM 0.6.0 (git tag `v0.6.0`) and DuckDB 1.5.3. The
 ## 1. Goal and non-goals
 
 **Goal.** The first scope is the core. Read an `.osm.pbf` file and write the same road edges and
-nodes as duckOSM, with the same `edge_id` values, without Python or DuckDB. The long-term goal is
+nodes as duckOSM, with the same `edge_id` values. The Rust program does not need Python or an
+installed DuckDB to run. The long-term goal is
 larger: move every part of duckOSM that suits Rust to Rust, one part at a time (sections 10 to 12).
 Give people three ways to run it:
 
@@ -19,13 +20,16 @@ Give people three ways to run it:
 2. One CLI program.
 3. Later, a WebAssembly package for the browser.
 
+The CLI and the wheel write a `.duckdb` file by default, with the same tables as duckOSM. They also
+write GeoParquet. This needs DuckDB inside the program (section 3). The WebAssembly package has no
+DuckDB and writes GeoParquet only.
+
 **Non-goals.**
 
 - A rewrite of duckOSM in one step. Version 0.1 does only the network step. Python duckOSM stays and
   keeps the other parts (GMNS, the exporters, routing, elevation, the `features.*` layers) until
   each part moves (sections 11 and 12).
 - A new `edge_id`. Downstream projects (sensor-matching, SonoFlow, fetching-sweden-data) join on it.
-- A DuckDB output in version 0.1. DuckDB, GeoPandas and GDAL read GeoParquet.
 - Planet-scale builds. The target is a city, a region or a small country.
 
 ## 2. What the Python pipeline does today
@@ -83,17 +87,22 @@ flowchart LR
     subgraph WS["Cargo workspace"]
         CORE["duckosm-core (lib)<br/>read, filter, junctions, segment,<br/>split, merge, edge_id"]
         PQ["duckosm-parquet (lib)<br/>GeoParquet writer"]
+        DB["duckosm-duckdb (lib)<br/>.duckdb writer, bundled DuckDB<br/>cargo feature duckdb"]
         CLI["duckosm-cli (bin)"]
         PY["duckosm-py<br/>PyO3 + maturin wheel"]
         WASM["duckosm-wasm<br/>wasm-bindgen (M4)"]
         CORE --> PQ
+        PQ --> DB
         CORE --> CLI
         PQ --> CLI
+        DB --> CLI
         CORE --> PY
         PQ --> PY
+        DB --> PY
         CORE --> WASM
         PQ --> WASM
     end
+    DB -.-> OUTDB[("area.duckdb")]
     PQ -.-> OUT[("edges_driving.parquet<br/>nodes_driving.parquet<br/>layers.json")]
 ```
 
@@ -110,6 +119,7 @@ trait. This lets the same code run in the CLI, in Python and in the browser.
 | Geometry | Own functions, plus `geo-types` for the types | Rust needs only haversine, planar interpolation and substring on a line. These are about 100 lines. The `geo` crate adds a large dependency for little use. Tests compare the results with DuckDB. |
 | Parquet and Arrow | `parquet` and `arrow-array` (version 60, pinned) | These are the standard crates. They release a new major version often, so the project pins the exact version. |
 | GeoParquet | Own code on top of `parquet`: a WKB column and the `geo` metadata key | The format needs only a binary column and one JSON text. The `geoparquet` crate (0.9.0) is still 0.x and changes its API. Revisit it after 1.0. |
+| DuckDB output | `duckdb` crate 1.10506.1 with the features `bundled` and `parquet`, in the crate `duckosm-duckdb`, behind the cargo feature `duckdb` | The crate builds DuckDB 1.5 into the program, so the user needs no DuckDB. The first build takes several minutes (it compiles the DuckDB C++ code). The feature is on by default for the CLI and the wheel, and off for WebAssembly. The writer loads the GeoParquet files with DuckDB itself, so the column types are the DuckDB types of duckOSM. |
 | CLI | `clap` 4 | The usual choice. |
 | Python binding | `pyo3` 0.30 with `maturin` 1.15, `abi3` wheel | One wheel for each system works for all Python 3.9+ versions. The GIL is released during a build. |
 | WebAssembly | `wasm-bindgen` | M4. |
@@ -120,18 +130,39 @@ Versions come from crates.io on 2026-10-21.
 
 ### Output
 
-For each mode the Rust core writes files with the same names as `duckosm export-gis -f geoparquet`:
-`edges_<mode>.parquet`, `nodes_<mode>.parquet` and `layers.json`. It also writes
-`private_edges_<mode>.parquet`. roadstyle, mapstyle and the GeoLibre plugin can then read the folder.
+The CLI and the wheel write both formats by default. `--format geoparquet` or `--format duckdb`
+chooses one. The WebAssembly build has no `duckdb` feature and writes GeoParquet only.
 
-- Edge columns: `edge_id`, `edge_ref`, `source`, `target`, `osm_id`, `highway`, `name`, `maxspeed`,
-  `oneway`, `lanes`, `surface`, `access`, `junction`, `layer`, `bridge`, `tunnel`, `service`, `refs`,
-  `is_reverse`, `length_m`, `geometry`. Types are the same as in the DuckDB `edges` table.
-  `geometry` is WKB in longitude and latitude (EPSG:4326).
-- Node columns: `node_id`, `geometry`.
+**GeoParquet.** For each mode the Rust core writes files with the same names as
+`duckosm export-gis -f geoparquet`: `edges_<mode>.parquet`, `nodes_<mode>.parquet` and
+`private_edges_<mode>.parquet`. `layers.json` is not written yet. roadstyle, mapstyle and the GeoLibre
+plugin can then read the folder.
+
+**DuckDB.** The file `<name>.duckdb` has the tables of duckOSM, with the same column types. Version 0.1
+writes this part of what duckOSM writes today (checked in `monaco.duckdb` of 2026-10-21):
+
+| duckOSM today | Version 0.1 writes |
+|---|---|
+| `<mode>.edges` | Yes. Columns `edge_id`, `edge_ref`, `source`, `target`, `osm_id`, `highway`, `name`, `oneway`, `lanes`, `surface`, `access`, `junction`, `layer`, `bridge`, `tunnel`, `service`, `refs`, `geometry`, `is_reverse`, `length_m`. It also has `maxspeed` (text) in place of `maxspeed_kmh`. |
+| `edges`: `maxspeed_kmh`, `cost_s`, `from_cell`, `to_cell`, `lca_res` | No. Speeds, costs and H3 are not ported. |
+| `<mode>.nodes` | Yes. `node_id` and `geom`. The column `h3_cell` is not written. |
+| `<mode>.private_edges` | Yes. |
+| `main.edge_id_hash`, `main.edge_id_hash_v1` (macros) | Yes. The same SQL as `edge_id.py`. They call the `hash()` of the DuckDB in the file, so they agree with the ids only for DuckDB 1.3 and later (section 5). |
+| `edge_graph`, `turn_*`, `lane_profile`, `edge_id_map`, `virtual_nodes`, `way_nodes`, `ways` | No. |
+| `main.global_junctions`, `main.boundary`, `main.visualization_metadata`, `raw.*`, `features.*`, `bus.*`, `mm.*`, `visualization.*` | No. |
+
+Python duckOSM can read the file and continue with the steps that are not ported. The DuckDB in the
+program can be newer than the DuckDB in the Python environment of the user. Today the program has
+DuckDB 1.5.6 (crate 1.10506.1) and duckOSM has 1.5.3. The file written by 1.5.6 opens in 1.5.3. This
+is checked only for these two versions. Open question 10.
+
+Common to both formats:
+
+- Edge columns have the types of the DuckDB `edges` table. `geometry` is WKB in longitude and
+  latitude (EPSG:4326).
 - The rows are sorted by `edge_id` and `node_id`. Two runs give identical files.
 - `refs` is a list column. `export-gis` does not write it. Rust writes it by default, because the
-  tests need it. The option `--no-refs` removes it.
+  tests need it. The option `--no-refs` removes it. (Not built yet.)
 
 ## 4. Python API plan
 
@@ -140,10 +171,10 @@ The names follow duckOSM. The keyword names are the config keys of duckOSM.
 ```python
 import duckosm_rust as dr
 
-res = dr.build("monaco.osm.pbf", "out/", modes=["driving", "walking"],
+res = dr.build("monaco.osm.pbf", "out/", modes=["driving", "walking"], formats=["duckdb", "geoparquet"],
                merge_segments=True, global_junctions=True, keep_largest_component=True)
 res.counts          # {"driving": {"edges": 2765, "nodes": 1719}, ...}
-res.files           # {"edges_driving": "out/edges_driving.parquet", ...}
+res.files           # {"duckdb": "out/monaco.duckdb", "edges_driving": "out/edges_driving.parquet", ...}
 
 dr.build_from_config("config/sample_monaco.yaml")   # a subset of the config keys
 dr.edge_id_hash(osm_id, source, target)             # same name and result as duckosm.edge_id_hash
@@ -265,6 +296,7 @@ M0 includes a check that `duckosm-core` builds for `wasm32-unknown-unknown`.
 | The two engines drift | Different results in time | Golden tests in both repositories. |
 | A crate does not build for WebAssembly | M4 slips | Spike in M0. |
 | `arrow` and `parquet` release a new major version often | Build breaks on update | Pin exact versions. Update on purpose. |
+| The bundled DuckDB makes the build slow and the program large | The first build takes several minutes. The release program is 56 MB (with DuckDB). | The `duckdb` feature is optional. A user who needs only GeoParquet builds without it. |
 | The name contains "duck" | The DuckDB trademark question for duckOSM can apply here too | Open question 2. |
 | One maintainer | Scope grows | Keep the non-goals. Ship M3 before M4. |
 
@@ -272,8 +304,8 @@ M0 includes a check that `duckosm-core` builds for `wasm32-unknown-unknown`.
 
 | M | Content | Exit criteria |
 |---|---|---|
-| M0 | Setup. Install Rust (with approval). Cargo workspace. `edge_id` module. Golden and vector files. | `cargo test` passes the hash vectors. Golden files are in the repository. The Monaco double build gives equal files. `duckosm-core` and `osmpbf` build for `wasm32-unknown-unknown`, or the report says why not. |
-| M1 | Monaco, driving. All steps in the table that are marked "Yes", for driving, without `merge_segments`. | All 2,765 `edge_id` values equal the golden file. All columns in section 6 pass. GeoPandas and DuckDB read the output. |
+| M0 | Setup and spike. Rust installed. Cargo workspace. `edge_id` module. Golden files. A CLI that builds the driving network of one PBF and writes `.duckdb` and GeoParquet. | `cargo test` passes the hash vectors and the Monaco golden test. **Done on 2026-10-21**, except: the Monaco double build (is the Python output the same on each run?) and the build for `wasm32-unknown-unknown` are still open. |
+| M1 | Monaco, driving. All steps in the table that are marked "Yes", for driving, without `merge_segments`. | All 2,765 `edge_id` values equal the golden file. All columns in section 6 pass. GeoPandas and DuckDB read the output. **Reached in the spike** for the output in `.duckdb` and GeoParquet (see [benchmark.md](benchmark.md) for the other areas). |
 | M2 | Walking and cycling. `merge_segments` and `edge_id_map`. `lanes`. `private_edges`. | The same checks pass for the three modes, with `merge_segments` on and off. Tartu passes as a local golden. |
 | M3 | Release 0.1.0. CLI, Python wheel, config subset, `layers.json`. | A fresh virtual environment runs `pip install` and builds Monaco with an equal result. The CLI binary does the same. The Estonia numbers are written down. Wheels build for Linux, macOS and Windows. |
 | M4 | WebAssembly and large areas. | A browser page turns a city PBF into GeoParquet. Estonia meets the targets. Optional: speeds and costs, turn restrictions. |
@@ -345,7 +377,7 @@ Decision (Kaveh, 2026-10-21): the repository is `duckosm-rust`.
 
 ## 14. Open questions for Kaveh
 
-1. Can I install Rust on this machine with `rustup`? Steps are in [development.md](development.md).
+1. ~~Can I install Rust?~~ Decided by Kaveh on 2026-10-21: yes, with `rustup` at user level. Done (Rust 1.99.1). See [development.md](development.md).
 2. What are the names of the PyPI package, the Python module and the CLI program? The proposal is
    `duckosm-rust` for the package and the CLI, and `duckosm_rust` for the module. The name has
    "duck" in it. The PyPI release of duckOSM waits for the DuckDB trademark reply, so this can apply.
@@ -362,6 +394,9 @@ Decision (Kaveh, 2026-10-21): the repository is `duckosm-rust`.
    repository.
 9. Is the order of the "Later" parts in section 11 right? After a part moves, do you delete its
    Python code or keep it as the reference?
+10. Which DuckDB version should the `.duckdb` file have? The program has DuckDB 1.5.6, duckOSM has
+    1.5.3. A file from a newer DuckDB may not open in an older one. Do you want to pin the crate to
+    the DuckDB version of duckOSM?
 
 ## Terms
 

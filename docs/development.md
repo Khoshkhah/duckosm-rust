@@ -2,36 +2,46 @@
 
 ## Toolchain status (2026-10-21)
 
-Checked on the WSL machine of Kaveh.
-
 | Tool | Status |
 |---|---|
-| `cargo`, `rustc`, `rustup` | Not installed. They are not on `PATH`. `~/.cargo` and `~/.rustup` do not exist. |
-| `maturin` | Not installed. |
-| `gcc`, `cc` | Installed (`/usr/bin`). |
-| Python | 3.10.12. duckOSM has its own `.venv` with DuckDB 1.5.3. |
-
-Nothing was installed. Install Rust only with the approval of Kaveh.
+| `rustc`, `cargo`, `rustup` | Installed on 2026-10-21 with `rustup` at user level (`~/.cargo`, `~/.rustup`, profile `default`, channel `stable`). Version 1.99.1. The installer added `~/.cargo/bin` to the `PATH` in the shell profile. |
+| `g++`, `cmake`, `make` | Installed (system). The `duckdb` crate needs a C++ compiler. |
+| `maturin` | Not installed. It is needed from M3 (Python wheel). |
+| `wasm32-unknown-unknown` target | Not installed. It is needed from M4. |
 
 ## Install Rust
 
+Done on this machine. On a new machine:
+
 ```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile default
 source "$HOME/.cargo/env"
-rustup component add clippy rustfmt
-rustup target add wasm32-unknown-unknown
+rustup target add wasm32-unknown-unknown   # M4
 ```
 
-Install `maturin` in a virtual environment, for the Python wheel (from M3):
+## Build and test
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install maturin
+cargo build --release          # the first build takes several minutes: it compiles DuckDB
+cargo test --release           # hash vectors, geometry tests, and the Monaco golden test
+cargo build --release --no-default-features -p duckosm-cli   # without DuckDB: GeoParquet only (not tested yet)
+./target/release/duckosm-rust tests/data/monaco.osm.pbf -o out --name monaco --no-component-filter
 ```
 
-## Check the edge_id reference
+The binary is `target/release/duckosm-rust`. `--timing` prints the time of each step.
 
-This needs no Rust. It compares the Python reference with the DuckDB that is installed.
+## Check the result against duckOSM
+
+`tests/data/golden_monaco.yaml` builds the golden database with duckOSM 0.6.0 (run it in an empty
+folder, with `duckosm build --config`). Then compare every row, column and geometry byte:
+
+```bash
+python tools/compare_with_duckosm.py monaco_golden.duckdb out/monaco.duckdb   # or the GeoParquet folder
+```
+
+`tools/make_golden.py` writes `tests/data/monaco_driving_edges.tsv` from such a database.
+`tools/edge_id_reference.py` is the `edge_id` hash in plain Python. It compares itself with the
+installed DuckDB, and with every edge of a duckOSM database:
 
 ```bash
 pip install duckdb
@@ -39,4 +49,6 @@ python tools/edge_id_reference.py                       # random checks
 python tools/edge_id_reference.py path/to/area.duckdb   # every edge of a duckOSM database
 ```
 
-The first line must say `different results in 0 random checks`. Each mode line must say `0 different`.
+## Benchmark
+
+See [benchmark.md](benchmark.md). The runner is `bench/run_bench.py`.
