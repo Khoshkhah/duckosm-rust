@@ -667,6 +667,7 @@ version = "0.0.1"
 dependencies = [
  "duckosm-core",
  "duckosm-parquet",
+ "js-sys",
  "wasm-bindgen",
 ]
 

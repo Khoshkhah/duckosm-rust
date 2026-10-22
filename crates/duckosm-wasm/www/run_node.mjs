@@ -18,5 +18,5 @@ try {
 console.log(`${net.summary} in ${((performance.now() - t0) / 1000).toFixed(3)} s, ${memory()}`);
 mkdirSync(out, { recursive: true });
 for (const name of ["edges", "nodes", "private_edges", "edge_id_map"]) {
-  writeFileSync(`${out}/${name}_${mode}.parquet`, net[name]);
+  writeFileSync(`${out}/${name}_${mode}.parquet`, Buffer.concat(net[name]));
 }

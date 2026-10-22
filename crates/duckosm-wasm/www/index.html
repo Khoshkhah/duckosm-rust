@@ -45,10 +45,10 @@ $("run").onclick = async () => {
     $("status").textContent = `${net.summary} in ${((performance.now() - t0) / 1000).toFixed(2)} s.`;
     for (const name of ["edges", "nodes", "private_edges", "edge_id_map"]) {
       const a = document.createElement("a");
-      const data = net[name];
-      a.href = URL.createObjectURL(new Blob([data], { type: "application/vnd.apache.parquet" }));
+      const blob = new Blob(net[name], { type: "application/vnd.apache.parquet" });
+      a.href = URL.createObjectURL(blob);
       a.download = `${name}_${mode}.parquet`;
-      a.textContent = `${a.download} (${data.length.toLocaleString()} bytes)`;
+      a.textContent = `${a.download} (${blob.size.toLocaleString()} bytes)`;
       $("files").append(a);
     }
     net.free();

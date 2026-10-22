@@ -13,7 +13,7 @@ use std::path::PathBuf;
 fn bytes_equal_files() {
     let pbf_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/data/monaco.osm.pbf");
-    let got = duckosm_wasm::run(&std::fs::read(&pbf_path).unwrap(), "driving").unwrap();
+    let got = duckosm_wasm::run(&std::fs::read(&pbf_path).unwrap(), "driving", Vec::new).unwrap();
 
     let ways = pbf::read_ways(&pbf_path).unwrap();
     let coords = pbf::read_coords(&pbf_path, &ways).unwrap();
