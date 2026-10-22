@@ -515,7 +515,7 @@ proposal: high gain and low effort first.
 | Network build: road filter, global junctions, graph simplifier, edge_id, private split, component filter (`processors/`) | about 1,500 | **Now** | Pure CPU. Large data. It is the main cost of a build. Section 2. |
 | GeoParquet output (part of `gis.py`) | small | **Now** | Rust writes it itself. |
 | Speeds, costs, walk and cycle type, dismount, lane profile (`processors/`) | about 450 | **Later, 1st** | Rules for one edge at a time. They need only the tags that Rust already reads. |
-| Turn restrictions, edge graph (`processors/restrictions.py`, `edge_graph.py`) | about 440 | **Later, 2nd** | Pure CPU. The edge graph is large. Needs the OSM relations. |
+| Turn restrictions, edge graph (`processors/restrictions.py`, `edge_graph.py`) | about 440 | **Later, 2nd** | Pure CPU. The edge graph is large. Needs the OSM relations. Design proposal: [edge_graph.md](edge_graph.md) (2026-10-22, waits for approval). |
 | Dangling-path connector, H3 cells (`path_connector.py`, `h3_indexer.py`, `utils/h3_calc.py`) | about 320 | **Later, 3rd** | Pure CPU. A Rust H3 crate exists (`h3o`). |
 | Routing: shortest path, point routing, lane routing, directions | about 1,100 | **Later, 4th** | Graph search is a good fit for Rust and gives a large speed gain. The export to networkx stays in Python, because networkx is a Python library. |
 | GMNS and crossings (`gmns.py`, `crossings.py`, `gmns_sumo.py`, `gmns_check.py`) | about 2,900 | **Later, 5th** | Large, CPU heavy, and uses shapely and numpy today. The lane rules still change, so port a table only when its rules are stable. |
