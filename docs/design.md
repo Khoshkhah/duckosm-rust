@@ -420,9 +420,12 @@ Decision (Kaveh, 2026-10-21): the repository is `duckosm-rust`.
 
 9. Is the order of the "Later" parts in section 11 right? After a part moves, do you delete its
    Python code or keep it as the reference?
-10. Which DuckDB version should the `.duckdb` file have? The program has DuckDB 1.5.6, duckOSM has
-    1.5.3. A file from a newer DuckDB may not open in an older one. Do you want to pin the crate to
-    the DuckDB version of duckOSM?
+10. ~~Which DuckDB version should the `.duckdb` file have?~~ Decided by Kaveh on 2026-10-21: keep the bundled
+    DuckDB 1.5.6 (crate `duckdb` 1.10506.1), and move to DuckDB 2 when the Rust crate supports it. The crate
+    has no 2.0 version yet (issue duckdb/duckdb-rs#913, opened on 2026-10-21). The order of the upgrade
+    matters. DuckDB 2.0.0 opens files that 1.5.x wrote, but DuckDB 1.5.3 cannot open a file that 2.0.0
+    wrote ("created with an newer version of DuckDB"). So the Python side must move to 2.x (it needs Python
+    3.11 or newer) before, or at the same time as, the Rust program. `edge_id` is the same in 2.0.0.
 
 ## Terms
 
