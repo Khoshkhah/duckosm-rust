@@ -1,6 +1,6 @@
 //! Golden test for the three modes. Input: the sample file of Monaco (no cut, no component filter).
 //! The expected counts and checksums come from duckOSM 0.6.0 (DuckDB 1.5.3): tools/make_golden_summary.py.
-//! The variants switch `merge_segments` and `global_junctions`. With `global_junctions` on, Monaco has no
+//! The variants switch `merge_segments` and `global_junctions`; `_cf` also runs the component filter. With `global_junctions` on, Monaco has no
 //! chains to merge, so the variants with it off test the merge.
 
 use duckosm_core::filter::Mode;
@@ -32,21 +32,33 @@ fn checksum(edges: &[Edge]) -> u64 {
 
 #[test]
 fn three_modes_equal_duckosm() {
-    let path = data("monaco_sample.osm.pbf");
-    let ways = pbf::read_ways(&path).unwrap();
-    let coords = pbf::read_coords(&path, &ways).unwrap();
+    // the sample file (no cut), and the file cut to the boundary (variants that end in _cf)
+    let read = |name: &str| {
+        let path = data(name);
+        let ways = pbf::read_ways(&path).unwrap();
+        let coords = pbf::read_coords(&path, &ways).unwrap();
+        (ways, coords)
+    };
+    let (ways, coords) = read("monaco_sample.osm.pbf");
+    let (cut_ways, cut_coords) = read("monaco.osm.pbf");
     let golden = std::fs::read_to_string(data("monaco_modes_summary.tsv")).unwrap();
     let mut bad = Vec::new();
     for line in golden.lines().skip(1) {
         let f: Vec<&str> = line.split('\t').collect();
         let (variant, mode) = (f[0], Mode::parse(f[1]).unwrap());
+        let cf = variant.ends_with("_cf");
         let opts = Options {
-            keep_largest_component: false,
+            keep_largest_component: cf,
             cycling_dismount: true,
             merge_segments: variant.starts_with("merge"),
-            global_junctions: variant.ends_with("_gj") && !variant.ends_with("_nogj"),
+            global_junctions: variant.contains("_gj"),
         };
-        let net = build_network(&ways, &coords, mode, &opts).unwrap();
+        let net = if cf {
+            build_network(&cut_ways, &cut_coords, mode, &opts)
+        } else {
+            build_network(&ways, &coords, mode, &opts)
+        }
+        .unwrap();
         let got = [
             net.edges.len().to_string(),
             net.private_edges.len().to_string(),

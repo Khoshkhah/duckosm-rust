@@ -255,7 +255,7 @@ Rule: a skipped test is not a pass.
    - Every vertex must differ by less than 1e-9 degrees.
    - On failure the test prints the first 20 different rows.
 3b. **Three modes, four variants (done).** `tests/modes.rs` builds the sample file of Monaco in driving, walking
-   and cycling, with `merge_segments` and `global_junctions` on or off, and compares the counts and a checksum
+   and cycling, with `merge_segments` and `global_junctions` on or off (and a fifth variant on the cut file with the component filter on), and compares the counts and a checksum
    of every edge and private edge with duckOSM (`tests/data/monaco_modes_summary.tsv`, made by
    `tools/make_golden_summary.py`). With `global_junctions` on, Monaco has no mergeable chain (duckOSM
    gives 0 rows in `edge_id_map`), so the variants with it off give the real test of the merge: 114, 265
@@ -320,7 +320,7 @@ Checked on 2026-10-21 (`cargo build --target wasm32-unknown-unknown`, compile on
 |---|---|---|
 | M0 | Setup and spike. Rust installed. Cargo workspace. `edge_id` module. Golden files. A CLI that builds the driving network of one PBF and writes `.duckdb` and GeoParquet. | `cargo test` passes the hash vectors and the Monaco golden test. **Done on 2026-10-21.** The Python output is the same on each run (two golden builds of Monaco: 0 rows differ). The build for `wasm32-unknown-unknown` is checked for compile only (section 7). |
 | M1 | Monaco, driving. All steps in the table that are marked "Yes", for driving, without `merge_segments`. | All 2,765 `edge_id` values equal the golden file. All columns in section 6 pass. GeoPandas and DuckDB read the output. **Reached in the spike** for the output in `.duckdb` and GeoParquet (see [benchmark.md](benchmark.md) for the speed; only Monaco is tested). |
-| M2 | Walking and cycling. `merge_segments` and `edge_id_map`. `lanes`. `private_edges`. | The same checks pass for the three modes, with `merge_segments` on and off. Tartu passes as a local golden. **Reached on Monaco on 2026-10-21** for 4 variants (`merge_segments` and `global_junctions` on or off) in the three modes: 0 rows differ in `edges`, `private_edges`, `nodes` and `edge_id_map`. Not done: the sidewalk rule, the dangling-path connector, Tartu. |
+| M2 | Walking and cycling. `merge_segments` and `edge_id_map`. `lanes`. `private_edges`. | The same checks pass for the three modes, with `merge_segments` on and off. Tartu passes as a local golden. **Reached on Monaco on 2026-10-21** for 5 variants (`merge_segments` and `global_junctions` on or off, and the component filter) in the three modes: 0 rows differ in `edges`, `private_edges`, `nodes` and `edge_id_map`. Not done: the sidewalk rule, the dangling-path connector, Tartu. |
 | M3 | Release 0.1.0. CLI, Python wheel, config subset, `layers.json`. | A fresh virtual environment runs `pip install` and builds Monaco with an equal result. The CLI binary does the same. The Estonia numbers are written down. Wheels build for Linux, macOS and Windows. |
 | M4 | WebAssembly and large areas. | A browser page turns a city PBF into GeoParquet. Estonia meets the targets. Optional: speeds and costs, turn restrictions. |
 

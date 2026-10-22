@@ -11,3 +11,6 @@ merge_nogj	cycling	9654	141	4317	1159	c1b46fb28310a8d8	e673fe3965b500cf
 nomerge_nogj	driving	2202	472	1296	0	74b227cc1020173c	d7accc1b0a645936
 nomerge_nogj	walking	12038	166	4718	0	e55cce0bce1527c6	22fac69d205a399
 nomerge_nogj	cycling	10258	141	4644	0	5a79aef4668653bc	e673fe3965b500cf
+merge_gj_cf	driving	2765	689	1719	0	3b36990a04e2ba6b	7934092300a69b92
+merge_gj_cf	walking	11450	158	4456	0	c8613dec4d91915e	4bf3ad550bfc2598
+merge_gj_cf	cycling	9434	133	4139	0	b71300be3fe52735	afafff05bc4c86ce
