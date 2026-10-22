@@ -28,15 +28,25 @@
 <body>
 <h1>duckOSM in the browser</h1>
 <p class="note">duckosm-rust builds duckOSM's tables in this tab, and DuckDB (duckdb-wasm) keeps them for SQL. No server of ours, no Python.
-A place name is found with <a href="https://nominatim.openstreetmap.org">Nominatim</a>, and its data comes from the
-<a href="https://wiki.openstreetmap.org/wiki/Overpass_API">Overpass API</a>, so the area should be a city or a region. A PBF file does not leave your computer.</p>
+The input is an area: a boundary and a name. Make the boundary with the <a href="boundary.html">boundary tool</a>. A PBF file does not leave your computer.</p>
 
 <fieldset>
-  <legend>1. Input</legend>
-  <p><label>Place <input id="place" type="search" placeholder="for example Tartu" size="30"></label>
-    <button id="search">Find</button></p>
-  <div id="places"></div>
-  <p>or <label>a PBF file (already cut to the area) <input id="pbf" type="file" accept=".pbf"></label></p>
+  <legend>1. The area</legend>
+  <p><label>Boundary <input id="boundary" type="file" accept=".geojson,.json"></label>
+    <span class="note">(from the <a href="boundary.html">boundary tool</a> or <code>duckosm boundary</code>)</span></p>
+  <p><label>Name <input id="name" size="30"></label></p>
+  <pre id="area">No boundary yet.</pre>
+</fieldset>
+
+<fieldset>
+  <legend>2. The OpenStreetMap data</legend>
+  <p><label><input type="radio" name="source" value="region" checked> a region PBF file that covers the area (for example a Geofabrik extract)</label>
+    <input id="region" type="file" accept=".pbf"><br>
+    <span class="note">The page reads the file piece by piece and keeps the ways with a node inside the boundary, as osmium's <code>complete_ways</code>.</span></p>
+  <p><label><input type="radio" name="source" value="overpass"> the <a href="https://wiki.openstreetmap.org/wiki/Overpass_API">Overpass API</a></label>
+    <span class="note">(a city or smaller; the public servers are often full)</span></p>
+  <p><label><input type="radio" name="source" value="cut"> a PBF file already cut to the area (no boundary necessary)</label>
+    <input id="pbf" type="file" accept=".pbf"></p>
   <p>Modes:
     <label><input type="checkbox" name="mode" value="driving" checked> driving</label>
     <label><input type="checkbox" name="mode" value="walking" checked> walking</label>
@@ -66,7 +76,7 @@ const $ = (id) => document.getElementById(id);
 const log = (s) => ($("status").textContent = s);
 const t0 = performance.now();
 const since = () => ((performance.now() - t0) / 1000).toFixed(2) + " s";
-let db = null, conn = null, tables = [];
+let db = null, conn = null, tables = [], areaName = "area";
 
 const MACROS = `
 CREATE OR REPLACE MACRO edge_id_hash(osm_id, source, target) AS
@@ -88,7 +98,7 @@ const duckReady = startDuckDB().then(async (d) => {
   db = d;
   conn = await db.connect();
   window.timings = { duckdbStart: (performance.now() - t0) / 1000 };
-  log(`DuckDB is ready (${since()}). Choose a PBF file and click Build.`);
+  log(`DuckDB is ready (${since()}). Select the area and the data, and click Build.`);
 });
 duckReady.catch((e) => log("DuckDB did not start: " + e));
 
@@ -101,7 +111,7 @@ function buildInWorker(msg) {
       else if (data.error) reject(new Error(data.error));
       else resolve(data);
     };
-    worker.postMessage(msg, [msg.pbf || msg.json]);
+    worker.postMessage(msg, msg.pbf || msg.json ? [msg.pbf || msg.json] : []);
   });
 }
 
@@ -112,41 +122,58 @@ const split = (name) => {
   return { mode, table: base.slice(0, base.lastIndexOf("_")) };
 };
 
-// the place search (Nominatim) and the data of a place (Overpass): a public server can be busy, so the page tries
-// the next one
-const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
-                  "https://overpass.private.coffee/api/interpreter"];
-let found = [];
+// the boundary: a duckOSM boundary file (a FeatureCollection with one Feature, or a Feature or a geometry)
+let boundary = null;
 
-$("search").onclick = async () => {
-  const q = $("place").value.trim();
-  if (!q) return;
+function setBoundary(text, from) {
+  const g = JSON.parse(text);
+  const f = g.type === "FeatureCollection" ? g.features[0] : g.type === "Feature" ? g : { geometry: g, properties: {} };
+  const p = f.properties || {};
+  const outer = f.geometry.type === "Polygon" ? [f.geometry.coordinates[0]] : f.geometry.type === "MultiPolygon" ? f.geometry.coordinates.map((q) => q[0]) : null;
+  if (!outer) throw new Error("the geometry is not a Polygon or a MultiPolygon");
+  boundary = { text, outer };
+  $("name").value = p.name || "";
+  const links = (p.geofabrik || []).filter((x) => /^https:\/\//.test(x.pbf)).map((x) => `<a href="${x.pbf}">${x.name.replace(/</g, "&lt;")}</a>`).join(", ");
+  $("area").innerHTML = `${(p.name || "(no name)").replace(/</g, "&lt;")}${p.area_km2 ? `, ${p.area_km2} km²` : ""}, from ${from}.` +
+    (links ? `\nRegion files that cover it: ${links}` : "\nThe boundary tool names a region file that covers it.");
+}
+
+$("boundary").onchange = async () => {
   try {
-    const r = await fetch("https://nominatim.openstreetmap.org/search?" + new URLSearchParams({ q, format: "jsonv2", limit: "8" }));
-    found = await r.json();
-    const list = found.map((p, i) => `<label><input type="radio" name="place" value="${i}"${i ? "" : " checked"}> ${p.display_name.replace(/</g, "&lt;")} <span class="note">(${p.addresstype}, ${p.osm_type} ${p.osm_id})</span></label><br>`);
-    $("places").innerHTML = list.join("") || "<p class='note'>No place found.</p>";
+    setBoundary(await $("boundary").files[0].text(), $("boundary").files[0].name);
   } catch (e) {
-    $("places").textContent = "The place search failed: " + e.message;
+    $("area").textContent = "The boundary file is not usable: " + e.message;
   }
 };
 
-// the highway ways and ferry lines in the area (a relation or a closed way) or in the bounding box (a point), with
-// all their nodes, and the type=restriction relations of these ways
-function overpassQuery(p) {
-  const area = p.osm_type === "relation" ? 3600000000 + Number(p.osm_id) : p.osm_type === "way" ? 2400000000 + Number(p.osm_id) : null;
-  const [s, n, w, e] = p.boundingbox;
-  const where = area ? "(area.a)" : `(${s},${w},${n},${e})`;
-  return `[out:json][timeout:600][maxsize:2147483648];${area ? `area(id:${area})->.a;` : ""}` +
-    `(way["highway"]${where};way["route"="ferry"]${where};)->.w;rel(bw.w)["type"="restriction"]->.r;(.w;.w >;.r;);out body qt;`;
+// a boundary from the boundary tool (the storage of this site)
+try {
+  const kept = localStorage.getItem("duckosm.boundary");
+  if (kept) setBoundary(kept, "the boundary tool");
+} catch (e) { /* no storage: select the file */ }
+
+// the data of the area from the Overpass API: the highway ways and ferry lines in the bounding box of each outer
+// ring, with all their nodes, and the type=restriction relations of these ways. duckosm-rust then keeps the ways
+// with a node inside the boundary, so the result is the same as the cut of a region file. A public server can be
+// busy, so the page tries the next one.
+const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+                  "https://overpass.private.coffee/api/interpreter"];
+
+function overpassQuery(outer) {
+  const boxes = outer.map((r) => {
+    const xs = r.map((c) => c[0]), ys = r.map((c) => c[1]);
+    return `(${Math.min(...ys)},${Math.min(...xs)},${Math.max(...ys)},${Math.max(...xs)})`;
+  });
+  const ways = boxes.map((b) => `way["highway"]${b};way["route"="ferry"]${b};`).join("");
+  return `[out:json][timeout:600][maxsize:2147483648];(${ways})->.w;rel(bw.w)["type"="restriction"]->.r;(.w;.w >;.r;);out body qt;`;
 }
 
-async function overpass(p) {
-  const query = overpassQuery(p);
+async function overpass(outer, name) {
+  const query = overpassQuery(outer);
   const failed = [];
   for (const url of OVERPASS) {
     const host = new URL(url).host;
-    log(`getting the data of ${p.display_name.split(",")[0]} from ${host}…`);
+    log(`getting the data of ${name} from ${host}…`);
     try {
       const r = await fetch(url, { method: "POST", body: new URLSearchParams({ data: query }) });
       if (r.ok) return { bytes: await r.arrayBuffer(), server: host };
@@ -156,13 +183,15 @@ async function overpass(p) {
     }
   }
   throw new Error(`no Overpass server answered (${failed.join("; ")}). The public servers are often full: ` +
-                  "try again later, or give a PBF file");
+                  "try again later, or use a region file");
 }
 
 $("run").onclick = async () => {
-  const file = $("pbf").files[0];
-  const chosen = document.querySelector("input[name=place]:checked");
-  if (!file && !chosen) return log("Find a place, or choose a PBF file.");
+  const source = document.querySelector("input[name=source]:checked").value;
+  const file = $(source === "cut" ? "pbf" : "region").files[0];
+  if (source !== "cut" && !boundary) return log("Select a boundary file, or make one with the boundary tool.");
+  if (source !== "overpass" && !file) return log("Select the PBF file.");
+  const name = $("name").value.trim() || "area";
   const modes = [...document.querySelectorAll("input[name=mode]:checked")].map((c) => c.value).join(",");
   if (!modes) return log("Choose at least one mode.");
   $("run").disabled = $("query").disabled = $("duckdb").disabled = true;
@@ -172,13 +201,16 @@ $("run").onclick = async () => {
     const start = performance.now();
     const fixes = $("fixes").files[0] ? await $("fixes").files[0].text() : null;
     let msg, download = null;
-    if (file) {
+    if (source === "region") {
+      // the worker reads the File piece by piece: no copy of the region file in memory
+      msg = { region: file, boundary: boundary.text, modes, fixes };
+    } else if (source === "cut") {
       msg = { pbf: await file.arrayBuffer(), modes, fixes };
     } else {
       const d0 = performance.now();
-      const got = await overpass(found[Number(chosen.value)]);
+      const got = await overpass(boundary.outer, name);
       download = { seconds: (performance.now() - d0) / 1000, bytes: got.bytes.byteLength, server: got.server };
-      msg = { json: got.bytes, modes, fixes };
+      msg = { json: got.bytes, boundary: boundary.text, modes, fixes };
     }
     const out = await buildInWorker(msg);
     const built = performance.now();
@@ -203,7 +235,8 @@ $("run").onclick = async () => {
       tables: (ready - built) / 1000, clickToQuery: (ready - start) / 1000, memoryMiB: out.memoryMiB, download,
     });
     const got = download ? `OSM data from ${download.server}: ${(download.bytes / 2 ** 20).toFixed(1)} MB in ${download.seconds.toFixed(1)} s. ` : "";
-    log(`${out.summary}\n\n${got}build ${out.seconds.build.toFixed(2)} s (module load ${out.seconds.load.toFixed(2)} s), ` +
+    areaName = name;
+    log(`${name}\n\n${out.summary}\n\n${got}build ${out.seconds.build.toFixed(2)} s (module load ${out.seconds.load.toFixed(2)} s), ` +
         `tables into DuckDB ${((ready - built) / 1000).toFixed(2)} s, ready for SQL ${((ready - start) / 1000).toFixed(2)} s after the click, ` +
         `${out.memoryMiB} MiB WebAssembly memory.`);
     for (const t of tables) {
@@ -250,10 +283,11 @@ $("query").onclick = async () => {
 
 // duckdb-wasm (1.33.1-dev57.0) keeps a written .duckdb file locked after DETACH, so the page cannot give that
 // file. load.sql makes it from the Parquet files, with the SQL of the native .duckdb writer:
-// `duckdb area.duckdb < load.sql` in the folder of the files.
+// `duckdb <name>.duckdb < load.sql` in the folder of the files.
 $("duckdb").onclick = () => {
-  const lines = ["-- duckOSM tables from the Parquet files of duckosm-rust in the browser.",
-    "-- In the folder of the files: duckdb area.duckdb < load.sql"];
+  const file = areaName.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "area";
+  const lines = [`-- duckOSM tables of ${areaName.replace(/\n/g, " ")}, from the Parquet files of duckosm-rust in the browser.`,
+    `-- In the folder of the files: duckdb ${file}.duckdb < load.sql`];
   for (const m of [...new Set(tables.map((t) => t.mode))]) lines.push(`CREATE SCHEMA IF NOT EXISTS ${m};`);
   for (const t of tables) {
     const select = t.table === "nodes" ? "SELECT node_id, geometry AS geom" : "SELECT *";

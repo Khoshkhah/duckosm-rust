@@ -1,9 +1,10 @@
 // The build of duckosm-rust in a Web Worker, so the page stays responsive during a long build.
-// In: {pbf: ArrayBuffer} or {json: ArrayBuffer} (OSM JSON from the Overpass API), with {modes: "driving,walking",
-// fixes: text or null}.
+// In: {pbf: ArrayBuffer} (a file cut to the area), {region: File, boundary: GeoJSON text} (a region file, cut
+// while it is read, piece by piece) or {json: ArrayBuffer, boundary} (OSM JSON from the Overpass API), with
+// {modes: "driving,walking", fixes: text or null}.
 // Out: {step}, then {files: {name: Uint8Array}, summary, seconds: {load, build}, memoryMiB} (the buffers are
 // transferred, not copied), or {error}.
-import init, { build, build_osm_json } from "./pkg/duckosm_wasm.js";
+import init, { build, build_area, build_osm_json } from "./pkg/duckosm_wasm.js";
 
 let wasm = null;
 
@@ -16,9 +17,12 @@ onmessage = async ({ data }) => {
     }
     const t1 = performance.now();
     postMessage({ step: "building the networks" });
-    const res = data.json
-      ? build_osm_json(new Uint8Array(data.json), data.modes, data.fixes || undefined)
-      : build(new Uint8Array(data.pbf), data.modes, data.fixes || undefined);
+    const fixes = data.fixes || undefined;
+    const res = data.region
+      ? build_area(data.region, data.boundary, data.modes, fixes)
+      : data.json
+        ? build_osm_json(new Uint8Array(data.json), data.boundary || undefined, data.modes, fixes)
+        : build(new Uint8Array(data.pbf), data.modes, fixes);
     const t2 = performance.now();
     // one buffer for each file: duckdb-wasm registers a file as one buffer
     const files = {};

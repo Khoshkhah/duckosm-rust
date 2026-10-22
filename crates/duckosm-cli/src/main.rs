@@ -70,6 +70,9 @@ struct Cli {
     /// A duckOSM OSM fixes file (YAML). With --config, it replaces the config's osm_overrides.
     #[arg(long, value_name = "FILE")]
     fixes: Option<PathBuf>,
+    /// A boundary (GeoJSON, as `duckosm boundary` writes it): the PBF is cut to it (as osmium complete_ways).
+    #[arg(long, value_name = "FILE", conflicts_with = "config")]
+    boundary: Option<PathBuf>,
     /// Print the time of each step.
     #[arg(long)]
     timing: bool,
@@ -126,6 +129,9 @@ fn run() -> Result<(), String> {
     };
     if let Some(f) = &cli.fixes {
         p.osm_fixes = Some(f.clone());
+    }
+    if cli.boundary.is_some() {
+        p.boundary = cli.boundary.clone();
     }
     p.geoparquet = false;
     p.duckdb = false;

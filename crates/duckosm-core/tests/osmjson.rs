@@ -1,7 +1,9 @@
 //! The OSM JSON reader gives the same data as the PBF reader: the Monaco PBF is written as OSM JSON (as Overpass
 //! writes it: coordinates with 7 decimals, tags as an object, members with type, ref and role), read back, and
-//! compared with the PBF reader: the ways, their tags, the coordinate bits and the restriction relations.
+//! compared with the PBF reader: the ways, their tags, the coordinate bits and the restriction relations. The cut
+//! of OSM JSON to a boundary keeps the same ways as the cut of the PBF reader.
 
+use duckosm_core::boundary::Boundary;
 use duckosm_core::osmjson::OsmJson;
 use duckosm_core::pbf;
 use osmpbf::{Element, ElementReader, RelMemberType};
@@ -30,11 +32,16 @@ fn deg7(d: i32) -> String {
     )
 }
 
-#[test]
-fn osm_json_equals_pbf() {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/data/monaco.osm.pbf");
+fn data(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/data")
+        .join(name)
+}
+
+/// The PBF file as OSM JSON.
+fn to_json(path: &PathBuf) -> String {
     let mut els: Vec<String> = Vec::new();
-    ElementReader::from_path(&path)
+    ElementReader::from_path(path)
         .unwrap()
         .for_each(|el| {
             let mut s = String::new();
@@ -92,8 +99,13 @@ fn osm_json_equals_pbf() {
             els.push(s);
         })
         .unwrap();
-    let json = format!(r#"{{"version":0.6,"elements":[{}]}}"#, els.join(","));
+    format!(r#"{{"version":0.6,"elements":[{}]}}"#, els.join(","))
+}
 
+#[test]
+fn osm_json_equals_pbf() {
+    let path = data("monaco.osm.pbf");
+    let json = to_json(&path);
     let data = OsmJson::read(json.as_bytes()).unwrap();
     let ways = pbf::read_ways(&path).unwrap();
     assert_eq!(data.ways.len(), ways.len());
@@ -129,4 +141,17 @@ fn osm_json_equals_pbf() {
         tb.sort();
         assert_eq!((a.id, ta, &a.members), (b.id, tb, &b.members));
     }
+}
+
+#[test]
+fn osm_json_cut_equals_pbf_cut() {
+    let sample = data("monaco_sample.osm.pbf");
+    let b = Boundary::parse(&std::fs::read_to_string(data("monaco.geojson")).unwrap()).unwrap();
+    let mut json = OsmJson::read(to_json(&sample).as_bytes()).unwrap();
+    let all = json.ways.len();
+    json.cut(&b);
+    let (ways, _, _) = pbf::read_area_path(&sample, &b).unwrap();
+    assert!(json.ways.len() < all);
+    let ids = |w: &[duckosm_core::model::Way]| w.iter().map(|w| w.id).collect::<Vec<_>>();
+    assert_eq!(ids(&json.ways), ids(&ways));
 }

@@ -44,7 +44,7 @@ The features of version 0.1 are complete after milestone M2. M3 releases them (s
 
 | # | Python step (file) | Rust in 0.1 | Note |
 |---|---|---|---|
-| 1 | Cut the PBF to the boundary with `osmium` (`importer.py`) | No | The input is a PBF that is already cut. A built-in cut can come later. |
+| 1 | Cut the PBF to the boundary with `osmium` (`importer.py`) | Yes (B4) | `pbf::read_area`: a polygon cut in Rust with the result of osmium's `complete_ways` (browser.md, step B4). |
 | 2 | Read OSM into `raw.*` with `ST_READOSM` | Yes | Rust keeps only highway ways, the tags it needs, and the nodes of these ways. |
 | 3 | Load the boundary, boundary cells | No | |
 | 4 | Global junctions (`global_junctions.py`) | Yes | Needed in every mode: a footway that crosses a road cuts the road. |
@@ -204,9 +204,9 @@ dr.edge_id_hash(osm_id, source, target)             # same name and result as du
   - A key that duckOSM does not know is an error (duckOSM only warns; it is almost always a typo).
   - A key that changes the result and is not supported is an error: `source.type: duckdb`, `boundary.place`,
     `bbox`, `h3_cell`, `buffer_m`, `clip.predicate` other than `intersects`, `clip.min_component_edges` > 1.
-  - The program does not cut the PBF. With a boundary, the caller must say that the PBF is already cut
-    (`pbf_is_cut=True`, CLI `--pbf-is-cut`). The component filter then runs as in duckOSM (with a boundary
-    and `build_graph` on).
+  - With a boundary, the program cuts the PBF to it, as osmium's `complete_ways` does (no `osmium` is
+    necessary). When the PBF is already cut, say so (`pbf_is_cut=True`, CLI `--pbf-is-cut`): then the program
+    does not cut. The component filter runs as in duckOSM (with a boundary and `build_graph` on).
   - A duckOSM step that the program does not have (H3, `features.*`, the
     drawing order, the bus routes, the sea, the checks, the report, the maps, the multimodal
     graph) is an error. Most of them are on by default in duckOSM, so a usual config needs `strict=False`
@@ -587,7 +587,10 @@ Decision (Kaveh, 2026-10-21): the repository is `duckosm-rust`.
    with `engine: rust` as the switch?~~ Decided by Kaveh on 2026-10-22: yes. Done for the network step:
    duckOSM has `options.engine: rust` (duckOSM `docs/design/rust_engine.md`). Its test
    `tests/test_engine_rust.py` builds the Monaco sample with both engines and compares the tables.
-7. Cut to the boundary: keep `osmium` outside, or add a polygon cut to the Rust core in M3 or M4?
+7. ~~Cut to the boundary: keep `osmium` outside, or add a polygon cut to the Rust core in M3 or M4?~~
+   Decided by Kaveh on 2026-10-22: a polygon cut in the Rust core, because the browser needs it. Done
+   (browser.md, step B4): the Rust cut gives the same ways and coordinates as osmium on Monaco, and the same
+   20 tables on Tartu from the Estonia file.
 8. ~~Large areas are not tested yet. Which PBF is the scale test, and when do you want it?~~ Decided by
    Kaveh on 2026-10-22: Estonia (`osm-traffic-enrichment/map/estonia-latest.osm.pbf`, 121 MB). Done
    (section 6, item 6d).

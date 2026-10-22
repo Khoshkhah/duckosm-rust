@@ -23,7 +23,7 @@ use std::path::PathBuf;
     merge_segments = true, global_junctions = true, keep_largest_component = true,
     cycling_dismount = true, infer_separate_sidewalks = true, connectivity_rescue = true,
     connect_snap_m = 10.0, process_speeds = true, calculate_costs = true, functional_types = true,
-    osm_overrides = None, build_graph = true, extract_restrictions = true
+    osm_overrides = None, build_graph = true, extract_restrictions = true, boundary = None
 ))]
 #[allow(clippy::too_many_arguments)]
 fn build<'py>(
@@ -46,6 +46,7 @@ fn build<'py>(
     osm_overrides: Option<PathBuf>,
     build_graph: bool,
     extract_restrictions: bool,
+    boundary: Option<PathBuf>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let mut p = Params {
         name,
@@ -72,6 +73,7 @@ fn build<'py>(
     }
     p.infer_sidewalks = infer_separate_sidewalks;
     p.osm_fixes = osm_overrides;
+    p.boundary = boundary;
     p.options = NetworkOptions {
         keep_largest_component,
         cycling_dismount,

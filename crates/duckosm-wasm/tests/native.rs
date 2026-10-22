@@ -55,3 +55,59 @@ fn browser_build_equals_native_build() {
         assert!(a == b, "{n} differs");
     }
 }
+
+/// The browser build of an area (a region PBF and a boundary, cut while it is read) equals the native build with
+/// the same boundary, byte for byte.
+#[test]
+fn browser_area_build_equals_native_build() {
+    use duckosm_core::boundary::Boundary;
+    use duckosm_core::pbf::ElementReader;
+    use std::io::Read;
+
+    let data = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/data");
+    let (pbf, geojson) = (
+        data.join("monaco_sample.osm.pbf"),
+        data.join("monaco.geojson"),
+    );
+    let tmp = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
+    let (native, wasm) = (
+        tmp.join("duckosm-native-area"),
+        tmp.join("duckosm-wasm-area"),
+    );
+    std::fs::create_dir_all(&wasm).unwrap();
+    let p = Params {
+        modes: vec![Mode::Driving, Mode::Walking, Mode::Cycling],
+        geoparquet: true,
+        duckdb: false,
+        boundary: Some(geojson.clone()),
+        ..Params::default()
+    };
+    build(&pbf, &native, &p).unwrap();
+
+    let boundary = Boundary::parse(&std::fs::read_to_string(&geojson).unwrap()).unwrap();
+    let bytes = std::fs::read(&pbf).unwrap();
+    let open = || -> Result<ElementReader<Box<dyn Read + Send + '_>>, String> {
+        Ok(ElementReader::new(Box::new(std::io::Cursor::new(
+            &bytes[..],
+        ))))
+    };
+    let mut names = Vec::new();
+    duckosm_wasm::run(
+        duckosm_wasm::Input::Area(&open, &boundary),
+        "driving,walking,cycling",
+        None,
+        |name| {
+            names.push(name.to_string());
+            std::fs::File::create(wasm.join(name)).map_err(|e| e.to_string())
+        },
+    )
+    .unwrap();
+    assert_eq!(names.len(), 20);
+    for n in &names {
+        let (a, b) = (
+            std::fs::read(native.join(n)).unwrap(),
+            std::fs::read(wasm.join(n)).unwrap(),
+        );
+        assert!(a == b, "{n} differs");
+    }
+}

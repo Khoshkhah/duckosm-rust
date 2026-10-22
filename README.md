@@ -14,7 +14,10 @@ Make the first step of duckOSM easy to install and easy to run:
 
 - `pip install` a wheel. The wheel does not need DuckDB.
 - One CLI program, with no Python.
-- A WebAssembly build for the browser: a PBF file in, GeoParquet files out, with no server.
+- A WebAssembly build for the browser: an area (a boundary and a name) and a region PBF file in, duckOSM's
+  tables in DuckDB and GeoParquet files out, with no server. A separate boundary tool finds the boundary of a
+  place and the smallest Geofabrik extract that covers it.
+- A cut to a boundary in Rust (`--boundary`), with the result of osmium's `complete_ways`.
 
 ## How it fits with duckOSM
 
@@ -51,7 +54,8 @@ dr.edge_id_hash(osm_id, source, target)
 ```
 
 ```bash
-# the browser page (WebAssembly): build it, then open http://localhost:8000, select a PBF file, build, and run SQL
+# the browser page (WebAssembly): build it, then open http://localhost:8000. Make a boundary with the boundary
+# tool (boundary.html), select the boundary and a region PBF file that covers it, build, and run SQL
 cargo build --release --target wasm32-unknown-unknown -p duckosm-wasm
 wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/pkg target/wasm32-unknown-unknown/release/duckosm_wasm.wasm
 python3 -m http.server 8000 -d crates/duckosm-wasm/www

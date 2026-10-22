@@ -3,6 +3,7 @@
 //! same data: the highway ways and ferry lines sorted by id, the coordinates of the nodes that they use, and
 //! the `type=restriction` relations.
 
+use crate::boundary::Boundary;
 use crate::filter;
 use crate::geom::Pt;
 use crate::graph::{MemberType, Relation};
@@ -106,6 +107,17 @@ impl OsmJson {
             relations,
             nodes,
         })
+    }
+
+    /// Keep the ways with a node inside the boundary (osmium's `complete_ways`, as `pbf::read_area`). Overpass
+    /// cuts with the outer rings only, so this gives the same area as the cut of a region PBF.
+    pub fn cut(&mut self, boundary: &Boundary) {
+        let nodes = &self.nodes;
+        self.ways.retain(|w| {
+            w.refs
+                .iter()
+                .any(|n| nodes.get(n).is_some_and(|p| boundary.contains(p.0, p.1)))
+        });
     }
 
     /// The coordinates of the nodes that `ways` use (pass 2 of the PBF reader).

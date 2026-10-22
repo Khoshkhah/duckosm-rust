@@ -233,13 +233,12 @@ pub fn read(path: &Path, pbf_is_cut: bool, strict: bool) -> Result<FromConfig, S
     if top.get("h3_cell").is_some() {
         return Err("config: h3_cell is not supported (cut the PBF first)".into());
     }
-    let has_boundary = boundary
-        .str("path")?
-        .or(top.str("boundary_path")?)
-        .is_some();
-    if has_boundary && !pbf_is_cut {
-        return Err("config: a boundary is set, but this program does not cut the PBF. Cut it to the boundary \
-                    (osmium, or `duckosm clip-pbf`), and build with pbf_is_cut=true (CLI: --pbf-is-cut)".into());
+    let boundary_path = boundary.str("path")?.or(top.str("boundary_path")?);
+    let has_boundary = boundary_path.is_some();
+    // with a boundary, the program cuts the PBF to it (as osmium complete_ways), unless it is cut already
+    let cut_to = boundary_path.filter(|_| !pbf_is_cut).map(PathBuf::from);
+    if let Some(b) = cut_to.as_ref().filter(|b| !b.exists()) {
+        return Err(format!("boundary file not found: {}", b.display()));
     }
     if let Some(p) = clip.str("predicate")? {
         if p != "intersects" {
@@ -384,6 +383,7 @@ pub fn read(path: &Path, pbf_is_cut: bool, strict: bool) -> Result<FromConfig, S
         options: opts,
         infer_sidewalks: options.bool("infer_separate_sidewalks", true)?,
         osm_fixes,
+        boundary: cut_to,
         ..Params::default()
     };
     Ok(FromConfig {
@@ -724,7 +724,11 @@ mod tests {
             "pbf_path: {}\nboundary:\n  path: x.geojson\n",
             pbf()
         ));
-        assert!(read(&c, false, false).unwrap_err().contains("pbf_is_cut"));
+        assert!(read(&c, false, false)
+            .unwrap_err()
+            .contains("boundary file not found"));
+        let r = read(&c, true, false).unwrap();
+        assert!(r.params.boundary.is_none() && r.params.options.keep_largest_component);
     }
 
     #[test]

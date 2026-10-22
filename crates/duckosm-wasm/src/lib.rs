@@ -2,14 +2,17 @@
 //! chosen modes out, as GeoParquet bytes. The same steps and the same writer as the native build.
 
 use duckosm_build::{config::parse_osm_fixes, parse_modes, write_tables};
+use duckosm_core::boundary::Boundary;
 use duckosm_core::filter::Mode;
 use duckosm_core::fixes::OsmFixes;
 use duckosm_core::network::{build_network_with, Options};
 use duckosm_core::osmjson::OsmJson;
+use duckosm_core::pbf::ElementReader;
 use duckosm_core::{pbf, sidewalks};
 use js_sys::{Array, Object, Reflect, Uint8Array};
-use std::io::{self, BufWriter, Write};
+use std::io::{self, BufReader, BufWriter, Read, Write};
 use wasm_bindgen::prelude::*;
+use web_sys::{Blob, FileReaderSync};
 
 /// The result of [`build`]. `files` maps each file name (for example `edges_driving.parquet`) to an array
 /// of `Uint8Array` parts: `new Blob(files[name])` gives the file.
@@ -38,11 +41,87 @@ impl Write for JsParts {
     }
 }
 
-/// The input of a build: the bytes of a `.osm.pbf` file, or OSM JSON (the output of the Overpass API).
+/// A new reader of a PBF file for each pass of the cut.
+pub type Open<'a> = &'a dyn Fn() -> Result<ElementReader<Box<dyn Read + Send + 'a>>, String>;
+
+/// The input of a build: the bytes of a `.osm.pbf` file, OSM JSON (the output of the Overpass API), or a region
+/// PBF and a boundary (the PBF is cut to the boundary, as osmium's `complete_ways` does).
 #[derive(Clone, Copy)]
 pub enum Input<'a> {
     Pbf(&'a [u8]),
-    OsmJson(&'a [u8]),
+    OsmJson(&'a [u8], Option<&'a Boundary>),
+    Area(Open<'a>, &'a Boundary),
+}
+
+/// Reads a browser `Blob` (a `File` that the user chose) piece by piece, so the region file is never in the
+/// WebAssembly memory as a whole. `FileReaderSync` exists only in a worker: the page builds in one.
+struct BlobRead {
+    blob: Blob,
+    reader: FileReaderSync,
+    pos: f64,
+}
+
+// SAFETY: osmpbf needs Send. This module has one thread (no atomics), so the value never moves to another thread.
+unsafe impl Send for BlobRead {}
+
+impl Read for BlobRead {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let size = self.blob.size();
+        if self.pos >= size || buf.is_empty() {
+            return Ok(0);
+        }
+        let end = (self.pos + buf.len() as f64).min(size);
+        let js = |e: JsValue| io::Error::other(format!("{e:?}"));
+        let part = self
+            .blob
+            .slice_with_f64_and_f64(self.pos, end)
+            .map_err(js)?;
+        let bytes = Uint8Array::new(&self.reader.read_as_array_buffer(&part).map_err(js)?.into());
+        let n = bytes.length() as usize;
+        bytes.copy_to(&mut buf[..n]);
+        self.pos += n as f64;
+        Ok(n)
+    }
+}
+
+/// Build duckOSM's tables of an area: `region` is a `.osm.pbf` file (a `File` or `Blob`) that covers the
+/// `boundary` (GeoJSON, as `duckosm boundary` writes it). The file is cut to the boundary while it is read.
+#[wasm_bindgen]
+pub fn build_area(
+    region: Blob,
+    boundary: &str,
+    modes: &str,
+    fixes_yaml: Option<String>,
+) -> Result<Output, JsError> {
+    let boundary = Boundary::parse(boundary).map_err(|e| JsError::new(&e))?;
+    let open = || -> Result<ElementReader<Box<dyn Read + Send>>, String> {
+        let reader = FileReaderSync::new().map_err(|e| format!("{e:?}"))?;
+        let r = BlobRead {
+            blob: region.clone(),
+            reader,
+            pos: 0.0,
+        };
+        Ok(ElementReader::new(Box::new(BufReader::with_capacity(
+            4 << 20,
+            r,
+        ))))
+    };
+    js_build(Input::Area(&open, &boundary), modes, fixes_yaml)
+}
+
+/// The same as [`build_area`], with the bytes of the region file (for Node, which has no `FileReaderSync`).
+#[wasm_bindgen]
+pub fn build_area_bytes(
+    region: &[u8],
+    boundary: &str,
+    modes: &str,
+    fixes_yaml: Option<String>,
+) -> Result<Output, JsError> {
+    let boundary = Boundary::parse(boundary).map_err(|e| JsError::new(&e))?;
+    let open = || -> Result<ElementReader<Box<dyn Read + Send + '_>>, String> {
+        Ok(ElementReader::new(Box::new(io::Cursor::new(region))))
+    };
+    js_build(Input::Area(&open, &boundary), modes, fixes_yaml)
 }
 
 /// Build duckOSM's tables of `modes` (comma separated: driving, walking, cycling) from the bytes of a `.osm.pbf`
@@ -54,14 +133,20 @@ pub fn build(pbf_bytes: &[u8], modes: &str, fixes_yaml: Option<String>) -> Resul
 }
 
 /// The same as [`build`], from OSM JSON: the answer of the Overpass API to the query of the page (the highway
-/// ways and ferry lines with their nodes, and the `type=restriction` relations).
+/// ways and ferry lines with their nodes, and the `type=restriction` relations). With a `boundary` (GeoJSON),
+/// only the ways with a node inside are kept, as in [`build_area`].
 #[wasm_bindgen]
 pub fn build_osm_json(
     json: &[u8],
+    boundary: Option<String>,
     modes: &str,
     fixes_yaml: Option<String>,
 ) -> Result<Output, JsError> {
-    js_build(Input::OsmJson(json), modes, fixes_yaml)
+    let boundary = boundary
+        .map(|b| Boundary::parse(&b))
+        .transpose()
+        .map_err(|e| JsError::new(&e))?;
+    js_build(Input::OsmJson(json, boundary.as_ref()), modes, fixes_yaml)
 }
 
 fn js_build(input: Input, modes: &str, fixes_yaml: Option<String>) -> Result<Output, JsError> {
@@ -104,8 +189,24 @@ pub fn run<W: Write + Send>(
             };
             (ways, coords, relations)
         }
-        Input::OsmJson(bytes) => {
+        Input::Area(open, boundary) => {
+            let (mut ways, coords, relations) = pbf::read_area(open, boundary)?;
+            fixes.apply_to_ways(&mut ways)?;
+            (
+                ways,
+                coords,
+                if need_relations {
+                    relations
+                } else {
+                    Vec::new()
+                },
+            )
+        }
+        Input::OsmJson(bytes, boundary) => {
             let mut data = OsmJson::read(bytes)?;
+            if let Some(b) = boundary {
+                data.cut(b);
+            }
             let mut ways = std::mem::take(&mut data.ways);
             fixes.apply_to_ways(&mut ways)?;
             let coords = data.coords(&ways);

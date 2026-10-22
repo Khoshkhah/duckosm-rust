@@ -1,7 +1,10 @@
-"""The page in headless Chromium (Playwright): build a PBF file, run a query, and download
-the Parquet files and load.sql. Prints the times of the page as JSON (docs/browser.md, step B3).
+"""The page in headless Chromium (Playwright): build an area, run a query, and download the Parquet files and
+load.sql. Prints the times of the page as JSON (docs/browser.md, steps B3 and B4).
 
-    python crates/duckosm-wasm/www/e2e.py <file.osm.pbf> <out folder> [--modes driving,walking,cycling] [--fixes file.yaml]
+    python crates/duckosm-wasm/www/e2e.py <file.osm.pbf> <out folder> [--boundary area.geojson] [--modes driving,walking,cycling] [--fixes file.yaml]
+
+With --boundary, the PBF file is a region file and the page cuts it to the boundary; without, the file is
+already cut. With --boundary and the PBF file "overpass", the data comes from the Overpass API.
 
 Build the page first (docs/development.md, "WebAssembly"). The page loads duckdb-wasm from cdn.jsdelivr.net, so
 the computer needs the network.
@@ -19,7 +22,8 @@ from playwright.sync_api import sync_playwright
 WWW = pathlib.Path(__file__).resolve().parent
 
 a = argparse.ArgumentParser()
-a.add_argument("pbf", help="a .osm.pbf file, or place:<name> for the first match of the place search")
+a.add_argument("pbf", help="a .osm.pbf file, or overpass (with --boundary)")
+a.add_argument("--boundary")
 a.add_argument("out")
 a.add_argument("--modes", default="driving,walking,cycling")
 a.add_argument("--fixes")
@@ -42,13 +46,14 @@ with sync_playwright() as p:
     page.on("pageerror", lambda e: print("page error:", e))
     page.goto(url)
     page.wait_for_function("document.getElementById('status').textContent.startsWith('DuckDB is ready')", timeout=120_000)
-    if args.pbf.startswith("place:"):
-        page.fill("#place", args.pbf[len("place:"):])
-        page.click("#search")
-        page.wait_for_selector("input[name=place]", timeout=60_000)
-        print("place:", page.inner_text("#places").splitlines()[0])
-    else:
-        page.set_input_files("#pbf", args.pbf)
+    if args.boundary:
+        page.set_input_files("#boundary", args.boundary)
+        page.wait_for_function("!document.getElementById('area').textContent.startsWith('No boundary')")
+        print("area:", page.inner_text("#area").splitlines()[0])
+    source = "cut" if not args.boundary else "overpass" if args.pbf == "overpass" else "region"
+    page.check(f"input[name=source][value={source}]")
+    if source != "overpass":
+        page.set_input_files("#pbf" if source == "cut" else "#region", args.pbf)
     if args.fixes:
         page.set_input_files("#fixes", args.fixes)
     for box in page.query_selector_all("input[name=mode]"):

@@ -1,6 +1,6 @@
 # duckOSM in the browser
 
-Status: B1, B2 and B3 done on 2026-10-22 (the results are under each step). B2 depends on public Overpass
+Status: B1, B2, B3 and B4 done on 2026-10-22 (the results are under each step). B2 depends on public Overpass
 servers, which were full during the test. Decision by Kaveh (2026-10-22): **the main goal of duckosm-rust is that duckOSM runs
 in the browser.** The speed of the native program is a side effect. First without the map (the visualization
 part); the map comes after.
@@ -9,8 +9,9 @@ part); the map comes after.
 
 One web page, no server, no Python:
 
-1. The user types the name of a place (or gives a PBF file).
-2. The page gets the OpenStreetMap data of that place, and builds duckOSM's tables for the modes the user
+1. The user makes the boundary of the area with the boundary tool (a name search), or gives a boundary file.
+2. The page gets the OpenStreetMap data of that area (from a region file that the user downloaded one time),
+   cuts it to the boundary, and builds duckOSM's tables for the modes the user
    chooses: `edges`, `private_edges`, `nodes`, `edge_id_map`, `edge_graph`, `turn_permission`, and in driving
    `turn_restrictions` and `turn_path_restrictions`. The OSM fixes file is optional.
 3. The tables go into DuckDB in the page (duckdb-wasm). The user can run SQL on them, as on a duckOSM `.duckdb`
@@ -130,5 +131,60 @@ design). Three runs each; the computer had a load average of about 5 from other 
   driving,walking,cycling` (native), and `crates/duckosm-wasm/www/e2e.py <cut file> <folder>` (the page; it
   prints the times as JSON).
 
-**After B3: the visualization part.** The map from the tables in duckdb-wasm, with the Rust style module of
+**B4: a boundary and a name as the input** (Kaveh, 2026-10-22). duckOSM works from an area: a boundary (GeoJSON)
+with a name, as a duckOSM config with `name` and `boundary`. Decisions:
+
+- **A separate boundary tool** (`www/boundary.html`, its own module). The user types a name, the tool shows the
+  matches (Nominatim), and the user selects one. The tool writes the boundary in the format of `duckosm
+  boundary`: a FeatureCollection with one Feature, and the properties `name`, `osm_id`, `admin_level`,
+  `area_km2`, `source`. It also names the smallest Geofabrik extract that covers the boundary, with its download
+  link (`geofabrik`). The file works in Python duckOSM and in the page.
+- **The data: a region PBF, cut in Rust (A+).** The user downloads the extract that the tool names, one time, and
+  selects it in the page. The page reads the file piece by piece (no copy of the whole file in WebAssembly
+  memory) and cuts it to the boundary as osmium's `complete_ways` does: every way with a node inside is kept
+  whole. Then the build runs, with the component filter, as duckOSM does with a boundary.
+- **Overpass as an option (C)**, with the polygon of the boundary, for a small area when a server has room.
+- No automatic download: the extract servers send no CORS header (checked 2026-10-22: Geofabrik,
+  openstreetmap.fr, BBBike), so that needs a server of our own.
+- The native program gets the same cut: `--boundary` in the CLI, and a config with a boundary needs no osmium.
+- Check: the Rust cut gives the same network as duckOSM's osmium cut.
+
+**Result of B4 (2026-10-22).** Done:
+- `boundary.rs` reads a boundary (a FeatureCollection, a Feature, a Polygon or a MultiPolygon). A point on the
+  border is inside, as in osmium. `pbf::read_area` cuts in three passes: the nodes inside; the ways with a node
+  inside and the restriction relations; the coordinates of the nodes of these ways.
+- The CLI has `--boundary`, the Python package `boundary=`, and a config with a boundary needs no osmium.
+- The wasm module has `build_area(blob, boundary, ...)`. It reads the region file piece by piece (`Blob.slice`
+  and `FileReaderSync` in the worker), so the file is not copied into WebAssembly memory. `build_osm_json` also
+  takes the boundary: Overpass gives the ways in the box of each outer ring, and Rust keeps the ways with a node
+  inside, as in the cut of a region file.
+- `www/boundary.html` is the boundary tool: a Nominatim search with a list of matches, or a GeoJSON file, or a
+  box. It writes the format of `duckosm boundary` (the area in km² is the same as duckOSM's: 2.39 for Monaco),
+  with `geofabrik`: the three smallest extracts that cover the area, with their links. "Use in duckOSM" gives
+  the boundary to `index.html` through the storage of the site.
+- `www/geofabrik.json` (1.6 MB, 0.5 MB gzip, 554 extracts) comes from Geofabrik's `index-v1.json`
+  (`tools/make_geofabrik_index.py`). The polygons are about 1 km larger than the extracts, so an area at the
+  border of an extract is not lost (with the simplified polygons only, Monaco was not in its own extract).
+
+Checks:
+- The Rust cut of `monaco_sample.osm.pbf` with `monaco.geojson` gives the same ways, tags and coordinates as
+  duckOSM's osmium cut (`tests/boundary.rs`). The cut of OSM JSON keeps the same ways (`tests/osmjson.rs`).
+- The page (headless Chromium) with the boundary and the region file against the native CLI `--boundary`:
+  Monaco and Tartu from the Estonia file (121 MB), all 20 tables equal on every row.
+- The Overpass option was not tested in the page: all three public servers gave 504 on 2026-10-22.
+
+| Tartu from the Estonia file (121 MB) | Time | Memory |
+|---|---|---|
+| osmium cut (duckOSM) | 1.97 s | |
+| duckosm-rust native, cut and build | 1.25 s | 310 MB |
+| duckosm-rust native on one thread | 9.4 s (before the restrictions moved into pass 2) | 180 MB |
+| The page: cut and build | 8.7 s (11.3 s with a fourth pass for the restrictions) | 116 MiB WebAssembly memory |
+| The page with the cut file (B3) | 0.9–1.0 s | 77 MiB |
+
+The page runs on one thread, so the three passes over the region file take most of the time. The file is read
+from the disk each time; a file kept in the browser storage (OPFS) does not make it faster. Not done: keep the
+region file in OPFS (the user selects the file again, which costs nothing), and an automatic download of the
+extract (it needs a server with CORS).
+
+**After B4: the visualization part.** The map from the tables in duckdb-wasm, with the Rust style module of
 geolibre-roadstyle. It needs the base-map layers and the drawing order in Rust (or a page without them).

@@ -1,6 +1,7 @@
 //! The whole build, shared by the CLI and the Python module: read a PBF, build the networks of the modes,
 //! write GeoParquet and/or a `.duckdb` file.
 
+use duckosm_core::boundary::Boundary;
 use duckosm_core::filter::Mode;
 use duckosm_core::fixes::OsmFixes;
 use duckosm_core::model::Network;
@@ -30,6 +31,8 @@ pub struct Params {
     pub infer_sidewalks: bool,
     /// A duckOSM OSM fixes file (duckOSM `osm_overrides`).
     pub osm_fixes: Option<PathBuf>,
+    /// A boundary (GeoJSON): the PBF is cut to it as osmium's `complete_ways` does. None: the PBF is the area.
+    pub boundary: Option<PathBuf>,
 }
 
 impl Default for Params {
@@ -42,6 +45,7 @@ impl Default for Params {
             options: Options::default(),
             infer_sidewalks: true,
             osm_fixes: None,
+            boundary: None,
         }
     }
 }
@@ -152,17 +156,37 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
         Some(f) => config::read_osm_fixes(f)?,
         None => OsmFixes::default(),
     };
-    let mut ways = pbf::read_ways(pbf_path)?;
-    lap("read ways", &mut sum);
-    // duckOSM: the fixes on the raw ways come before any step reads them
-    fixes.apply_to_ways(&mut ways)?;
-    let mut coords = pbf::read_coords(pbf_path, &ways)?;
+    let (mut ways, mut coords, area_relations) = match &p.boundary {
+        // duckOSM with a boundary: cut the PBF (osmium complete_ways), then the fixes on the raw ways
+        Some(path) => {
+            let text =
+                std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+            let (mut ways, coords, relations) =
+                pbf::read_area_path(pbf_path, &Boundary::parse(&text)?)?;
+            lap("cut to the boundary", &mut sum);
+            fixes.apply_to_ways(&mut ways)?;
+            (ways, coords, Some(relations))
+        }
+        None => {
+            let mut ways = pbf::read_ways(pbf_path)?;
+            lap("read ways", &mut sum);
+            // duckOSM: the fixes on the raw ways come before any step reads them
+            fixes.apply_to_ways(&mut ways)?;
+            let coords = pbf::read_coords(pbf_path, &ways)?;
+            lap("read nodes", &mut sum);
+            (ways, coords, None)
+        }
+    };
     fixes.add_new_nodes(&mut ways, &mut coords);
-    lap("read nodes", &mut sum);
     let relations = if p.options.extract_restrictions && p.modes.contains(&Mode::Driving) {
-        let r = pbf::read_restrictions(pbf_path)?;
-        lap("read restrictions", &mut sum);
-        r
+        match area_relations {
+            Some(r) => r,
+            None => {
+                let r = pbf::read_restrictions(pbf_path)?;
+                lap("read restrictions", &mut sum);
+                r
+            }
+        }
     } else {
         Vec::new()
     };

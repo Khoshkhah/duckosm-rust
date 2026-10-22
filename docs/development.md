@@ -73,8 +73,10 @@ a `file://` address, so use a local server:
 python3 -m http.server 8000 -d crates/duckosm-wasm/www
 ```
 
-Then go to `http://localhost:8000`, choose a PBF file, the modes and an optional OSM fixes file, and click
-**Build**. The build runs in a Web Worker (`build_worker.js`). The page loads the tables into duckdb-wasm, so you
+Then go to `http://localhost:8000`. Select a boundary (make it with the boundary tool, `boundary.html`), a
+region PBF file that covers it (the tool names the smallest Geofabrik extract), the modes and an optional OSM
+fixes file, and click **Build**. The page can also get the data from the Overpass API, or take a PBF file that
+is already cut. The build runs in a Web Worker (`build_worker.js`), which reads the region file piece by piece. The page loads the tables into duckdb-wasm, so you
 can run SQL on them. It gives the Parquet files and `load.sql`, which makes a `.duckdb` file from them
 (`duckdb area.duckdb < load.sql`). The page loads duckdb-wasm from cdn.jsdelivr.net.
 
@@ -89,11 +91,22 @@ Checks:
 ```bash
 cargo test --release -p duckosm-wasm     # the browser build equals duckosm_build::build, byte for byte (Monaco, 3 modes, a fixes file)
 python crates/duckosm-wasm/www/e2e.py tests/data/monaco.osm.pbf out-page --fixes fixes.yaml   # the page in headless Chromium (Playwright)
+python crates/duckosm-wasm/www/e2e.py tests/data/monaco_sample.osm.pbf out-area --boundary tests/data/monaco.geojson   # the cut to a boundary
+duckosm-rust tests/data/monaco_sample.osm.pbf --boundary tests/data/monaco.geojson -m driving,walking,cycling -f geoparquet -o out-cli   # the same, native
 ```
 
 The test writes its files to `target/tmp/duckosm-wasm-native/`. Compare them with `cmp` to the files of
 `run_node.mjs` or `e2e.py` (built with the same fixes text as the test). `e2e.py` also prints the times of
-the page as JSON.
+the page as JSON. The CLI writes zstd and the page writes snap, so compare `out-area` and `out-cli` by rows,
+not with `cmp`.
+
+The boundary tool uses `www/geofabrik.json`, a small copy of Geofabrik's list of extracts (Geofabrik sends no
+CORS header). Make it again when Geofabrik changes its extracts:
+
+```bash
+curl -o index-v1.json https://download.geofabrik.de/index-v1.json
+python tools/make_geofabrik_index.py index-v1.json crates/duckosm-wasm/www/geofabrik.json   # needs shapely
+```
 
 ## Check the OSM fixes
 
