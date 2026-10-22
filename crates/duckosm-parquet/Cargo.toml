@@ -1,0 +1,11 @@
+[package]
+name = "duckosm-parquet"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+duckosm-core = { path = "../duckosm-core", default-features = false }
+arrow-array = "=60.0.0"
+arrow-schema = "=60.0.0"
+parquet = { version = "=60.0.0", default-features = false, features = ["arrow", "zstd"] }
