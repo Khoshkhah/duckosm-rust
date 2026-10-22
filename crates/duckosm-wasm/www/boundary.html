@@ -373,9 +373,8 @@ async function setArea(polys, props, { zoom = true } = {}) {
   if (props.name) $("name").value = props.name;
   area = { polys, props };
   $("save").disabled = $("use").disabled = true;
-  setData("area", geometry(polys));
-  // terra-draw fills the drawn shapes; the area layer then gives only the outline of their merge
-  loaded.then(() => map.setPaintProperty("area-fill", "fill-opacity", props.source === "drawn" ? 0 : 0.18));
+  // terra-draw shows the drawn shapes itself; a copy in the area layer stays behind when a shape moves
+  setData("area", props.source === "drawn" ? null : geometry(polys));
   if (zoom) fitTo(geometry(polys));
   const km2 = Math.round(areaKm2(polys) * 100) / 100;
   const vertices = polys.flat().reduce((s, r) => s + r.length - 1, 0);

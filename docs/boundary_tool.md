@@ -71,6 +71,8 @@ panel has three numbered steps:
   and it sends a CORS header, so it works with the COOP and COEP headers of `www/serve.py`.
 - The area shows as a blue fill and a blue line. When the area comes from a search or a file, the map zooms to
   it.
+- A drawn area shows only as the shapes of terra-draw. The tool does not draw a copy of them: a copy stays at
+  the old position while the user moves a shape (found by Kaveh, 2026-10-22).
 - A preview (a dashed purple line) shows an area that the user points to in the list of matches. A click on a
   point match zooms the map to it.
 - The outline of a suggested Geofabrik extract shows as a dashed orange line when the user selects it.
