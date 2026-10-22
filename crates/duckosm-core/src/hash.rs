@@ -45,6 +45,11 @@ pub fn edge_id(osm_id: i64, source: i64, target: i64) -> i64 {
     (hash3(osm_id, source, target) >> 1) as i64
 }
 
+/// `hash(a, b, text)` for two BIGINT and a VARCHAR.
+pub fn hash_int_int_str(a: i64, b: i64, s: &str) -> u64 {
+    combine(combine(mix(a as u64), mix(b as u64)), hash_str(s))
+}
+
 /// DuckDB writes a list as `[1, 2, 3]`. The virtual node ids hash this text.
 pub fn refs_text(refs: &[i64]) -> String {
     let mut s = String::with_capacity(2 + refs.len() * 12);

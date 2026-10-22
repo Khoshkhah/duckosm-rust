@@ -73,7 +73,7 @@ duckosm-rust area.osm.pbf -o out --format geoparquet --modes driving,walking,cyc
 python tools/compare_with_duckosm.py golden.duckdb out walking
 ```
 
-Switches: `--no-merge-segments`, `--no-global-junctions`, `--no-sidewalk-inference`, `--no-connect-paths`,
+Switches: `--no-functional-types`, `--no-speeds`, `--no-costs`, `--no-merge-segments`, `--no-global-junctions`, `--no-sidewalk-inference`, `--no-connect-paths`,
 `--no-component-filter`. With a boundary in the yaml (and `build_graph`, `process_speeds` and
 `calculate_costs` on, because duckOSM runs the component filter only then), give duckosm-rust the cut file
 that duckOSM wrote in `pbf/` and leave the component filter on.

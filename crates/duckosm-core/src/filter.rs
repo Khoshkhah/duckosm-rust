@@ -204,6 +204,10 @@ pub struct ModeWay {
     pub lanes_fwd: Option<i32>,
     pub lanes_bwd: Option<i32>,
     pub dismount: Option<bool>,
+    /// walk_type (walking), or cycle_type of the forward edge (cycling)
+    pub type_fwd: Option<&'static str>,
+    /// cycle_type of the reverse edge (cycling; the same as `type_fwd` in walking)
+    pub type_rev: Option<&'static str>,
 }
 
 fn s(o: &Option<Box<str>>) -> Option<String> {
@@ -367,6 +371,116 @@ fn in_network(t: &Tags, mode: Mode, dismount: bool) -> bool {
     class_ok == Some(true)
 }
 
+const SHARED_ROAD: [&str; 12] = [
+    "residential",
+    "service",
+    "unclassified",
+    "road",
+    "tertiary",
+    "tertiary_link",
+    "secondary",
+    "secondary_link",
+    "primary",
+    "primary_link",
+    "trunk",
+    "trunk_link",
+];
+
+/// `walk_type` of a way (`FunctionalType._walk_type`); `t` is None for a connector (no way).
+pub fn walk_type(hw: &str, t: Option<&Tags>) -> &'static str {
+    if let Some(t) = t {
+        if hw == "steps" {
+            return if t.conveying.is_some() {
+                "escalator"
+            } else {
+                "steps"
+            };
+        }
+        if hw == "footway" {
+            return match t.footway.as_deref() {
+                Some("sidewalk") => "sidewalk",
+                Some("crossing") => "crossing",
+                _ => "footpath",
+            };
+        }
+        if hw == "pedestrian" {
+            return if is(&t.area, "yes") {
+                "plaza"
+            } else {
+                "pedestrian_street"
+            };
+        }
+        if hw == "living_street" {
+            return "shared_street";
+        }
+        if !matches!(
+            t.sidewalk.as_deref().unwrap_or("no"),
+            "no" | "none" | "separate"
+        ) && !matches!(hw, "path" | "track" | "bridleway" | "corridor" | "platform")
+        {
+            return "sidewalk";
+        }
+        if SHARED_ROAD.contains(&hw) {
+            return "shared_road";
+        }
+        if hw == "corridor" || is(&t.indoor, "yes") {
+            return "corridor";
+        }
+        if hw == "platform" {
+            return "platform";
+        }
+        if matches!(hw, "path" | "track" | "bridleway") {
+            return "path";
+        }
+        return "footpath";
+    }
+    match hw {
+        "steps" => "steps",
+        "pedestrian" => "pedestrian_street",
+        "living_street" => "shared_street",
+        h if SHARED_ROAD.contains(&h) => "shared_road",
+        "corridor" => "corridor",
+        "platform" => "platform",
+        "path" | "track" | "bridleway" => "path",
+        _ => "footpath",
+    }
+}
+
+/// `cycle_type` of a way for the forward (`reverse` false: `cycleway:right`) or reverse edge (`cycleway:left`).
+/// `t` is None for a connector. The `dismount` case is applied on the edge.
+pub fn cycle_type(hw: &str, t: Option<&Tags>, reverse: bool) -> &'static str {
+    if hw == "cycleway" {
+        return "cycleway";
+    }
+    let path = matches!(hw, "path" | "track" | "bridleway");
+    if let Some(t) = t {
+        let side = first(&[
+            if reverse {
+                &t.cycleway_left
+            } else {
+                &t.cycleway_right
+            },
+            &t.cycleway_both,
+            &t.cycleway,
+        ]);
+        match side {
+            Some("track") => return "cycle_track",
+            Some("lane") => return "cycle_lane",
+            Some("shared_lane") => return "shared_lane",
+            Some("share_busway") => return "bus_cycle_lane",
+            _ => {}
+        }
+        if path && is(&t.segregated, "yes") {
+            return "segregated_path";
+        }
+    }
+    if path {
+        "shared_path"
+    } else {
+        "mixed_traffic"
+    }
+}
+
 /// Apply the filter of a mode to one way. None if the way is not in that network.
 pub fn mode_way(w: &Way, mode: Mode, cycling_dismount: bool) -> Option<ModeWay> {
     let t = &w.tags;
@@ -455,6 +569,17 @@ pub fn mode_way(w: &Way, mode: Mode, cycling_dismount: bool) -> Option<ModeWay> 
     } else {
         w.refs.clone()
     };
+    let (type_fwd, type_rev) = match mode {
+        Mode::Walking => (
+            Some(walk_type(&highway, Some(t))),
+            Some(walk_type(&highway, Some(t))),
+        ),
+        Mode::Cycling => (
+            Some(cycle_type(&highway, Some(t), false)),
+            Some(cycle_type(&highway, Some(t), true)),
+        ),
+        Mode::Driving => (None, None),
+    };
     Some(ModeWay {
         id: w.id,
         refs,
@@ -473,6 +598,8 @@ pub fn mode_way(w: &Way, mode: Mode, cycling_dismount: bool) -> Option<ModeWay> 
         lanes_fwd,
         lanes_bwd,
         dismount: if dismount { Some(pushes_bike(t)) } else { None },
+        type_fwd,
+        type_rev,
     })
 }
 

@@ -106,6 +106,11 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
             dismount: *mode == Mode::Cycling && p.options.cycling_dismount,
             speeds: p.options.process_speeds,
             costs: p.options.calculate_costs,
+            ftype: match mode {
+                Mode::Walking if p.options.functional_types => Some("walk_type"),
+                Mode::Cycling if p.options.functional_types => Some("cycle_type"),
+                _ => None,
+            },
         };
         let n = mode.name();
         let put = |kind: &str, file: String, sum: &mut Summary| {

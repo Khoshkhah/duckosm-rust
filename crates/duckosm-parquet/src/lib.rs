@@ -86,6 +86,8 @@ pub struct EdgeCols {
     pub speeds: bool,
     /// The cost step ran: `cost_s`.
     pub costs: bool,
+    /// The name of the column of `Edge::ftype`: `walk_type` or `cycle_type`.
+    pub ftype: Option<&'static str>,
 }
 
 pub fn edges_schema(cols: EdgeCols) -> Schema {
@@ -124,6 +126,9 @@ pub fn edges_schema(cols: EdgeCols) -> Schema {
     if cols.costs {
         fields.push(Field::new("cost_s", DataType::Float32, true));
     }
+    if let Some(name) = cols.ftype {
+        fields.push(Field::new(name, DataType::Utf8, true));
+    }
     Schema::new(fields)
 }
 
@@ -160,6 +165,7 @@ fn edges_batch(schema: &Arc<Schema>, rows: &[Edge], oc: EdgeCols) -> RecordBatch
     let mut dismount = BooleanBuilder::with_capacity(n);
     let mut kmh = Float32Builder::with_capacity(n);
     let mut cost = Float32Builder::with_capacity(n);
+    let mut ftype = StringBuilder::new();
     for e in rows {
         edge_id.append_value(e.edge_id);
         edge_ref.append_option(e.edge_ref.as_deref());
@@ -186,6 +192,7 @@ fn edges_batch(schema: &Arc<Schema>, rows: &[Edge], oc: EdgeCols) -> RecordBatch
         dismount.append_option(e.dismount);
         kmh.append_option(e.maxspeed_kmh);
         cost.append_option(e.cost_s);
+        ftype.append_option(e.ftype);
     }
     let mut cols: Vec<ArrayRef> = vec![
         Arc::new(edge_id.finish()),
@@ -220,6 +227,9 @@ fn edges_batch(schema: &Arc<Schema>, rows: &[Edge], oc: EdgeCols) -> RecordBatch
     }
     if oc.costs {
         cols.push(Arc::new(cost.finish()));
+    }
+    if oc.ftype.is_some() {
+        cols.push(Arc::new(ftype.finish()));
     }
     RecordBatch::try_new(schema.clone(), cols).expect("edge columns match the schema")
 }

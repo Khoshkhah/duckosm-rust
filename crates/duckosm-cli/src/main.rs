@@ -42,6 +42,9 @@ struct Cli {
     /// Do not compute cost_s, the travel time (duckOSM option calculate_costs: false).
     #[arg(long)]
     no_costs: bool,
+    /// Do not add walk_type and cycle_type (duckOSM option functional_types: false).
+    #[arg(long)]
+    no_functional_types: bool,
     /// Do not join the chains of edges that are one road (duckOSM option merge_segments).
     #[arg(long)]
     no_merge_segments: bool,
@@ -97,6 +100,7 @@ fn run() -> Result<(), String> {
         snap_m: cli.snap_m,
         process_speeds: !cli.no_speeds,
         calculate_costs: !cli.no_speeds && !cli.no_costs,
+        functional_types: !cli.no_functional_types,
     };
     let sum = build(&cli.pbf, &cli.out, &p)?;
     if sum.sidewalk_roads > 0 || p.modes.contains(&NetworkMode::Walking) {

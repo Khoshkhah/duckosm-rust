@@ -29,6 +29,13 @@ pub struct Tags {
     pub lanes_reversible: Option<Box<str>>,
     pub route: Option<Box<str>>,
     pub footway: Option<Box<str>>,
+    pub conveying: Option<Box<str>>,
+    pub area: Option<Box<str>>,
+    pub indoor: Option<Box<str>>,
+    pub cycleway_left: Option<Box<str>>,
+    pub cycleway_right: Option<Box<str>>,
+    pub cycleway_both: Option<Box<str>>,
+    pub segregated: Option<Box<str>>,
     pub foot: Option<Box<str>>,
     pub bicycle: Option<Box<str>>,
     pub cycleway: Option<Box<str>>,
@@ -70,6 +77,13 @@ impl Tags {
             "lanes:reversible" => &mut self.lanes_reversible,
             "route" => &mut self.route,
             "footway" => &mut self.footway,
+            "conveying" => &mut self.conveying,
+            "area" => &mut self.area,
+            "indoor" => &mut self.indoor,
+            "cycleway:left" => &mut self.cycleway_left,
+            "cycleway:right" => &mut self.cycleway_right,
+            "cycleway:both" => &mut self.cycleway_both,
+            "segregated" => &mut self.segregated,
             "foot" => &mut self.foot,
             "bicycle" => &mut self.bicycle,
             "cycleway" => &mut self.cycleway,
@@ -125,6 +139,8 @@ pub struct Edge {
     /// With the speed step: the speed in km/h (the raw `maxspeed` is then None) and the travel time.
     pub maxspeed_kmh: Option<f32>,
     pub cost_s: Option<f32>,
+    /// Walking: `walk_type`. Cycling: `cycle_type`. None in the driving mode, or without the step.
+    pub ftype: Option<&'static str>,
 }
 
 /// A row of the `nodes` table. A virtual node has `node_id < 0`.

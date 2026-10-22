@@ -1,10 +1,10 @@
 //! Golden test for the three modes. Input: the sample file of Monaco (no cut, no component filter).
 //! The expected counts and checksums come from duckOSM 0.6.0 (DuckDB 1.5.3): tools/make_golden_summary.py.
-//! The variants switch `merge_segments` and `global_junctions`; `_cf` also runs the component filter, and `_sw` the sidewalk rule, `_cp` the dangling-path connector, `_sp` the speeds and costs (the `_cf` variants have them too). With `global_junctions` on, Monaco has no
+//! The variants switch `merge_segments` and `global_junctions`; `_cf` also runs the component filter, and `_sw` the sidewalk rule, `_cp` the dangling-path connector, `_sp` the speeds and costs (the `_cf` variants have them too), `_ft` everything: sidewalk rule, connector, speeds and walk and cycle types. With `global_junctions` on, Monaco has no
 //! chains to merge, so the variants with it off test the merge.
 
 use duckosm_core::filter::Mode;
-use duckosm_core::hash::hash3;
+use duckosm_core::hash::{hash3, hash_int_int_str};
 use duckosm_core::model::Edge;
 use duckosm_core::network::{build_network, Options};
 use duckosm_core::pbf;
@@ -31,6 +31,9 @@ fn checksum(edges: &[Edge]) -> u64 {
             let cost = e.cost_s.map_or(0, |v| v.to_bits() as i64);
             x ^= hash3(e.edge_id ^ 0x5555, kmh.to_bits() as i64, cost);
         }
+        if let (Some(t), true) = (e.ftype, e.osm_id > 0) {
+            x ^= hash_int_int_str(e.edge_id ^ 0xAAAA, 0, t);
+        }
     }
     x
 }
@@ -53,20 +56,23 @@ fn three_modes_equal_duckosm() {
         let (variant, mode) = (f[0], Mode::parse(f[1]).unwrap());
         let cf = variant.ends_with("_cf") || variant.ends_with("_cfcp");
         // the databases of the _cf, _cfcp and _sp variants have speeds and costs
-        let speeds = cf || variant.ends_with("_sp");
+        let speeds = cf || variant.ends_with("_sp") || variant.ends_with("_ft");
         let opts = Options {
             keep_largest_component: cf,
             cycling_dismount: true,
             merge_segments: variant.starts_with("merge"),
             global_junctions: variant.contains("_gj"),
-            connect_paths: variant.ends_with("_cp") || variant.ends_with("_cfcp"),
+            connect_paths: variant.ends_with("_cp")
+                || variant.ends_with("_cfcp")
+                || variant.ends_with("_ft"),
             snap_m: 10.0,
             process_speeds: speeds,
             calculate_costs: speeds,
+            functional_types: variant.ends_with("_ft"),
         };
         let net = if cf {
             build_network(&cut_ways, &cut_coords, mode, &opts)
-        } else if variant.ends_with("_sw") {
+        } else if variant.ends_with("_sw") || variant.ends_with("_ft") {
             let mut w = ways.clone();
             let n = infer_separate_sidewalks(&mut w, &coords);
             assert_eq!(n, 46, "roads with sidewalk=separate");

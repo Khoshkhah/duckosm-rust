@@ -25,6 +25,8 @@ pub struct Options {
     pub process_speeds: bool,
     /// Set `cost_s`, the travel time in seconds (duckOSM `options.calculate_costs`, on by default; needs the speeds).
     pub calculate_costs: bool,
+    /// Add `walk_type` (walking) or `cycle_type` (cycling) (duckOSM `options.functional_types`, on by default).
+    pub functional_types: bool,
     /// Join the chains of edges that are one road (duckOSM `options.merge_segments`, on by default).
     pub merge_segments: bool,
 }
@@ -40,6 +42,7 @@ impl Default for Options {
             snap_m: 10.0,
             process_speeds: true,
             calculate_costs: true,
+            functional_types: true,
         }
     }
 }
@@ -263,6 +266,11 @@ pub fn build_network(
                     dismount: w.dismount,
                     maxspeed_kmh: None,
                     cost_s: None,
+                    ftype: if opts.functional_types {
+                        w.type_fwd
+                    } else {
+                        None
+                    },
                 },
                 way: wi,
             });
@@ -384,6 +392,11 @@ pub fn build_network(
             r.refs.reverse();
             r.geometry.reverse();
             r.is_reverse = true;
+            r.ftype = if opts.functional_types {
+                w.type_rev
+            } else {
+                None
+            };
             rev.push(r);
         }
     }
@@ -434,7 +447,19 @@ pub fn build_network(
             &nodes,
             opts.snap_m,
             mode == Mode::Cycling && opts.cycling_dismount,
+            if opts.functional_types {
+                Some(mode)
+            } else {
+                None
+            },
         );
+    }
+
+    // 8b2. Edges that are walked get the cycle_type 'dismount'.
+    if opts.functional_types && mode == Mode::Cycling {
+        for e in edges.iter_mut().filter(|e| e.dismount == Some(true)) {
+            e.ftype = Some("dismount");
+        }
     }
 
     // 8c. Speeds and travel times.
@@ -796,7 +821,13 @@ const PATH_CLASSES: [&str; 6] = [
 ];
 
 /// `PathConnector`: reconnect dangling path ends. Returns the number of connectors (each has two edges).
-fn connect_paths(edges: &mut Vec<Edge>, nodes: &[Node], snap_m: f64, dismount: bool) -> usize {
+fn connect_paths(
+    edges: &mut Vec<Edge>,
+    nodes: &[Node],
+    snap_m: f64,
+    dismount: bool,
+    types_for: Option<Mode>,
+) -> usize {
     // 1. the undirected segments: (a, b) -> (smallest osm_id, a highway)
     let mut und: FxHashMap<(i64, i64), (i64, String)> = FxHashMap::default();
     for e in edges.iter() {
@@ -943,6 +974,12 @@ fn connect_paths(edges: &mut Vec<Edge>, nodes: &[Node], snap_m: f64, dismount: b
                 dismount: if dismount { Some(false) } else { None },
                 maxspeed_kmh: None,
                 cost_s: None,
+                // a connector has no way: the class comes from the highway only
+                ftype: match types_for {
+                    Some(Mode::Walking) => Some(filter::walk_type(hw, None)),
+                    Some(Mode::Cycling) => Some(filter::cycle_type(hw, None, is_reverse)),
+                    _ => None,
+                },
             });
         }
     }

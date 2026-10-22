@@ -22,7 +22,7 @@ use std::path::PathBuf;
     pbf, out, *, modes = vec!["driving".to_string()], formats = None, name = "area".to_string(),
     merge_segments = true, global_junctions = true, keep_largest_component = true,
     cycling_dismount = true, infer_separate_sidewalks = true, connectivity_rescue = true,
-    connect_snap_m = 10.0, process_speeds = true, calculate_costs = true
+    connect_snap_m = 10.0, process_speeds = true, calculate_costs = true, functional_types = true
 ))]
 #[allow(clippy::too_many_arguments)]
 fn build<'py>(
@@ -41,6 +41,7 @@ fn build<'py>(
     connect_snap_m: f64,
     process_speeds: bool,
     calculate_costs: bool,
+    functional_types: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let mut p = Params {
         name,
@@ -75,6 +76,7 @@ fn build<'py>(
         snap_m: connect_snap_m,
         process_speeds,
         calculate_costs,
+        functional_types,
     };
     // the build runs without the GIL, so other Python threads go on
     let sum = py

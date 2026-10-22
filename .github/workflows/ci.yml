@@ -1,0 +1,87 @@
+# CI for duckosm-rust. Not run yet: the repository has no remote. The runner names and action versions
+# come from `maturin generate-ci github` (maturin 1.15.0).
+#
+# The wheels are abi3 (Python 3.9 and newer), so one wheel for each system is enough. They contain DuckDB
+# (cargo feature `duckdb`), so a build takes several minutes. Publishing to PyPI is NOT done here: the name
+# question (DuckDB trademark) is open. Add a publish job when Kaveh decides.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: cargo test, and the WebAssembly compile check
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Tests of the core (hash vectors, geometry, golden files for 3 modes)
+        run: cargo test --release -p duckosm-core
+      - name: The hash agrees with the bundled DuckDB
+        run: cargo test --release -p duckosm-duckdb
+      - name: duckosm-core and duckosm-parquet build for WebAssembly (compile check only)
+        run: |
+          cargo build --release -p duckosm-core --target wasm32-unknown-unknown
+          cargo build --release -p duckosm-parquet --no-default-features --features snap --target wasm32-unknown-unknown
+
+  wheels:
+    name: wheel ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: linux-x86_64, runner: ubuntu-22.04, target: x86_64, manylinux: "2_28"}
+          - {name: linux-aarch64, runner: ubuntu-24.04-arm, target: aarch64, manylinux: "2_28"}
+          - {name: macos-x86_64, runner: macos-15-intel, target: x86_64}
+          - {name: macos-aarch64, runner: macos-latest, target: aarch64}
+          - {name: windows-x64, runner: windows-latest, target: x64}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Build the wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist --manifest-path crates/duckosm-py/Cargo.toml
+          manylinux: ${{ matrix.manylinux || 'auto' }}
+          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+      - uses: actions/upload-artifact@v6
+        with:
+          name: wheels-${{ matrix.name }}
+          path: dist
+      - name: Test the wheel in a new virtual environment (Monaco must equal duckOSM)
+        shell: bash
+        run: |
+          set -e
+          python -m venv test-env
+          if [ -f test-env/Scripts/activate ]; then source test-env/Scripts/activate; else source test-env/bin/activate; fi
+          pip install duckdb==1.5.3
+          pip install duckosm-rust --no-index --no-deps --find-links dist --force-reinstall
+          python tests/test_wheel.py
+
+  sdist:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist --manifest-path crates/duckosm-py/Cargo.toml
+      - uses: actions/upload-artifact@v6
+        with:
+          name: wheels-sdist
+          path: dist
