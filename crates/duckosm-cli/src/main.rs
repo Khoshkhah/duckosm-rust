@@ -30,6 +30,9 @@ struct Cli {
     /// Cut each mode at its own junctions (duckOSM option global_junctions: false).
     #[arg(long)]
     no_global_junctions: bool,
+    /// Do not infer sidewalk=separate on roads that have a sidewalk line on both sides (duckOSM option infer_separate_sidewalks).
+    #[arg(long)]
+    no_sidewalk_inference: bool,
     /// Do not join the chains of edges that are one road (duckOSM option merge_segments).
     #[arg(long)]
     no_merge_segments: bool,
@@ -76,7 +79,7 @@ fn run() -> Result<(), String> {
         *t = Instant::now();
     };
     let mut t = Instant::now();
-    let ways = pbf::read_ways(&cli.pbf)?;
+    let mut ways = pbf::read_ways(&cli.pbf)?;
     lap("read ways", &mut t);
     let coords = pbf::read_coords(&cli.pbf, &ways)?;
     lap("read nodes", &mut t);
@@ -100,6 +103,11 @@ fn run() -> Result<(), String> {
         std::env::temp_dir().join(format!("duckosm-{}", std::process::id()))
     };
     std::fs::create_dir_all(&pq_dir).map_err(|e| e.to_string())?;
+    if !cli.no_sidewalk_inference && modes.contains(&Mode::Walking) {
+        let n = duckosm_core::sidewalks::infer_separate_sidewalks(&mut ways, &coords);
+        lap("sidewalk rule", &mut t);
+        eprintln!("sidewalk rule: {n} roads get sidewalk=separate");
+    }
     for mode in &modes {
         let net = build_network(&ways, &coords, *mode, &opts)?;
         lap(&format!("build {}", mode.name()), &mut t);

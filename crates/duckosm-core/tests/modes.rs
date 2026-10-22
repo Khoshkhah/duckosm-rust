@@ -1,6 +1,6 @@
 //! Golden test for the three modes. Input: the sample file of Monaco (no cut, no component filter).
 //! The expected counts and checksums come from duckOSM 0.6.0 (DuckDB 1.5.3): tools/make_golden_summary.py.
-//! The variants switch `merge_segments` and `global_junctions`; `_cf` also runs the component filter. With `global_junctions` on, Monaco has no
+//! The variants switch `merge_segments` and `global_junctions`; `_cf` also runs the component filter, and `_sw` the sidewalk rule. With `global_junctions` on, Monaco has no
 //! chains to merge, so the variants with it off test the merge.
 
 use duckosm_core::filter::Mode;
@@ -8,6 +8,7 @@ use duckosm_core::hash::hash3;
 use duckosm_core::model::Edge;
 use duckosm_core::network::{build_network, Options};
 use duckosm_core::pbf;
+use duckosm_core::sidewalks::infer_separate_sidewalks;
 use std::path::PathBuf;
 
 fn data(name: &str) -> PathBuf {
@@ -55,6 +56,11 @@ fn three_modes_equal_duckosm() {
         };
         let net = if cf {
             build_network(&cut_ways, &cut_coords, mode, &opts)
+        } else if variant.ends_with("_sw") {
+            let mut w = ways.clone();
+            let n = infer_separate_sidewalks(&mut w, &coords);
+            assert_eq!(n, 46, "roads with sidewalk=separate");
+            build_network(&w, &coords, mode, &opts)
         } else {
             build_network(&ways, &coords, mode, &opts)
         }

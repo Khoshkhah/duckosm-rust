@@ -153,8 +153,7 @@ in duckOSM use the same call for lists that can be large (for example `component
 
 ## Update: the lane profile fix
 
-The fix is on the branch `fix-lane-profile-insert` of duckOSM (worktree `/home/kaveh/projects/duckOSM-lanefix`, one
-commit, not merged, not pushed). The step now writes its rows with one `INSERT ... SELECT` from a DataFrame.
+The fix is merged into `main` of duckOSM (commit `8b5a101`, fast-forward, not pushed). The step now writes its rows with one `INSERT ... SELECT` from a DataFrame.
 On a copy of `monaco.duckdb`: 10.9 s before and 0.21 s after (3,176 rows). `driving.lane_profile` has the same
 rows and the same column types (checked with `EXCEPT` in both directions). The tests `test_lane_profile.py`,
 `test_lane_routing.py`, `test_road_filter_lanes.py`, `test_gmns.py`, `test_levels.py` and `test_sumo.py` pass

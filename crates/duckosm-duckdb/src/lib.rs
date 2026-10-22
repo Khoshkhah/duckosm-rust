@@ -52,3 +52,48 @@ fn write_mode(con: &Connection, parquet_dir: &Path, mode: &str) -> Result<(), St
     con.execute_batch(&sql).map_err(|e| e.to_string())?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use duckdb::Connection;
+    use duckosm_core::hash;
+
+    /// The edge_id of duckosm-core must equal the hash() of the DuckDB inside this program.
+    /// If a new DuckDB changes hash(), this test fails.
+    #[test]
+    fn hash_equals_the_bundled_duckdb() {
+        let con = Connection::open_in_memory().unwrap();
+        let version: String = con.query_row("SELECT version()", [], |r| r.get(0)).unwrap();
+        for (a, b, c) in [
+            (1i64, 2i64, 3i64),
+            (123456789, 987654321, -555),
+            (-1, 0, i64::MAX),
+            (4230114, 1868723946, 1080509801),
+        ] {
+            let want: u64 = con
+                .query_row(
+                    "SELECT hash(?::BIGINT, ?::BIGINT, ?::BIGINT)",
+                    [a, b, c],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(
+                hash::hash3(a, b, c),
+                want,
+                "DuckDB {version}: hash({a}, {b}, {c})"
+            );
+        }
+        for s in [
+            "[1, 2, 3]",
+            "",
+            "[10, 2]",
+            "a longer text with more than sixteen bytes",
+        ] {
+            let want: u64 = con
+                .query_row("SELECT hash(?::VARCHAR)", [s], |r| r.get(0))
+                .unwrap();
+            assert_eq!(hash::hash_str(s), want, "DuckDB {version}: hash('{s}')");
+        }
+        eprintln!("DuckDB {version}: the hash agrees");
+    }
+}

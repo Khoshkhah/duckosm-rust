@@ -10,4 +10,5 @@ default = ["pbf"]
 pbf = ["dep:osmpbf"]
 
 [dependencies]
+rstar = "0.12"
 osmpbf = { version = "0.3.8", optional = true }
