@@ -19,7 +19,7 @@ from playwright.sync_api import sync_playwright
 WWW = pathlib.Path(__file__).resolve().parent
 
 a = argparse.ArgumentParser()
-a.add_argument("pbf")
+a.add_argument("pbf", help="a .osm.pbf file, or place:<name> for the first match of the place search")
 a.add_argument("out")
 a.add_argument("--modes", default="driving,walking,cycling")
 a.add_argument("--fixes")
@@ -42,7 +42,13 @@ with sync_playwright() as p:
     page.on("pageerror", lambda e: print("page error:", e))
     page.goto(url)
     page.wait_for_function("document.getElementById('status').textContent.startsWith('DuckDB is ready')", timeout=120_000)
-    page.set_input_files("#pbf", args.pbf)
+    if args.pbf.startswith("place:"):
+        page.fill("#place", args.pbf[len("place:"):])
+        page.click("#search")
+        page.wait_for_selector("input[name=place]", timeout=60_000)
+        print("place:", page.inner_text("#places").splitlines()[0])
+    else:
+        page.set_input_files("#pbf", args.pbf)
     if args.fixes:
         page.set_input_files("#fixes", args.fixes)
     for box in page.query_selector_all("input[name=mode]"):

@@ -5,6 +5,7 @@ use duckosm_build::{config::parse_osm_fixes, parse_modes, write_tables};
 use duckosm_core::filter::Mode;
 use duckosm_core::fixes::OsmFixes;
 use duckosm_core::network::{build_network_with, Options};
+use duckosm_core::osmjson::OsmJson;
 use duckosm_core::{pbf, sidewalks};
 use js_sys::{Array, Object, Reflect, Uint8Array};
 use std::io::{self, BufWriter, Write};
@@ -37,12 +38,35 @@ impl Write for JsParts {
     }
 }
 
-/// Build duckOSM's tables of `modes` (comma separated: driving, walking, cycling) with the default options of
-/// the CLI. `fixes_yaml`: the text of an OSM fixes file (duckOSM `osm_overrides`), or nothing.
+/// The input of a build: the bytes of a `.osm.pbf` file, or OSM JSON (the output of the Overpass API).
+#[derive(Clone, Copy)]
+pub enum Input<'a> {
+    Pbf(&'a [u8]),
+    OsmJson(&'a [u8]),
+}
+
+/// Build duckOSM's tables of `modes` (comma separated: driving, walking, cycling) from the bytes of a `.osm.pbf`
+/// file, with the default options of the CLI. `fixes_yaml`: the text of an OSM fixes file (duckOSM
+/// `osm_overrides`), or nothing.
 #[wasm_bindgen]
 pub fn build(pbf_bytes: &[u8], modes: &str, fixes_yaml: Option<String>) -> Result<Output, JsError> {
+    js_build(Input::Pbf(pbf_bytes), modes, fixes_yaml)
+}
+
+/// The same as [`build`], from OSM JSON: the answer of the Overpass API to the query of the page (the highway
+/// ways and ferry lines with their nodes, and the `type=restriction` relations).
+#[wasm_bindgen]
+pub fn build_osm_json(
+    json: &[u8],
+    modes: &str,
+    fixes_yaml: Option<String>,
+) -> Result<Output, JsError> {
+    js_build(Input::OsmJson(json), modes, fixes_yaml)
+}
+
+fn js_build(input: Input, modes: &str, fixes_yaml: Option<String>) -> Result<Output, JsError> {
     let files = Object::new();
-    let summary = run(pbf_bytes, modes, fixes_yaml.as_deref(), |name| {
+    let summary = run(input, modes, fixes_yaml.as_deref(), |name| {
         let parts = Array::new();
         Reflect::set(&files, &name.into(), &parts).map_err(|_| format!("cannot keep {name}"))?;
         // the array is a JavaScript object: the writer and `files` share it
@@ -56,7 +80,7 @@ pub fn build(pbf_bytes: &[u8], modes: &str, fixes_yaml: Option<String>) -> Resul
 /// fixes, the relations for the turn restrictions, the sidewalk rule, then each mode, written with
 /// `write_tables` to a writer from `file`. Returns one summary line for each mode.
 pub fn run<W: Write + Send>(
-    pbf_bytes: &[u8],
+    input: Input,
     modes: &str,
     fixes_yaml: Option<&str>,
     mut file: impl FnMut(&str) -> Result<W, String>,
@@ -67,15 +91,36 @@ pub fn run<W: Write + Send>(
         Some(text) => parse_osm_fixes(text, "the OSM fixes file")?,
         None => OsmFixes::default(),
     };
-    let mut ways = pbf::read_ways_bytes(pbf_bytes)?;
-    fixes.apply_to_ways(&mut ways)?;
-    let mut coords = pbf::read_coords_bytes(pbf_bytes, &ways)?;
-    fixes.add_new_nodes(&mut ways, &mut coords);
-    let relations = if opts.extract_restrictions && modes.contains(&Mode::Driving) {
-        pbf::read_restrictions_bytes(pbf_bytes)?
-    } else {
-        Vec::new()
+    let need_relations = opts.extract_restrictions && modes.contains(&Mode::Driving);
+    let (mut ways, mut coords, relations) = match input {
+        Input::Pbf(bytes) => {
+            let mut ways = pbf::read_ways_bytes(bytes)?;
+            fixes.apply_to_ways(&mut ways)?;
+            let coords = pbf::read_coords_bytes(bytes, &ways)?;
+            let relations = if need_relations {
+                pbf::read_restrictions_bytes(bytes)?
+            } else {
+                Vec::new()
+            };
+            (ways, coords, relations)
+        }
+        Input::OsmJson(bytes) => {
+            let mut data = OsmJson::read(bytes)?;
+            let mut ways = std::mem::take(&mut data.ways);
+            fixes.apply_to_ways(&mut ways)?;
+            let coords = data.coords(&ways);
+            (
+                ways,
+                coords,
+                if need_relations {
+                    data.relations
+                } else {
+                    Vec::new()
+                },
+            )
+        }
     };
+    fixes.add_new_nodes(&mut ways, &mut coords);
     if modes.contains(&Mode::Walking) {
         sidewalks::infer_separate_sidewalks(&mut ways, &coords);
     }

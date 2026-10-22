@@ -7,6 +7,7 @@ pub mod graph;
 pub mod hash;
 pub mod model;
 pub mod network;
+pub mod osmjson;
 #[cfg(feature = "pbf")]
 pub mod pbf;
 pub mod sidewalks;

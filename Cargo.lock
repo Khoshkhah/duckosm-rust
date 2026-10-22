@@ -632,6 +632,8 @@ version = "0.2.0"
 dependencies = [
  "osmpbf",
  "rstar",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

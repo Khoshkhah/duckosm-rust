@@ -28,7 +28,7 @@ fn browser_build_equals_native_build() {
     build(&pbf, &native, &p).unwrap();
     let mut names = Vec::new();
     duckosm_wasm::run(
-        &std::fs::read(&pbf).unwrap(),
+        duckosm_wasm::Input::Pbf(&std::fs::read(&pbf).unwrap()),
         "driving,walking,cycling",
         Some(FIXES),
         |name| {

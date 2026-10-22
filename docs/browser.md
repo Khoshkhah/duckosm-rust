@@ -79,6 +79,20 @@ Two changes from the plan:
 - Limits: the Overpass servers have a size and time limit for each query, so the target is a city or a region.
   The page says so, and a PBF file stays possible for larger areas.
 
+**Result of B2 (2026-10-22).** Done in code, not usable every day:
+- `osmjson.rs` reads OSM JSON. Its test writes the Monaco PBF as OSM JSON (coordinates with 7 decimals, as Overpass
+  writes them) and reads it back: the same ways, tags, coordinate bits and restriction relations as the PBF reader.
+  A coordinate becomes whole nanodegrees and then `1e-9 * nanodegrees`, the formula of the PBF reader, so the
+  bits are equal.
+- `build_osm_json` in the wasm module; the page finds a place with Nominatim and asks three Overpass servers in
+  turn (the area of a relation or a closed way, else the bounding box of a point).
+- **The public Overpass servers were full during the test** (2026-10-22): overpass-api.de "at capacity, all query
+  workers are busy" (502), maps.mail.ru 504 at once, overpass.private.coffee a timeout after 4 minutes. Earlier the
+  same day, a small query took 21 to 72 s. So a place name works only when a server has room, and the page says
+  so. A PBF file always works.
+- Geofabrik's extracts have no CORS header, so a page cannot download them. A source of PBF extracts with CORS, or
+  a proxy (a server), is a decision for Kaveh.
+
 **B3: the comparison with the Python version** (Kaveh, 2026-10-22). On the same areas (Monaco and Tartu; Estonia
 when Kaveh agrees), the same options, and the same tables:
 

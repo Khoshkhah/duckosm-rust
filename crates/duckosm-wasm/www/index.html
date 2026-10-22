@@ -27,11 +27,16 @@
 </head>
 <body>
 <h1>duckOSM in the browser</h1>
-<p class="note">duckosm-rust builds duckOSM's tables in this tab, and DuckDB (duckdb-wasm) keeps them for SQL. No server, no Python. The file does not leave your computer.</p>
+<p class="note">duckosm-rust builds duckOSM's tables in this tab, and DuckDB (duckdb-wasm) keeps them for SQL. No server of ours, no Python.
+A place name is found with <a href="https://nominatim.openstreetmap.org">Nominatim</a>, and its data comes from the
+<a href="https://wiki.openstreetmap.org/wiki/Overpass_API">Overpass API</a>, so the area should be a city or a region. A PBF file does not leave your computer.</p>
 
 <fieldset>
   <legend>1. Input</legend>
-  <p><label>PBF file (already cut to the area) <input id="pbf" type="file" accept=".pbf"></label></p>
+  <p><label>Place <input id="place" type="search" placeholder="for example Tartu" size="30"></label>
+    <button id="search">Find</button></p>
+  <div id="places"></div>
+  <p>or <label>a PBF file (already cut to the area) <input id="pbf" type="file" accept=".pbf"></label></p>
   <p>Modes:
     <label><input type="checkbox" name="mode" value="driving" checked> driving</label>
     <label><input type="checkbox" name="mode" value="walking" checked> walking</label>
@@ -96,7 +101,7 @@ function buildInWorker(msg) {
       else if (data.error) reject(new Error(data.error));
       else resolve(data);
     };
-    worker.postMessage(msg, [msg.pbf]);
+    worker.postMessage(msg, [msg.pbf || msg.json]);
   });
 }
 
@@ -107,9 +112,57 @@ const split = (name) => {
   return { mode, table: base.slice(0, base.lastIndexOf("_")) };
 };
 
+// the place search (Nominatim) and the data of a place (Overpass): a public server can be busy, so the page tries
+// the next one
+const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+                  "https://overpass.private.coffee/api/interpreter"];
+let found = [];
+
+$("search").onclick = async () => {
+  const q = $("place").value.trim();
+  if (!q) return;
+  try {
+    const r = await fetch("https://nominatim.openstreetmap.org/search?" + new URLSearchParams({ q, format: "jsonv2", limit: "8" }));
+    found = await r.json();
+    const list = found.map((p, i) => `<label><input type="radio" name="place" value="${i}"${i ? "" : " checked"}> ${p.display_name.replace(/</g, "&lt;")} <span class="note">(${p.addresstype}, ${p.osm_type} ${p.osm_id})</span></label><br>`);
+    $("places").innerHTML = list.join("") || "<p class='note'>No place found.</p>";
+  } catch (e) {
+    $("places").textContent = "The place search failed: " + e.message;
+  }
+};
+
+// the highway ways and ferry lines in the area (a relation or a closed way) or in the bounding box (a point), with
+// all their nodes, and the type=restriction relations of these ways
+function overpassQuery(p) {
+  const area = p.osm_type === "relation" ? 3600000000 + Number(p.osm_id) : p.osm_type === "way" ? 2400000000 + Number(p.osm_id) : null;
+  const [s, n, w, e] = p.boundingbox;
+  const where = area ? "(area.a)" : `(${s},${w},${n},${e})`;
+  return `[out:json][timeout:600][maxsize:2147483648];${area ? `area(id:${area})->.a;` : ""}` +
+    `(way["highway"]${where};way["route"="ferry"]${where};)->.w;rel(bw.w)["type"="restriction"]->.r;(.w;.w >;.r;);out body qt;`;
+}
+
+async function overpass(p) {
+  const query = overpassQuery(p);
+  const failed = [];
+  for (const url of OVERPASS) {
+    const host = new URL(url).host;
+    log(`getting the data of ${p.display_name.split(",")[0]} from ${host}…`);
+    try {
+      const r = await fetch(url, { method: "POST", body: new URLSearchParams({ data: query }) });
+      if (r.ok) return { bytes: await r.arrayBuffer(), server: host };
+      failed.push(`${host}: ${r.status}`);
+    } catch (e) {
+      failed.push(`${host}: ${e.message}`);
+    }
+  }
+  throw new Error(`no Overpass server answered (${failed.join("; ")}). The public servers are often full: ` +
+                  "try again later, or give a PBF file");
+}
+
 $("run").onclick = async () => {
   const file = $("pbf").files[0];
-  if (!file) return log("Choose a PBF file first.");
+  const chosen = document.querySelector("input[name=place]:checked");
+  if (!file && !chosen) return log("Find a place, or choose a PBF file.");
   const modes = [...document.querySelectorAll("input[name=mode]:checked")].map((c) => c.value).join(",");
   if (!modes) return log("Choose at least one mode.");
   $("run").disabled = $("query").disabled = $("duckdb").disabled = true;
@@ -118,8 +171,16 @@ $("run").onclick = async () => {
   try {
     const start = performance.now();
     const fixes = $("fixes").files[0] ? await $("fixes").files[0].text() : null;
-    const pbf = await file.arrayBuffer();
-    const out = await buildInWorker({ pbf, modes, fixes });
+    let msg, download = null;
+    if (file) {
+      msg = { pbf: await file.arrayBuffer(), modes, fixes };
+    } else {
+      const d0 = performance.now();
+      const got = await overpass(found[Number(chosen.value)]);
+      download = { seconds: (performance.now() - d0) / 1000, bytes: got.bytes.byteLength, server: got.server };
+      msg = { json: got.bytes, modes, fixes };
+    }
+    const out = await buildInWorker(msg);
     const built = performance.now();
     await duckReady;
     log("loading the tables into DuckDB…");
@@ -139,9 +200,10 @@ $("run").onclick = async () => {
     const ready = performance.now();
     window.timings = Object.assign(window.timings || {}, {
       wasmLoad: out.seconds.load, build: out.seconds.build,
-      tables: (ready - built) / 1000, clickToQuery: (ready - start) / 1000, memoryMiB: out.memoryMiB,
+      tables: (ready - built) / 1000, clickToQuery: (ready - start) / 1000, memoryMiB: out.memoryMiB, download,
     });
-    log(`${out.summary}\n\nbuild ${out.seconds.build.toFixed(2)} s (module load ${out.seconds.load.toFixed(2)} s), ` +
+    const got = download ? `OSM data from ${download.server}: ${(download.bytes / 2 ** 20).toFixed(1)} MB in ${download.seconds.toFixed(1)} s. ` : "";
+    log(`${out.summary}\n\n${got}build ${out.seconds.build.toFixed(2)} s (module load ${out.seconds.load.toFixed(2)} s), ` +
         `tables into DuckDB ${((ready - built) / 1000).toFixed(2)} s, ready for SQL ${((ready - start) / 1000).toFixed(2)} s after the click, ` +
         `${out.memoryMiB} MiB WebAssembly memory.`);
     for (const t of tables) {

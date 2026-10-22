@@ -1,8 +1,9 @@
 // The build of duckosm-rust in a Web Worker, so the page stays responsive during a long build.
-// In: {pbf: ArrayBuffer, modes: "driving,walking", fixes: text or null}.
+// In: {pbf: ArrayBuffer} or {json: ArrayBuffer} (OSM JSON from the Overpass API), with {modes: "driving,walking",
+// fixes: text or null}.
 // Out: {step}, then {files: {name: Uint8Array}, summary, seconds: {load, build}, memoryMiB} (the buffers are
 // transferred, not copied), or {error}.
-import init, { build } from "./pkg/duckosm_wasm.js";
+import init, { build, build_osm_json } from "./pkg/duckosm_wasm.js";
 
 let wasm = null;
 
@@ -15,7 +16,9 @@ onmessage = async ({ data }) => {
     }
     const t1 = performance.now();
     postMessage({ step: "building the networks" });
-    const res = build(new Uint8Array(data.pbf), data.modes, data.fixes || undefined);
+    const res = data.json
+      ? build_osm_json(new Uint8Array(data.json), data.modes, data.fixes || undefined)
+      : build(new Uint8Array(data.pbf), data.modes, data.fixes || undefined);
     const t2 = performance.now();
     // one buffer for each file: duckdb-wasm registers a file as one buffer
     const files = {};
