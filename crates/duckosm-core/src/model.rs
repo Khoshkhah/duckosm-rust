@@ -122,6 +122,9 @@ pub struct Edge {
     pub length_m: f32,
     /// Cycling only: the edge is walked, not ridden. None in the other modes.
     pub dismount: Option<bool>,
+    /// With the speed step: the speed in km/h (the raw `maxspeed` is then None) and the travel time.
+    pub maxspeed_kmh: Option<f32>,
+    pub cost_s: Option<f32>,
 }
 
 /// A row of the `nodes` table. A virtual node has `node_id < 0`.

@@ -21,6 +21,10 @@ pub struct Options {
     /// (duckOSM `clip.connectivity_rescue`, on by default; walking and cycling only).
     pub connect_paths: bool,
     pub snap_m: f64,
+    /// Set `maxspeed_kmh` and replace the raw `maxspeed` (duckOSM `options.process_speeds`, on by default).
+    pub process_speeds: bool,
+    /// Set `cost_s`, the travel time in seconds (duckOSM `options.calculate_costs`, on by default; needs the speeds).
+    pub calculate_costs: bool,
     /// Join the chains of edges that are one road (duckOSM `options.merge_segments`, on by default).
     pub merge_segments: bool,
 }
@@ -34,6 +38,8 @@ impl Default for Options {
             global_junctions: true,
             connect_paths: true,
             snap_m: 10.0,
+            process_speeds: true,
+            calculate_costs: true,
         }
     }
 }
@@ -255,6 +261,8 @@ pub fn build_network(
                     is_reverse: false,
                     length_m,
                     dismount: w.dismount,
+                    maxspeed_kmh: None,
+                    cost_s: None,
                 },
                 way: wi,
             });
@@ -427,6 +435,14 @@ pub fn build_network(
             opts.snap_m,
             mode == Mode::Cycling && opts.cycling_dismount,
         );
+    }
+
+    // 8c. Speeds and travel times.
+    if opts.calculate_costs && !opts.process_speeds {
+        return Err("calculate_costs needs process_speeds".to_string());
+    }
+    if opts.process_speeds {
+        crate::speeds::apply(&mut edges, mode, opts.calculate_costs);
     }
 
     // 9. Move private roads, bus-only roads and pedestrian streets to private_edges.
@@ -925,6 +941,8 @@ fn connect_paths(edges: &mut Vec<Edge>, nodes: &[Node], snap_m: f64, dismount: b
                 is_reverse,
                 length_m: *dist as f32,
                 dismount: if dismount { Some(false) } else { None },
+                maxspeed_kmh: None,
+                cost_s: None,
             });
         }
     }

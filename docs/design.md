@@ -54,7 +54,7 @@ The features of version 0.1 are complete after milestone M2. M3 releases them (s
 | 12 | Move private roads, bus-only roads and pedestrian streets to `private_edges` | Yes | A filter on `access` and `highway`. |
 | 13 | Component filter (keep the largest connected part) | Yes | Python runs it only when a boundary is set. Rust uses an option. |
 | 14 | Connect dangling paths, mark dismount edges | Yes | Done (2026-10-21). The connector adds the same edges as duckOSM. See the note on connector direction in section 6. |
-| 15 | Speeds, travel-time costs, walk and cycle type | No | The Rust output has the raw `maxspeed` text, not `maxspeed_kmh` and `cost_s`. |
+| 15 | Speeds, travel-time costs, walk and cycle type | Speeds and costs: yes. Walk and cycle type: no | Done (2026-10-21): `maxspeed_kmh` replaces `maxspeed`, and `cost_s` is added, with the `f32` arithmetic of the SQL. `--no-speeds` and `--no-costs` switch them off (then the raw `maxspeed` stays). |
 | 16 | Turn restrictions, edge graph | No | Turn restrictions need the OSM relations. |
 | 17 | H3 cells | No | |
 | 18 | Multimodal graph, `features.*`, bus routes, lane profile, drawing order | No | |
@@ -143,8 +143,8 @@ writes this part of what duckOSM writes today (checked in `monaco.duckdb` of 202
 
 | duckOSM today | Version 0.1 writes |
 |---|---|
-| `<mode>.edges` | Yes. Columns `edge_id`, `edge_ref`, `source`, `target`, `osm_id`, `highway`, `name`, `oneway`, `lanes`, `surface`, `access`, `junction`, `layer`, `bridge`, `tunnel`, `service`, `refs`, `geometry`, `is_reverse`, `length_m`. It also has `maxspeed` (text) in place of `maxspeed_kmh`. |
-| `edges`: `maxspeed_kmh`, `cost_s`, `from_cell`, `to_cell`, `lca_res` | No. Speeds, costs and H3 are not ported. |
+| `<mode>.edges` | Yes. Columns (without the speed step) `edge_id`, `edge_ref`, `source`, `target`, `osm_id`, `highway`, `name`, `oneway`, `lanes`, `surface`, `access`, `junction`, `layer`, `bridge`, `tunnel`, `service`, `refs`, `geometry`, `is_reverse`, `length_m`. It also has `maxspeed` (text). With the speed step (the default) `maxspeed` is replaced by `maxspeed_kmh` and `cost_s`, as in duckOSM. |
+| `edges`: `from_cell`, `to_cell`, `lca_res` | No. H3 is not ported. |
 | `<mode>.nodes` | Yes. `node_id` and `geom`. The column `h3_cell` is not written. |
 | `<mode>.private_edges` | Yes. |
 | `main.edge_id_hash`, `main.edge_id_hash_v1` (macros) | Yes. The same SQL as `edge_id.py`. They call the `hash()` of the DuckDB in the file, so they agree with the ids only for DuckDB 1.3 and later (section 5). |

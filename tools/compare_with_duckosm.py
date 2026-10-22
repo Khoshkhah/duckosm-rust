@@ -26,6 +26,11 @@ else:
 
 COLS = ["edge_ref", "source", "target", "osm_id", "highway", "name", "oneway", "lanes", "surface", "access",
         "junction", "layer", "bridge", "tunnel", "service", "is_reverse"] + (["dismount"] if MODE == "cycling" else [])
+# speeds and costs: compared when both sides have them (FLOAT values, exact)
+_p_cols = {r[0] for r in con.execute(f"DESCRIBE py.{MODE}.edges").fetchall()}
+for _c in ("maxspeed_kmh", "cost_s"):
+    if _c in _p_cols:
+        COLS.append(_c)
 con.execute(f"CREATE VIEW p_edges AS SELECT *, ST_AsWKB(geometry) AS wkb FROM py.{MODE}.edges")
 con.execute(f"CREATE VIEW p_priv AS SELECT *, ST_AsWKB(geometry) AS wkb FROM py.{MODE}.private_edges")
 con.execute(f"CREATE VIEW p_nodes AS SELECT node_id, ST_AsWKB(geom) AS wkb FROM py.{MODE}.nodes")

@@ -22,7 +22,7 @@ The **network step of the driving mode**: PBF in, driving edges and nodes out. I
 The settings are the same for both programs:
 
 - one mode (driving), no boundary (so no `osmium` cut and no component filter), global junctions on,
-  `merge_segments` off (`--no-merge-segments`; the benchmark was measured before duckosm-rust had the merge), no OSM fixes;
+  `merge_segments` off (`--no-merge-segments`, and `--no-speeds` since duckosm-rust has the speed step; the benchmark was measured before it had the merge or the speeds), no OSM fixes;
 - duckOSM: the config `bench/python_network_step.yaml`, with every other step switched off (graph of
   legal turns, H3, speeds, costs, turn restrictions, features, bus routes, drawing order);
 - duckosm-rust: `duckosm-rust monaco.osm.pbf -o <dir> --name monaco --no-component-filter --format duckdb`

@@ -39,6 +39,12 @@ struct Cli {
     /// The distance in metres within which a dangling path end is connected.
     #[arg(long, default_value_t = 10.0)]
     snap_m: f64,
+    /// Do not compute maxspeed_kmh (the raw maxspeed text stays; duckOSM option process_speeds: false).
+    #[arg(long)]
+    no_speeds: bool,
+    /// Do not compute cost_s, the travel time (duckOSM option calculate_costs: false).
+    #[arg(long)]
+    no_costs: bool,
     /// Do not join the chains of edges that are one road (duckOSM option merge_segments).
     #[arg(long)]
     no_merge_segments: bool,
@@ -104,6 +110,8 @@ fn run() -> Result<(), String> {
         global_junctions: !cli.no_global_junctions,
         connect_paths: !cli.no_connect_paths,
         snap_m: cli.snap_m,
+        process_speeds: !cli.no_speeds,
+        calculate_costs: !cli.no_speeds && !cli.no_costs,
     };
     let pq_dir = if formats.contains(&"geoparquet") {
         cli.out.clone()
@@ -127,13 +135,17 @@ fn run() -> Result<(), String> {
             net.private_edges.len(),
             net.stats
         );
-        let dis = *mode == Mode::Cycling && opts.cycling_dismount;
+        let oc = duckosm_parquet::EdgeCols {
+            dismount: *mode == Mode::Cycling && opts.cycling_dismount,
+            speeds: opts.process_speeds,
+            costs: opts.calculate_costs,
+        };
         let n = mode.name();
-        duckosm_parquet::write_edges(&pq_dir.join(format!("edges_{n}.parquet")), &net.edges, dis)?;
+        duckosm_parquet::write_edges(&pq_dir.join(format!("edges_{n}.parquet")), &net.edges, oc)?;
         duckosm_parquet::write_edges(
             &pq_dir.join(format!("private_edges_{n}.parquet")),
             &net.private_edges,
-            dis,
+            oc,
         )?;
         duckosm_parquet::write_nodes(&pq_dir.join(format!("nodes_{n}.parquet")), &net.nodes)?;
         if opts.merge_segments {

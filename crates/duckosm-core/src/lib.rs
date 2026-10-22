@@ -8,4 +8,5 @@ pub mod network;
 #[cfg(feature = "pbf")]
 pub mod pbf;
 pub mod sidewalks;
+pub mod speeds;
 pub mod util;

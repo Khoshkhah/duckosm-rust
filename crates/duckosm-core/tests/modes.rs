@@ -1,6 +1,6 @@
 //! Golden test for the three modes. Input: the sample file of Monaco (no cut, no component filter).
 //! The expected counts and checksums come from duckOSM 0.6.0 (DuckDB 1.5.3): tools/make_golden_summary.py.
-//! The variants switch `merge_segments` and `global_junctions`; `_cf` also runs the component filter, and `_sw` the sidewalk rule, `_cp` the dangling-path connector. With `global_junctions` on, Monaco has no
+//! The variants switch `merge_segments` and `global_junctions`; `_cf` also runs the component filter, and `_sw` the sidewalk rule, `_cp` the dangling-path connector, `_sp` the speeds and costs (the `_cf` variants have them too). With `global_junctions` on, Monaco has no
 //! chains to merge, so the variants with it off test the merge.
 
 use duckosm_core::filter::Mode;
@@ -27,6 +27,10 @@ fn checksum(edges: &[Edge]) -> u64 {
             c |= 1 << 48;
         }
         x ^= hash3(e.edge_id, b as i64, c as i64);
+        if let Some(kmh) = e.maxspeed_kmh {
+            let cost = e.cost_s.map_or(0, |v| v.to_bits() as i64);
+            x ^= hash3(e.edge_id ^ 0x5555, kmh.to_bits() as i64, cost);
+        }
     }
     x
 }
@@ -48,6 +52,8 @@ fn three_modes_equal_duckosm() {
         let f: Vec<&str> = line.split('\t').collect();
         let (variant, mode) = (f[0], Mode::parse(f[1]).unwrap());
         let cf = variant.ends_with("_cf") || variant.ends_with("_cfcp");
+        // the databases of the _cf, _cfcp and _sp variants have speeds and costs
+        let speeds = cf || variant.ends_with("_sp");
         let opts = Options {
             keep_largest_component: cf,
             cycling_dismount: true,
@@ -55,6 +61,8 @@ fn three_modes_equal_duckosm() {
             global_junctions: variant.contains("_gj"),
             connect_paths: variant.ends_with("_cp") || variant.ends_with("_cfcp"),
             snap_m: 10.0,
+            process_speeds: speeds,
+            calculate_costs: speeds,
         };
         let net = if cf {
             build_network(&cut_ways, &cut_coords, mode, &opts)

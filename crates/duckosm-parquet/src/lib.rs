@@ -77,7 +77,18 @@ fn list_field(name: &str) -> Field {
     )
 }
 
-pub fn edges_schema(with_dismount: bool) -> Schema {
+/// Which optional columns the edge files have.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct EdgeCols {
+    /// Cycling: the `dismount` flag.
+    pub dismount: bool,
+    /// The speed step ran: `maxspeed_kmh` replaces the raw `maxspeed`.
+    pub speeds: bool,
+    /// The cost step ran: `cost_s`.
+    pub costs: bool,
+}
+
+pub fn edges_schema(cols: EdgeCols) -> Schema {
     let mut fields = vec![
         Field::new("edge_id", DataType::Int64, false),
         Field::new("edge_ref", DataType::Utf8, true),
@@ -101,8 +112,17 @@ pub fn edges_schema(with_dismount: bool) -> Schema {
         Field::new("length_m", DataType::Float32, false),
         Field::new("geometry", DataType::Binary, false),
     ];
-    if with_dismount {
+    if cols.speeds {
+        fields.retain(|f| f.name() != "maxspeed");
+    }
+    if cols.dismount {
         fields.push(Field::new("dismount", DataType::Boolean, true));
+    }
+    if cols.speeds {
+        fields.push(Field::new("maxspeed_kmh", DataType::Float32, true));
+    }
+    if cols.costs {
+        fields.push(Field::new("cost_s", DataType::Float32, true));
     }
     Schema::new(fields)
 }
@@ -114,7 +134,7 @@ pub fn nodes_schema() -> Schema {
     ])
 }
 
-fn edges_batch(schema: &Arc<Schema>, rows: &[Edge], with_dismount: bool) -> RecordBatch {
+fn edges_batch(schema: &Arc<Schema>, rows: &[Edge], oc: EdgeCols) -> RecordBatch {
     let n = rows.len();
     let mut edge_id = Int64Builder::with_capacity(n);
     let mut edge_ref = StringBuilder::new();
@@ -138,6 +158,8 @@ fn edges_batch(schema: &Arc<Schema>, rows: &[Edge], with_dismount: bool) -> Reco
     let mut length_m = Float32Builder::with_capacity(n);
     let mut geometry = BinaryBuilder::new();
     let mut dismount = BooleanBuilder::with_capacity(n);
+    let mut kmh = Float32Builder::with_capacity(n);
+    let mut cost = Float32Builder::with_capacity(n);
     for e in rows {
         edge_id.append_value(e.edge_id);
         edge_ref.append_option(e.edge_ref.as_deref());
@@ -162,8 +184,10 @@ fn edges_batch(schema: &Arc<Schema>, rows: &[Edge], with_dismount: bool) -> Reco
         length_m.append_value(e.length_m);
         geometry.append_value(line_wkb(&e.geometry));
         dismount.append_option(e.dismount);
+        kmh.append_option(e.maxspeed_kmh);
+        cost.append_option(e.cost_s);
     }
-    let cols: Vec<ArrayRef> = vec![
+    let mut cols: Vec<ArrayRef> = vec![
         Arc::new(edge_id.finish()),
         Arc::new(edge_ref.finish()),
         Arc::new(source.finish()),
@@ -171,7 +195,6 @@ fn edges_batch(schema: &Arc<Schema>, rows: &[Edge], with_dismount: bool) -> Reco
         Arc::new(osm_id.finish()),
         Arc::new(highway.finish()),
         Arc::new(name.finish()),
-        Arc::new(maxspeed.finish()),
         Arc::new(oneway.finish()),
         Arc::new(lanes.finish()),
         Arc::new(surface.finish()),
@@ -186,9 +209,17 @@ fn edges_batch(schema: &Arc<Schema>, rows: &[Edge], with_dismount: bool) -> Reco
         Arc::new(length_m.finish()),
         Arc::new(geometry.finish()),
     ];
-    let mut cols = cols;
-    if with_dismount {
+    if !oc.speeds {
+        cols.insert(7, Arc::new(maxspeed.finish())); // after name
+    }
+    if oc.dismount {
         cols.push(Arc::new(dismount.finish()));
+    }
+    if oc.speeds {
+        cols.push(Arc::new(kmh.finish()));
+    }
+    if oc.costs {
+        cols.push(Arc::new(cost.finish()));
     }
     RecordBatch::try_new(schema.clone(), cols).expect("edge columns match the schema")
 }
@@ -198,8 +229,8 @@ fn err<E: std::fmt::Display>(e: E) -> String {
 }
 
 /// Write the edges as a GeoParquet file with LineString geometry.
-pub fn write_edges(path: &Path, rows: &[Edge], with_dismount: bool) -> Result<(), String> {
-    let schema = Arc::new(edges_schema(with_dismount));
+pub fn write_edges(path: &Path, rows: &[Edge], oc: EdgeCols) -> Result<(), String> {
+    let schema = Arc::new(edges_schema(oc));
     let mut w = ArrowWriter::try_new(
         File::create(path).map_err(err)?,
         schema.clone(),
@@ -207,8 +238,7 @@ pub fn write_edges(path: &Path, rows: &[Edge], with_dismount: bool) -> Result<()
     )
     .map_err(err)?;
     for chunk in rows.chunks(ROW_GROUP) {
-        w.write(&edges_batch(&schema, chunk, with_dismount))
-            .map_err(err)?;
+        w.write(&edges_batch(&schema, chunk, oc)).map_err(err)?;
     }
     w.close().map_err(err)?;
     Ok(())
