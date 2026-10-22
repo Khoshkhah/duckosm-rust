@@ -42,10 +42,7 @@ fn ways_of<R: Read + Send>(reader: ElementReader<R>) -> Result<Vec<Way>, String>
             |el| {
                 let mut v = Vec::new();
                 if let Element::Way(w) = el {
-                    let mut tags = Tags::default();
-                    for (k, val) in w.tags() {
-                        tags.set(k, val);
-                    }
+                    let tags = Tags::from_pairs(w.tags());
                     if filter::is_kept_by_reader(&tags) {
                         v.push(Way {
                             id: w.id(),

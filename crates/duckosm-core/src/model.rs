@@ -3,104 +3,144 @@
 use crate::geom::Pt;
 use std::sync::Arc;
 
-/// The OSM tags that the driving network step reads. Other tags are not kept.
+/// The OSM tags that the network step reads. Other tags are not kept. All the values of a way are
+/// in one string, so the tags of a way use two small allocations, not one field for each key.
 #[derive(Default, Clone, Debug)]
 pub struct Tags {
-    pub highway: Option<Box<str>>,
-    pub name: Option<Box<str>>,
-    pub maxspeed: Option<Box<str>>,
-    pub oneway: Option<Box<str>>,
-    pub oneway_bus: Option<Box<str>>,
-    pub oneway_psv: Option<Box<str>>,
-    pub junction: Option<Box<str>>,
-    pub motorcar: Option<Box<str>>,
-    pub motor_vehicle: Option<Box<str>>,
-    pub vehicle: Option<Box<str>>,
-    pub access: Option<Box<str>>,
-    pub bus: Option<Box<str>>,
-    pub psv: Option<Box<str>>,
-    pub surface: Option<Box<str>>,
-    pub service: Option<Box<str>>,
-    pub layer: Option<Box<str>>,
-    pub bridge: Option<Box<str>>,
-    pub tunnel: Option<Box<str>>,
-    pub lanes: Option<Box<str>>,
-    pub lanes_forward: Option<Box<str>>,
-    pub lanes_backward: Option<Box<str>>,
-    pub lanes_reversible: Option<Box<str>>,
-    pub route: Option<Box<str>>,
-    pub footway: Option<Box<str>>,
-    pub conveying: Option<Box<str>>,
-    pub area: Option<Box<str>>,
-    pub indoor: Option<Box<str>>,
-    pub cycleway_left: Option<Box<str>>,
-    pub cycleway_right: Option<Box<str>>,
-    pub cycleway_both: Option<Box<str>>,
-    pub segregated: Option<Box<str>>,
-    pub foot: Option<Box<str>>,
-    pub bicycle: Option<Box<str>>,
-    pub cycleway: Option<Box<str>>,
-    pub sidewalk: Option<Box<str>>,
-    pub sidewalk_both: Option<Box<str>>,
-    pub sidewalk_left: Option<Box<str>>,
-    pub sidewalk_right: Option<Box<str>>,
-    pub motorroad: Option<Box<str>>,
-    pub oneway_foot: Option<Box<str>>,
-    pub oneway_bicycle: Option<Box<str>>,
+    /// The key of each value and the end of the value in `text`.
+    keys: Box<[(Key, u32)]>,
+    text: Box<str>,
 }
 
 impl Tags {
-    /// Store the tag if the network step reads it. Returns false for a tag that is not used.
-    /// Like `map_extract(tags, k)[1]` in duckOSM, the first value of a key wins.
+    /// Keep the tags that the network step reads. Like `map_extract(tags, k)[1]` in duckOSM, the
+    /// first value of a key wins.
+    pub fn from_pairs<'a>(pairs: impl IntoIterator<Item = (&'a str, &'a str)>) -> Tags {
+        // Collect on the stack first, then allocate the exact size one time. Growing and
+        // shrinking a Vec for each way leaves small holes in the heap (WebAssembly never returns them).
+        let mut found = [(Key::highway, ""); N_KEYS];
+        let mut n = 0;
+        for (k, v) in pairs {
+            if let Some(key) = Key::of(k) {
+                if !found[..n].iter().any(|&(x, _)| x == key) {
+                    found[n] = (key, v);
+                    n += 1;
+                }
+            }
+        }
+        Tags::build(&found[..n])
+    }
+
+    /// Set the value of an OSM key, and replace an old value. A key that is not read is not kept.
     pub fn set(&mut self, k: &str, v: &str) {
-        let slot = match k {
-            "highway" => &mut self.highway,
-            "name" => &mut self.name,
-            "maxspeed" => &mut self.maxspeed,
-            "oneway" => &mut self.oneway,
-            "oneway:bus" => &mut self.oneway_bus,
-            "oneway:psv" => &mut self.oneway_psv,
-            "junction" => &mut self.junction,
-            "motorcar" => &mut self.motorcar,
-            "motor_vehicle" => &mut self.motor_vehicle,
-            "vehicle" => &mut self.vehicle,
-            "access" => &mut self.access,
-            "bus" => &mut self.bus,
-            "psv" => &mut self.psv,
-            "surface" => &mut self.surface,
-            "service" => &mut self.service,
-            "layer" => &mut self.layer,
-            "bridge" => &mut self.bridge,
-            "tunnel" => &mut self.tunnel,
-            "lanes" => &mut self.lanes,
-            "lanes:forward" => &mut self.lanes_forward,
-            "lanes:backward" => &mut self.lanes_backward,
-            "lanes:reversible" => &mut self.lanes_reversible,
-            "route" => &mut self.route,
-            "footway" => &mut self.footway,
-            "conveying" => &mut self.conveying,
-            "area" => &mut self.area,
-            "indoor" => &mut self.indoor,
-            "cycleway:left" => &mut self.cycleway_left,
-            "cycleway:right" => &mut self.cycleway_right,
-            "cycleway:both" => &mut self.cycleway_both,
-            "segregated" => &mut self.segregated,
-            "foot" => &mut self.foot,
-            "bicycle" => &mut self.bicycle,
-            "cycleway" => &mut self.cycleway,
-            "sidewalk" => &mut self.sidewalk,
-            "sidewalk:both" => &mut self.sidewalk_both,
-            "sidewalk:left" => &mut self.sidewalk_left,
-            "sidewalk:right" => &mut self.sidewalk_right,
-            "motorroad" => &mut self.motorroad,
-            "oneway:foot" => &mut self.oneway_foot,
-            "oneway:bicycle" => &mut self.oneway_bicycle,
-            _ => return,
+        let Some(key) = Key::of(k) else {
+            return;
         };
-        if slot.is_none() {
-            *slot = Some(v.into());
+        let mut found: Vec<(Key, &str)> = self.pairs().filter(|p| p.0 != key).collect();
+        found.push((key, v));
+        let new = Tags::build(&found);
+        *self = new;
+    }
+
+    fn build(found: &[(Key, &str)]) -> Tags {
+        let mut text = String::with_capacity(found.iter().map(|f| f.1.len()).sum());
+        let keys = found
+            .iter()
+            .map(|&(key, v)| {
+                text.push_str(v);
+                (key, text.len() as u32)
+            })
+            .collect();
+        Tags {
+            keys,
+            text: text.into_boxed_str(),
         }
     }
+
+    fn pairs(&self) -> impl Iterator<Item = (Key, &str)> {
+        let mut start = 0;
+        self.keys.iter().map(move |&(k, end)| {
+            let v = &self.text[start..end as usize];
+            start = end as usize;
+            (k, v)
+        })
+    }
+
+    fn get(&self, key: Key) -> Option<&str> {
+        self.pairs().find(|p| p.0 == key).map(|p| p.1)
+    }
+}
+
+/// The keys that the network step reads: one accessor (`tags.highway()`) for each key.
+macro_rules! tag_keys {
+    ($($name:ident = $osm:literal),* $(,)?) => {
+        #[allow(non_camel_case_types)]
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        enum Key {
+            $($name),*
+        }
+
+        const N_KEYS: usize = [$(Key::$name),*].len();
+
+        impl Key {
+            fn of(k: &str) -> Option<Key> {
+                match k {
+                    $($osm => Some(Key::$name),)*
+                    _ => None,
+                }
+            }
+        }
+
+        impl Tags {
+            $(pub fn $name(&self) -> Option<&str> {
+                self.get(Key::$name)
+            })*
+        }
+    };
+}
+
+tag_keys! {
+    highway = "highway",
+    name = "name",
+    maxspeed = "maxspeed",
+    oneway = "oneway",
+    oneway_bus = "oneway:bus",
+    oneway_psv = "oneway:psv",
+    junction = "junction",
+    motorcar = "motorcar",
+    motor_vehicle = "motor_vehicle",
+    vehicle = "vehicle",
+    access = "access",
+    bus = "bus",
+    psv = "psv",
+    surface = "surface",
+    service = "service",
+    layer = "layer",
+    bridge = "bridge",
+    tunnel = "tunnel",
+    lanes = "lanes",
+    lanes_forward = "lanes:forward",
+    lanes_backward = "lanes:backward",
+    lanes_reversible = "lanes:reversible",
+    route = "route",
+    footway = "footway",
+    conveying = "conveying",
+    area = "area",
+    indoor = "indoor",
+    cycleway_left = "cycleway:left",
+    cycleway_right = "cycleway:right",
+    cycleway_both = "cycleway:both",
+    segregated = "segregated",
+    foot = "foot",
+    bicycle = "bicycle",
+    cycleway = "cycleway",
+    sidewalk = "sidewalk",
+    sidewalk_both = "sidewalk:both",
+    sidewalk_left = "sidewalk:left",
+    sidewalk_right = "sidewalk:right",
+    motorroad = "motorroad",
+    oneway_foot = "oneway:foot",
+    oneway_bicycle = "oneway:bicycle",
 }
 
 /// An OSM way with a highway tag, in the node order of the file.

@@ -177,16 +177,12 @@ fn unit(v: P) -> P {
 
 fn level(w: &Way) -> i32 {
     let t = &w.tags;
-    if let Some(l) = t
-        .layer
-        .as_deref()
-        .and_then(|l| l.trim().parse::<i32>().ok())
-    {
+    if let Some(l) = t.layer().and_then(|l| l.trim().parse::<i32>().ok()) {
         return l;
     }
-    if t.tunnel.as_deref().unwrap_or("no") != "no" {
+    if t.tunnel().unwrap_or("no") != "no" {
         -1
-    } else if t.bridge.as_deref().unwrap_or("no") != "no" {
+    } else if t.bridge().unwrap_or("no") != "no" {
         1
     } else {
         0
@@ -199,8 +195,8 @@ pub fn infer_separate_sidewalks(ways: &mut [Way], coords: &Coords) -> usize {
     let mut raw: Vec<(usize, Vec<P>, u8)> = Vec::new(); // (index in ways, points, kind)
     for (wi, w) in ways.iter().enumerate() {
         let t = &w.tags;
-        let hw = t.highway.as_deref().unwrap_or("");
-        let is_sidewalk = hw == "footway" && t.footway.as_deref() == Some("sidewalk");
+        let hw = t.highway().unwrap_or("");
+        let is_sidewalk = hw == "footway" && t.footway() == Some("sidewalk");
         if !(CAR_ROADS.contains(&hw) || is_sidewalk) {
             continue;
         }
@@ -208,13 +204,13 @@ pub fn infer_separate_sidewalks(ways: &mut [Way], coords: &Coords) -> usize {
             2
         } else if WALKED.contains(&hw)
             && !matches!(
-                t.foot.as_deref(),
+                t.foot(),
                 Some("yes") | Some("designated") | Some("permissive")
             )
-            && t.sidewalk.is_none()
-            && t.sidewalk_both.is_none()
-            && t.sidewalk_left.is_none()
-            && t.sidewalk_right.is_none()
+            && t.sidewalk().is_none()
+            && t.sidewalk_both().is_none()
+            && t.sidewalk_left().is_none()
+            && t.sidewalk_right().is_none()
         {
             1
         } else {
@@ -250,11 +246,11 @@ pub fn infer_separate_sidewalks(ways: &mut [Way], coords: &Coords) -> usize {
                 cum.push(cum.last().unwrap() + l);
             }
             let t = &ways[*wi].tags;
-            let ow = if matches!(t.oneway.as_deref(), Some("yes") | Some("true") | Some("1"))
-                || t.junction.as_deref() == Some("roundabout")
+            let ow = if matches!(t.oneway(), Some("yes") | Some("true") | Some("1"))
+                || t.junction() == Some("roundabout")
             {
                 1
-            } else if t.oneway.as_deref() == Some("-1") {
+            } else if t.oneway() == Some("-1") {
                 -1
             } else {
                 0
@@ -390,7 +386,7 @@ pub fn infer_separate_sidewalks(ways: &mut [Way], coords: &Coords) -> usize {
     // 3. Tag the roads. (lines[k] is made from raw[k])
     let n = found.len();
     for k in found {
-        ways[raw[k].0].tags.sidewalk = Some("separate".into());
+        ways[raw[k].0].tags.set("sidewalk", "separate");
     }
     n
 }
