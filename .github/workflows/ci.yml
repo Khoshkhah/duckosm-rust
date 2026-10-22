@@ -30,10 +30,10 @@ jobs:
         run: cargo test --release -p duckosm-core
       - name: The hash agrees with the bundled DuckDB
         run: cargo test --release -p duckosm-duckdb
-      - name: duckosm-core and duckosm-parquet build for WebAssembly (compile check only)
+      - name: The WebAssembly module builds, and its byte functions give the files of the path functions
         run: |
-          cargo build --release -p duckosm-core --target wasm32-unknown-unknown
-          cargo build --release -p duckosm-parquet --no-default-features --features snap --target wasm32-unknown-unknown
+          cargo build --release -p duckosm-wasm --target wasm32-unknown-unknown
+          cargo test --release -p duckosm-wasm
 
   wheels:
     name: wheel ${{ matrix.name }}

@@ -128,7 +128,7 @@ python3 -m venv /tmp/t && /tmp/t/bin/pip install wheels/duckosm_rust-*.whl duckd
 
 `.github/workflows/ci.yml` builds the wheel on 5 targets (Linux x86_64 and aarch64 with manylinux 2_28, macOS
 x86_64 and arm64, Windows x64), plus the sdist, runs `tests/test_wheel.py` on each wheel, runs the Rust tests and
-the WebAssembly compile check. **It has never run**: the repository has no remote. It does not publish.
+the WebAssembly build with the test of `duckosm-wasm`. **It has never run**: the repository has no remote. It does not publish.
 
 What was checked on this machine (Linux x86_64, 2026-10-21):
 

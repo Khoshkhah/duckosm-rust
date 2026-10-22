@@ -332,7 +332,7 @@ the first measurement.
 
 **WebAssembly.** One tab has at most 4 GB of address space, so the target is a city or a small
 region. The crate `duckosm-wasm` has one function, `build(pbf_bytes, mode)`. It uses the default
-options of the CLI and returns the Parquet files of one mode as bytes: `edges`, `nodes`,
+options of the CLI and returns the Parquet files of one mode: `edges`, `nodes`,
 `private_edges` and `edge_id_map`. The page `crates/duckosm-wasm/www/index.html` reads a PBF file
 in the tab, runs `build` and gives the files as downloads. [development.md](development.md) tells
 how to build and test it.
@@ -343,63 +343,74 @@ how to build and test it.
   `write_edge_id_map_to`). In WebAssembly, the writer sends the bytes to JavaScript in parts of
   1 MB, so the output files are not in the WebAssembly memory. Each file is an array of
   `Uint8Array` parts, and `new Blob(parts)` gives the file.
+- `build` runs the same steps as `duckosm_build::build`: the sidewalk rule for the walking mode,
+  and the columns from `EdgeCols::of(mode, options)`. It cannot call `build` itself, because `build`
+  uses files and a clock (`Instant::now` panics in `wasm32-unknown-unknown`).
 - `osmpbf` uses `rayon`. In WebAssembly, `rayon` cannot start threads, so it does all the work on
   the current thread. It does not panic.
 - `parquet` uses Snappy. The `zstd` feature needs a C compiler for WebAssembly (`clang`), so it
   is off.
 - The `.duckdb` writer has no WebAssembly build.
 
-Measured on 2026-10-21, driving, with the same `.wasm` file in Node 24 and in headless Chromium.
-The `.wasm` file is 4.3 MB (0.75 MB with gzip, `wasm-opt` is not used). The native program uses all
-threads. Other jobs used the computer at the same time (load average 6 to 7), so the times can
-change by some seconds.
+Measured with the same `.wasm` file in Node 24 and in headless Chromium, driving. The `.wasm` file
+is 4.4 MB (0.81 MB with gzip, `wasm-opt` is not used). The native program uses all threads.
 
 | Area | PBF | Node | Chromium | WebAssembly memory | Native program |
 |---|---|---|---|---|---|
-| Monaco | 0.6 MB | 0.07 s | 0.07 s | 10 MiB | 0.04 s |
+| Monaco | 0.6 MB | 0.08 s | 0.09 s | 11 MiB | 0.04 s |
 | Stockholm county | 70 MB | 5.5 s | Not measured | 537 MiB | Not measured |
-| Estonia, 769,662 edges | 121 MB | 9.7 s | 10.3 s | 731 MiB | 5.2 s, 1.13 GB |
-| Kentucky, 2,114,699 edges | 148 MB | 21.3 s | 20.1 s | 2,297 MiB | 11.8 s, 3.24 GB |
-| Iran | 219 MB | Fails at 4,025 MiB | Not measured | | Not measured |
+| Estonia, 769,662 edges | 121 MB | 9.7 s | 10.3 s | 676 MiB | 5.2 s, 1.13 GB |
+| Kentucky, 2,114,699 edges | 148 MB | 22.1 s | 20.1 s | 2,053 MiB | 11.8 s, 3.24 GB |
+| Iran | 219 MB | Fails at 3,816 MiB | Not measured | | Not measured |
 
-For Monaco, the four files are equal, byte for byte, to the native output with Snappy.
-`tools/compare_with_duckosm.py` gives the same result as for the native output. For Estonia and
-Kentucky, all rows of the four files are equal to the native output. Kentucky is the largest area
-that is tested and fits. When an area does not fit, an allocation fails, and the module stops with
-`RuntimeError: unreachable`.
+The Monaco row is from 2026-10-22, after the rebase onto the speed step, the sidewalk rule and the
+connector. The other rows are from 2026-10-21 and 2026-10-22, before the rebase. They are not
+measured again, because the tests use Monaco (and Tartu) only until Kaveh asks for a large area.
+Other jobs used the computer during some measurements, so the times can change by some seconds.
 
-**Changes that make the memory smaller (2026-10-21).** Two probes measured the memory after each
-step: a counting allocator in a native program (the heap), and `memory_size` in WebAssembly (the
-WebAssembly memory only grows, so it shows the peak). Before the changes, Kentucky needed a heap
-peak of 5,665 MiB and did not fit. Now its heap peak is 2,400 MiB, and it uses 2,297 MiB of
-WebAssembly memory. The changes:
+For Monaco, in the three modes, all rows of the four files are equal to the native output. In the
+driving mode, the files are also equal, byte for byte, to the native output with Snappy (the test
+`bytes_equal_files`). Before the rebase, all rows for Estonia and Kentucky were equal to the native
+output. Kentucky is the largest area that is tested and fits. When an area does not fit, an
+allocation fails, and the module stops with `RuntimeError: unreachable`.
+
+**Changes that make the memory smaller (2026-10-21 and 2026-10-22).** Two probes measured the memory
+after each step: a counting allocator in a native program (the heap), and `memory_size` in
+WebAssembly (the WebAssembly memory only grows, so it shows the peak). Before the changes, Kentucky
+needed a heap peak of 5,665 MiB and did not fit. After the changes, its heap peak is 2,145 MiB on
+one thread, and it uses 2,053 MiB of WebAssembly memory. The changes:
 
 - The edges of a way share one `Arc<Attrs>`, which holds the 9 columns that come from the way.
   Before, each edge had its own copy of each string. An `Edge` now has 128 bytes, not 360 bytes,
-  and it does not allocate strings.
+  and it does not allocate strings. A connector gets an `Attrs` with only `highway`.
 - An edge keeps `seq`. The writer makes the `edge_ref` text (`Edge::edge_ref`).
+- The speed step does not clear the raw `maxspeed`, because `Attrs` is shared. The writer leaves out
+  the `maxspeed` column when the speed step ran, so the output is the same.
 - Step 9 moves the private edges out with `Vec::extract_if`. Before, `partition` made a second copy
   of all the edges.
-- Step 5 allocates the exact capacity, not twice the number of forward edges. `read_ways` releases
-  the capacity that the list of ways does not use.
+- Step 5 and `node_uses` allocate the exact capacity. `read_ways` releases the capacity that the
+  list of ways does not use.
 - `Tags` keeps the values of a way in one string, with a short list of keys. A `Way` now has
-  64 bytes, not 560 bytes. The ways of Kentucky use 133 MiB, not 428 MiB.
+  64 bytes, not 560 bytes. The ways of Kentucky use 133 MiB, not 428 MiB. `Tags::set` replaces a
+  value (the sidewalk rule uses it).
+- `global_junctions` and `local_junctions` sort a list of (node, flags) and count each run. Before,
+  each one had a hash map of all nodes (400 MiB for Kentucky).
+- `Coords` is a list sorted by node id, with 24 bytes for each node and no unused capacity. Before,
+  it was a hash map that grew by doubling. A lookup is a binary search. The native time of
+  Kentucky did not change (11 s).
+- Step 2 (self-loops) runs on each edge when step 1 makes it, so the forward edges are not copied
+  to a second list. The order of the edges does not change.
 - In WebAssembly, the Parquet files go to JavaScript while they are written (see above). Before,
   the output `Vec<u8>` values grew by doubling and added 768 MiB to the WebAssembly memory of
   Kentucky. The module also releases the ways and the coordinates before it writes.
 
 The output did not change. The native program is also faster: Kentucky took 44.6 s before.
 
-The WebAssembly memory of Kentucky grows most in these steps:
+After these changes, the WebAssembly memory of Kentucky grows in many small steps. The largest are
+`read_coords` (plus 531 MiB: the set of the necessary nodes and the list before the sort) and the
+edges themselves (steps 1 to 5, plus 881 MiB).
 
-- `read_coords`: plus 970 MiB. The coordinates are a hash map with 24 bytes for each node, plus the
-  unused capacity (400 MiB). The blocks of the file are read into small maps, and these are merged
-  into a map that doubles. The plan in this section (16 bytes for each node) is not done. A sorted
-  `Vec` with a binary search uses less memory, but each lookup is slower.
-- `global_junctions` and `local_junctions`: plus 400 MiB each. Each one counts all 9 M nodes in a
-  hash map. A sorted `Vec` of node ids uses less memory.
-
-Iran does not fit: on one thread, the native program has a heap peak of 5,387 MiB. For areas of
+Iran does not fit: on one thread, the native program has a heap peak of 5,222 MiB. For areas of
 this size, the build must write the edges while it makes them, and not keep all of them.
 
 ## 8. Risks
@@ -425,7 +436,7 @@ this size, the build must write the edges while it makes them, and not keep all 
 | M1 | Monaco, driving. All steps in the table that are marked "Yes", for driving, without `merge_segments`. | All 2,765 `edge_id` values equal the golden file. All columns in section 6 pass. GeoPandas and DuckDB read the output. **Reached in the spike** for the output in `.duckdb` and GeoParquet (see [benchmark.md](benchmark.md) for the speed; only Monaco is tested). |
 | M2 | Walking and cycling. `merge_segments` and `edge_id_map`. `lanes`. `private_edges`. | The same checks pass for the three modes, with `merge_segments` on and off. Tartu passes as a local golden (done, see section 6). **Reached on Monaco on 2026-10-21** for 9 variants (`merge_segments` and `global_junctions` on or off, the component filter, the sidewalk rule, the connector, the connector with the component filter, and everything on with speeds and the walk and cycle types) in the three modes: 0 rows differ in `edges`, `private_edges`, `nodes` and `edge_id_map`. Tartu is done (section 6). The sidewalk rule finds the same 46 roads in Monaco as duckOSM. It is a geometric rule with float thresholds, so a different area can give a difference at a threshold. It assumes right-hand traffic, as duckOSM does. |
 | M3 | Release 0.1.0. CLI, Python wheel, config subset, `layers.json`. | A fresh virtual environment runs `pip install` and builds Monaco with an equal result. The CLI binary does the same. The Estonia numbers are written down. Wheels build for Linux, macOS and Windows. |
-| M4 | WebAssembly and large areas. | A browser page turns a city PBF into GeoParquet. Estonia meets the targets. Optional: speeds and costs, turn restrictions. **Browser page done on 2026-10-21** (section 7): Monaco gives the same bytes as the native output. Estonia uses 731 MiB, and Kentucky (148 MB PBF) fits in 2,297 MiB. Not done: the large-area targets of the native program. |
+| M4 | WebAssembly and large areas. | A browser page turns a city PBF into GeoParquet. Estonia meets the targets. Optional: speeds and costs, turn restrictions. **Browser page done on 2026-10-21** (section 7): Monaco gives the same rows as the native output in the three modes. Estonia uses 676 MiB, and Kentucky (148 MB PBF) fits in 2,053 MiB. Not done: the large-area targets of the native program. |
 
 ## 10. Long-term vision
 
