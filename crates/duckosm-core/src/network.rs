@@ -48,8 +48,32 @@ impl Default for Options {
     }
 }
 
-/// Node id -> (longitude, latitude).
-pub type Coords = FxHashMap<i64, Pt>;
+/// Node id -> (longitude, latitude), as a list sorted by node id. It uses 24 bytes for each node,
+/// with no unused capacity. A hash map uses about twice that, and more while it grows.
+#[derive(Default, Debug)]
+pub struct Coords(Vec<(i64, Pt)>);
+
+impl Coords {
+    pub fn new(mut nodes: Vec<(i64, Pt)>) -> Coords {
+        nodes.sort_unstable_by_key(|n| n.0);
+        nodes.dedup_by_key(|n| n.0);
+        nodes.shrink_to_fit();
+        Coords(nodes)
+    }
+
+    pub fn get(&self, id: &i64) -> Option<&Pt> {
+        let i = self.0.binary_search_by_key(id, |n| n.0).ok()?;
+        Some(&self.0[i].1)
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
 
 /// A forward edge while the graph is built. `way` is the index of its way in the filtered list.
 struct Fwd {
@@ -57,60 +81,64 @@ struct Fwd {
     way: usize,
 }
 
-#[derive(Default)]
-struct Agg {
-    ways: u32,
-    road: u32,
-    road_end: u32,
+/// Count the uses of each node with a sort, not a hash map of all nodes: the entries use 16 bytes
+/// for each node of each way, and only the result map is a hash map. `uses` gives
+/// (node, flags) for each node of each way; `keep` gets the flags of all uses of one node.
+fn junction_map(
+    mut uses: Vec<(i64, u8)>,
+    keep: impl Fn(&[(i64, u8)]) -> Option<bool>,
+) -> FxHashMap<i64, bool> {
+    uses.sort_unstable();
+    let mut out = FxHashMap::default();
+    for run in uses.chunk_by(|a, b| a.0 == b.0) {
+        if let Some(v) = keep(run) {
+            out.insert(run[0].0, v);
+        }
+    }
+    out
+}
+
+const ROAD: u8 = 1;
+const END: u8 = 2;
+const ROAD_END: u8 = ROAD | END;
+
+/// Each node of each way, with ROAD if the way is a road and END at the first and last node.
+fn node_uses<'a>(ways: impl Iterator<Item = (&'a [i64], bool)> + Clone) -> Vec<(i64, u8)> {
+    let mut uses = Vec::with_capacity(ways.clone().map(|w| w.0.len()).sum());
+    for (refs, road) in ways {
+        let n = refs.len();
+        uses.extend(refs.iter().enumerate().map(|(pos, &node)| {
+            let end = if pos == 0 || pos + 1 == n { END } else { 0 };
+            (node, if road { ROAD } else { 0 } | end)
+        }));
+    }
+    uses
 }
 
 /// `main.global_junctions`: node id -> is a road junction (false: only paths are cut there).
 fn global_junctions(ways: &[Way]) -> FxHashMap<i64, bool> {
-    let mut agg: FxHashMap<i64, Agg> = FxHashMap::default();
-    for w in ways.iter().filter(|w| filter::is_built_highway(&w.tags)) {
-        let road = filter::is_road_raw(&w.tags);
-        let n = w.refs.len();
-        for (pos, &node) in w.refs.iter().enumerate() {
-            let a = agg.entry(node).or_default();
-            a.ways += 1;
-            if road {
-                a.road += 1;
-                if pos == 0 || pos + 1 == n {
-                    a.road_end += 1;
-                }
-            }
-        }
-    }
-    agg.into_iter()
-        .filter(|(_, a)| {
-            (a.road > 0 && (a.ways > 1 || a.road_end > 0)) || (a.road == 0 && a.ways > 1)
-        })
-        .map(|(n, a)| (n, a.road > 0))
-        .collect()
+    let built = ways.iter().filter(|w| filter::is_built_highway(&w.tags));
+    let uses = node_uses(built.map(|w| (&w.refs[..], filter::is_road_raw(&w.tags))));
+    junction_map(uses, |run| {
+        let road = run.iter().filter(|u| u.1 & ROAD != 0).count();
+        let road_end = run.iter().filter(|u| u.1 & ROAD_END == ROAD_END).count();
+        let ways = run.len();
+        ((road > 0 && (ways > 1 || road_end > 0)) || (road == 0 && ways > 1)).then_some(road > 0)
+    })
 }
 
 /// `junctions`: the nodes where the ways of this mode meet, or end. The value is `is_road_junction`.
 fn local_junctions(mw: &[ModeWay]) -> FxHashMap<i64, bool> {
-    // (ways, way ends, road way ends) at each node
-    let mut cnt: FxHashMap<i64, (u32, u32, u32)> = FxHashMap::default();
-    for w in mw {
-        let n = w.refs.len();
-        let is_road = !NON_ROAD.contains(&w.attrs.highway.as_str());
-        for (pos, &node) in w.refs.iter().enumerate() {
-            let c = cnt.entry(node).or_default();
-            c.0 += 1;
-            if pos == 0 || pos + 1 == n {
-                c.1 += 1;
-                if is_road {
-                    c.2 += 1;
-                }
-            }
-        }
-    }
-    cnt.into_iter()
-        .filter(|(_, c)| c.0 > 1 || c.1 > 0)
-        .map(|(n, c)| (n, c.0 > 1 || c.2 > 0))
-        .collect()
+    let uses = node_uses(
+        mw.iter()
+            .map(|w| (&w.refs[..], !NON_ROAD.contains(&w.attrs.highway.as_str()))),
+    );
+    junction_map(uses, |run| {
+        let ways = run.len();
+        let ends = run.iter().filter(|u| u.1 & END != 0).count();
+        let road_ends = run.iter().filter(|u| u.1 & ROAD_END == ROAD_END).count();
+        (ways > 1 || ends > 0).then_some(ways > 1 || road_ends > 0)
+    })
 }
 
 /// Cut the nodes of a way into groups of node positions, one group for each edge (`_segment_ways`).
@@ -206,8 +234,10 @@ pub fn build_network(
     stats.ways_kept = mw.len();
     let lj = local_junctions(&mw);
 
-    // 1. Cut every way into forward edges.
+    // 1. Cut every way into forward edges. Step 2 runs on each edge as it is made, so the forward
+    // edges are not copied to a second list.
     let mut fwd: Vec<Fwd> = Vec::new();
+    let mut virtual_nodes: Vec<Node> = Vec::new();
     for (wi, w) in mw.iter().enumerate() {
         let is_road = !NON_ROAD.contains(&w.attrs.highway.as_str());
         let split: Vec<bool> = w
@@ -241,7 +271,8 @@ pub fn build_network(
                 continue;
             }
             let length_m = geom::line_length_m(&geometry);
-            fwd.push(Fwd {
+            stats.forward_edges += 1;
+            let f = Fwd {
                 e: Edge {
                     edge_id: 0,
                     seq: None,
@@ -266,42 +297,12 @@ pub fn build_network(
                     },
                 },
                 way: wi,
-            });
+            };
+            if push_split_loop(&mut fwd, f, &mut virtual_nodes) {
+                stats.self_loops_split += 1;
+            }
         }
     }
-    stats.forward_edges = fwd.len();
-    let mut virtual_nodes: Vec<Node> = Vec::new();
-
-    // 2. Split the self-loops with a virtual node in the middle.
-    let mut out: Vec<Fwd> = Vec::with_capacity(fwd.len());
-    for f in fwd {
-        if f.e.source != f.e.target {
-            out.push(f);
-            continue;
-        }
-        let rr = geom::remove_repeated(&f.e.geometry);
-        if rr.len() < 3 {
-            continue; // a loop of fewer than 3 distinct points disappears
-        }
-        let v = hash::virtual_node_loop(f.e.osm_id, f.e.source, &f.e.refs);
-        let mid = geom::interpolate(&rr, 0.5);
-        let (r1, r2) = split_refs(&f.e.refs);
-        virtual_nodes.push(Node {
-            node_id: v,
-            lon: mid.0,
-            lat: mid.1,
-        });
-        out.push(Fwd {
-            e: half(&f.e, f.e.source, v, r1, geom::substring(&rr, 0.0, 0.5)),
-            way: f.way,
-        });
-        out.push(Fwd {
-            e: half(&f.e, v, f.e.source, r2, geom::substring(&rr, 0.5, 1.0)),
-            way: f.way,
-        });
-        stats.self_loops_split += 1;
-    }
-    let mut fwd = out;
 
     // 2b. Merge the chains of edges that are one road.
     let mut edge_id_map: Vec<MapRow> = Vec::new();
@@ -370,10 +371,11 @@ pub fn build_network(
     fwd = split_arcs(fwd, &sel, &mut virtual_nodes);
 
     // 5. Add the reverse edge of each two-way way (and of a one-way way with a bus lane).
-    let mut rev: Vec<Edge> = Vec::new();
+    let has_rev = |f: &Fwd| !f.e.oneway || mw[f.way].bus_back;
+    let mut rev: Vec<Edge> = Vec::with_capacity(fwd.iter().filter(|f| has_rev(f)).count());
     for f in &fwd {
         let w = &mw[f.way];
-        if !f.e.oneway || w.bus_back {
+        if has_rev(f) {
             let mut r = f.e.clone();
             r.source = f.e.target;
             r.target = f.e.source;
@@ -497,6 +499,36 @@ pub fn build_network(
         edge_id_map,
         stats,
     })
+}
+
+/// 2. Split a self-loop with a virtual node in the middle, and push the two halves. Push any other
+/// edge as it is. Returns true for a self-loop that is split.
+fn push_split_loop(fwd: &mut Vec<Fwd>, f: Fwd, vnodes: &mut Vec<Node>) -> bool {
+    if f.e.source != f.e.target {
+        fwd.push(f);
+        return false;
+    }
+    let rr = geom::remove_repeated(&f.e.geometry);
+    if rr.len() < 3 {
+        return false; // a loop of fewer than 3 distinct points disappears
+    }
+    let v = hash::virtual_node_loop(f.e.osm_id, f.e.source, &f.e.refs);
+    let mid = geom::interpolate(&rr, 0.5);
+    let (r1, r2) = split_refs(&f.e.refs);
+    vnodes.push(Node {
+        node_id: v,
+        lon: mid.0,
+        lat: mid.1,
+    });
+    fwd.push(Fwd {
+        e: half(&f.e, f.e.source, v, r1, geom::substring(&rr, 0.0, 0.5)),
+        way: f.way,
+    });
+    fwd.push(Fwd {
+        e: half(&f.e, v, f.e.source, r2, geom::substring(&rr, 0.5, 1.0)),
+        way: f.way,
+    });
+    true
 }
 
 /// Split the forward edges in `sel` at their midpoint with a virtual node (`_split_arcs_at_midpoint`).

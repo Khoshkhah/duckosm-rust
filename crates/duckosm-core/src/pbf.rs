@@ -66,27 +66,26 @@ fn ways_of<R: Read + Send>(reader: ElementReader<R>) -> Result<Vec<Way>, String>
 }
 
 fn coords_of<R: Read + Send>(reader: ElementReader<R>, ways: &[Way]) -> Result<Coords, String> {
-    let needed: FxHashSet<i64> = ways.iter().flat_map(|w| w.refs.iter().copied()).collect();
-    reader
+    // the exact size at once: a set that grows by doubling keeps the old and the new table
+    let mut needed: FxHashSet<i64> = FxHashSet::default();
+    needed.reserve(ways.iter().map(|w| w.refs.len()).sum());
+    needed.extend(ways.iter().flat_map(|w| w.refs.iter().copied()));
+    let nodes = reader
         .par_map_reduce(
-            |el| {
-                let mut c = Coords::default();
-                match el {
-                    Element::Node(n) if needed.contains(&n.id()) => {
-                        c.insert(n.id(), (n.lon(), n.lat()));
-                    }
-                    Element::DenseNode(n) if needed.contains(&n.id()) => {
-                        c.insert(n.id(), (n.lon(), n.lat()));
-                    }
-                    _ => {}
+            |el| match el {
+                Element::Node(n) if needed.contains(&n.id()) => vec![(n.id(), (n.lon(), n.lat()))],
+                Element::DenseNode(n) if needed.contains(&n.id()) => {
+                    vec![(n.id(), (n.lon(), n.lat()))]
                 }
-                c
+                _ => Vec::new(),
             },
-            Coords::default,
-            |mut a, b| {
-                a.extend(b);
+            Vec::new,
+            |mut a, mut b| {
+                a.append(&mut b);
                 a
             },
         )
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    drop(needed);
+    Ok(Coords::new(nodes))
 }
