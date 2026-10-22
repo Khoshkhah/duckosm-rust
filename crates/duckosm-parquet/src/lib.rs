@@ -9,7 +9,7 @@ use arrow_schema::{DataType, Field, Schema};
 use duckosm_core::geom::Pt;
 use duckosm_core::model::{Edge, Node};
 use parquet::arrow::ArrowWriter;
-use parquet::basic::{Compression, ZstdLevel};
+use parquet::basic::Compression;
 use parquet::file::metadata::KeyValue;
 use parquet::file::properties::WriterProperties;
 use std::fs::File;
@@ -25,9 +25,24 @@ fn geo_metadata(geometry_type: &str) -> KeyValue {
     KeyValue::new("geo".to_string(), json)
 }
 
+#[cfg(feature = "zstd")]
+fn compression() -> Compression {
+    Compression::ZSTD(parquet::basic::ZstdLevel::default())
+}
+
+#[cfg(all(not(feature = "zstd"), feature = "snap"))]
+fn compression() -> Compression {
+    Compression::SNAPPY
+}
+
+#[cfg(not(any(feature = "zstd", feature = "snap")))]
+fn compression() -> Compression {
+    Compression::UNCOMPRESSED
+}
+
 fn props(geometry_type: &str) -> WriterProperties {
     WriterProperties::builder()
-        .set_compression(Compression::ZSTD(ZstdLevel::default()))
+        .set_compression(compression())
         .set_max_row_group_row_count(Some(ROW_GROUP))
         .set_key_value_metadata(Some(vec![geo_metadata(geometry_type)]))
         .build()

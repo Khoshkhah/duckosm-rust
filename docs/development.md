@@ -7,7 +7,7 @@
 | `rustc`, `cargo`, `rustup` | Installed on 2026-10-21 with `rustup` at user level (`~/.cargo`, `~/.rustup`, profile `default`, channel `stable`). Version 1.99.1. The installer added `~/.cargo/bin` to the `PATH` in the shell profile. |
 | `g++`, `cmake`, `make` | Installed (system). The `duckdb` crate needs a C++ compiler. |
 | `maturin` | Not installed. It is needed from M3 (Python wheel). |
-| `wasm32-unknown-unknown` target | Not installed. It is needed from M4. |
+| `wasm32-unknown-unknown` target | Installed (`rustup target add`). Compile checks only; see section 7 of the design. |
 
 ## Install Rust
 
@@ -16,7 +16,7 @@ Done on this machine. On a new machine:
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile default
 source "$HOME/.cargo/env"
-rustup target add wasm32-unknown-unknown   # M4
+rustup target add wasm32-unknown-unknown   # M4 (compile check done)
 ```
 
 ## Build and test
@@ -52,3 +52,10 @@ python tools/edge_id_reference.py path/to/area.duckdb   # every edge of a duckOS
 ## Benchmark
 
 See [benchmark.md](benchmark.md). The runner is `bench/run_bench.py`.
+
+## WebAssembly compile check
+
+```bash
+cargo build --release -p duckosm-core --target wasm32-unknown-unknown
+cargo build --release -p duckosm-parquet --no-default-features --features snap --target wasm32-unknown-unknown
+```

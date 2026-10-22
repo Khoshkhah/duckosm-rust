@@ -283,7 +283,15 @@ the first measurement.
 **WebAssembly.** One tab has at most 4 GB of address space, so the target is a city or a small
 region. The code uses one thread (no `rayon`) and no C libraries. The `parquet` crate must use a
 compression that is pure Rust. The input comes from a `Read` value over data from JavaScript.
-M0 includes a check that `duckosm-core` builds for `wasm32-unknown-unknown`.
+Checked on 2026-10-21 (`cargo build --target wasm32-unknown-unknown`, compile only, nothing run in a browser):
+
+- `duckosm-core` without the `pbf` feature builds.
+- `duckosm-core` with `osmpbf` builds (pure-Rust zlib `miniz_oxide`). But `pbf.rs` today reads a file path
+  and uses `rayon`, so it cannot run in the browser. A reader for a `Read` value, without threads, is
+  still to write.
+- `duckosm-parquet` builds with `--no-default-features --features snap`. The default `zstd` feature
+  needs a C compiler for WebAssembly (`clang`) and fails, so the WebAssembly build uses Snappy.
+- Not checked: the `.duckdb` writer (it has no WebAssembly build), `wasm-bindgen`, the size of the module.
 
 ## 8. Risks
 
@@ -304,7 +312,7 @@ M0 includes a check that `duckosm-core` builds for `wasm32-unknown-unknown`.
 
 | M | Content | Exit criteria |
 |---|---|---|
-| M0 | Setup and spike. Rust installed. Cargo workspace. `edge_id` module. Golden files. A CLI that builds the driving network of one PBF and writes `.duckdb` and GeoParquet. | `cargo test` passes the hash vectors and the Monaco golden test. **Done on 2026-10-21**, except: the Monaco double build (is the Python output the same on each run?) and the build for `wasm32-unknown-unknown` are still open. |
+| M0 | Setup and spike. Rust installed. Cargo workspace. `edge_id` module. Golden files. A CLI that builds the driving network of one PBF and writes `.duckdb` and GeoParquet. | `cargo test` passes the hash vectors and the Monaco golden test. **Done on 2026-10-21.** The Python output is the same on each run (two golden builds of Monaco: 0 rows differ). The build for `wasm32-unknown-unknown` is checked for compile only (section 7). |
 | M1 | Monaco, driving. All steps in the table that are marked "Yes", for driving, without `merge_segments`. | All 2,765 `edge_id` values equal the golden file. All columns in section 6 pass. GeoPandas and DuckDB read the output. **Reached in the spike** for the output in `.duckdb` and GeoParquet (see [benchmark.md](benchmark.md) for the speed; only Monaco is tested). |
 | M2 | Walking and cycling. `merge_segments` and `edge_id_map`. `lanes`. `private_edges`. | The same checks pass for the three modes, with `merge_segments` on and off. Tartu passes as a local golden. |
 | M3 | Release 0.1.0. CLI, Python wheel, config subset, `layers.json`. | A fresh virtual environment runs `pip install` and builds Monaco with an equal result. The CLI binary does the same. The Estonia numbers are written down. Wheels build for Linux, macOS and Windows. |
