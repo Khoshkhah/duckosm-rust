@@ -50,6 +50,9 @@ def main():
     cfg = work / "config.yaml"
     cfg.write_text((HERE / "python_network_step.yaml").read_text().replace("PBF", str(pbf)).replace("name: bench", f"name: {a.label}"))
     jobs = []   # (name, command, runs, step names)
+    # start-up: the program starts and stops without a build (imports, loading the libraries)
+    jobs.append(("start-up only, duckOSM: `duckosm --version`", [VENV / "duckosm", "--version"], a.runs, None))
+    jobs.append(("start-up only, duckosm-rust: `duckosm-rust --version`", [RUST, "--version"], a.runs, None))
     if e2e_runs:
         jobs.append(("duckOSM 0.6.0: `duckosm build --config config.yaml`", [VENV / "duckosm", "build", "--config", cfg], e2e_runs, None))
     jobs.append(("duckOSM 0.6.0: same, lane profile off (`bench/python_steps.py config.yaml --no-lane-profile`)",
