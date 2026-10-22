@@ -2,7 +2,8 @@
 //! write GeoParquet and/or a `.duckdb` file.
 
 use duckosm_core::filter::Mode;
-use duckosm_core::network::{build_network, Options};
+use duckosm_core::fixes::OsmFixes;
+use duckosm_core::network::{build_network_with, Options};
 use duckosm_core::{pbf, sidewalks};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -25,6 +26,8 @@ pub struct Params {
     pub options: Options,
     /// Run the sidewalk rule when the walking mode is built (duckOSM `infer_separate_sidewalks`).
     pub infer_sidewalks: bool,
+    /// A duckOSM OSM fixes file (duckOSM `osm_overrides`).
+    pub osm_fixes: Option<PathBuf>,
 }
 
 impl Default for Params {
@@ -36,6 +39,7 @@ impl Default for Params {
             name: "area".to_string(),
             options: Options::default(),
             infer_sidewalks: true,
+            osm_fixes: None,
         }
     }
 }
@@ -49,6 +53,8 @@ pub struct ModeSummary {
     pub private_edges: usize,
     pub edge_id_map: usize,
     pub connectors: usize,
+    /// The per-mode OSM fixes that matched a way of this mode.
+    pub osm_fixes: usize,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -86,9 +92,16 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
             .push((what.to_string(), t.elapsed().as_secs_f64()));
         t = Instant::now();
     };
+    let fixes = match &p.osm_fixes {
+        Some(f) => config::read_osm_fixes(f)?,
+        None => OsmFixes::default(),
+    };
     let mut ways = pbf::read_ways(pbf_path)?;
     lap("read ways", &mut sum);
-    let coords = pbf::read_coords(pbf_path, &ways)?;
+    // duckOSM: the fixes on the raw ways come before any step reads them
+    fixes.apply_to_ways(&mut ways)?;
+    let mut coords = pbf::read_coords(pbf_path, &ways)?;
+    fixes.add_new_nodes(&mut ways, &mut coords);
     lap("read nodes", &mut sum);
     if p.infer_sidewalks && p.modes.contains(&Mode::Walking) {
         sum.sidewalk_roads = sidewalks::infer_separate_sidewalks(&mut ways, &coords);
@@ -102,7 +115,7 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
     };
     std::fs::create_dir_all(&pq_dir).map_err(|e| e.to_string())?;
     for mode in &p.modes {
-        let net = build_network(&ways, &coords, *mode, &p.options)?;
+        let net = build_network_with(&ways, &coords, *mode, &p.options, &fixes)?;
         lap(&format!("build {}", mode.name()), &mut sum);
         let oc = duckosm_parquet::EdgeCols::of(*mode, &p.options);
         let n = mode.name();
@@ -138,6 +151,7 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
             private_edges: net.private_edges.len(),
             edge_id_map: net.edge_id_map.len(),
             connectors: net.stats.connectors,
+            osm_fixes: net.stats.osm_fixes,
         });
     }
     #[cfg(feature = "duckdb")]

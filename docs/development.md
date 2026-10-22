@@ -94,6 +94,15 @@ cmp target/tmp/duckosm-wasm-native/edges_driving.parquet out-wasm/edges_driving.
 
 Do the `cmp` step for the other three files too. `tools/compare_with_duckosm.py` also reads the
 `out-wasm` folder.
+## Check the OSM fixes
+
+`monaco.duckdb` of duckOSM is built with its OSM fixes file, so all driving rows must be equal:
+
+```bash
+./target/release/duckosm-rust tests/data/monaco.osm.pbf -o out-fixes --fixes ../duckOSM/osm_overrides/osm_overrides.yaml
+python tools/compare_with_duckosm.py ../duckOSM/monaco.duckdb out-fixes driving
+```
+
 ## Check another area (example: Tartu)
 
 Build the golden with duckOSM, then run duckosm-rust with the matching flags and compare. The yaml is

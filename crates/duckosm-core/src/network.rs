@@ -3,6 +3,7 @@
 //! Not in this version: `merge_segments`, OSM overrides, speeds, costs, turn restrictions, H3.
 
 use crate::filter::{self, Mode, ModeWay, NON_ROAD};
+use crate::fixes::OsmFixes;
 use crate::geom::{self, Pt};
 use crate::hash;
 use crate::model::{Attrs, Edge, MapRow, Network, Node, Stats, Way};
@@ -64,6 +65,13 @@ impl Coords {
     pub fn get(&self, id: &i64) -> Option<&Pt> {
         let i = self.0.binary_search_by_key(id, |n| n.0).ok()?;
         Some(&self.0[i].1)
+    }
+
+    /// Add nodes (the new nodes of the OSM fixes). A node that is already here keeps its place.
+    pub fn extend(&mut self, nodes: impl IntoIterator<Item = (i64, Pt)>) {
+        let mut all = std::mem::take(&mut self.0);
+        all.extend(nodes);
+        *self = Coords::new(all);
     }
 
     pub fn len(&self) -> usize {
@@ -218,6 +226,18 @@ pub fn build_network(
     mode: Mode,
     opts: &Options,
 ) -> Result<Network, String> {
+    build_network_with(all_ways, coords, mode, opts, &OsmFixes::default())
+}
+
+/// The network of one mode, with the per-mode rules of the OSM fixes. The other rules act on the
+/// ways before (`OsmFixes::apply_to_ways`).
+pub fn build_network_with(
+    all_ways: &[Way],
+    coords: &Coords,
+    mode: Mode,
+    opts: &Options,
+    fixes: &OsmFixes,
+) -> Result<Network, String> {
     let mut stats = Stats {
         ways_read: all_ways.len(),
         ..Default::default()
@@ -227,10 +247,12 @@ pub fn build_network(
     } else {
         FxHashMap::default()
     };
-    let mw: Vec<ModeWay> = all_ways
+    let mut mw: Vec<ModeWay> = all_ways
         .iter()
         .filter_map(|w| filter::mode_way(w, mode, opts.cycling_dismount))
         .collect();
+    // duckOSM: after RoadFilter and before GraphBuilder, so oneway and the lanes act on the edges
+    stats.osm_fixes = fixes.apply_to_mode(&mut mw, mode);
     stats.ways_kept = mw.len();
     let lj = local_junctions(&mw);
 

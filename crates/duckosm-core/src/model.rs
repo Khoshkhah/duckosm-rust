@@ -66,6 +66,11 @@ impl Tags {
         })
     }
 
+    /// The kept tags as (OSM key, value).
+    pub fn osm_pairs(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.pairs().map(|(k, v)| (k.osm(), v))
+    }
+
     fn get(&self, key: Key) -> Option<&str> {
         self.pairs().find(|p| p.0 == key).map(|p| p.1)
     }
@@ -87,6 +92,12 @@ macro_rules! tag_keys {
                 match k {
                     $($osm => Some(Key::$name),)*
                     _ => None,
+                }
+            }
+
+            fn osm(self) -> &'static str {
+                match self {
+                    $(Key::$name => $osm,)*
                 }
             }
         }
@@ -244,4 +255,6 @@ pub struct Stats {
     pub merged_pieces: usize,
     pub private_edges: usize,
     pub dropped_by_component_filter: usize,
+    /// The per-mode rules of the OSM fixes that matched a way of this mode.
+    pub osm_fixes: usize,
 }

@@ -22,7 +22,8 @@ use std::path::PathBuf;
     pbf, out, *, modes = vec!["driving".to_string()], formats = None, name = "area".to_string(),
     merge_segments = true, global_junctions = true, keep_largest_component = true,
     cycling_dismount = true, infer_separate_sidewalks = true, connectivity_rescue = true,
-    connect_snap_m = 10.0, process_speeds = true, calculate_costs = true, functional_types = true
+    connect_snap_m = 10.0, process_speeds = true, calculate_costs = true, functional_types = true,
+    osm_overrides = None
 ))]
 #[allow(clippy::too_many_arguments)]
 fn build<'py>(
@@ -42,6 +43,7 @@ fn build<'py>(
     process_speeds: bool,
     calculate_costs: bool,
     functional_types: bool,
+    osm_overrides: Option<PathBuf>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let mut p = Params {
         name,
@@ -67,6 +69,7 @@ fn build<'py>(
         }
     }
     p.infer_sidewalks = infer_separate_sidewalks;
+    p.osm_fixes = osm_overrides;
     p.options = NetworkOptions {
         keep_largest_component,
         cycling_dismount,
@@ -95,6 +98,7 @@ fn summary_dict<'py>(py: Python<'py>, sum: &Summary) -> PyResult<Bound<'py, PyDi
         d.set_item("private_edges", m.private_edges)?;
         d.set_item("edge_id_map", m.edge_id_map)?;
         d.set_item("connectors", m.connectors)?;
+        d.set_item("osm_fixes", m.osm_fixes)?;
         modes.set_item(m.mode.name(), d)?;
     }
     res.set_item("modes", modes)?;

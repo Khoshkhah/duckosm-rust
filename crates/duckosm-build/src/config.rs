@@ -11,6 +11,7 @@
 
 use crate::Params;
 use duckosm_core::filter::Mode;
+use duckosm_core::fixes::{NewNode, NewWay, OsmFixes, WayFix};
 use duckosm_core::network::Options;
 use std::path::{Path, PathBuf};
 use yaml_rust2::{Yaml, YamlLoader};
@@ -250,8 +251,9 @@ pub fn read(path: &Path, pbf_is_cut: bool, strict: bool) -> Result<FromConfig, S
     if clip.f64("min_component_edges", 1.0)? > 1.0 {
         return Err("config: clip.min_component_edges > 1 is not supported".into());
     }
-    if top.str("osm_overrides")?.is_some() {
-        skip("osm_overrides (the OSM fixes) are not applied".into())?;
+    let osm_fixes = top.str("osm_overrides")?.map(PathBuf::from);
+    if let Some(f) = osm_fixes.as_ref().filter(|f| !f.exists()) {
+        return Err(format!("OSM fixes file not found: {}", f.display()));
     }
 
     // the modes
@@ -381,6 +383,7 @@ pub fn read(path: &Path, pbf_is_cut: bool, strict: bool) -> Result<FromConfig, S
         name,
         options: opts,
         infer_sidewalks: options.bool("infer_separate_sidewalks", true)?,
+        osm_fixes,
         ..Params::default()
     };
     Ok(FromConfig {
@@ -390,6 +393,184 @@ pub fn read(path: &Path, pbf_is_cut: bool, strict: bool) -> Result<FromConfig, S
         skipped,
         ignored,
     })
+}
+
+const FIX_TOP: [&str; 3] = ["overrides", "new_ways", "turn_restrictions"];
+const FIX_RULE: [&str; 13] = [
+    "osm_id",
+    "oneway",
+    "lanes",
+    "lanes_forward",
+    "lanes_backward",
+    "layer",
+    "exclude_modes",
+    "remove",
+    "tags",
+    "keep_nodes",
+    "turn_lanes_forward",
+    "turn_lanes_backward",
+    "note",
+];
+const FIX_NEW_WAY: [&str; 6] = ["id", "nodes", "tags", "tags_from", "source", "note"];
+
+/// Read a duckOSM OSM fixes file (`osm_overrides`). The rules for the arrows of the lanes and the
+/// `turn_restrictions` are read but not used (they are not part of the network step).
+pub fn read_osm_fixes(path: &Path) -> Result<OsmFixes, String> {
+    let err = |e: String| format!("{}: {e}", path.display());
+    let text = std::fs::read_to_string(path).map_err(|e| err(e.to_string()))?;
+    let docs = YamlLoader::load_from_str(&text).map_err(|e| err(e.to_string()))?;
+    let empty = yaml_rust2::yaml::Hash::new();
+    let root = match docs.first() {
+        None | Some(Yaml::Null) => &empty,
+        Some(Yaml::Hash(h)) => h,
+        Some(_) => return Err(err("the file must be a map of keys".into())),
+    };
+    let int = |v: &Yaml, what: &str| {
+        v.as_i64()
+            .ok_or_else(|| err(format!("{what} must be an integer, not {v:?}")))
+    };
+    let keys = |h: &yaml_rust2::yaml::Hash, known: &[&str], what: &str| -> Result<(), String> {
+        for k in h.keys() {
+            let k = k.as_str().unwrap_or("?");
+            if !known.contains(&k) {
+                return Err(err(format!("unknown key '{k}' in {what}")));
+            }
+        }
+        Ok(())
+    };
+    let tags = |v: Option<&Yaml>, what: &str| -> Result<Vec<(String, String)>, String> {
+        let Some(v) = v else { return Ok(Vec::new()) };
+        let h = v
+            .as_hash()
+            .ok_or_else(|| err(format!("{what}.tags must be a map")))?;
+        h.iter()
+            .map(|(k, v)| {
+                let val = match v {
+                    Yaml::String(s) => s.clone(),
+                    Yaml::Integer(i) => i.to_string(),
+                    Yaml::Real(r) => r.clone(),
+                    _ => {
+                        return Err(err(format!(
+                            "{what}.tags: write the value of '{k:?}' as a text in quotes"
+                        )))
+                    }
+                };
+                Ok((k.as_str().unwrap_or("?").to_string(), val))
+            })
+            .collect()
+    };
+    keys(root, &FIX_TOP, "the file")?;
+    let list = |key: &str| -> Result<&[Yaml], String> {
+        match root.get(&Yaml::String(key.into())) {
+            None | Some(Yaml::Null) => Ok(&[]),
+            Some(Yaml::Array(a)) => Ok(a),
+            Some(_) => Err(err(format!("{key} must be a list"))),
+        }
+    };
+    let mut fixes = OsmFixes::default();
+    for r in list("overrides")? {
+        let h = r
+            .as_hash()
+            .ok_or_else(|| err("each rule in overrides must be a map".into()))?;
+        keys(h, &FIX_RULE, "a rule of overrides")?;
+        let s = Section {
+            name: "overrides",
+            map: Some(h),
+        };
+        let id = s
+            .get("osm_id")
+            .ok_or_else(|| err("a rule of overrides has no osm_id".into()))?;
+        let osm_id = int(id, "osm_id")?;
+        let what = format!("overrides (osm_id {osm_id})");
+        let opt_int = |k: &str| {
+            s.get(k)
+                .map(|v| int(v, &format!("{what}.{k}")).map(|n| n as i32))
+                .transpose()
+        };
+        let keep_nodes = match s.get("keep_nodes") {
+            None => None,
+            Some(Yaml::Array(a)) if a.len() == 2 => {
+                Some((int(&a[0], "keep_nodes")?, int(&a[1], "keep_nodes")?))
+            }
+            Some(_) => return Err(err(format!("{what}.keep_nodes must be [from, to]"))),
+        };
+        let exclude_modes = match s.get("exclude_modes") {
+            None => Vec::new(),
+            Some(Yaml::Array(a)) => {
+                let names: Vec<String> = a
+                    .iter()
+                    .map(|m| m.as_str().unwrap_or("?").to_string())
+                    .collect();
+                Mode::parse_all(&names).map_err(err)?
+            }
+            Some(_) => return Err(err(format!("{what}.exclude_modes must be a list"))),
+        };
+        fixes.ways.push(WayFix {
+            osm_id,
+            remove: s.bool("remove", false).map_err(err)?,
+            keep_nodes,
+            tags: tags(s.get("tags"), &what)?,
+            oneway: s
+                .get("oneway")
+                .map(|_| s.bool("oneway", false))
+                .transpose()
+                .map_err(err)?,
+            lanes: opt_int("lanes")?,
+            lanes_forward: opt_int("lanes_forward")?,
+            lanes_backward: opt_int("lanes_backward")?,
+            layer: opt_int("layer")?,
+            exclude_modes,
+        });
+    }
+    for n in list("new_ways")? {
+        let h = n
+            .as_hash()
+            .ok_or_else(|| err("each way in new_ways must be a map".into()))?;
+        keys(h, &FIX_NEW_WAY, "a way of new_ways")?;
+        let s = Section {
+            name: "new_ways",
+            map: Some(h),
+        };
+        let id = int(
+            s.get("id")
+                .ok_or_else(|| err("a way of new_ways has no id".into()))?,
+            "new_ways.id",
+        )?;
+        let what = format!("new_ways (id {id})");
+        let nodes = s
+            .get("nodes")
+            .and_then(|v| v.as_vec())
+            .ok_or_else(|| err(format!("{what}.nodes must be a list")))?
+            .iter()
+            .map(|x| match x {
+                Yaml::Integer(i) => Ok(NewNode::Osm(*i)),
+                Yaml::Array(p) if p.len() == 2 => {
+                    let f = |v: &Yaml| match v {
+                        Yaml::Integer(i) => Some(*i as f64),
+                        Yaml::Real(r) => r.parse().ok(),
+                        _ => None,
+                    };
+                    match (f(&p[0]), f(&p[1])) {
+                        (Some(lon), Some(lat)) => Ok(NewNode::At((lon, lat))),
+                        _ => Err(err(format!("{what}.nodes: [lon, lat] must be numbers"))),
+                    }
+                }
+                _ => Err(err(format!(
+                    "{what}.nodes: a node is an OSM node id or [lon, lat]"
+                ))),
+            })
+            .collect::<Result<_, _>>()?;
+        fixes.new_ways.push(NewWay {
+            id,
+            nodes,
+            tags: tags(s.get("tags"), &what)?,
+            tags_from: s
+                .get("tags_from")
+                .map(|v| int(v, "tags_from"))
+                .transpose()?,
+        });
+    }
+    Ok(fixes)
 }
 
 #[cfg(test)]
@@ -409,6 +590,53 @@ mod tests {
             "{}/../../tests/data/monaco_sample.osm.pbf",
             env!("CARGO_MANIFEST_DIR")
         )
+    }
+
+    #[test]
+    fn osm_fixes_file() {
+        use duckosm_core::network::build_network_with;
+        use duckosm_core::pbf;
+        let f = write(
+            "overrides:\n  - osm_id: 93137596\n    lanes: 1\n    note: Larvotto\n  - osm_id: 1\n    \
+             exclude_modes: [walking]\n    keep_nodes: [5, 6]\n    tags: {highway: residential, lanes: 2}\n    \
+             turn_lanes_forward: left|through\nnew_ways:\n  - id: 9000000000001\n    source: nvdb:1\n    \
+             nodes: [5, [7.4, 43.7]]\n    tags_from: 1\nturn_restrictions:\n  - from_way: 1\n",
+        );
+        let fixes = read_osm_fixes(&f).unwrap();
+        assert_eq!(fixes.ways.len(), 2);
+        assert_eq!(fixes.ways[0].lanes, Some(1));
+        let r = &fixes.ways[1];
+        assert_eq!(
+            (r.exclude_modes.clone(), r.keep_nodes),
+            (vec![Mode::Walking], Some((5, 6)))
+        );
+        assert_eq!(r.tags[1], ("lanes".to_string(), "2".to_string()));
+        assert_eq!(fixes.new_ways[0].nodes.len(), 2);
+        let bad = write("overrides:\n  - osm_id: 1\n    lane: 2\n");
+        assert!(read_osm_fixes(&bad).unwrap_err().contains("'lane'"));
+
+        // Monaco: OSM has lanes=2 on this one-way road, the rule gives 1
+        let pbf_path = PathBuf::from(pbf().replace("monaco_sample", "monaco"));
+        let ways = pbf::read_ways(&pbf_path).unwrap();
+        let coords = pbf::read_coords(&pbf_path, &ways).unwrap();
+        let lanes = |fx: &OsmFixes| {
+            let net =
+                build_network_with(&ways, &coords, Mode::Driving, &Options::default(), fx).unwrap();
+            let l: Vec<_> = net
+                .edges
+                .iter()
+                .filter(|e| e.osm_id == 93137596)
+                .map(|e| e.lanes)
+                .collect();
+            (l, net.stats.osm_fixes)
+        };
+        let (before, _) = lanes(&OsmFixes::default());
+        let (after, n) = lanes(&fixes);
+        assert!(
+            !before.is_empty() && before.iter().all(|l| *l == Some(2)),
+            "{before:?}"
+        );
+        assert!(after.iter().all(|l| *l == Some(1)) && n == 1, "{after:?}");
     }
 
     #[test]

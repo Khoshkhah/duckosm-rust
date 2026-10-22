@@ -61,6 +61,9 @@ struct Cli {
     /// Do not keep only the largest connected part of the graph.
     #[arg(long, conflicts_with = "config")]
     no_component_filter: bool,
+    /// A duckOSM OSM fixes file (YAML). With --config, it replaces the config's osm_overrides.
+    #[arg(long, value_name = "FILE")]
+    fixes: Option<PathBuf>,
     /// Print the time of each step.
     #[arg(long)]
     timing: bool,
@@ -113,6 +116,9 @@ fn run() -> Result<(), String> {
             p,
         )
     };
+    if let Some(f) = &cli.fixes {
+        p.osm_fixes = Some(f.clone());
+    }
     p.geoparquet = false;
     p.duckdb = false;
     for f in cli
@@ -137,13 +143,14 @@ fn run() -> Result<(), String> {
     }
     for m in &sum.modes {
         eprintln!(
-            "{}: {} edges, {} nodes, {} private edges, {} connectors, {} edge_id_map rows",
+            "{}: {} edges, {} nodes, {} private edges, {} connectors, {} edge_id_map rows, {} OSM fixes",
             m.mode.name(),
             m.edges,
             m.nodes,
             m.private_edges,
             m.connectors,
-            m.edge_id_map
+            m.edge_id_map,
+            m.osm_fixes
         );
     }
     if cli.timing {

@@ -45,7 +45,7 @@ The features of version 0.1 are complete after milestone M2. M3 releases them (s
 | 3 | Load the boundary, boundary cells | No | |
 | 4 | Global junctions (`global_junctions.py`) | Yes | Needed in every mode: a footway that crosses a road cuts the road. |
 | 5 | Filter roads per mode (`road_filter.py`): class, access, one-way direction, lanes | Yes | Driving, walking and cycling are done. The dismount flag of cycling is done. The sidewalk rule (`separate_sidewalks.py`, step 5b) is done too (`sidewalks.rs`, option `--no-sidewalk-inference`). |
-| 6 | OSM overrides (`osm_overrides.py`) | No | Open question 5. |
+| 6 | OSM fixes (`osm_overrides.py`, `DuckOSM._raw_way_fixes`) | Yes | Done on 2026-10-22 (`fixes.rs`, section 6, item 6c). The rules for the arrows of the lanes and the extra turn restrictions are not part of the network step. |
 | 7 | Cut ways into edges at junctions, join the node coordinates, compute `length_m` (`graph_simplifier.py`) | Yes | |
 | 8 | Split self-loops, same-direction parallel arcs and antiparallel pairs with virtual nodes (`node_id < 0`) | Yes | Needed for a unique `(osm_id, source, target)`. |
 | 9 | Merge same-road chains, write `edge_id_map` (`_contract_chains`) | Yes | Done (2026-10-21). With `global_junctions` on, Monaco has no chains to merge in any mode, so the merge is tested with `global_junctions: false` (section 6). |
@@ -197,7 +197,7 @@ dr.edge_id_hash(osm_id, source, target)             # same name and result as du
     (`pbf_is_cut=True`, CLI `--pbf-is-cut`). The component filter then runs as in duckOSM (with a boundary
     and `build_graph` on).
   - A duckOSM step that the program does not have (the edge graph, H3, turn restrictions, `features.*`, the
-    drawing order, the bus routes, the sea, the OSM fixes, the checks, the report, the maps, the multimodal
+    drawing order, the bus routes, the sea, the checks, the report, the maps, the multimodal
     graph) is an error. Most of them are on by default in duckOSM, so a usual config needs `strict=False`
     (CLI `--allow-skipped`). The result then lists them under `skipped`.
   - Keys that only tune DuckDB in duckOSM (`memory_limit`, `threads`, `simplify_batches`, `clip_strategy`,
@@ -312,6 +312,23 @@ Rule: a skipped test is not a pass.
    benchmark).
 6b. **Local goldens.** Larger areas (Tartu has virtual nodes, Estonia is a scale test) are built with
    the same script. They stay in `tests/local/`, which git ignores.
+6c. **OSM fixes (done, 2026-10-22).** `fixes.rs` applies the rules file of duckOSM (the config key
+   `osm_overrides`, CLI `--fixes FILE`, Python `osm_overrides=`). As in duckOSM, the rules act at two
+   points. `remove`, `keep_nodes`, `tags` and `new_ways` change the ways as read, before pass 2. `oneway`,
+   the lanes, `layer` and `exclude_modes` change the ways of each mode, after the road filter. An unknown
+   key in the file is an error. The results with the file of duckOSM (`osm_overrides/osm_overrides.yaml`):
+
+   - Monaco against `monaco.duckdb`, which duckOSM built with the fixes: in the driving mode, every row is
+     equal in all columns. Before, 78 rows were different in `lanes`. In walking and cycling, only connector
+     rows are different, in the labels (item 3c). 37, 11 and 37 rules match a way.
+   - Tartu against `data/db/tartu.duckdb` of duckOSM (2026-09-30, with the fixes): the `layer` rule of way
+     1429337399 gives `0` on its 6 edges, as in duckOSM. The other differences against this old database
+     are the same with and without the fixes.
+   - `cargo test` runs the unit tests in `fixes.rs` and the test `osm_fixes_file` (duckosm-build).
+
+   Limits: the reader keeps only highway ways and ferry lines, so a `tags` rule or `tags_from` on another
+   way has no effect. A tag value that YAML reads as true or false is an error, so write it in quotes. The
+   WebAssembly page does not take a fixes file yet.
 
 ## 7. Memory and streaming
 
@@ -514,8 +531,9 @@ Decision (Kaveh, 2026-10-21): the repository is `duckosm-rust`.
    SonoFlow or fetching-sweden-data, that DuckDB older than 1.2 built? Their ids are different.
 4. Is version 0.1 without speeds, costs, turn restrictions, the edge graph and connector edges
    acceptable? Which of these comes first after 0.1?
-5. OSM overrides change ways before the graph is built. Can the Rust core read the YAML file for the
-   way rules, or must Python apply them to the PBF first?
+5. ~~OSM overrides change ways before the graph is built. Can the Rust core read the YAML file for the
+   way rules, or must Python apply them to the PBF first?~~ Decided by Kaveh on 2026-10-22: the Rust core
+   reads the YAML file. Done (section 6, item 6c).
 6. Is the strangler method in section 12 right: Python duckOSM calls the Rust wheel part by part,
    with `engine: rust` as the switch? Or do you want two separate tools?
 7. Cut to the boundary: keep `osmium` outside, or add a polygon cut to the Rust core in M3 or M4?
