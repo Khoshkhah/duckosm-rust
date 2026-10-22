@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = ["crates/duckosm-core", "crates/duckosm-parquet", "crates/duckosm-duckdb", "crates/duckosm-cli"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+license = "MIT"
+authors = ["Kaveh Khoshkhah"]
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = "thin"
+codegen-units = 16

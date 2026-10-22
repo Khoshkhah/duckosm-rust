@@ -1,0 +1,13 @@
+[package]
+name = "duckosm-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["pbf"]
+# Reading a .osm.pbf file. Off for builds that get their data from somewhere else (WebAssembly).
+pbf = ["dep:osmpbf"]
+
+[dependencies]
+osmpbf = { version = "0.3.8", optional = true }

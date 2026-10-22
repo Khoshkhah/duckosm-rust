@@ -1,0 +1,128 @@
+//! The data types: OSM ways as read, edges and nodes as written.
+
+use crate::geom::Pt;
+
+/// The OSM tags that the driving network step reads. Other tags are not kept.
+#[derive(Default, Clone, Debug)]
+pub struct Tags {
+    pub highway: Option<Box<str>>,
+    pub name: Option<Box<str>>,
+    pub maxspeed: Option<Box<str>>,
+    pub oneway: Option<Box<str>>,
+    pub oneway_bus: Option<Box<str>>,
+    pub oneway_psv: Option<Box<str>>,
+    pub junction: Option<Box<str>>,
+    pub motorcar: Option<Box<str>>,
+    pub motor_vehicle: Option<Box<str>>,
+    pub vehicle: Option<Box<str>>,
+    pub access: Option<Box<str>>,
+    pub bus: Option<Box<str>>,
+    pub psv: Option<Box<str>>,
+    pub surface: Option<Box<str>>,
+    pub service: Option<Box<str>>,
+    pub layer: Option<Box<str>>,
+    pub bridge: Option<Box<str>>,
+    pub tunnel: Option<Box<str>>,
+    pub lanes: Option<Box<str>>,
+    pub lanes_forward: Option<Box<str>>,
+    pub lanes_backward: Option<Box<str>>,
+    pub lanes_reversible: Option<Box<str>>,
+}
+
+impl Tags {
+    /// Store the tag if the network step reads it. Returns false for a tag that is not used.
+    /// Like `map_extract(tags, k)[1]` in duckOSM, the first value of a key wins.
+    pub fn set(&mut self, k: &str, v: &str) {
+        let slot = match k {
+            "highway" => &mut self.highway,
+            "name" => &mut self.name,
+            "maxspeed" => &mut self.maxspeed,
+            "oneway" => &mut self.oneway,
+            "oneway:bus" => &mut self.oneway_bus,
+            "oneway:psv" => &mut self.oneway_psv,
+            "junction" => &mut self.junction,
+            "motorcar" => &mut self.motorcar,
+            "motor_vehicle" => &mut self.motor_vehicle,
+            "vehicle" => &mut self.vehicle,
+            "access" => &mut self.access,
+            "bus" => &mut self.bus,
+            "psv" => &mut self.psv,
+            "surface" => &mut self.surface,
+            "service" => &mut self.service,
+            "layer" => &mut self.layer,
+            "bridge" => &mut self.bridge,
+            "tunnel" => &mut self.tunnel,
+            "lanes" => &mut self.lanes,
+            "lanes:forward" => &mut self.lanes_forward,
+            "lanes:backward" => &mut self.lanes_backward,
+            "lanes:reversible" => &mut self.lanes_reversible,
+            _ => return,
+        };
+        if slot.is_none() {
+            *slot = Some(v.into());
+        }
+    }
+}
+
+/// An OSM way with a highway tag, in the node order of the file.
+#[derive(Clone, Debug)]
+pub struct Way {
+    pub id: i64,
+    pub refs: Vec<i64>,
+    pub tags: Tags,
+}
+
+/// A row of the `edges` table.
+#[derive(Clone, Debug)]
+pub struct Edge {
+    pub edge_id: i64,
+    pub edge_ref: Option<String>,
+    pub source: i64,
+    pub target: i64,
+    pub osm_id: i64,
+    pub highway: String,
+    pub name: Option<String>,
+    pub maxspeed: Option<String>,
+    pub oneway: bool,
+    pub lanes: Option<i32>,
+    pub surface: Option<String>,
+    pub access: Option<String>,
+    pub junction: Option<String>,
+    pub layer: Option<String>,
+    pub bridge: Option<String>,
+    pub tunnel: Option<String>,
+    pub service: Option<String>,
+    pub refs: Vec<i64>,
+    pub geometry: Vec<Pt>,
+    pub is_reverse: bool,
+    pub length_m: f32,
+}
+
+/// A row of the `nodes` table. A virtual node has `node_id < 0`.
+#[derive(Clone, Copy, Debug)]
+pub struct Node {
+    pub node_id: i64,
+    pub lon: f64,
+    pub lat: f64,
+}
+
+/// The result of the network step for one mode.
+#[derive(Default, Debug)]
+pub struct Network {
+    pub edges: Vec<Edge>,
+    pub private_edges: Vec<Edge>,
+    pub nodes: Vec<Node>,
+    pub stats: Stats,
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct Stats {
+    pub ways_read: usize,
+    pub ways_kept: usize,
+    pub forward_edges: usize,
+    pub self_loops_split: usize,
+    pub parallel_split: usize,
+    pub antiparallel_split: usize,
+    pub private_edges: usize,
+    pub dropped_by_component_filter: usize,
+}
