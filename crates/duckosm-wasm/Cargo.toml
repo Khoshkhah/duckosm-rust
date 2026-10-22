@@ -1,0 +1,14 @@
+[package]
+name = "duckosm-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+duckosm-core = { path = "../duckosm-core" }
+# zstd is a C library: snap (pure Rust) is the compression in WebAssembly.
+duckosm-parquet = { path = "../duckosm-parquet", default-features = false, features = ["snap"] }
+wasm-bindgen = "0.2"

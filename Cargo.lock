@@ -662,6 +662,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "duckosm-wasm"
+version = "0.0.1"
+dependencies = [
+ "duckosm-core",
+ "duckosm-parquet",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "either"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

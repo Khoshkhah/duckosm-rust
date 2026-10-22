@@ -123,7 +123,7 @@ trait. This lets the same code run in the CLI, in Python and in the browser.
 | CLI | `clap` 4 | The usual choice. |
 | Python binding | `pyo3` 0.30 with `maturin` 1.15, `abi3` wheel | One wheel for each system works for all Python 3.9+ versions. The GIL is released during a build. |
 | WebAssembly | `wasm-bindgen` | M4. |
-| Parallel work | `rayon`, behind a feature | Off for WebAssembly. |
+| Parallel work | `rayon`, through `osmpbf` | In WebAssembly, `rayon` uses the current thread (section 7). |
 | Hash | Own module, no dependency | About 25 lines. See section 5. |
 
 Versions come from crates.io on 2026-10-21.
@@ -331,17 +331,36 @@ Targets for M3, to be measured: Estonia in less than 2 GB of memory. The time ta
 the first measurement.
 
 **WebAssembly.** One tab has at most 4 GB of address space, so the target is a city or a small
-region. The code uses one thread (no `rayon`) and no C libraries. The `parquet` crate must use a
-compression that is pure Rust. The input comes from a `Read` value over data from JavaScript.
-Checked on 2026-10-21 (`cargo build --target wasm32-unknown-unknown`, compile only, nothing run in a browser):
+region. The crate `duckosm-wasm` has one function, `build(pbf_bytes, mode)`. It uses the default
+options of the CLI and returns the Parquet files of one mode as bytes: `edges`, `nodes`,
+`private_edges` and `edge_id_map`. The page `crates/duckosm-wasm/www/index.html` reads a PBF file
+in the tab, runs `build` and gives the files as downloads. [development.md](development.md) tells
+how to build and test it.
 
-- `duckosm-core` without the `pbf` feature builds.
-- `duckosm-core` with `osmpbf` builds (pure-Rust zlib `miniz_oxide`). But `pbf.rs` today reads a file path
-  and uses `rayon`, so it cannot run in the browser. A reader for a `Read` value, without threads, is
-  still to write.
-- `duckosm-parquet` builds with `--no-default-features --features snap`. The default `zstd` feature
-  needs a C compiler for WebAssembly (`clang`) and fails, so the WebAssembly build uses Snappy.
-- Not checked: the `.duckdb` writer (it has no WebAssembly build), `wasm-bindgen`, the size of the module.
+- `pbf::read_ways_bytes` and `pbf::read_coords_bytes` read the PBF from a byte slice
+  (`ElementReader::new(Cursor<&[u8]>)`). The path functions use the same parse code.
+- The writers of `duckosm-parquet` write to a `Write` value (`write_edges_to`, `write_nodes_to`,
+  `write_edge_id_map_to`). In WebAssembly, this value is a `Vec<u8>`.
+- `osmpbf` uses `rayon`. In WebAssembly, `rayon` cannot start threads, so it does all the work on
+  the current thread. It does not panic.
+- `parquet` uses Snappy. The `zstd` feature needs a C compiler for WebAssembly (`clang`), so it
+  is off.
+- The `.duckdb` writer has no WebAssembly build.
+
+Measured on 2026-10-21, driving, with the same `.wasm` file in Node 24 and in headless Chromium:
+
+| Item | Result |
+|---|---|
+| Size of `duckosm_wasm_bg.wasm` | 4.2 MB (4,229,045 bytes), 0.74 MB with gzip. `wasm-opt` is not used. |
+| Monaco | 0.07 s in Node, 0.09 s in Chromium, 9 MiB of WebAssembly memory. The four files are equal, byte for byte, to the native output with Snappy. `tools/compare_with_duckosm.py` gives the same result as for the native output. |
+| Stockholm county, 70 MB PBF | 8.8 s, 1,144 MiB. |
+| Estonia, 121 MB PBF, 769,662 edges | 15.0 s in Node, 12.0 s in Chromium, 1,249 MiB. All rows of the four files are equal to the native output. The native program takes 16.2 s and 1.45 GB on one thread, and 7.6 s and 1.85 GB on all threads. |
+| Kentucky, 148 MB PBF | Fails at 3,560 MiB: an allocation fails, and the module stops with `RuntimeError: unreachable`. On one thread, the native program also needs 4.3 GB. |
+
+The largest area that fits is between Estonia and Kentucky. The memory of the core sets this limit,
+not WebAssembly. The speed is near the speed of the native program on one thread. The memory plan
+above is not done: each way keeps its own `Vec<i64>` of nodes, and the coordinates are in a hash
+map of two `f64` values for each node. When this plan is done, larger areas can fit.
 
 ## 8. Risks
 
@@ -366,7 +385,7 @@ Checked on 2026-10-21 (`cargo build --target wasm32-unknown-unknown`, compile on
 | M1 | Monaco, driving. All steps in the table that are marked "Yes", for driving, without `merge_segments`. | All 2,765 `edge_id` values equal the golden file. All columns in section 6 pass. GeoPandas and DuckDB read the output. **Reached in the spike** for the output in `.duckdb` and GeoParquet (see [benchmark.md](benchmark.md) for the speed; only Monaco is tested). |
 | M2 | Walking and cycling. `merge_segments` and `edge_id_map`. `lanes`. `private_edges`. | The same checks pass for the three modes, with `merge_segments` on and off. Tartu passes as a local golden (done, see section 6). **Reached on Monaco on 2026-10-21** for 9 variants (`merge_segments` and `global_junctions` on or off, the component filter, the sidewalk rule, the connector, the connector with the component filter, and everything on with speeds and the walk and cycle types) in the three modes: 0 rows differ in `edges`, `private_edges`, `nodes` and `edge_id_map`. Tartu is done (section 6). The sidewalk rule finds the same 46 roads in Monaco as duckOSM. It is a geometric rule with float thresholds, so a different area can give a difference at a threshold. It assumes right-hand traffic, as duckOSM does. |
 | M3 | Release 0.1.0. CLI, Python wheel, config subset, `layers.json`. | A fresh virtual environment runs `pip install` and builds Monaco with an equal result. The CLI binary does the same. The Estonia numbers are written down. Wheels build for Linux, macOS and Windows. |
-| M4 | WebAssembly and large areas. | A browser page turns a city PBF into GeoParquet. Estonia meets the targets. Optional: speeds and costs, turn restrictions. |
+| M4 | WebAssembly and large areas. | A browser page turns a city PBF into GeoParquet. Estonia meets the targets. Optional: speeds and costs, turn restrictions. **Browser page done on 2026-10-21** (section 7): Monaco gives the same bytes as the native output, and Estonia fits in 1.25 GiB. Not done: the large-area targets of the native program. |
 
 ## 10. Long-term vision
 

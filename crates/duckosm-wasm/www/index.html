@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>duckosm-rust in the browser</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+  label, button { display: block; margin: 0.75rem 0; }
+  a { display: block; }
+</style>
+</head>
+<body>
+<h1>duckosm-rust</h1>
+<p>Select an <code>.osm.pbf</code> file. The road network is built in this tab: the file does not go to a server.</p>
+<label>PBF file <input id="pbf" type="file" accept=".pbf"></label>
+<label>Mode
+  <select id="mode"><option>driving</option><option>walking</option><option>cycling</option></select>
+</label>
+<button id="run" disabled>Run</button>
+<p id="status">Loading the WebAssembly module…</p>
+<div id="files"></div>
+<script type="module">
+import init, { build } from "./pkg/duckosm_wasm.js";
+
+const $ = (id) => document.getElementById(id);
+await init();
+$("status").textContent = "Ready.";
+$("run").disabled = false;
+
+$("run").onclick = async () => {
+  const file = $("pbf").files[0];
+  if (!file) { $("status").textContent = "Select a PBF file first."; return; }
+  const mode = $("mode").value;
+  $("files").replaceChildren();
+  $("status").textContent = `Running on ${file.name}…`;
+  $("run").disabled = true;
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  // ponytail: runs on the main thread, so the tab does not respond until the build ends.
+  // Move build() to a Web Worker if large areas make this a problem.
+  await new Promise((r) => setTimeout(r, 50));
+  try {
+    const t0 = performance.now();
+    const net = build(bytes, mode);
+    $("status").textContent = `${net.summary} in ${((performance.now() - t0) / 1000).toFixed(2)} s.`;
+    for (const name of ["edges", "nodes", "private_edges", "edge_id_map"]) {
+      const a = document.createElement("a");
+      const data = net[name];
+      a.href = URL.createObjectURL(new Blob([data], { type: "application/vnd.apache.parquet" }));
+      a.download = `${name}_${mode}.parquet`;
+      a.textContent = `${a.download} (${data.length.toLocaleString()} bytes)`;
+      $("files").append(a);
+    }
+    net.free();
+  } catch (e) {
+    $("status").textContent = `Error: ${e.message ?? e}`;
+  }
+  $("run").disabled = false;
+};
+</script>
+</body>
+</html>

@@ -7,7 +7,9 @@
 | `rustc`, `cargo`, `rustup` | Installed on 2026-10-21 with `rustup` at user level (`~/.cargo`, `~/.rustup`, profile `default`, channel `stable`). Version 1.99.1. The installer added `~/.cargo/bin` to the `PATH` in the shell profile. |
 | `g++`, `cmake`, `make` | Installed (system). The `duckdb` crate needs a C++ compiler. |
 | `maturin` | Not installed. It is needed from M3 (Python wheel). |
-| `wasm32-unknown-unknown` target | Installed (`rustup target add`). Compile checks only; see section 7 of the design. |
+| `wasm32-unknown-unknown` target | Installed (`rustup target add`). See section 7 of the design. |
+| `wasm-bindgen` | `wasm-bindgen-cli` 0.2.129, installed with `cargo install` at user level (`~/.cargo/bin`). Its version must be the same as the `wasm-bindgen` crate in `Cargo.lock`. |
+| `node` | Version 24, installed (system). It runs the WebAssembly build without a browser. |
 
 ## Install Rust
 
@@ -16,7 +18,8 @@ Done on this machine. On a new machine:
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile default
 source "$HOME/.cargo/env"
-rustup target add wasm32-unknown-unknown   # M4 (compile check done)
+rustup target add wasm32-unknown-unknown   # M4
+cargo install wasm-bindgen-cli --version 0.2.129 --locked
 ```
 
 ## Build and test
@@ -53,13 +56,44 @@ python tools/edge_id_reference.py path/to/area.duckdb   # every edge of a duckOS
 
 See [benchmark.md](benchmark.md). The runner is `bench/run_bench.py`.
 
-## WebAssembly compile check
+## WebAssembly
+
+Build the module and the JavaScript bindings into `crates/duckosm-wasm/www/pkg/` (Git ignores this
+folder):
 
 ```bash
-cargo build --release -p duckosm-core --target wasm32-unknown-unknown
-cargo build --release -p duckosm-parquet --no-default-features --features snap --target wasm32-unknown-unknown
+cargo build --release --target wasm32-unknown-unknown -p duckosm-wasm
+wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/pkg target/wasm32-unknown-unknown/release/duckosm_wasm.wasm
 ```
 
+Open the demo page. A browser does not load a module from a `file://` address, so use a local
+server:
+
+```bash
+python3 -m http.server 8000 -d crates/duckosm-wasm/www
+```
+
+Then go to `http://localhost:8000`, select a PBF file and click **Run**. The build runs on the main
+thread, so the tab does not respond until the build ends.
+
+Run the same `.wasm` file in Node. The script writes the four Parquet files and prints the time and
+the WebAssembly memory:
+
+```bash
+node crates/duckosm-wasm/www/run_node.mjs tests/data/monaco.osm.pbf out-wasm
+```
+
+Compare with the native output. The test `bytes_equal_files` writes the native files with the path
+functions to `target/tmp/duckosm-wasm-native/`. Run it with `-p duckosm-wasm`, because a test of
+the full workspace turns on `zstd`:
+
+```bash
+cargo test --release -p duckosm-wasm
+cmp target/tmp/duckosm-wasm-native/edges_driving.parquet out-wasm/edges_driving.parquet
+```
+
+Do the `cmp` step for the other three files too. `tools/compare_with_duckosm.py` also reads the
+`out-wasm` folder.
 ## Check another area (example: Tartu)
 
 Build the golden with duckOSM, then run duckosm-rust with the matching flags and compare. The yaml is

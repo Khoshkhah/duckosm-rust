@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/duckosm-core", "crates/duckosm-parquet", "crates/duckosm-duckdb", "crates/duckosm-build", "crates/duckosm-cli", "crates/duckosm-py"]
+members = ["crates/duckosm-core", "crates/duckosm-parquet", "crates/duckosm-duckdb", "crates/duckosm-build", "crates/duckosm-cli", "crates/duckosm-py", "crates/duckosm-wasm"]
 
 [workspace.package]
 version = "0.0.1"

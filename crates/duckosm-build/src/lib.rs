@@ -104,16 +104,7 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
     for mode in &p.modes {
         let net = build_network(&ways, &coords, *mode, &p.options)?;
         lap(&format!("build {}", mode.name()), &mut sum);
-        let oc = duckosm_parquet::EdgeCols {
-            dismount: *mode == Mode::Cycling && p.options.cycling_dismount,
-            speeds: p.options.process_speeds,
-            costs: p.options.calculate_costs,
-            ftype: match mode {
-                Mode::Walking if p.options.functional_types => Some("walk_type"),
-                Mode::Cycling if p.options.functional_types => Some("cycle_type"),
-                _ => None,
-            },
-        };
+        let oc = duckosm_parquet::EdgeCols::of(*mode, &p.options);
         let n = mode.name();
         let put = |kind: &str, file: String, sum: &mut Summary| {
             sum.files.push((format!("{kind}_{n}"), pq_dir.join(file)));

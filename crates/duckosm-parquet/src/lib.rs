@@ -6,13 +6,16 @@ use arrow_array::builder::{
 };
 use arrow_array::{ArrayRef, RecordBatch};
 use arrow_schema::{DataType, Field, Schema};
+use duckosm_core::filter::Mode;
 use duckosm_core::geom::Pt;
 use duckosm_core::model::{Edge, MapRow, Node};
+use duckosm_core::network::Options;
 use parquet::arrow::ArrowWriter;
 use parquet::basic::Compression;
 use parquet::file::metadata::KeyValue;
 use parquet::file::properties::WriterProperties;
 use std::fs::File;
+use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -88,6 +91,22 @@ pub struct EdgeCols {
     pub costs: bool,
     /// The name of the column of `Edge::ftype`: `walk_type` or `cycle_type`.
     pub ftype: Option<&'static str>,
+}
+
+impl EdgeCols {
+    /// The columns of the edge files of `mode` when the network is built with `opts`.
+    pub fn of(mode: Mode, opts: &Options) -> EdgeCols {
+        EdgeCols {
+            dismount: mode == Mode::Cycling && opts.cycling_dismount,
+            speeds: opts.process_speeds,
+            costs: opts.calculate_costs,
+            ftype: match mode {
+                Mode::Walking if opts.functional_types => Some("walk_type"),
+                Mode::Cycling if opts.functional_types => Some("cycle_type"),
+                _ => None,
+            },
+        }
+    }
 }
 
 pub fn edges_schema(cols: EdgeCols) -> Schema {
@@ -240,13 +259,14 @@ fn err<E: std::fmt::Display>(e: E) -> String {
 
 /// Write the edges as a GeoParquet file with LineString geometry.
 pub fn write_edges(path: &Path, rows: &[Edge], oc: EdgeCols) -> Result<(), String> {
+    write_edges_to(File::create(path).map_err(err)?, rows, oc)
+}
+
+/// The same as [`write_edges`], to any writer (for example a `Vec<u8>` in WebAssembly).
+pub fn write_edges_to<W: Write + Send>(out: W, rows: &[Edge], oc: EdgeCols) -> Result<(), String> {
     let schema = Arc::new(edges_schema(oc));
-    let mut w = ArrowWriter::try_new(
-        File::create(path).map_err(err)?,
-        schema.clone(),
-        Some(props("LineString")),
-    )
-    .map_err(err)?;
+    let mut w =
+        ArrowWriter::try_new(out, schema.clone(), Some(props("LineString"))).map_err(err)?;
     for chunk in rows.chunks(ROW_GROUP) {
         w.write(&edges_batch(&schema, chunk, oc)).map_err(err)?;
     }
@@ -256,13 +276,13 @@ pub fn write_edges(path: &Path, rows: &[Edge], oc: EdgeCols) -> Result<(), Strin
 
 /// Write the nodes as a GeoParquet file with Point geometry.
 pub fn write_nodes(path: &Path, rows: &[Node]) -> Result<(), String> {
+    write_nodes_to(File::create(path).map_err(err)?, rows)
+}
+
+/// The same as [`write_nodes`], to any writer (for example a `Vec<u8>` in WebAssembly).
+pub fn write_nodes_to<W: Write + Send>(out: W, rows: &[Node]) -> Result<(), String> {
     let schema = Arc::new(nodes_schema());
-    let mut w = ArrowWriter::try_new(
-        File::create(path).map_err(err)?,
-        schema.clone(),
-        Some(props("Point")),
-    )
-    .map_err(err)?;
+    let mut w = ArrowWriter::try_new(out, schema.clone(), Some(props("Point"))).map_err(err)?;
     for chunk in rows.chunks(ROW_GROUP) {
         let mut id = Int64Builder::with_capacity(chunk.len());
         let mut g = BinaryBuilder::new();
@@ -280,6 +300,11 @@ pub fn write_nodes(path: &Path, rows: &[Node]) -> Result<(), String> {
 
 /// Write `edge_id_map` as a plain Parquet file (no geometry).
 pub fn write_edge_id_map(path: &Path, rows: &[MapRow]) -> Result<(), String> {
+    write_edge_id_map_to(File::create(path).map_err(err)?, rows)
+}
+
+/// The same as [`write_edge_id_map`], to any writer (for example a `Vec<u8>` in WebAssembly).
+pub fn write_edge_id_map_to<W: Write + Send>(out: W, rows: &[MapRow]) -> Result<(), String> {
     let schema = Arc::new(Schema::new(vec![
         Field::new("old_edge_id", DataType::Int64, false),
         Field::new("new_edge_id", DataType::Int64, false),
@@ -290,12 +315,7 @@ pub fn write_edge_id_map(path: &Path, rows: &[MapRow]) -> Result<(), String> {
     let plain = WriterProperties::builder()
         .set_compression(compression())
         .build();
-    let mut w = ArrowWriter::try_new(
-        File::create(path).map_err(err)?,
-        schema.clone(),
-        Some(plain),
-    )
-    .map_err(err)?;
+    let mut w = ArrowWriter::try_new(out, schema.clone(), Some(plain)).map_err(err)?;
     for chunk in rows.chunks(ROW_GROUP) {
         let mut old = Int64Builder::with_capacity(chunk.len());
         let mut new = Int64Builder::with_capacity(chunk.len());
