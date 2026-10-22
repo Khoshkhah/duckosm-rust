@@ -162,8 +162,9 @@ with a name, as a duckOSM config with `name` and `boundary`. Decisions:
   and `FileReaderSync` in the worker), so the file is not copied into WebAssembly memory. `build_osm_json` also
   takes the boundary: Overpass gives the ways in the box of each outer ring, and Rust keeps the ways with a node
   inside, as in the cut of a region file.
-- `www/boundary.html` is the boundary tool: a Nominatim search with a list of matches, or a GeoJSON file, or a
-  box. It writes the format of `duckosm boundary` (the area in km² is the same as duckOSM's: 2.39 for Monaco),
+- `www/boundary.html` is the boundary tool: a map (MapLibre, OpenFreeMap) with a side panel. The area comes from
+  a Nominatim search, a click on the map (what is here), the drawing tools (rectangle, polygon, circle,
+  freehand, edit), or a GeoJSON file. The design is in [boundary_tool.md](boundary_tool.md). It writes the format of `duckosm boundary` (the area in km² is the same as duckOSM's: 2.39 for Monaco),
   with `geofabrik`: the three smallest extracts that cover the area, with their links. "Use in duckOSM" gives
   the boundary to `index.html` through the storage of the site.
 - `www/geofabrik.json` (1.6 MB, 0.5 MB gzip, 554 extracts) comes from Geofabrik's `index-v1.json`

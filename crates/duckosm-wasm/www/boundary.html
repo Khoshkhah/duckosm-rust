@@ -4,57 +4,118 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>duckOSM boundary tool</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css" crossorigin>
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js" crossorigin></script>
+<script type="importmap">
+{ "imports": {
+  "terra-draw": "https://cdn.jsdelivr.net/npm/terra-draw@1.38.0/dist/terra-draw.modern.js",
+  "terra-draw-maplibre-gl-adapter": "https://cdn.jsdelivr.net/npm/terra-draw-maplibre-gl-adapter@1.5.0/dist/terra-draw-maplibre-gl-adapter.modern.js",
+  "polyclip-ts": "https://cdn.jsdelivr.net/npm/polyclip-ts@0.16.8/+esm"
+} }
+</script>
 <style>
-  :root { --bg: #fff; --fg: #1d1d1f; --muted: #6e6e73; --line: #d2d2d7; --accent: #0a66c2; --code: #f5f5f7; }
+  :root { --bg: #fff; --fg: #1d1d1f; --muted: #6e6e73; --line: #d2d2d7; --accent: #0a66c2; --code: #f5f5f7; --warn: #9a3412; }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #1c1c1e; --fg: #f2f2f7; --muted: #a1a1a6; --line: #3a3a3c; --accent: #4ea1ff; --code: #2c2c2e; }
+    :root { --bg: #1c1c1e; --fg: #f2f2f7; --muted: #a1a1a6; --line: #3a3a3c; --accent: #4ea1ff; --code: #2c2c2e; --warn: #fdba74; }
   }
-  body { font: 15px/1.5 system-ui, sans-serif; background: var(--bg); color: var(--fg); max-width: 60rem; margin: 2rem auto; padding: 0 1rem; }
-  h1 { font-size: 1.5rem; margin-bottom: 0.2rem; }
-  .note { color: var(--muted); }
-  p.note { margin-top: 0; }
-  fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 1rem 0; }
-  button { font: inherit; padding: 0.35rem 0.9rem; border-radius: 6px; border: 1px solid var(--line); background: var(--code); color: var(--fg); cursor: pointer; }
+  html, body { height: 100%; margin: 0; }
+  body { font: 15px/1.5 system-ui, sans-serif; background: var(--bg); color: var(--fg); display: grid; grid-template-columns: 22rem 1fr; }
+  #panel { overflow-y: auto; padding: 0.8rem 1rem; border-right: 1px solid var(--line); }
+  #map { min-height: 0; }
+  @media (max-width: 700px) {
+    body { grid-template-columns: 1fr; grid-template-rows: 55vh auto; height: auto; }
+    #map { grid-row: 1; }
+    #panel { grid-row: 2; border-right: 0; border-top: 1px solid var(--line); }
+    button, [role=tab] { min-height: 44px; }
+  }
+  h1 { font-size: 1.2rem; margin: 0 0 0.2rem; }
+  h2 { font-size: 1rem; margin: 1rem 0 0.3rem; }
+  .note { color: var(--muted); font-size: 13px; }
+  p { margin: 0.4rem 0; }
+  button { font: inherit; padding: 0.3rem 0.7rem; border-radius: 6px; border: 1px solid var(--line); background: var(--code); color: var(--fg); cursor: pointer; }
   button:disabled { opacity: 0.5; cursor: default; }
-  input { font: inherit; }
-  pre { background: var(--code); padding: 0.6rem; border-radius: 6px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+  button[aria-pressed=true], [role=tab][aria-selected=true] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  input { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 0.25rem 0.4rem; }
+  input[type=search], #name { width: 100%; box-sizing: border-box; }
+  [role=tablist] { display: flex; gap: 0.3rem; margin: 0.6rem 0; }
+  [role=tab] { flex: 1; }
+  .tools { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  #found label, #extracts label { display: block; padding: 0.25rem 0.3rem; border-radius: 4px; cursor: pointer; }
+  #found label:hover, #found label:focus-within { background: var(--code); }
+  #found label.point { cursor: default; color: var(--muted); }
+  #summary { background: var(--code); padding: 0.5rem 0.6rem; border-radius: 6px; white-space: pre-wrap; font-size: 14px; }
+  .warn { color: var(--warn); font-weight: 600; }
+  #drop { border: 2px dashed var(--line); border-radius: 8px; padding: 1rem; text-align: center; }
+  body.dragging #drop, body.dragging #map { outline: 3px dashed var(--accent); outline-offset: -3px; }
   a { color: var(--accent); }
 </style>
 </head>
 <body>
+<main id="panel">
 <h1>duckOSM boundary tool</h1>
-<p class="note">Find the boundary of an area and save it as a duckOSM boundary file (the format of <code>duckosm boundary</code>).
-The file works in <a href="index.html">duckOSM in the browser</a>, in <code>duckosm-rust build --boundary</code> and in a duckOSM config.
-The tool also gives the smallest <a href="https://download.geofabrik.de">Geofabrik</a> extract that covers the area.</p>
+<p class="note">Make the area that duckOSM builds. Save it as a boundary file (the format of <code>duckosm boundary</code>),
+  or use it in <a href="index.html">duckOSM in the browser</a>.</p>
 
-<fieldset>
-  <legend>1. The area</legend>
-  <p><label>Name <input id="q" type="search" placeholder="for example Tartu" size="30"></label>
-    <button id="search">Find</button> <span class="note">(<a href="https://nominatim.openstreetmap.org">Nominatim</a>)</span></p>
-  <div id="found"></div>
-  <p>or <label>a GeoJSON file <input id="file" type="file" accept=".geojson,.json"></label></p>
-  <p>or <label>a box (west, south, east, north) <input id="bbox" placeholder="26.6, 58.33, 26.81, 58.42" size="26"></label>
-    <button id="usebox">Use</button></p>
-</fieldset>
+<div role="tablist" aria-label="The ways to make an area">
+  <button role="tab" id="tab-find" aria-controls="find" aria-selected="true">Find</button>
+  <button role="tab" id="tab-draw" aria-controls="draw" aria-selected="false">Draw</button>
+  <button role="tab" id="tab-file" aria-controls="file-panel" aria-selected="false">File</button>
+</div>
 
-<fieldset>
-  <legend>2. The boundary</legend>
-  <p><label>Name <input id="name" size="30"></label></p>
-  <pre id="info">No area yet.</pre>
-  <p><button id="save" disabled>Download boundary.geojson</button>
-    <button id="use" disabled>Use in duckOSM in the browser</button></p>
-</fieldset>
+<section id="find" role="tabpanel" aria-labelledby="tab-find">
+  <form id="search"><label for="q">Name of a place</label>
+    <p style="display:flex;gap:0.3rem"><input id="q" type="search" placeholder="for example Tartu"> <button>Find</button></p></form>
+  <p><button id="here" aria-pressed="false">What is here?</button> <span class="note">then click the map</span></p>
+  <div id="found" role="radiogroup" aria-label="The matches"></div>
+  <p class="note">Search: <a href="https://nominatim.openstreetmap.org">Nominatim</a>, data © OpenStreetMap contributors.</p>
+</section>
+
+<section id="draw" role="tabpanel" aria-labelledby="tab-draw" hidden>
+  <div class="tools">
+    <button data-mode="rectangle" aria-pressed="false">Rectangle</button>
+    <button data-mode="polygon" aria-pressed="false">Polygon</button>
+    <button data-mode="circle" aria-pressed="false">Circle</button>
+    <button data-mode="freehand" aria-pressed="false">Freehand</button>
+    <button data-mode="select" aria-pressed="false">Edit</button>
+    <button id="delete" disabled>Delete</button>
+    <button id="clear">Clear</button>
+  </div>
+  <p class="note">Rectangle and circle: drag on the map. Polygon: click each vertex, then click the first vertex or push Enter.
+    Edit: select a shape, then drag a vertex or the midpoint of a side. Escape stops a shape. Shapes that overlap become one polygon.
+    The drawing needs a mouse, a pen or a finger; the search and the file work with the keyboard.</p>
+</section>
+
+<section id="file-panel" role="tabpanel" aria-labelledby="tab-file" hidden>
+  <div id="drop"><label>Select a GeoJSON file <input id="file" type="file" accept=".geojson,.json"></label>
+    <p class="note">or drag it onto the map. A FeatureCollection, a Feature, a Polygon or a MultiPolygon.</p></div>
+</section>
+
+<h2>The area</h2>
+<p><label for="name">Name</label> <input id="name"></p>
+<div id="summary" aria-live="polite">No area yet. Find a place, draw a shape, or select a file.</div>
+<div id="extracts"></div>
+<p style="margin-top:0.8rem"><button id="save" disabled>Download boundary.geojson</button>
+  <button id="use" disabled>Use in duckOSM in the browser</button></p>
+</main>
+<div id="map" role="region" aria-label="Map of the area"></div>
 
 <script type="module">
+import { TerraDraw, TerraDrawRectangleMode, TerraDrawPolygonMode, TerraDrawCircleMode, TerraDrawFreehandMode,
+         TerraDrawSelectMode, ValidateNotSelfIntersecting } from "terra-draw";
+import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
+
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
-let found = [], area = null, extracts = null;
+const say = (html) => ($("summary").innerHTML = html);
+let found = [], area = null, extracts = null, cover = [];
 
 // the list of Geofabrik's extracts (tools/make_geofabrik_index.py), loaded once
 const geofabrik = () => (extracts ??= fetch("geofabrik.json").then((r) => r.json()).then((d) => d.extracts));
 
 // the polygons of a geometry, as a list of polygons (each a list of rings)
-const polygons = (g) => (g.type === "Polygon" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : []);
+const polygons = (g) => (g?.type === "Polygon" ? [g.coordinates] : g?.type === "MultiPolygon" ? g.coordinates : []);
+const geometry = (polys) => (polys.length === 1 ? { type: "Polygon", coordinates: polys[0] } : { type: "MultiPolygon", coordinates: polys });
 
 // the area on the sphere (radius 6378137 m) of a ring in degrees
 const rad = (d) => (d * Math.PI) / 180;
@@ -74,14 +135,18 @@ function inside(polys, x, y) {
   return c;
 }
 
+function bbox(polys) {
+  const pts = polys.flatMap((p) => p[0]);
+  return [Math.min(...pts.map((p) => p[0])), Math.min(...pts.map((p) => p[1])), Math.max(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[1]))];
+}
+
 // the extracts that contain all points of the outer rings (at most 2000 of them), the smallest first. The
 // polygons of the list are about 1 km larger than the extracts, so an area at most 1 km outside can be shown.
 async function covering(polys) {
   const pts = polys.flatMap((p) => p[0]);
   const step = Math.ceil(pts.length / 2000);
   const some = pts.filter((_, i) => i % step === 0);
-  const [w, s, e, n] = [Math.min(...some.map((p) => p[0])), Math.min(...some.map((p) => p[1])),
-                        Math.max(...some.map((p) => p[0])), Math.max(...some.map((p) => p[1]))];
+  const [w, s, e, n] = bbox([[some]]);
   return (await geofabrik())
     .filter((x) => x.bbox[0] <= w && x.bbox[1] <= s && x.bbox[2] >= e && x.bbox[3] >= n)
     .filter((x) => some.every((p) => inside(x.polygon, p[0], p[1])))
@@ -89,71 +154,214 @@ async function covering(polys) {
     .sort((a, b) => a.km2 - b.km2);
 }
 
-$("search").onclick = async () => {
-  const q = $("q").value.trim();
-  if (!q) return;
-  $("found").textContent = "searching…";
-  try {
-    const r = await fetch("https://nominatim.openstreetmap.org/search?" +
-      new URLSearchParams({ q, format: "geojson", polygon_geojson: "1", extratags: "1", limit: "8" }));
-    found = (await r.json()).features;
-    $("found").innerHTML = found.map((f, i) => {
-      const p = f.properties;
-      const ok = polygons(f.geometry).length > 0;
-      return `<label><input type="radio" name="hit" value="${i}"${ok ? "" : " disabled"}> ${esc(p.display_name)} ` +
-        `<span class="note">(${esc(p.addresstype)}, ${p.osm_type} ${p.osm_id}${ok ? "" : ", a point: no boundary"})</span></label><br>`;
-    }).join("") || "<p class='note'>No place found.</p>";
-  } catch (e) {
-    $("found").textContent = "The search failed: " + e.message;
-  }
+// ---- the map ----
+const empty = { type: "FeatureCollection", features: [] };
+const map = new maplibregl.Map({ container: "map", style: "https://tiles.openfreemap.org/styles/liberty", center: [10, 50], zoom: 3 });
+map.addControl(new maplibregl.NavigationControl(), "top-right");
+const loaded = new Promise((ok) => map.on("load", ok));
+const setData = (src, data) => loaded.then(() => map.getSource(src).setData(data ?? empty));
+
+const draw = new TerraDraw({
+  adapter: new TerraDrawMapLibreGLAdapter({ map }),
+  modes: [
+    new TerraDrawRectangleMode({ drawInteraction: "click-move-or-drag" }),
+    new TerraDrawPolygonMode({ validation: (f) => ValidateNotSelfIntersecting(f) }),
+    new TerraDrawCircleMode({ drawInteraction: "click-move-or-drag", segments: 64 }),
+    new TerraDrawFreehandMode({ drawInteraction: "click-move-or-drag", validation: (f) => ValidateNotSelfIntersecting(f) }),
+    new TerraDrawSelectMode({ flags: Object.fromEntries(["rectangle", "polygon", "circle", "freehand"].map((m) =>
+      [m, { feature: { draggable: true, coordinates: { draggable: true, midpoints: true, deletable: true } } }])) }),
+  ],
+});
+
+loaded.then(() => {
+  map.addSource("area", { type: "geojson", data: empty });
+  map.addSource("preview", { type: "geojson", data: empty });
+  map.addSource("extract", { type: "geojson", data: empty });
+  map.addLayer({ id: "area-fill", type: "fill", source: "area", paint: { "fill-color": "#0a66c2", "fill-opacity": 0.2 } });
+  map.addLayer({ id: "area-line", type: "line", source: "area", paint: { "line-color": "#0a66c2", "line-width": 2 } });
+  map.addLayer({ id: "extract-line", type: "line", source: "extract", paint: { "line-color": "#ea580c", "line-width": 2, "line-dasharray": [3, 2] } });
+  map.addLayer({ id: "preview-line", type: "line", source: "preview", filter: ["!=", ["geometry-type"], "Point"],
+                 paint: { "line-color": "#7c3aed", "line-width": 2, "line-dasharray": [2, 2] } });
+  map.addLayer({ id: "preview-point", type: "circle", source: "preview", filter: ["==", ["geometry-type"], "Point"],
+                 paint: { "circle-radius": 7, "circle-color": "#7c3aed", "circle-stroke-color": "#fff", "circle-stroke-width": 2 } });
+  draw.start();
+  window.mapReady = true;
+});
+
+function fit(polys) {
+  const [w, s, e, n] = bbox(polys);
+  loaded.then(() => map.fitBounds([[w, s], [e, n]], { padding: 40, maxZoom: 16, duration: 0 }));
+}
+
+// ---- the tabs ----
+const tabs = [...document.querySelectorAll("[role=tab]")];
+for (const t of tabs) t.onclick = () => {
+  for (const u of tabs) { u.setAttribute("aria-selected", u === t); $(u.getAttribute("aria-controls")).hidden = u !== t; }
+  if (t.id !== "tab-draw") tool(null);
+  if (t.id !== "tab-find") picking(false);
 };
 
+// ---- the area ----
+async function setArea(polys, props, { zoom = true } = {}) {
+  if (!polys.length) {
+    area = null;
+    setData("area", null);
+    $("extracts").innerHTML = "";
+    $("save").disabled = $("use").disabled = true;
+    return say("No area yet. Find a place, draw a shape, or select a file.");
+  }
+  if (props.source !== "drawn" && draw.enabled) draw.clear();
+  if (props.name) $("name").value = props.name;
+  area = { polys, props };
+  $("save").disabled = $("use").disabled = true;
+  setData("area", geometry(polys));
+  if (zoom) fit(polys);
+  const km2 = Math.round(areaKm2(polys) * 100) / 100;
+  const vertices = polys.flat().reduce((s, r) => s + r.length - 1, 0);
+  say(`${km2.toLocaleString("en")} km², ${polys.length} polygon${polys.length > 1 ? "s" : ""}, ${vertices.toLocaleString("en")} vertices\n` +
+      `Source: ${esc(props.source)}` +
+      (km2 > 10000 ? `\n<span class="warn">A large area. The cut can take minutes, and the build can need more than 1 GB of memory.</span>` : ""));
+  $("extracts").innerHTML = "<p class='note'>Finding the Geofabrik extracts…</p>";
+  const mine = area;
+  cover = (await covering(polys)).slice(0, 3);
+  if (area !== mine) return;
+  area.props = { ...props, area_km2: km2, geofabrik: cover.map((x) => ({ id: x.id, name: x.name, pbf: x.pbf })) };
+  $("extracts").innerHTML = cover.length
+    ? "<h2>Region files</h2><p class='note'>The smallest Geofabrik extracts that cover the area. Download one, then select it in duckOSM in the browser.</p>" +
+      cover.map((x, i) => `<label><input type="radio" name="extract" value="${i}"> show <a href="${esc(x.pbf)}">${esc(x.name)}</a> ` +
+        `<span class="note">(${esc(x.id)}, ${Math.round(x.km2).toLocaleString("en")} km²)</span></label>`).join("")
+    : "<p class='note'>No Geofabrik extract covers the area. Use the planet file, or the Overpass option of duckOSM in the browser.</p>";
+  setData("extract", null);
+  $("save").disabled = $("use").disabled = false;
+  window.areas = (window.areas ?? 0) + 1;  // for boundary_e2e.py
+}
+
+$("extracts").onchange = (ev) => setData("extract", { type: "Feature", properties: {}, geometry: geometry(cover[Number(ev.target.value)].polygon) });
+
+// ---- find: Nominatim, at most 1 request each second, the last 20 answers kept ----
+let queue = Promise.resolve(), last = 0;
+const cache = new Map();
+function nominatim(path, params) {
+  const url = `https://nominatim.openstreetmap.org/${path}?` + new URLSearchParams({ format: "geojson", polygon_geojson: "1", extratags: "1", ...params });
+  if (cache.has(url)) return cache.get(url);
+  const p = (queue = queue.catch(() => {}).then(async () => {
+    await new Promise((ok) => setTimeout(ok, Math.max(0, last + 1000 - Date.now())));
+    last = Date.now();
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`Nominatim answered ${r.status}`);
+    return (await r.json()).features ?? [];
+  }));
+  cache.set(url, p);
+  p.catch(() => cache.delete(url));
+  if (cache.size > 20) cache.delete(cache.keys().next().value);
+  return p;
+}
+
+function list(features) {
+  found = features;
+  $("found").innerHTML = found.map((f, i) => {
+    const p = f.properties, ok = polygons(f.geometry).length > 0;
+    return `<label class="${ok ? "" : "point"}" data-i="${i}"><input type="radio" name="hit" value="${i}"${ok ? "" : " disabled"}> ${esc(p.display_name)} ` +
+      `<span class="note">(${esc(p.addresstype ?? p.type)}, ${esc(p.osm_type)} ${esc(p.osm_id)}${ok ? "" : ", a point: no boundary"})</span></label>`;
+  }).join("") || "<p class='note'>No place found.</p>";
+}
+
+$("search").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const q = $("q").value.trim();
+  if (!q) return;
+  $("found").innerHTML = "<p class='note'>Searching…</p>";
+  try { list(await nominatim("search", { q, limit: "8" })); }
+  catch (e) { $("found").innerHTML = `<p class="warn">The search failed: ${esc(e.message)}</p>`; }
+};
+
+// what is here: the areas at 5 levels around the point that the user clicks
+const picking = (on) => { $("here").setAttribute("aria-pressed", on); map.getCanvas().style.cursor = on ? "crosshair" : ""; };
+$("here").onclick = () => picking($("here").getAttribute("aria-pressed") !== "true");
+map.on("click", async (ev) => {
+  if ($("here").getAttribute("aria-pressed") !== "true") return;
+  picking(false);
+  const { lng: lon, lat } = ev.lngLat, got = [];
+  $("found").innerHTML = "<p class='note'>Searching…</p>";
+  for (const zoom of [14, 10, 8, 5, 3]) {
+    try {
+      for (const f of await nominatim("reverse", { lat: lat.toFixed(6), lon: lon.toFixed(6), zoom }))
+        if (!got.some((g) => g.properties.osm_id === f.properties.osm_id && g.properties.osm_type === f.properties.osm_type)) got.push(f);
+      list(got);
+    } catch (e) { $("found").insertAdjacentHTML("beforeend", `<p class="warn">${esc(e.message)}</p>`); }
+  }
+});
+
+const preview = (i) => setData("preview", i == null ? null : { type: "Feature", properties: {}, geometry: found[i].geometry });
+const point = (ev) => { const l = ev.target.closest("label"); if (l) preview(Number(l.dataset.i)); };
+$("found").addEventListener("mouseover", point);
+$("found").addEventListener("focusin", point);
+$("found").onmouseleave = () => preview(null);
 $("found").onchange = (ev) => {
   const f = found[Number(ev.target.value)], p = f.properties;
   const level = Number(p.extratags?.admin_level);
-  show(f.geometry, { name: p.name || p.display_name.split(",")[0], osm_id: p.osm_type === "relation" ? p.osm_id : null,
-                     admin_level: Number.isInteger(level) ? level : null, source: `Nominatim ${p.osm_type} ${p.osm_id}` });
+  preview(null);
+  setArea(polygons(f.geometry), { name: p.name || p.display_name.split(",")[0], osm_id: p.osm_type === "relation" ? p.osm_id : null,
+                                  admin_level: Number.isInteger(level) ? level : null, source: `Nominatim ${p.osm_type} ${p.osm_id}` });
 };
 
-$("file").onchange = async () => {
-  const file = $("file").files[0];
-  try {
-    const g = JSON.parse(await file.text());
-    const f = g.type === "FeatureCollection" ? g.features[0] : g.type === "Feature" ? g : { geometry: g, properties: {} };
-    const p = f.properties || {};
-    show(f.geometry, { name: p.name || file.name.replace(/\.(geo)?json$/, ""), osm_id: p.osm_id ?? null,
-                       admin_level: p.admin_level ?? null, source: p.source || `file ${file.name}` });
-  } catch (e) {
-    $("info").textContent = "The file is not GeoJSON: " + e.message;
-  }
-};
-
-$("usebox").onclick = () => {
-  const [w, s, e, n] = $("bbox").value.split(",").map(Number);
-  if (![w, s, e, n].every(Number.isFinite) || w >= e || s >= n) return ($("info").textContent = "Give west, south, east, north in degrees.");
-  show({ type: "Polygon", coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]] },
-       { name: "box", osm_id: null, admin_level: null, source: `box ${w},${s},${e},${n}` });
-};
-
-async function show(geometry, props) {
-  const polys = polygons(geometry);
-  if (!polys.length) return ($("info").textContent = "The geometry is not a Polygon or a MultiPolygon.");
-  $("name").value = props.name;
-  $("info").textContent = "finding the Geofabrik extract…";
-  const cover = await covering(polys);
-  const km2 = Math.round(areaKm2(polys) * 100) / 100;
-  area = { geometry, props: { ...props, area_km2: km2,
-           geofabrik: cover.slice(0, 3).map((x) => ({ id: x.id, name: x.name, pbf: x.pbf })) } };
-  $("info").innerHTML = `${esc(props.name)}: ${km2.toLocaleString()} km², ${polys.length} polygon(s), source ${esc(props.source)}.\n\n` +
-    (cover.length ? "The smallest Geofabrik extracts that cover the area (download one, then select it in duckOSM in the browser):\n" +
-      cover.slice(0, 3).map((x) => `  <a href="${x.pbf}">${esc(x.name)}</a> (${esc(x.id)}, ${Math.round(x.km2).toLocaleString()} km²)`).join("\n")
-     : "No Geofabrik extract covers the area. Use the planet file, or the Overpass option of duckOSM in the browser.");
-  $("save").disabled = $("use").disabled = false;
+// ---- draw ----
+let selected = null;
+const toolButtons = [...document.querySelectorAll("[data-mode]")];
+function tool(mode) {
+  for (const b of toolButtons) b.setAttribute("aria-pressed", b.dataset.mode === mode);
+  if (draw.enabled) draw.setMode(mode ?? "static");
 }
+for (const b of toolButtons) b.onclick = () => tool(b.getAttribute("aria-pressed") === "true" ? null : b.dataset.mode);
 
-// the format of `duckosm boundary`: a FeatureCollection with one Feature
+// the drawn shapes, merged where they overlap
+async function drawn() {
+  const shapes = draw.getSnapshot().filter((f) => f.geometry.type === "Polygon" && f.properties.mode !== "select").map((f) => f.geometry.coordinates);
+  if (!shapes.length) return area?.props.source === "drawn" ? setArea([], {}) : undefined;
+  const { union } = await import("polyclip-ts");
+  const polys = shapes.length > 1 ? union(...shapes) : shapes;
+  setArea(polys, { name: area?.props.source === "drawn" ? $("name").value : "drawn area", osm_id: null, admin_level: null, source: "drawn" }, { zoom: false });
+}
+draw.on("finish", drawn);
+draw.on("change", (ids, type) => {
+  if (type !== "delete") return;
+  if (ids.includes(selected)) { selected = null; $("delete").disabled = true; }  // the Delete key
+  drawn();
+});
+draw.on("select", (id) => { selected = id; $("delete").disabled = false; });
+draw.on("deselect", () => { selected = null; $("delete").disabled = true; });
+$("delete").onclick = () => { if (selected != null) { draw.removeFeatures([selected]); selected = null; $("delete").disabled = true; drawn(); } };
+$("clear").onclick = () => { draw.clear(); drawn(); };
+
+// ---- file ----
+function readGeoJSON(text, fileName) {
+  const g = JSON.parse(text);
+  const feats = g.type === "FeatureCollection" ? g.features : g.type === "Feature" ? [g] : [{ geometry: g, properties: {} }];
+  const polys = feats.flatMap((f) => polygons(f.geometry));
+  if (!polys.length) throw new Error("no Polygon or MultiPolygon in it");
+  const p = feats[0].properties || {};
+  return [polys, { name: p.name || fileName.replace(/\.(geo)?json$/, ""), osm_id: p.osm_id ?? null,
+                   admin_level: p.admin_level ?? null, source: p.source || `file ${fileName}` }];
+}
+async function openFile(file) {
+  try { await setArea(...readGeoJSON(await file.text(), file.name)); }
+  catch (e) { say(`<span class="warn">The file is not usable: ${esc(e.message)}</span>`); }
+}
+$("file").onchange = () => {
+  if ($("file").files[0]) openFile($("file").files[0]);
+  $("file").value = "";  // the same file can then be selected again
+};
+addEventListener("dragover", (ev) => { ev.preventDefault(); document.body.classList.add("dragging"); });
+addEventListener("dragleave", (ev) => ev.relatedTarget || document.body.classList.remove("dragging"));
+addEventListener("drop", (ev) => {
+  ev.preventDefault();
+  document.body.classList.remove("dragging");
+  if (ev.dataTransfer.files[0]) openFile(ev.dataTransfer.files[0]);
+});
+
+// ---- the output: the format of `duckosm boundary`, a FeatureCollection with one Feature ----
 const text = () => JSON.stringify({ type: "FeatureCollection", features: [
-  { type: "Feature", properties: { ...area.props, name: $("name").value.trim() || area.props.name }, geometry: area.geometry }] });
+  { type: "Feature", properties: { ...area.props, name: $("name").value.trim() || area.props.name }, geometry: geometry(area.polys) }] });
 
 $("save").onclick = () => {
   const a = document.createElement("a");
@@ -168,9 +376,15 @@ $("use").onclick = () => {
     localStorage.setItem("duckosm.boundary", text());
     location.href = "index.html";
   } catch (e) {
-    $("info").textContent += "\n\nThe browser did not keep the boundary (" + e.message + "). Download it, and select the file in duckOSM in the browser.";
+    say(`<span class="warn">The browser did not keep the boundary (${esc(e.message)}). Download it, and select the file in duckOSM in the browser.</span>`);
   }
 };
+
+// the last boundary, for example after a return from duckOSM in the browser
+try {
+  const kept = localStorage.getItem("duckosm.boundary");
+  if (kept) setArea(...readGeoJSON(kept, "the last boundary"));
+} catch (e) { /* no storage, or not usable: start empty */ }
 </script>
 </body>
 </html>

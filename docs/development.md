@@ -108,6 +108,15 @@ The test writes its files to `target/tmp/duckosm-wasm-native/`. Compare them wit
 the page as JSON. The CLI writes zstd and the page writes snap, so compare `out-area` and `out-cli` by rows,
 not with `cmp`.
 
+Open the boundary tool at `http://localhost:8000/boundary.html`. It loads MapLibre GL JS, terra-draw and
+polyclip-ts from cdn.jsdelivr.net, and the map from OpenFreeMap. Check it in headless Chromium (a file, two
+rectangles drawn with the mouse, a Nominatim search, and the hand-off to `index.html`; `--no-search` skips
+the search):
+
+```bash
+python crates/duckosm-wasm/www/boundary_e2e.py
+```
+
 The boundary tool uses `www/geofabrik.json`, a small copy of Geofabrik's list of extracts (Geofabrik sends no
 CORS header). Make it again when Geofabrik changes its extracts:
 
