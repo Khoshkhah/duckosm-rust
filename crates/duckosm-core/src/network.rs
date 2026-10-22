@@ -7,6 +7,7 @@ use crate::geom::{self, Pt};
 use crate::hash;
 use crate::model::{Edge, MapRow, Network, Node, Stats, Way};
 use crate::util::{FxHashMap, FxHashSet};
+use rstar::{primitives::GeomWithData, RTree, AABB};
 
 #[derive(Clone, Debug)]
 pub struct Options {
@@ -16,6 +17,10 @@ pub struct Options {
     pub cycling_dismount: bool,
     /// Cut the roads at one set of junctions for all modes (duckOSM `options.global_junctions`, on by default).
     pub global_junctions: bool,
+    /// Add a straight connector edge from each dangling path end to the nearest node within `snap_m`
+    /// (duckOSM `clip.connectivity_rescue`, on by default; walking and cycling only).
+    pub connect_paths: bool,
+    pub snap_m: f64,
     /// Join the chains of edges that are one road (duckOSM `options.merge_segments`, on by default).
     pub merge_segments: bool,
 }
@@ -27,6 +32,8 @@ impl Default for Options {
             cycling_dismount: true,
             merge_segments: true,
             global_junctions: true,
+            connect_paths: true,
+            snap_m: 10.0,
         }
     }
 }
@@ -412,6 +419,16 @@ pub fn build_network(
     }
     nodes.extend(virtual_nodes);
 
+    // 8b. Connect the dangling path ends to the network (walking and cycling).
+    if opts.connect_paths && mode != Mode::Driving {
+        stats.connectors = connect_paths(
+            &mut edges,
+            &nodes,
+            opts.snap_m,
+            mode == Mode::Cycling && opts.cycling_dismount,
+        );
+    }
+
     // 9. Move private roads, bus-only roads and pedestrian streets to private_edges.
     let moved = |e: &Edge| {
         matches!(e.access.as_deref(), Some("private") | Some("bus"))
@@ -751,4 +768,189 @@ fn merge_chains(
     }
     map.sort_by_key(|m| (m.new_edge_id, m.seq, m.old_edge_id));
     (merged, map, n_chains, n_pieces)
+}
+
+const PATH_CLASSES: [&str; 6] = [
+    "cycleway",
+    "footway",
+    "path",
+    "steps",
+    "pedestrian",
+    "track",
+];
+
+/// `PathConnector`: reconnect dangling path ends. Returns the number of connectors (each has two edges).
+fn connect_paths(edges: &mut Vec<Edge>, nodes: &[Node], snap_m: f64, dismount: bool) -> usize {
+    // 1. the undirected segments: (a, b) -> (smallest osm_id, a highway)
+    let mut und: FxHashMap<(i64, i64), (i64, String)> = FxHashMap::default();
+    for e in edges.iter() {
+        let key = (e.source.min(e.target), e.source.max(e.target));
+        und.entry(key)
+            .and_modify(|v| v.0 = v.0.min(e.osm_id))
+            .or_insert((e.osm_id, e.highway.clone()));
+    }
+    // 2. for each node: how many segments touch it, the other end and way of the last one, the smallest osm_id
+    struct Touch {
+        count: u32,
+        other: i64,
+        osm: i64,
+        hw: String,
+        min_osm: i64,
+    }
+    let mut touch: FxHashMap<i64, Touch> = FxHashMap::default();
+    let mut keys: Vec<&(i64, i64)> = und.keys().collect();
+    keys.sort();
+    for &(a, b) in keys {
+        let (osm, hw) = &und[&(a, b)];
+        for (node, other) in [(a, b), (b, a)] {
+            let t = touch.entry(node).or_insert(Touch {
+                count: 0,
+                other,
+                osm: *osm,
+                hw: hw.clone(),
+                min_osm: *osm,
+            });
+            t.count += 1;
+            t.other = other;
+            t.osm = *osm;
+            t.hw = hw.clone();
+            t.min_osm = t.min_osm.min(*osm);
+        }
+    }
+    let by_id: FxHashMap<i64, usize> = nodes
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (n.node_id, i))
+        .collect();
+    let mut dangles: Vec<(i64, &Touch)> = touch
+        .iter()
+        .filter(|(n, t)| {
+            t.count == 1 && PATH_CLASSES.contains(&t.hw.as_str()) && by_id.contains_key(n)
+        })
+        .map(|(n, t)| (*n, t))
+        .collect();
+    dangles.sort_by_key(|d| d.0);
+    if dangles.is_empty() {
+        return 0;
+    }
+    // 3. the nearest node within snap_m (a local metric at the latitude of the dangle)
+    let tree = RTree::bulk_load(
+        nodes
+            .iter()
+            .enumerate()
+            .map(|(i, n)| GeomWithData::new([n.lon, n.lat], i))
+            .collect(),
+    );
+    let mut pairs: Vec<(i64, i64, String, f64, i64)> = Vec::new();
+    let mut seen: FxHashSet<(i64, i64)> = FxHashSet::default();
+    for (dnode, t) in dangles {
+        let d = nodes[by_id[&dnode]];
+        let coslat = d.lat.to_radians().cos();
+        let coslat = if coslat == 0.0 { 1e-9 } else { coslat };
+        let dlat = snap_m / 111320.0 * 1.5;
+        let dlon = dlat / coslat.abs().max(1e-9);
+        let mut best: Option<(f64, usize)> = None;
+        for c in tree.locate_in_envelope(&AABB::from_corners(
+            [d.lon - dlon, d.lat - dlat],
+            [d.lon + dlon, d.lat + dlat],
+        )) {
+            let n = nodes[c.data];
+            if n.node_id == dnode || n.node_id == t.other {
+                continue;
+            }
+            let dist = ((n.lon - d.lon) * 111320.0 * coslat).hypot((n.lat - d.lat) * 111320.0);
+            if best.map_or(true, |b| (dist, c.data) < b) {
+                best = Some((dist, c.data));
+            }
+        }
+        if let Some((dist, j)) = best {
+            if dist <= snap_m {
+                let target = nodes[j].node_id;
+                let key = (dnode.min(target), dnode.max(target));
+                if seen.insert(key) {
+                    let other_osm = touch.get(&target).map_or(t.osm, |x| x.min_osm);
+                    let osm_id = -(t.osm.min(other_osm));
+                    pairs.push((
+                        dnode,
+                        target,
+                        t.hw.clone(),
+                        (dist * 100.0).round() / 100.0,
+                        osm_id,
+                    ));
+                }
+            }
+        }
+    }
+    // 4. the connector edges, both directions
+    let mut rank: FxHashMap<i64, Vec<(i64, i64)>> = FxHashMap::default();
+    for p in &pairs {
+        rank.entry(p.4)
+            .or_default()
+            .push((p.0.min(p.1), p.0.max(p.1)));
+    }
+    for v in rank.values_mut() {
+        v.sort();
+        v.dedup();
+    }
+    let first_new = edges.len();
+    for (a, b, hw, dist, osm_id) in &pairs {
+        let seq = rank[osm_id].binary_search(&(*a.min(b), *a.max(b))).unwrap() + 1;
+        for (s, t, is_reverse) in [(*a, *b, false), (*b, *a, true)] {
+            let (ns, nt) = (nodes[by_id[&s]], nodes[by_id[&t]]);
+            edges.push(Edge {
+                edge_id: hash::edge_id(*osm_id, s, t),
+                edge_ref: Some(format!(
+                    "{}#{}{}",
+                    osm_id,
+                    seq,
+                    if is_reverse { 'r' } else { 'f' }
+                )),
+                source: s,
+                target: t,
+                osm_id: *osm_id,
+                highway: hw.clone(),
+                name: None,
+                maxspeed: None,
+                oneway: false,
+                lanes: None,
+                surface: None,
+                access: None,
+                junction: None,
+                layer: None,
+                bridge: None,
+                tunnel: None,
+                service: None,
+                refs: vec![s, t],
+                geometry: vec![(ns.lon, ns.lat), (nt.lon, nt.lat)],
+                is_reverse,
+                length_m: *dist as f32,
+                dismount: if dismount { Some(false) } else { None },
+            });
+        }
+    }
+    // 5. a connector that extends a footway or pedestrian way that is walked is walked too
+    if dismount {
+        let walked: Vec<(String, i64, i64)> = edges[..first_new]
+            .iter()
+            .filter(|e| e.osm_id > 0 && e.dismount == Some(true))
+            .map(|e| (e.highway.clone(), e.source, e.target))
+            .collect();
+        let mut by_node: FxHashMap<(&str, i64), ()> = FxHashMap::default();
+        for (hw, s, t) in &walked {
+            by_node.insert((hw.as_str(), *s), ());
+            by_node.insert((hw.as_str(), *t), ());
+        }
+        let flags: Vec<bool> = edges[first_new..]
+            .iter()
+            .map(|e| {
+                matches!(e.highway.as_str(), "footway" | "pedestrian")
+                    && (by_node.contains_key(&(e.highway.as_str(), e.source))
+                        || by_node.contains_key(&(e.highway.as_str(), e.target)))
+            })
+            .collect();
+        for (e, f) in edges[first_new..].iter_mut().zip(flags) {
+            e.dismount = Some(f);
+        }
+    }
+    pairs.len()
 }

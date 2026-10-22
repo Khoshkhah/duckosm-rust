@@ -162,6 +162,7 @@ pub struct Stats {
     pub parallel_split: usize,
     pub antiparallel_split: usize,
     pub merged_chains: usize,
+    pub connectors: usize,
     pub merged_pieces: usize,
     pub private_edges: usize,
     pub dropped_by_component_filter: usize,

@@ -17,3 +17,9 @@ merge_gj_cf	cycling	9434	133	4139	0	b71300be3fe52735	afafff05bc4c86ce
 merge_gj_sw	driving	3092	724	1904	0	28d4aae45d7b7241	71672fe008f3b815
 merge_gj_sw	walking	11998	166	4799	0	7ac76df16fa4b3c2	22fac69d205a399
 merge_gj_sw	cycling	10670	141	4867	0	f26d18ebdcdd08f7	e673fe3965b500cf
+merge_gj_cp	driving	3092	724	1904	0	28d4aae45d7b7241	71672fe008f3b815
+merge_gj_cp	walking	12756	166	4821	0	5810c4a54e6cd032	22fac69d205a399
+merge_gj_cp	cycling	11818	141	4868	0	e5a9f13a550a9d1c	e673fe3965b500cf
+merge_gj_cfcp	driving	2765	689	1719	0	3b36990a04e2ba6b	7934092300a69b92
+merge_gj_cfcp	walking	11968	158	4476	0	70d0e88c2a30a13e	4bf3ad550bfc2598
+merge_gj_cfcp	cycling	11124	133	4537	0	59cb500c6a954a9e	afafff05bc4c86ce

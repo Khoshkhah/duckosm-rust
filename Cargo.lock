@@ -625,6 +625,7 @@ name = "duckosm-duckdb"
 version = "0.0.1"
 dependencies = [
  "duckdb",
+ "duckosm-core",
 ]
 
 [[package]]

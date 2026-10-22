@@ -7,7 +7,6 @@
 
 use crate::model::Way;
 use crate::network::Coords;
-use crate::util::FxHashMap;
 use rstar::{RTree, RTreeObject, AABB};
 
 const SIDE_M: f64 = 12.0; // a sidewalk line this near the road line can be its sidewalk

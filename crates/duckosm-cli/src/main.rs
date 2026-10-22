@@ -33,6 +33,12 @@ struct Cli {
     /// Do not infer sidewalk=separate on roads that have a sidewalk line on both sides (duckOSM option infer_separate_sidewalks).
     #[arg(long)]
     no_sidewalk_inference: bool,
+    /// Do not connect the dangling path ends to the network (duckOSM option connectivity_rescue: false).
+    #[arg(long)]
+    no_connect_paths: bool,
+    /// The distance in metres within which a dangling path end is connected.
+    #[arg(long, default_value_t = 10.0)]
+    snap_m: f64,
     /// Do not join the chains of edges that are one road (duckOSM option merge_segments).
     #[arg(long)]
     no_merge_segments: bool,
@@ -96,6 +102,8 @@ fn run() -> Result<(), String> {
         cycling_dismount: !cli.no_cycling_dismount,
         merge_segments: !cli.no_merge_segments,
         global_junctions: !cli.no_global_junctions,
+        connect_paths: !cli.no_connect_paths,
+        snap_m: cli.snap_m,
     };
     let pq_dir = if formats.contains(&"geoparquet") {
         cli.out.clone()
