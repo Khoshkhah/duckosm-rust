@@ -2,7 +2,7 @@
 //! `GlobalJunctions`, `RoadFilter`, `GraphSimplifier`, `_split_private` and `ComponentFilter` of duckOSM.
 //! Not in this version: `merge_segments`, OSM overrides, speeds, costs, turn restrictions, H3.
 
-use crate::filter::{self, ModeWay, NON_ROAD};
+use crate::filter::{self, Mode, ModeWay, NON_ROAD};
 use crate::geom::{self, Pt};
 use crate::hash;
 use crate::model::{Edge, Network, Node, Stats, Way};
@@ -12,12 +12,15 @@ use crate::util::{FxHashMap, FxHashSet};
 pub struct Options {
     /// Keep only the largest connected part of the graph (duckOSM does this when a boundary is set).
     pub keep_largest_component: bool,
+    /// Cycling also gets footways and pedestrian streets, as edges that are walked (`dismount`).
+    pub cycling_dismount: bool,
 }
 
 impl Default for Options {
     fn default() -> Self {
         Options {
             keep_largest_component: true,
+            cycling_dismount: true,
         }
     }
 }
@@ -149,12 +152,25 @@ fn refs_key(e: &Edge) -> String {
 }
 
 pub fn build_driving(all_ways: &[Way], coords: &Coords, opts: &Options) -> Result<Network, String> {
+    build_network(all_ways, coords, Mode::Driving, opts)
+}
+
+/// The network of one mode.
+pub fn build_network(
+    all_ways: &[Way],
+    coords: &Coords,
+    mode: Mode,
+    opts: &Options,
+) -> Result<Network, String> {
     let mut stats = Stats {
         ways_read: all_ways.len(),
         ..Default::default()
     };
     let gj = global_junctions(all_ways);
-    let mw: Vec<ModeWay> = all_ways.iter().filter_map(filter::driving_way).collect();
+    let mw: Vec<ModeWay> = all_ways
+        .iter()
+        .filter_map(|w| filter::mode_way(w, mode, opts.cycling_dismount))
+        .collect();
     stats.ways_kept = mw.len();
     let lj = local_junctions(&mw);
 
@@ -210,6 +226,7 @@ pub fn build_driving(all_ways: &[Way], coords: &Coords, opts: &Options) -> Resul
                     geometry,
                     is_reverse: false,
                     length_m,
+                    dismount: w.dismount,
                 },
                 way: wi,
             });
@@ -366,7 +383,8 @@ pub fn build_driving(all_ways: &[Way], coords: &Coords, opts: &Options) -> Resul
 
     // 9. Move private roads, bus-only roads and pedestrian streets to private_edges.
     let moved = |e: &Edge| {
-        matches!(e.access.as_deref(), Some("private") | Some("bus")) || e.highway == "pedestrian"
+        matches!(e.access.as_deref(), Some("private") | Some("bus"))
+            || (mode == Mode::Driving && e.highway == "pedestrian")
     };
     let (private_edges, mut edges): (Vec<Edge>, Vec<Edge>) = edges.into_iter().partition(moved);
     stats.private_edges = private_edges.len();

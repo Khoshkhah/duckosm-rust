@@ -77,8 +77,8 @@ fn list_field(name: &str) -> Field {
     )
 }
 
-pub fn edges_schema() -> Schema {
-    Schema::new(vec![
+pub fn edges_schema(with_dismount: bool) -> Schema {
+    let mut fields = vec![
         Field::new("edge_id", DataType::Int64, false),
         Field::new("edge_ref", DataType::Utf8, true),
         Field::new("source", DataType::Int64, false),
@@ -100,7 +100,11 @@ pub fn edges_schema() -> Schema {
         Field::new("is_reverse", DataType::Boolean, false),
         Field::new("length_m", DataType::Float32, false),
         Field::new("geometry", DataType::Binary, false),
-    ])
+    ];
+    if with_dismount {
+        fields.push(Field::new("dismount", DataType::Boolean, true));
+    }
+    Schema::new(fields)
 }
 
 pub fn nodes_schema() -> Schema {
@@ -110,7 +114,7 @@ pub fn nodes_schema() -> Schema {
     ])
 }
 
-fn edges_batch(schema: &Arc<Schema>, rows: &[Edge]) -> RecordBatch {
+fn edges_batch(schema: &Arc<Schema>, rows: &[Edge], with_dismount: bool) -> RecordBatch {
     let n = rows.len();
     let mut edge_id = Int64Builder::with_capacity(n);
     let mut edge_ref = StringBuilder::new();
@@ -133,6 +137,7 @@ fn edges_batch(schema: &Arc<Schema>, rows: &[Edge]) -> RecordBatch {
     let mut is_reverse = BooleanBuilder::with_capacity(n);
     let mut length_m = Float32Builder::with_capacity(n);
     let mut geometry = BinaryBuilder::new();
+    let mut dismount = BooleanBuilder::with_capacity(n);
     for e in rows {
         edge_id.append_value(e.edge_id);
         edge_ref.append_option(e.edge_ref.as_deref());
@@ -156,6 +161,7 @@ fn edges_batch(schema: &Arc<Schema>, rows: &[Edge]) -> RecordBatch {
         is_reverse.append_value(e.is_reverse);
         length_m.append_value(e.length_m);
         geometry.append_value(line_wkb(&e.geometry));
+        dismount.append_option(e.dismount);
     }
     let cols: Vec<ArrayRef> = vec![
         Arc::new(edge_id.finish()),
@@ -180,6 +186,10 @@ fn edges_batch(schema: &Arc<Schema>, rows: &[Edge]) -> RecordBatch {
         Arc::new(length_m.finish()),
         Arc::new(geometry.finish()),
     ];
+    let mut cols = cols;
+    if with_dismount {
+        cols.push(Arc::new(dismount.finish()));
+    }
     RecordBatch::try_new(schema.clone(), cols).expect("edge columns match the schema")
 }
 
@@ -188,8 +198,8 @@ fn err<E: std::fmt::Display>(e: E) -> String {
 }
 
 /// Write the edges as a GeoParquet file with LineString geometry.
-pub fn write_edges(path: &Path, rows: &[Edge]) -> Result<(), String> {
-    let schema = Arc::new(edges_schema());
+pub fn write_edges(path: &Path, rows: &[Edge], with_dismount: bool) -> Result<(), String> {
+    let schema = Arc::new(edges_schema(with_dismount));
     let mut w = ArrowWriter::try_new(
         File::create(path).map_err(err)?,
         schema.clone(),
@@ -197,7 +207,8 @@ pub fn write_edges(path: &Path, rows: &[Edge]) -> Result<(), String> {
     )
     .map_err(err)?;
     for chunk in rows.chunks(ROW_GROUP) {
-        w.write(&edges_batch(&schema, chunk)).map_err(err)?;
+        w.write(&edges_batch(&schema, chunk, with_dismount))
+            .map_err(err)?;
     }
     w.close().map_err(err)?;
     Ok(())

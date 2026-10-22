@@ -7,7 +7,7 @@ use crate::util::FxHashSet;
 use osmpbf::{Element, ElementReader};
 use std::path::Path;
 
-/// Pass 1: all highway ways that exist on the ground, sorted by id.
+/// Pass 1: all highway ways and ferry lines, sorted by id.
 pub fn read_ways(path: &Path) -> Result<Vec<Way>, String> {
     let reader = ElementReader::from_path(path).map_err(|e| e.to_string())?;
     let mut ways = reader
@@ -19,7 +19,7 @@ pub fn read_ways(path: &Path) -> Result<Vec<Way>, String> {
                     for (k, val) in w.tags() {
                         tags.set(k, val);
                     }
-                    if filter::is_built_highway(&tags) {
+                    if filter::is_kept_by_reader(&tags) {
                         v.push(Way {
                             id: w.id(),
                             refs: w.refs().collect(),

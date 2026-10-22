@@ -1,7 +1,33 @@
-//! The driving road filter (`RoadFilter` in duckOSM): which ways are roads for cars, and their
-//! one-way direction, access and lanes.
+//! The road filter of duckOSM (`RoadFilter`): which ways are in the network of a mode, and their
+//! one-way direction, access and lanes. Modes: driving, walking, cycling.
 
 use crate::model::{Tags, Way};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Mode {
+    Driving,
+    Walking,
+    Cycling,
+}
+
+impl Mode {
+    pub fn name(self) -> &'static str {
+        match self {
+            Mode::Driving => "driving",
+            Mode::Walking => "walking",
+            Mode::Cycling => "cycling",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Mode> {
+        match s {
+            "driving" => Some(Mode::Driving),
+            "walking" => Some(Mode::Walking),
+            "cycling" => Some(Mode::Cycling),
+            _ => None,
+        }
+    }
+}
 
 pub const NON_ROAD: [&str; 7] = [
     "footway",
@@ -31,7 +57,45 @@ const ROAD_CLASSES: [&str; 16] = [
     "road",
     "busway",
 ];
-const FORBIDDEN: [&str; 4] = ["no", "agricultural", "forestry", "emergency"];
+const WALK_CLASSES: [&str; 21] = [
+    "footway",
+    "path",
+    "pedestrian",
+    "steps",
+    "living_street",
+    "residential",
+    "service",
+    "platform",
+    "corridor",
+    "track",
+    "bridleway",
+    "road",
+    "unclassified",
+    "tertiary",
+    "tertiary_link",
+    "secondary",
+    "secondary_link",
+    "primary",
+    "primary_link",
+    "trunk",
+    "trunk_link",
+];
+const CYCLE_CLASSES: [&str; 14] = [
+    "cycleway",
+    "path",
+    "track",
+    "bridleway",
+    "living_street",
+    "residential",
+    "service",
+    "unclassified",
+    "tertiary",
+    "tertiary_link",
+    "secondary",
+    "secondary_link",
+    "primary",
+    "primary_link",
+];
 const NON_MOTOR: [&str; 8] = [
     "footway",
     "path",
@@ -42,12 +106,37 @@ const NON_MOTOR: [&str; 8] = [
     "corridor",
     "platform",
 ];
+const YES: [&str; 3] = ["yes", "designated", "permissive"];
+
+type Tri = Option<bool>; // SQL three-valued logic: None is NULL
 
 fn is(o: &Option<Box<str>>, v: &str) -> bool {
     o.as_deref() == Some(v)
 }
 fn is_in(o: &Option<Box<str>>, vs: &[&str]) -> bool {
     o.as_deref().map_or(false, |x| vs.contains(&x))
+}
+/// `x IN (...)`: NULL when x is NULL.
+fn tin(o: &Option<Box<str>>, vs: &[&str]) -> Tri {
+    o.as_deref().map(|x| vs.contains(&x))
+}
+fn and(a: Tri, b: Tri) -> Tri {
+    match (a, b) {
+        (Some(false), _) | (_, Some(false)) => Some(false),
+        (Some(true), Some(true)) => Some(true),
+        _ => None,
+    }
+}
+fn or(a: Tri, b: Tri) -> Tri {
+    match (a, b) {
+        (Some(true), _) | (_, Some(true)) => Some(true),
+        (Some(false), Some(false)) => Some(false),
+        _ => None,
+    }
+}
+/// `COALESCE(x, '') <> v`
+fn ne_or_null(o: &Option<Box<str>>, v: &str) -> Tri {
+    Some(o.as_deref().unwrap_or("") != v)
 }
 fn first<'a>(os: &[&'a Option<Box<str>>]) -> Option<&'a str> {
     os.iter().find_map(|o| o.as_deref())
@@ -59,7 +148,7 @@ pub fn ped_ok(t: &Tags) -> bool {
         return false;
     }
     let mv = first(&[&t.motorcar, &t.motor_vehicle]);
-    mv.map_or(false, |x| ["yes", "designated", "permissive"].contains(&x))
+    mv.map_or(false, |x| YES.contains(&x))
         || is_in(&t.access, &["delivery", "destination", "agricultural"])
 }
 
@@ -68,13 +157,18 @@ pub fn is_built_highway(t: &Tags) -> bool {
     t.highway.is_some() && !is_in(&t.highway, &NOT_BUILT)
 }
 
+/// A way that the reader keeps: a highway, or a ferry line (it has no highway tag).
+pub fn is_kept_by_reader(t: &Tags) -> bool {
+    t.highway.is_some() || is(&t.route, "ferry")
+}
+
 /// A road for the cut rule of the global junctions: not a path, or a pedestrian street cars may use.
 pub fn is_road_raw(t: &Tags) -> bool {
     let hw = t.highway.as_deref().unwrap_or("");
     !NON_ROAD.contains(&hw) || ped_ok(t)
 }
 
-/// A way of the driving network, after the filter.
+/// A way of one network, after the filter.
 #[derive(Clone, Debug)]
 pub struct ModeWay {
     pub id: i64,
@@ -94,6 +188,7 @@ pub struct ModeWay {
     pub tunnel: Option<String>,
     pub lanes_fwd: Option<i32>,
     pub lanes_bwd: Option<i32>,
+    pub dismount: Option<bool>,
 }
 
 fn s(o: &Option<Box<str>>) -> Option<String> {
@@ -112,62 +207,175 @@ fn first_int(o: &Option<Box<str>>) -> Option<i32> {
     v[start..end].parse::<i32>().ok().filter(|&n| n != 0)
 }
 
-/// The access value of the way for cars (`_access_expression`, driving).
-fn access_of(t: &Tags) -> Option<String> {
-    let car = first(&[&t.motorcar, &t.motor_vehicle, &t.vehicle, &t.access]);
-    if is(&t.highway, "pedestrian") && !ped_ok(t) {
-        return Some(match car {
-            Some(c) if c == "delivery" || c == "private" => c.to_string(),
-            _ => "pedestrian".to_string(),
-        });
-    }
-    let bus_ok = is_in(&t.bus, &["yes", "designated"]) || is_in(&t.psv, &["yes", "designated"]);
-    if is(&t.highway, "busway")
-        || car == Some("psv")
-        || (matches!(car, Some("no") | Some("private")) && bus_ok)
-    {
-        return Some("bus".to_string());
-    }
-    car.map(str::to_string)
+/// A footway or pedestrian way that does not admit bikes: cyclists push the bike (`dismount`).
+fn pushes_bike(t: &Tags) -> bool {
+    is_in(&t.highway, &["footway", "pedestrian"]) && !is_in(&t.bicycle, &YES)
 }
 
-/// Travel direction: 1 one-way as drawn, -1 one-way against the drawing, 0 two-way.
-fn direction(t: &Tags) -> i32 {
-    if is_in(&t.junction, &["roundabout", "circular"]) {
-        return 1;
+/// The access value of the way for the mode (`_access_expression`).
+fn access_of(t: &Tags, mode: Mode, dismount: bool) -> Option<String> {
+    match mode {
+        Mode::Driving => {
+            let car = first(&[&t.motorcar, &t.motor_vehicle, &t.vehicle, &t.access]);
+            if is(&t.highway, "pedestrian") && !ped_ok(t) {
+                return Some(match car {
+                    Some(c) if c == "delivery" || c == "private" => c.to_string(),
+                    _ => "pedestrian".to_string(),
+                });
+            }
+            let bus_ok =
+                is_in(&t.bus, &["yes", "designated"]) || is_in(&t.psv, &["yes", "designated"]);
+            if is(&t.highway, "busway")
+                || car == Some("psv")
+                || (matches!(car, Some("no") | Some("private")) && bus_ok)
+            {
+                return Some("bus".to_string());
+            }
+            car.map(str::to_string)
+        }
+        Mode::Walking => first(&[&t.foot, &t.access]).map(str::to_string),
+        Mode::Cycling => {
+            if dismount && pushes_bike(t) {
+                first(&[&t.foot, &t.access]).map(str::to_string)
+            } else {
+                first(&[&t.bicycle, &t.vehicle, &t.access]).map(str::to_string)
+            }
+        }
     }
-    if is_in(&t.oneway, &["yes", "1", "true"]) {
-        return 1;
-    }
-    if is(&t.oneway, "-1") {
-        return -1;
-    }
-    if is_in(&t.oneway, &["no", "false", "0"]) {
-        return 0;
-    }
-    if is_in(&t.highway, &["motorway", "motorway_link"]) {
-        return 1;
-    }
-    0
 }
 
-/// Apply the driving filter to one way. None if the way is not in the driving network.
-pub fn driving_way(w: &Way) -> Option<ModeWay> {
+/// Travel direction: 1 one-way as drawn, -1 one-way against the drawing, 0 two-way (`_direction_expression`).
+fn direction(t: &Tags, mode: Mode, dismount: bool) -> i32 {
+    match mode {
+        Mode::Walking => {
+            if is_in(&t.oneway_foot, &["yes", "1", "true"]) {
+                1
+            } else if is(&t.oneway_foot, "-1") {
+                -1
+            } else {
+                0
+            }
+        }
+        Mode::Cycling => {
+            if dismount && pushes_bike(t) {
+                return 0;
+            }
+            if is(&t.oneway_bicycle, "no") {
+                0
+            } else if is_in(&t.oneway_bicycle, &["yes", "1", "true"]) {
+                1
+            } else if is(&t.oneway_bicycle, "-1") {
+                -1
+            } else if is_in(&t.junction, &["roundabout", "circular"])
+                || is_in(&t.oneway, &["yes", "1", "true"])
+            {
+                1
+            } else if is(&t.oneway, "-1") {
+                -1
+            } else {
+                0
+            }
+        }
+        Mode::Driving => {
+            if is_in(&t.junction, &["roundabout", "circular"]) {
+                1
+            } else if is_in(&t.oneway, &["yes", "1", "true"]) {
+                1
+            } else if is(&t.oneway, "-1") {
+                -1
+            } else if is_in(&t.oneway, &["no", "false", "0"]) {
+                0
+            } else if is_in(&t.highway, &["motorway", "motorway_link"]) {
+                1
+            } else {
+                0
+            }
+        }
+    }
+}
+
+/// The WHERE clause of `RoadFilter` for the mode (NULL counts as false).
+fn in_network(t: &Tags, mode: Mode, dismount: bool) -> bool {
+    let hw = t.highway.as_deref();
+    let class_ok: Tri = match mode {
+        Mode::Driving => or(
+            tin(&t.highway, &ROAD_CLASSES),
+            Some(hw == Some("pedestrian")),
+        ),
+        Mode::Walking => {
+            let not_motorway = Some(!matches!(hw.unwrap_or(""), "motorway" | "motorway_link"));
+            let sidewalk_lr: Tri =
+                Some(is(&t.sidewalk_left, "separate") && is(&t.sidewalk_right, "separate"));
+            let by_class = and(
+                and(
+                    and(
+                        tin(&t.highway, &WALK_CLASSES),
+                        ne_or_null(&t.motorroad, "yes"),
+                    ),
+                    and(
+                        ne_or_null(&t.foot, "use_sidepath"),
+                        ne_or_null(&t.sidewalk, "separate"),
+                    ),
+                ),
+                and(
+                    ne_or_null(&t.sidewalk_both, "separate"),
+                    sidewalk_lr.map(|b| !b),
+                ),
+            );
+            and(
+                not_motorway,
+                or(
+                    or(
+                        tin(&t.foot, &YES),
+                        tin(&t.sidewalk, &["yes", "both", "left", "right"]),
+                    ),
+                    by_class,
+                ),
+            )
+        }
+        Mode::Cycling => {
+            let cycleway_infra: Tri = t
+                .cycleway
+                .as_deref()
+                .map(|c| !["no", "none", "separate"].contains(&c));
+            let base = or(
+                or(tin(&t.highway, &CYCLE_CLASSES), tin(&t.bicycle, &YES)),
+                cycleway_infra,
+            );
+            if dismount {
+                or(base, tin(&t.highway, &["footway", "pedestrian"]))
+            } else {
+                base
+            }
+        }
+    };
+    class_ok == Some(true)
+}
+
+/// Apply the filter of a mode to one way. None if the way is not in that network.
+pub fn mode_way(w: &Way, mode: Mode, cycling_dismount: bool) -> Option<ModeWay> {
     let t = &w.tags;
-    let raw_hw = t.highway.as_deref()?;
-    if !(ROAD_CLASSES.contains(&raw_hw) || raw_hw == "pedestrian") {
+    let dismount = mode == Mode::Cycling && cycling_dismount;
+    let forbidden: &[&str] = match mode {
+        Mode::Driving => &["no", "agricultural", "forestry", "emergency"],
+        _ => &["no"],
+    };
+    if !(t.highway.is_some() || is(&t.route, "ferry")) || !in_network(t, mode, dismount) {
         return None;
     }
-    let access = access_of(t);
-    if FORBIDDEN.contains(&access.as_deref().unwrap_or("")) {
+    let access = access_of(t, mode, dismount);
+    if forbidden.contains(&access.as_deref().unwrap_or("")) {
         return None;
     }
-    let highway = if ped_ok(t) {
+    // a ferry line has no highway tag: it gets its own class
+    let raw_hw = t.highway.as_deref().unwrap_or("ferry");
+    let highway = if mode == Mode::Driving && ped_ok(t) {
         "living_street".to_string()
     } else {
         raw_hw.to_string()
     };
-    let dir = direction(t);
+    let dir = direction(t, mode, dismount);
+    let car_dir = direction(t, Mode::Driving, false); // the lanes are the cars' in every mode
     let contra = is(&t.oneway_bus, "no") || is(&t.oneway_psv, "no");
     let n_total = first_int(&t.lanes);
     let n_fwd = first_int(&t.lanes_forward);
@@ -183,7 +391,7 @@ pub fn driving_way(w: &Way) -> Option<ModeWay> {
     let car_fwd = if non_motor {
         None
     } else {
-        let base = if dir == -1 {
+        let base = if car_dir == -1 {
             // GREATEST ignores a NULL, so an untagged one-way road has 1 lane here, not the class default
             n_bwd.unwrap_or_else(|| {
                 n_total.map_or(1, |n| {
@@ -192,7 +400,7 @@ pub fn driving_way(w: &Way) -> Option<ModeWay> {
             })
         } else if let Some(n) = n_fwd {
             n
-        } else if dir != 0 {
+        } else if car_dir != 0 {
             n_total.map_or(1, |n| {
                 (n - if contra { n_bwd.unwrap_or(1) } else { 0 }).max(1)
             })
@@ -205,7 +413,7 @@ pub fn driving_way(w: &Way) -> Option<ModeWay> {
         };
         Some(base + n_rev)
     };
-    let car_bwd = if non_motor || (dir != 0 && !contra) {
+    let car_bwd = if non_motor || (car_dir != 0 && !contra) {
         None
     } else {
         let base = if let Some(b) = n_bwd {
@@ -218,6 +426,13 @@ pub fn driving_way(w: &Way) -> Option<ModeWay> {
             default
         };
         Some(base + n_rev)
+    };
+    // this mode's forward edge runs along `dir`; the cars' forward lanes run along `car_dir`
+    let swap = (dir == -1) != (car_dir == -1);
+    let (lanes_fwd, lanes_bwd) = if swap {
+        (car_bwd, car_fwd)
+    } else {
+        (car_fwd, car_bwd)
     };
 
     let refs = if dir == -1 {
@@ -232,7 +447,7 @@ pub fn driving_way(w: &Way) -> Option<ModeWay> {
         name: s(&t.name),
         maxspeed: s(&t.maxspeed),
         oneway: dir != 0,
-        bus_back: dir != 0 && contra,
+        bus_back: mode == Mode::Driving && dir != 0 && contra,
         surface: s(&t.surface),
         service: s(&t.service),
         access,
@@ -240,7 +455,13 @@ pub fn driving_way(w: &Way) -> Option<ModeWay> {
         layer: s(&t.layer),
         bridge: s(&t.bridge),
         tunnel: s(&t.tunnel),
-        lanes_fwd: car_fwd,
-        lanes_bwd: car_bwd,
+        lanes_fwd,
+        lanes_bwd,
+        dismount: if dismount { Some(pushes_bike(t)) } else { None },
     })
+}
+
+/// The driving filter (kept for the first spike).
+pub fn driving_way(w: &Way) -> Option<ModeWay> {
+    mode_way(w, Mode::Driving, false)
 }

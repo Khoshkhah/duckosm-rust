@@ -1,5 +1,6 @@
 use clap::Parser;
-use duckosm_core::network::{build_driving, Options};
+use duckosm_core::filter::Mode;
+use duckosm_core::network::{build_network, Options};
 use duckosm_core::pbf;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -20,6 +21,12 @@ struct Cli {
     /// program is built without the cargo feature "duckdb".
     #[arg(short, long)]
     format: Option<String>,
+    /// Modes, comma separated: driving, walking, cycling.
+    #[arg(short, long, default_value = "driving")]
+    modes: String,
+    /// Cycling without the footways that are walked (dismount).
+    #[arg(long)]
+    no_cycling_dismount: bool,
     /// Do not keep only the largest connected part of the graph.
     #[arg(long)]
     no_component_filter: bool,
@@ -37,8 +44,18 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let cli = Cli::parse();
-    let default_format = if cfg!(feature = "duckdb") { "duckdb,geoparquet" } else { "geoparquet" };
-    let formats: Vec<&str> = cli.format.as_deref().unwrap_or(default_format).split(',').map(str::trim).collect();
+    let default_format = if cfg!(feature = "duckdb") {
+        "duckdb,geoparquet"
+    } else {
+        "geoparquet"
+    };
+    let formats: Vec<&str> = cli
+        .format
+        .as_deref()
+        .unwrap_or(default_format)
+        .split(',')
+        .map(str::trim)
+        .collect();
     for f in &formats {
         if !["duckdb", "geoparquet"].contains(f) {
             return Err(format!("unknown format '{f}' (use duckdb or geoparquet)"));
@@ -57,41 +74,54 @@ fn run() -> Result<(), String> {
     lap("read ways", &mut t);
     let coords = pbf::read_coords(&cli.pbf, &ways)?;
     lap("read nodes", &mut t);
-    let net = build_driving(
-        &ways,
-        &coords,
-        &Options {
-            keep_largest_component: !cli.no_component_filter,
-        },
-    )?;
-    lap("build network", &mut t);
-    eprintln!(
-        "driving: {} edges, {} nodes, {} private edges ({:?})",
-        net.edges.len(),
-        net.nodes.len(),
-        net.private_edges.len(),
-        net.stats
-    );
+    let modes: Vec<Mode> = cli
+        .modes
+        .split(',')
+        .map(|m| {
+            Mode::parse(m.trim())
+                .ok_or_else(|| format!("unknown mode '{m}' (use driving, walking or cycling)"))
+        })
+        .collect::<Result<_, _>>()?;
+    let opts = Options {
+        keep_largest_component: !cli.no_component_filter,
+        cycling_dismount: !cli.no_cycling_dismount,
+    };
     let pq_dir = if formats.contains(&"geoparquet") {
         cli.out.clone()
     } else {
         std::env::temp_dir().join(format!("duckosm-{}", std::process::id()))
     };
     std::fs::create_dir_all(&pq_dir).map_err(|e| e.to_string())?;
-    duckosm_parquet::write_edges(&pq_dir.join("edges_driving.parquet"), &net.edges)?;
-    duckosm_parquet::write_edges(
-        &pq_dir.join("private_edges_driving.parquet"),
-        &net.private_edges,
-    )?;
-    duckosm_parquet::write_nodes(&pq_dir.join("nodes_driving.parquet"), &net.nodes)?;
-    lap("write geoparquet", &mut t);
+    for mode in &modes {
+        let net = build_network(&ways, &coords, *mode, &opts)?;
+        lap(&format!("build {}", mode.name()), &mut t);
+        eprintln!(
+            "{}: {} edges, {} nodes, {} private edges ({:?})",
+            mode.name(),
+            net.edges.len(),
+            net.nodes.len(),
+            net.private_edges.len(),
+            net.stats
+        );
+        let dis = *mode == Mode::Cycling && opts.cycling_dismount;
+        let n = mode.name();
+        duckosm_parquet::write_edges(&pq_dir.join(format!("edges_{n}.parquet")), &net.edges, dis)?;
+        duckosm_parquet::write_edges(
+            &pq_dir.join(format!("private_edges_{n}.parquet")),
+            &net.private_edges,
+            dis,
+        )?;
+        duckosm_parquet::write_nodes(&pq_dir.join(format!("nodes_{n}.parquet")), &net.nodes)?;
+        lap(&format!("write geoparquet {n}"), &mut t);
+    }
     if formats.contains(&"duckdb") {
         #[cfg(feature = "duckdb")]
         {
+            let names: Vec<&str> = modes.iter().map(|m| m.name()).collect();
             duckosm_duckdb::write_database(
                 &cli.out.join(format!("{}.duckdb", cli.name)),
                 &pq_dir,
-                "driving",
+                &names,
             )?;
             lap("write duckdb", &mut t);
         }

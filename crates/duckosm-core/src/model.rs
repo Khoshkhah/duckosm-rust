@@ -27,6 +27,17 @@ pub struct Tags {
     pub lanes_forward: Option<Box<str>>,
     pub lanes_backward: Option<Box<str>>,
     pub lanes_reversible: Option<Box<str>>,
+    pub route: Option<Box<str>>,
+    pub foot: Option<Box<str>>,
+    pub bicycle: Option<Box<str>>,
+    pub cycleway: Option<Box<str>>,
+    pub sidewalk: Option<Box<str>>,
+    pub sidewalk_both: Option<Box<str>>,
+    pub sidewalk_left: Option<Box<str>>,
+    pub sidewalk_right: Option<Box<str>>,
+    pub motorroad: Option<Box<str>>,
+    pub oneway_foot: Option<Box<str>>,
+    pub oneway_bicycle: Option<Box<str>>,
 }
 
 impl Tags {
@@ -56,6 +67,17 @@ impl Tags {
             "lanes:forward" => &mut self.lanes_forward,
             "lanes:backward" => &mut self.lanes_backward,
             "lanes:reversible" => &mut self.lanes_reversible,
+            "route" => &mut self.route,
+            "foot" => &mut self.foot,
+            "bicycle" => &mut self.bicycle,
+            "cycleway" => &mut self.cycleway,
+            "sidewalk" => &mut self.sidewalk,
+            "sidewalk:both" => &mut self.sidewalk_both,
+            "sidewalk:left" => &mut self.sidewalk_left,
+            "sidewalk:right" => &mut self.sidewalk_right,
+            "motorroad" => &mut self.motorroad,
+            "oneway:foot" => &mut self.oneway_foot,
+            "oneway:bicycle" => &mut self.oneway_bicycle,
             _ => return,
         };
         if slot.is_none() {
@@ -96,6 +118,8 @@ pub struct Edge {
     pub geometry: Vec<Pt>,
     pub is_reverse: bool,
     pub length_m: f32,
+    /// Cycling only: the edge is walked, not ridden. None in the other modes.
+    pub dismount: Option<bool>,
 }
 
 /// A row of the `nodes` table. A virtual node has `node_id < 0`.

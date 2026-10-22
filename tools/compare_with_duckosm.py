@@ -1,33 +1,34 @@
-"""Compare the driving edges and nodes of duckosm-rust with a duckOSM database, row by row.
+"""Compare the edges and nodes of duckosm-rust with a duckOSM database, row by row.
 
-    python tools/compare_with_duckosm.py monaco.duckdb OUT_DIR_OR_DUCKDB
+    python tools/compare_with_duckosm.py monaco.duckdb OUT_DIR_OR_DUCKDB [mode]
 
-The second argument is the output of duckosm-rust: a folder with edges_driving.parquet and
-nodes_driving.parquet, or a .duckdb file. Rows are matched on edge_id (nodes on node_id).
+The second argument is the output of duckosm-rust: a folder with edges_<mode>.parquet and
+nodes_<mode>.parquet, or a .duckdb file. Rows are matched on edge_id (nodes on node_id).
 Needs the duckdb Python package with the spatial extension.
 """
 import sys
 import duckdb
 
 REF, OUT = sys.argv[1], sys.argv[2]
+MODE = sys.argv[3] if len(sys.argv) > 3 else "driving"
 con = duckdb.connect()
 con.execute("LOAD spatial")
 con.execute(f"ATTACH '{REF}' AS py (READ_ONLY)")
 if OUT.endswith(".duckdb"):
     con.execute(f"ATTACH '{OUT}' AS rs (READ_ONLY)")
-    con.execute("CREATE VIEW r_edges AS SELECT *, ST_AsWKB(geometry) AS wkb FROM rs.driving.edges")
-    con.execute("CREATE VIEW r_priv AS SELECT *, ST_AsWKB(geometry) AS wkb FROM rs.driving.private_edges")
-    con.execute("CREATE VIEW r_nodes AS SELECT node_id, ST_AsWKB(geom) AS wkb FROM rs.driving.nodes")
+    con.execute(f"CREATE VIEW r_edges AS SELECT *, ST_AsWKB(geometry) AS wkb FROM rs.{MODE}.edges")
+    con.execute(f"CREATE VIEW r_priv AS SELECT *, ST_AsWKB(geometry) AS wkb FROM rs.{MODE}.private_edges")
+    con.execute(f"CREATE VIEW r_nodes AS SELECT node_id, ST_AsWKB(geom) AS wkb FROM rs.{MODE}.nodes")
 else:
-    con.execute(f"CREATE VIEW r_edges AS SELECT *, ST_AsWKB(geometry) AS wkb FROM read_parquet('{OUT}/edges_driving.parquet')")
-    con.execute(f"CREATE VIEW r_priv AS SELECT *, ST_AsWKB(geometry) AS wkb FROM read_parquet('{OUT}/private_edges_driving.parquet')")
-    con.execute(f"CREATE VIEW r_nodes AS SELECT node_id, ST_AsWKB(geometry) AS wkb FROM read_parquet('{OUT}/nodes_driving.parquet')")
+    con.execute(f"CREATE VIEW r_edges AS SELECT *, ST_AsWKB(geometry) AS wkb FROM read_parquet('{OUT}/edges_{MODE}.parquet')")
+    con.execute(f"CREATE VIEW r_priv AS SELECT *, ST_AsWKB(geometry) AS wkb FROM read_parquet('{OUT}/private_edges_{MODE}.parquet')")
+    con.execute(f"CREATE VIEW r_nodes AS SELECT node_id, ST_AsWKB(geometry) AS wkb FROM read_parquet('{OUT}/nodes_{MODE}.parquet')")
 
 COLS = ["edge_ref", "source", "target", "osm_id", "highway", "name", "oneway", "lanes", "surface", "access",
-        "junction", "layer", "bridge", "tunnel", "service", "is_reverse"]
-con.execute("CREATE VIEW p_edges AS SELECT *, ST_AsWKB(geometry) AS wkb FROM py.driving.edges")
-con.execute("CREATE VIEW p_priv AS SELECT *, ST_AsWKB(geometry) AS wkb FROM py.driving.private_edges")
-con.execute("CREATE VIEW p_nodes AS SELECT node_id, ST_AsWKB(geom) AS wkb FROM py.driving.nodes")
+        "junction", "layer", "bridge", "tunnel", "service", "is_reverse"] + (["dismount"] if MODE == "cycling" else [])
+con.execute(f"CREATE VIEW p_edges AS SELECT *, ST_AsWKB(geometry) AS wkb FROM py.{MODE}.edges")
+con.execute(f"CREATE VIEW p_priv AS SELECT *, ST_AsWKB(geometry) AS wkb FROM py.{MODE}.private_edges")
+con.execute(f"CREATE VIEW p_nodes AS SELECT node_id, ST_AsWKB(geom) AS wkb FROM py.{MODE}.nodes")
 
 q = lambda s: con.execute(s).fetchall()
 
