@@ -64,23 +64,36 @@ with sync_playwright() as p:
     assert pr["area_km2"] == 2.39 and pr["name"] == "Monaco" and pr["geofabrik"][0]["id"] == "monaco", pr
     print("file: ok,", pr["area_km2"], "km²,", [x["id"] for x in pr["geofabrik"]])
 
-    # two rectangles that overlap, drawn with mouse drags: one polygon
-    page.click("#tab-draw")
-    page.click("[data-mode=rectangle]")
+    # two rectangles that overlap, drawn with mouse drags: one polygon. The panel covers the left side of the
+    # map, so the drags are on the right side.
     box = page.locator("#map canvas").bounding_box()
     assert box
-    n = areas(page)
-    for x0, y0, x1, y1 in [(0.3, 0.3, 0.5, 0.5), (0.4, 0.4, 0.7, 0.6)]:
+
+    def drag(x0, y0, x1, y1):
         page.mouse.move(box["x"] + x0 * box["width"], box["y"] + y0 * box["height"])
         page.mouse.down()
         page.mouse.move(box["x"] + x1 * box["width"], box["y"] + y1 * box["height"], steps=10)
         page.mouse.up()
         page.wait_for_timeout(300)
+
+    page.click("#tab-draw")
+    n = areas(page)
+    for rect in [(0.45, 0.3, 0.6, 0.5), (0.55, 0.4, 0.75, 0.6)]:
+        page.click("[data-mode=rectangle]")
+        drag(*rect)
     f = boundary(page, n + 2)
     g, pr = f["geometry"], f["properties"]
     assert pr["source"] == "drawn" and pr["osm_id"] is None and pr["area_km2"] > 0, pr
     assert g["type"] == "Polygon" and len(g["coordinates"][0]) == 9, g  # the merge of the two: 8 vertices
     print("rectangles: ok,", pr["area_km2"], "km²")
+
+    # the second rectangle is selected after the draw: a drag moves it away from the first one
+    n = areas(page)
+    drag(0.65, 0.5, 0.8, 0.5)
+    f = boundary(page, n + 1)
+    g = f["geometry"]
+    assert g["type"] == "MultiPolygon" and len(g["coordinates"]) == 2, g
+    print("move: ok,", f["properties"]["area_km2"], "km²")
 
     # a search
     if not args.no_search:

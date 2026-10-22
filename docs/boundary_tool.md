@@ -25,31 +25,42 @@ the user cannot see the area before the build.
 
 ## The layout
 
-On a computer, the map fills the window. A panel of 22 rem is on the left side, over the map:
+On a computer, the map fills the window. A panel of 370 px floats over the map on the left side, with round
+corners and a shadow. Kaveh asked for a more professional design after the first version (2026-10-22), so the
+panel has three numbered steps:
 
 ```
-+----------------------+--------------------------------------------+
-| duckOSM boundary     |                                    [+][-]  |
-|                      |                                            |
-| [ Find | Draw | File ]|             the map                       |
-|  (the controls of    |        (the area: a blue fill and line)    |
-|   the selected tab)  |                                            |
-|                      |                                            |
-| ---- The area ----   |                                            |
-| Name [Tartu       ]  |                                            |
-| 38.97 km², 1 polygon |                                            |
-| 2,113 vertices       |                                            |
-| Region files:        |                                            |
-|  [o] Estonia  ...    |                                            |
-|                      |                                            |
-| [Download] [Use ->]  |   © OpenFreeMap © OpenMapTiles © OSM ...   |
-+----------------------+--------------------------------------------+
++--------------------------+------------------------------------------+
+| [#] Boundary tool        |                                   [+][-] |
+|                          |                                          |
+| 1 CHOOSE AN AREA         |               the map                    |
+| [Search | Draw | File ]  |     (the area: a blue fill and line)     |
+|  (the controls of the    |                                          |
+|   selected tab)          |                                          |
+|                          |                                          |
+| 2 THE AREA               |                                          |
+| [Tartu linn           ]  |                                          |
+| [38.91 km²][1 pol.][271] |                         +--------------+ |
+| (warning, if large)      |                         | legend       | |
+|                          |                         +--------------+ |
+| 3 REGION FILE            |                                          |
+| (o) Estonia      [down]  |                                          |
+|--------------------------|                                          |
+| [GeoJSON] [Use in duckOSM]|  scale    MapLibre | OpenFreeMap | OSM  |
++--------------------------+------------------------------------------+
 ```
 
-- The panel has three tabs: **Find** (the name search), **Draw** (the drawing tools) and **File**. Below the
-  tabs, the panel always shows the area and the two output buttons.
-- On a narrow screen (less than 700 px wide, a phone), the map is at the top (55 % of the height) and the panel
-  is below it. The panel scrolls. The map controls and the drawing buttons are at least 44 px, for a finger.
+- Step 1 has three tabs: **Search** (the name search and **What is here?**), **Draw** (the drawing tools) and
+  **File**. Steps 2 and 3 show the area and the region files. The two output buttons stay at the bottom of the
+  panel.
+- The area shows as three tiles: km², polygons and vertices. Below them are the source and, for a large area,
+  a yellow warning.
+- A legend on the map gives the three line styles: the area, a match (preview) and a Geofabrik extract.
+- Short messages (for example "Click a point on the map.") show at the top of the map and go away.
+- The buttons have icons (inline SVG, no icon library) and text.
+- On a narrow screen (700 px wide or less, a phone), the map is at the top (52 % of the height) and the panel
+  is below it. The page scrolls, and the output buttons stay at the bottom of the screen. The buttons and the
+  tabs are 44 px high, for a finger. The legend and the scale are not shown.
 - The page has the light and the dark theme of the system, as `index.html`. The map style stays light (the
   style of OpenFreeMap has no dark variant).
 
@@ -58,19 +69,22 @@ On a computer, the map fills the window. A panel of 22 rem is on the left side, 
 - MapLibre GL JS 5.24.0 (the version of roadstyle), from cdn.jsdelivr.net.
 - The base map: OpenFreeMap, style `https://tiles.openfreemap.org/styles/liberty`. It is free, it needs no key,
   and it sends a CORS header, so it works with the COOP and COEP headers of `www/serve.py`.
-- The area shows as a fill with 20 % opacity and a line of 2 px. When the area changes, the map zooms to it.
-- A preview (a dashed line, no fill) shows an area that the user points to in the list of matches.
+- The area shows as a blue fill and a blue line. When the area comes from a search or a file, the map zooms to
+  it.
+- A preview (a dashed purple line) shows an area that the user points to in the list of matches. A click on a
+  point match zooms the map to it.
 - The outline of a suggested Geofabrik extract shows as a dashed orange line when the user selects it.
 
 ## The ways to make an area
 
 The area is one list of polygons. Each way below replaces the area, except drawing, which adds shapes to it.
 
-### 1. Find: a name search
+### 1. Search: a name search
 
-1. The user types a name and pushes Enter or clicks **Find**. The tool does not search while the user types.
+1. The user types a name and pushes Enter or clicks **Search**. The tool does not search while the user types.
 2. The tool asks Nominatim (`/search`, `format=geojson`, `polygon_geojson=1`, `extratags=1`, `limit=8`).
-3. The matches show as a list. Each line has the name, the type (for example `city`), and the OSM object.
+3. The matches show as a list of cards. Each card has the name, the type (for example `city`), and the rest of
+   the address.
 4. When the user points to a match, or moves to it with the arrow keys, the map shows it as a preview. A match
    without a polygon (a point) shows as a marker, and its line says "a point: no boundary". The user cannot
    select it.
@@ -81,16 +95,21 @@ The area is one list of polygons. Each way below replaces the area, except drawi
 
 The drawing tools come from terra-draw 1.38.0 with its MapLibre adapter 1.5.0 (MIT, from cdn.jsdelivr.net).
 
-| Button | What it does |
-|---|---|
-| Rectangle | Drag on the map, or click two corners. |
-| Polygon | Click each vertex. Click the first vertex, or push Enter, to close the polygon. |
-| Circle | Drag from the center, or click the center and then a point on the circle. The circle is a polygon of 64 vertices. |
-| Freehand | Drag the outline. |
-| Edit | Select a shape. Drag a vertex to move it, drag the midpoint of a side to add a vertex, drag the shape to move it. |
-| Delete | Delete the selected shape. The Delete key does the same. |
-| Clear | Delete all shapes. |
+| Button | Key | What it does |
+|---|---|---|
+| Select | S | Click a shape to select it. Drag the shape to move it. Drag a corner of a rectangle to resize it (the opposite corner stays). Drag the point of a circle to change the radius. Drag a vertex of a polygon or a freehand shape, or drag the midpoint of a side to add a vertex. Drag the empty map to move the map. |
+| Rectangle | R | Drag on the map, or click two corners. |
+| Polygon | P | Click each vertex. Click the first vertex, or push Enter, to close the polygon. |
+| Circle | C | Drag from the center, or click the center and then a point on the circle. The circle is a polygon of 64 vertices. |
+| Freehand | F | Drag the outline. |
+| Delete shape | Delete | Delete the selected shape. |
+| Clear all | | Delete all shapes. |
 
+- When a shape is complete, the tool changes to **Select** and selects the new shape. The user can then move
+  it or change it at once, and drag the map. Kaveh found that the first version did not let him move a shape:
+  it could do that only after a click on **Edit**, and while a drawing tool was on, a drag on the map drew a
+  new shape.
+- The panel shows a hint for the selected tool.
 - Each shape is one polygon of the area. One shape gives a Polygon, more shapes that do not touch give a
   MultiPolygon.
 - Escape stops the drawing of a shape.
@@ -149,7 +168,7 @@ The tool obeys the usage policy of the public Nominatim server
 (<https://operations.osmfoundation.org/policies/nominatim/>):
 
 - At most 1 request each second. All requests go through one queue that waits 1 s between requests.
-- No search while the user types. A search starts only from Enter or **Find**.
+- No search while the user types. A search starts only from Enter or **Search**.
 - The browser sends the address of the page in the `Referer` header, which identifies the application. The
   tool does not send an email address or other personal data.
 - The panel shows "Search: Nominatim, data © OpenStreetMap contributors".
@@ -203,12 +222,13 @@ Kaveh's answers to the open questions of the draft (2026-10-22):
 
 ## Result (2026-10-22)
 
-Done. `python crates/duckosm-wasm/www/boundary_e2e.py` passed two times in a row, with the network:
+Done. `python crates/duckosm-wasm/www/boundary_e2e.py` passed with the network:
 
 | Check | Result |
 |---|---|
 | The file `tests/data/monaco.geojson` | 2.39 km². The extracts: `monaco`, `provence-alpes-cote-d-azur`, `alps`. |
 | Two rectangles that overlap, drawn with mouse drags | One Polygon of 8 vertices, `source` is `drawn`. |
+| A drag of the second rectangle (selected after the draw) away from the first | A MultiPolygon of 2 polygons. |
 | A search for "Monaco" | Nominatim relation 1124039, 79.82 km² (the boundary of the country includes the sea). |
 | The hand-off | `index.html` shows "Monaco, 2.39 km², from the boundary tool." |
 
@@ -217,8 +237,8 @@ properties, and `{id, name, pbf}` for each extract. A manual check at a width of
 horizontal scroll. What is here, at the center of Monaco, gave Monte-Carlo, Monaco (a suburb) and Monaco (the
 country).
 
-The test does not check the polygon, circle, freehand and edit tools, the drag of a file, and the keyboard
-use. I did not examine these in a real browser.
+The test does not check the polygon, circle and freehand tools, the resize of a shape, the drag of a file,
+and the keyboard use. I did not examine these in a real browser.
 
 Not in this plan: a simplification of large polygons, undo and redo of the drawing, a dark map style, and a
 search of the Geofabrik extracts by name.

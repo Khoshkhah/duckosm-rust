@@ -14,91 +14,222 @@
 } }
 </script>
 <style>
-  :root { --bg: #fff; --fg: #1d1d1f; --muted: #6e6e73; --line: #d2d2d7; --accent: #0a66c2; --code: #f5f5f7; --warn: #9a3412; }
+  :root {
+    --bg: #ffffff; --surface: #f6f7f9; --fg: #111827; --muted: #6b7280; --line: #e5e7eb;
+    --accent: #2563eb; --accent-fg: #ffffff; --accent-soft: #dbeafe; --warn: #b45309; --warn-soft: #fef3c7;
+    --error: #b91c1c; --shadow: 0 10px 30px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.08);
+  }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #1c1c1e; --fg: #f2f2f7; --muted: #a1a1a6; --line: #3a3a3c; --accent: #4ea1ff; --code: #2c2c2e; --warn: #fdba74; }
+    :root {
+      --bg: #17181c; --surface: #22242a; --fg: #f3f4f6; --muted: #9ca3af; --line: #33363d;
+      --accent: #60a5fa; --accent-fg: #0b1220; --accent-soft: #1e3a5f; --warn: #fbbf24; --warn-soft: #3b2f12;
+      --error: #f87171; --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
   }
+  * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
-  body { font: 15px/1.5 system-ui, sans-serif; background: var(--bg); color: var(--fg); display: grid; grid-template-columns: 22rem 1fr; }
-  #panel { overflow-y: auto; padding: 0.8rem 1rem; border-right: 1px solid var(--line); }
-  #map { min-height: 0; }
-  @media (max-width: 700px) {
-    body { grid-template-columns: 1fr; grid-template-rows: 55vh auto; height: auto; }
-    #map { grid-row: 1; }
-    #panel { grid-row: 2; border-right: 0; border-top: 1px solid var(--line); }
-    button, [role=tab] { min-height: 44px; }
+  body { font: 14px/1.45 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--fg); background: var(--bg); }
+  #map { position: fixed; inset: 0; }
+  #panel {
+    position: fixed; top: 12px; left: 12px; bottom: 12px; width: 370px; z-index: 2;
+    display: flex; flex-direction: column; background: var(--bg); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden;
   }
-  h1 { font-size: 1.2rem; margin: 0 0 0.2rem; }
-  h2 { font-size: 1rem; margin: 1rem 0 0.3rem; }
-  .note { color: var(--muted); font-size: 13px; }
-  p { margin: 0.4rem 0; }
-  button { font: inherit; padding: 0.3rem 0.7rem; border-radius: 6px; border: 1px solid var(--line); background: var(--code); color: var(--fg); cursor: pointer; }
-  button:disabled { opacity: 0.5; cursor: default; }
-  button[aria-pressed=true], [role=tab][aria-selected=true] { background: var(--accent); border-color: var(--accent); color: #fff; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  input { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 0.25rem 0.4rem; }
-  input[type=search], #name { width: 100%; box-sizing: border-box; }
-  [role=tablist] { display: flex; gap: 0.3rem; margin: 0.6rem 0; }
-  [role=tab] { flex: 1; }
-  .tools { display: flex; flex-wrap: wrap; gap: 0.3rem; }
-  #found label, #extracts label { display: block; padding: 0.25rem 0.3rem; border-radius: 4px; cursor: pointer; }
-  #found label:hover, #found label:focus-within { background: var(--code); }
-  #found label.point { cursor: default; color: var(--muted); }
-  #summary { background: var(--code); padding: 0.5rem 0.6rem; border-radius: 6px; white-space: pre-wrap; font-size: 14px; }
-  .warn { color: var(--warn); font-weight: 600; }
-  #drop { border: 2px dashed var(--line); border-radius: 8px; padding: 1rem; text-align: center; }
-  body.dragging #drop, body.dragging #map { outline: 3px dashed var(--accent); outline-offset: -3px; }
+  .scroll { overflow-y: auto; padding: 0 18px 18px; flex: 1; }
+  header { display: flex; align-items: center; gap: 10px; padding: 16px 18px 12px; }
+  header .logo { width: 34px; height: 34px; border-radius: 9px; background: var(--accent); color: var(--accent-fg); display: grid; place-items: center; flex: none; }
+  header h1 { font-size: 16px; margin: 0; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); font-size: 12.5px; }
+  h2 { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 18px 0 10px; }
+  h2 .n { width: 20px; height: 20px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 11px; }
+  svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
   a { color: var(--accent); }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: 9px;
+         border: 1px solid var(--line); background: var(--bg); font-weight: 500; }
+  .btn:hover:not(:disabled) { background: var(--surface); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+  .btn.primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+  .btn[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .segmented { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--surface); border-radius: 10px; padding: 3px; gap: 3px; }
+  .segmented [role=tab] { display: flex; align-items: center; justify-content: center; gap: 6px; height: 34px; border: 0; border-radius: 8px; background: none; color: var(--muted); font-weight: 500; }
+  .segmented [role=tab][aria-selected=true] { background: var(--bg); color: var(--fg); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+  [role=tabpanel] { padding-top: 12px; }
+
+  .field { position: relative; display: flex; gap: 6px; }
+  .field svg { position: absolute; left: 11px; top: 9px; color: var(--muted); }
+  input[type=search], input[type=text] { font: inherit; color: var(--fg); background: var(--bg); width: 100%; height: 36px; border: 1px solid var(--line); border-radius: 9px; padding: 0 10px; }
+  input[type=search] { padding-left: 36px; }
+  input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+  #found { margin-top: 10px; display: grid; gap: 4px; }
+  #found label { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+  #found label:hover, #found label:focus-within { border-color: var(--accent); background: var(--surface); }
+  #found label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+  #found label.point { cursor: default; opacity: 0.7; }
+  #found input { margin-top: 3px; accent-color: var(--accent); }
+  #found .t { font-weight: 600; }
+  #found .d { color: var(--muted); font-size: 12px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 270px; }
+  .badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 99px; background: var(--surface); color: var(--muted); border: 1px solid var(--line); margin-left: 4px; font-weight: 500; }
+  .badge.no { color: var(--warn); border-color: var(--warn); background: none; }
+
+  .tools { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .tools button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 9px 2px 7px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font-size: 11.5px; font-weight: 500; }
+  .tools button:hover { background: var(--surface); }
+  .tools button[aria-pressed=true] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+  .hint { margin: 10px 0 0; padding: 9px 11px; background: var(--surface); border-radius: 9px; font-size: 12.5px; color: var(--muted); }
+
+  #drop { display: grid; place-items: center; gap: 6px; text-align: center; padding: 26px 14px; border: 2px dashed var(--line); border-radius: 12px; color: var(--muted); cursor: pointer; }
+  #drop:hover, body.dragging #drop { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  #drop svg { width: 28px; height: 28px; }
+  #drop strong { color: var(--fg); }
+  #file { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+  .empty { padding: 18px 14px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; font-size: 13px; }
+  .stats { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 6px; margin-top: 10px; }
+  .stat { background: var(--surface); border-radius: 10px; padding: 8px 10px; }
+  .stat b { display: block; font-size: 17px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .stat span { font-size: 11.5px; color: var(--muted); }
+  .source { margin-top: 8px; font-size: 12.5px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .callout { display: flex; gap: 8px; margin-top: 10px; padding: 9px 11px; border-radius: 9px; background: var(--warn-soft); color: var(--warn); font-size: 12.5px; }
+  .error { color: var(--error); }
+
+  #extracts { display: grid; gap: 4px; }
+  #extracts label { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+  #extracts label:has(input:checked) { border-color: #ea580c; }
+  #extracts input { accent-color: #ea580c; }
+  #extracts .x { flex: 1; min-width: 0; }
+  #extracts .x span { display: block; font-size: 12px; color: var(--muted); }
+  #extracts a.dl { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; color: var(--muted); }
+  #extracts a.dl:hover { background: var(--surface); color: var(--accent); }
+
+  footer { display: grid; grid-template-columns: 1fr 1.5fr; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--line); background: var(--bg); }
+
+  .legend { position: fixed; right: 12px; bottom: 34px; z-index: 1; background: var(--bg); color: var(--fg); border-radius: 10px; box-shadow: var(--shadow); padding: 8px 12px; font-size: 12px; display: grid; gap: 3px; }
+  .legend i { display: inline-block; width: 18px; height: 0; border-top: 3px solid; vertical-align: middle; margin-right: 6px; }
+  #status { position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 3; background: var(--fg); color: var(--bg); padding: 7px 14px; border-radius: 99px; font-size: 13px; box-shadow: var(--shadow); }
+  #status:empty { display: none; }
+  body.picking #map canvas { cursor: crosshair; }
+
+  @media (min-width: 701px) {
+    .maplibregl-ctrl-top-left, .maplibregl-ctrl-bottom-left { left: 394px; }
+    #status { left: calc(50% + 191px); }
+  }
+  @media (max-width: 700px) {
+    #map { position: relative; height: 52vh; }
+    #panel { position: static; width: auto; border-radius: 0; box-shadow: none; border-top: 1px solid var(--line); }
+    .maplibregl-ctrl-scale { display: none; }
+    .scroll { overflow: visible; }
+    footer { position: sticky; bottom: 0; }
+    .btn, .segmented [role=tab] { height: 44px; }
+    .tools button { min-height: 56px; }
+    .legend { display: none; }
+    #found .d { max-width: 70vw; }
+  }
 </style>
 </head>
 <body>
-<main id="panel">
-<h1>duckOSM boundary tool</h1>
-<p class="note">Make the area that duckOSM builds. Save it as a boundary file (the format of <code>duckosm boundary</code>),
-  or use it in <a href="index.html">duckOSM in the browser</a>.</p>
+<svg style="display:none" aria-hidden="true">
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6"/></symbol>
+  <symbol id="i-select" viewBox="0 0 24 24"><path d="m4 4 7 17 2.5-7.5L21 11Z"/></symbol>
+  <symbol id="i-rect" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="13" rx="1"/></symbol>
+  <symbol id="i-poly" viewBox="0 0 24 24"><path d="m12 3 8.5 6.2-3.2 10.3H6.7L3.5 9.2Z"/></symbol>
+  <symbol id="i-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/></symbol>
+  <symbol id="i-free" viewBox="0 0 24 24"><path d="M3 15c2-5 5-8 7-5s1 7 4 7 4-6 7-9"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v12M7 11l5 5 5-5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20Z"/><path d="M12 10v4M12 17v.5"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></symbol>
+</svg>
 
-<div role="tablist" aria-label="The ways to make an area">
-  <button role="tab" id="tab-find" aria-controls="find" aria-selected="true">Find</button>
-  <button role="tab" id="tab-draw" aria-controls="draw" aria-selected="false">Draw</button>
-  <button role="tab" id="tab-file" aria-controls="file-panel" aria-selected="false">File</button>
+<div id="map" role="region" aria-label="Map of the area"></div>
+<div id="status" role="status" aria-live="polite"></div>
+<div class="legend" aria-hidden="true">
+  <div><i style="color:#2563eb"></i>The area</div>
+  <div><i style="color:#7c3aed;border-top-style:dashed"></i>A match (preview)</div>
+  <div><i style="color:#ea580c;border-top-style:dashed"></i>A Geofabrik extract</div>
+</div>
+
+<main id="panel">
+<header>
+  <div class="logo"><svg><use href="#i-poly"/></svg></div>
+  <div><h1>Boundary tool</h1><p>The area that <a href="index.html">duckOSM in the browser</a> builds</p></div>
+</header>
+
+<div class="scroll">
+<h2><span class="n">1</span>Choose an area</h2>
+<div class="segmented" role="tablist" aria-label="The ways to make an area">
+  <button role="tab" id="tab-find" aria-controls="find" aria-selected="true"><svg><use href="#i-search"/></svg>Search</button>
+  <button role="tab" id="tab-draw" aria-controls="draw" aria-selected="false"><svg><use href="#i-pen"/></svg>Draw</button>
+  <button role="tab" id="tab-file" aria-controls="file-panel" aria-selected="false"><svg><use href="#i-file"/></svg>File</button>
 </div>
 
 <section id="find" role="tabpanel" aria-labelledby="tab-find">
-  <form id="search"><label for="q">Name of a place</label>
-    <p style="display:flex;gap:0.3rem"><input id="q" type="search" placeholder="for example Tartu"> <button>Find</button></p></form>
-  <p><button id="here" aria-pressed="false">What is here?</button> <span class="note">then click the map</span></p>
+  <form id="search" class="field" role="search">
+    <svg><use href="#i-search"/></svg>
+    <input id="q" type="search" placeholder="A city, a region, a country" aria-label="Name of a place" autocomplete="off">
+    <button class="btn primary">Search</button>
+  </form>
+  <div class="row">
+    <button id="here" class="btn" aria-pressed="false"><svg><use href="#i-target"/></svg>What is here?</button>
+    <span class="small muted">Then click the map.</span>
+  </div>
   <div id="found" role="radiogroup" aria-label="The matches"></div>
-  <p class="note">Search: <a href="https://nominatim.openstreetmap.org">Nominatim</a>, data © OpenStreetMap contributors.</p>
+  <p class="small muted">Search by <a href="https://nominatim.openstreetmap.org">Nominatim</a>. Data © OpenStreetMap contributors.</p>
 </section>
 
 <section id="draw" role="tabpanel" aria-labelledby="tab-draw" hidden>
-  <div class="tools">
-    <button data-mode="rectangle" aria-pressed="false">Rectangle</button>
-    <button data-mode="polygon" aria-pressed="false">Polygon</button>
-    <button data-mode="circle" aria-pressed="false">Circle</button>
-    <button data-mode="freehand" aria-pressed="false">Freehand</button>
-    <button data-mode="select" aria-pressed="false">Edit</button>
-    <button id="delete" disabled>Delete</button>
-    <button id="clear">Clear</button>
+  <div class="tools" role="toolbar" aria-label="Drawing tools">
+    <button data-mode="select" aria-pressed="false" title="Select, move and resize (S)"><svg><use href="#i-select"/></svg>Select</button>
+    <button data-mode="rectangle" aria-pressed="false" title="Rectangle (R)"><svg><use href="#i-rect"/></svg>Rectangle</button>
+    <button data-mode="polygon" aria-pressed="false" title="Polygon (P)"><svg><use href="#i-poly"/></svg>Polygon</button>
+    <button data-mode="circle" aria-pressed="false" title="Circle (C)"><svg><use href="#i-circle"/></svg>Circle</button>
+    <button data-mode="freehand" aria-pressed="false" title="Freehand (F)"><svg><use href="#i-free"/></svg>Freehand</button>
   </div>
-  <p class="note">Rectangle and circle: drag on the map. Polygon: click each vertex, then click the first vertex or push Enter.
-    Edit: select a shape, then drag a vertex or the midpoint of a side. Escape stops a shape. Shapes that overlap become one polygon.
-    The drawing needs a mouse, a pen or a finger; the search and the file work with the keyboard.</p>
+  <div class="row">
+    <button id="delete" class="btn" disabled><svg><use href="#i-trash"/></svg>Delete shape</button>
+    <button id="clear" class="btn"><svg><use href="#i-x"/></svg>Clear all</button>
+  </div>
+  <p id="hint" class="hint">Select a tool. A new shape is selected when it is complete: drag it to move it, or drag a point to change it.</p>
 </section>
 
 <section id="file-panel" role="tabpanel" aria-labelledby="tab-file" hidden>
-  <div id="drop"><label>Select a GeoJSON file <input id="file" type="file" accept=".geojson,.json"></label>
-    <p class="note">or drag it onto the map. A FeatureCollection, a Feature, a Polygon or a MultiPolygon.</p></div>
+  <label id="drop">
+    <svg><use href="#i-upload"/></svg>
+    <span><strong>Select a GeoJSON file</strong><br>or drag it onto the map</span>
+    <span class="small">A FeatureCollection, a Feature, a Polygon or a MultiPolygon</span>
+    <input id="file" type="file" accept=".geojson,.json">
+  </label>
 </section>
 
-<h2>The area</h2>
-<p><label for="name">Name</label> <input id="name"></p>
-<div id="summary" aria-live="polite">No area yet. Find a place, draw a shape, or select a file.</div>
-<div id="extracts"></div>
-<p style="margin-top:0.8rem"><button id="save" disabled>Download boundary.geojson</button>
-  <button id="use" disabled>Use in duckOSM in the browser</button></p>
+<h2><span class="n">2</span>The area</h2>
+<input id="name" type="text" aria-label="Name of the area" placeholder="Name">
+<div id="summary" aria-live="polite"><div class="empty">No area yet. Search for a place, draw a shape, or select a file.</div></div>
+
+<div id="extracts-box" hidden>
+  <h2><span class="n">3</span>Region file</h2>
+  <p class="small muted" style="margin-top:0">The smallest Geofabrik extracts that cover the area. Download one, then select it in duckOSM in the browser.</p>
+  <div id="extracts" role="radiogroup" aria-label="Show an extract on the map"></div>
+</div>
+</div>
+
+<footer>
+  <button id="save" class="btn" disabled><svg><use href="#i-download"/></svg>GeoJSON</button>
+  <button id="use" class="btn primary" disabled>Use in duckOSM<svg><use href="#i-arrow"/></svg></button>
+</footer>
 </main>
-<div id="map" role="region" aria-label="Map of the area"></div>
 
 <script type="module">
 import { TerraDraw, TerraDrawRectangleMode, TerraDrawPolygonMode, TerraDrawCircleMode, TerraDrawFreehandMode,
@@ -106,9 +237,17 @@ import { TerraDraw, TerraDrawRectangleMode, TerraDrawPolygonMode, TerraDrawCircl
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 
 const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
-const say = (html) => ($("summary").innerHTML = html);
-let found = [], area = null, extracts = null, cover = [];
+const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+const icon = (name) => `<svg><use href="#i-${name}"/></svg>`;
+const num = (x, d = 0) => x.toLocaleString("en", { maximumFractionDigits: d });
+let found = [], area = null, extracts = null, cover = [], statusTimer;
+
+// a short message on top of the map; it goes away after some seconds
+function status(text, ms = 4000) {
+  $("status").textContent = text;
+  clearTimeout(statusTimer);
+  if (ms) statusTimer = setTimeout(() => ($("status").textContent = ""), ms);
+}
 
 // the list of Geofabrik's extracts (tools/make_geofabrik_index.py), loaded once
 const geofabrik = () => (extracts ??= fetch("geofabrik.json").then((r) => r.json()).then((d) => d.extracts));
@@ -158,18 +297,34 @@ async function covering(polys) {
 const empty = { type: "FeatureCollection", features: [] };
 const map = new maplibregl.Map({ container: "map", style: "https://tiles.openfreemap.org/styles/liberty", center: [10, 50], zoom: 3 });
 map.addControl(new maplibregl.NavigationControl(), "top-right");
+map.addControl(new maplibregl.ScaleControl(), "bottom-left");
 const loaded = new Promise((ok) => map.on("load", ok));
 const setData = (src, data) => loaded.then(() => map.getSource(src).setData(data ?? empty));
 
+const blue = "#2563eb";
+const shape = { fillColor: blue, fillOpacity: 0.15, outlineColor: blue, outlineWidth: 2 };
+const validation = (f) => ValidateNotSelfIntersecting(f);
+// select: drag a shape to move it; drag a corner of a rectangle or a point of a circle to resize it; drag a
+// vertex of a polygon, or the midpoint of a side to add a vertex
+const edit = (coordinates) => ({ feature: { draggable: true, coordinates: { draggable: true, ...coordinates } } });
 const draw = new TerraDraw({
   adapter: new TerraDrawMapLibreGLAdapter({ map }),
   modes: [
-    new TerraDrawRectangleMode({ drawInteraction: "click-move-or-drag" }),
-    new TerraDrawPolygonMode({ validation: (f) => ValidateNotSelfIntersecting(f) }),
-    new TerraDrawCircleMode({ drawInteraction: "click-move-or-drag", segments: 64 }),
-    new TerraDrawFreehandMode({ drawInteraction: "click-move-or-drag", validation: (f) => ValidateNotSelfIntersecting(f) }),
-    new TerraDrawSelectMode({ flags: Object.fromEntries(["rectangle", "polygon", "circle", "freehand"].map((m) =>
-      [m, { feature: { draggable: true, coordinates: { draggable: true, midpoints: true, deletable: true } } }])) }),
+    new TerraDrawRectangleMode({ drawInteraction: "click-move-or-drag", styles: shape }),
+    new TerraDrawPolygonMode({ validation, styles: { ...shape, closingPointColor: blue, closingPointOutlineColor: "#ffffff" } }),
+    new TerraDrawCircleMode({ drawInteraction: "click-move-or-drag", segments: 64, styles: shape }),
+    new TerraDrawFreehandMode({ drawInteraction: "click-move-or-drag", validation, styles: shape }),
+    new TerraDrawSelectMode({
+      flags: {
+        rectangle: edit({ resizable: "opposite" }),
+        circle: edit({ resizable: "center-fixed" }),
+        polygon: edit({ midpoints: true, deletable: true }),
+        freehand: edit({ midpoints: true, deletable: true }),
+      },
+      styles: { selectedPolygonColor: blue, selectedPolygonFillOpacity: 0.25, selectedPolygonOutlineColor: blue, selectedPolygonOutlineWidth: 3,
+                selectionPointColor: "#ffffff", selectionPointOutlineColor: blue, selectionPointWidth: 5, selectionPointOutlineWidth: 2,
+                midPointColor: blue, midPointOutlineColor: "#ffffff", midPointWidth: 3 },
+    }),
   ],
 });
 
@@ -177,60 +332,70 @@ loaded.then(() => {
   map.addSource("area", { type: "geojson", data: empty });
   map.addSource("preview", { type: "geojson", data: empty });
   map.addSource("extract", { type: "geojson", data: empty });
-  map.addLayer({ id: "area-fill", type: "fill", source: "area", paint: { "fill-color": "#0a66c2", "fill-opacity": 0.2 } });
-  map.addLayer({ id: "area-line", type: "line", source: "area", paint: { "line-color": "#0a66c2", "line-width": 2 } });
-  map.addLayer({ id: "extract-line", type: "line", source: "extract", paint: { "line-color": "#ea580c", "line-width": 2, "line-dasharray": [3, 2] } });
+  map.addLayer({ id: "area-fill", type: "fill", source: "area", paint: { "fill-color": blue, "fill-opacity": 0.18 } });
+  map.addLayer({ id: "area-line", type: "line", source: "area", paint: { "line-color": blue, "line-width": 2.5 } });
+  map.addLayer({ id: "extract-line", type: "line", source: "extract", paint: { "line-color": "#ea580c", "line-width": 2.5, "line-dasharray": [3, 2] } });
+  map.addLayer({ id: "preview-fill", type: "fill", source: "preview", filter: ["!=", ["geometry-type"], "Point"], paint: { "fill-color": "#7c3aed", "fill-opacity": 0.08 } });
   map.addLayer({ id: "preview-line", type: "line", source: "preview", filter: ["!=", ["geometry-type"], "Point"],
-                 paint: { "line-color": "#7c3aed", "line-width": 2, "line-dasharray": [2, 2] } });
+                 paint: { "line-color": "#7c3aed", "line-width": 2.5, "line-dasharray": [2, 1.5] } });
   map.addLayer({ id: "preview-point", type: "circle", source: "preview", filter: ["==", ["geometry-type"], "Point"],
-                 paint: { "circle-radius": 7, "circle-color": "#7c3aed", "circle-stroke-color": "#fff", "circle-stroke-width": 2 } });
+                 paint: { "circle-radius": 8, "circle-color": "#7c3aed", "circle-stroke-color": "#fff", "circle-stroke-width": 2.5 } });
   draw.start();
   window.mapReady = true;
 });
 
-function fit(polys) {
-  const [w, s, e, n] = bbox(polys);
-  loaded.then(() => map.fitBounds([[w, s], [e, n]], { padding: 40, maxZoom: 16, duration: 0 }));
-}
+const fitTo = (g) => {
+  const [w, s, e, n] = bbox(g.type === "Point" ? [[[g.coordinates]]] : polygons(g));
+  loaded.then(() => map.fitBounds([[w, s], [e, n]], { padding: { top: 60, bottom: 60, right: 60, left: innerWidth > 700 ? 420 : 60 }, maxZoom: 15, duration: 600 }));
+};
 
 // ---- the tabs ----
 const tabs = [...document.querySelectorAll("[role=tab]")];
 for (const t of tabs) t.onclick = () => {
   for (const u of tabs) { u.setAttribute("aria-selected", u === t); $(u.getAttribute("aria-controls")).hidden = u !== t; }
-  if (t.id !== "tab-draw") tool(null);
+  tool(t.id === "tab-draw" ? (draw.getSnapshot().length ? "select" : "rectangle") : null);
   if (t.id !== "tab-find") picking(false);
 };
 
 // ---- the area ----
+function clearArea() {
+  area = null;
+  setData("area", null);
+  setData("extract", null);
+  $("extracts-box").hidden = true;
+  $("save").disabled = $("use").disabled = true;
+  $("summary").innerHTML = `<div class="empty">No area yet. Search for a place, draw a shape, or select a file.</div>`;
+}
+
 async function setArea(polys, props, { zoom = true } = {}) {
-  if (!polys.length) {
-    area = null;
-    setData("area", null);
-    $("extracts").innerHTML = "";
-    $("save").disabled = $("use").disabled = true;
-    return say("No area yet. Find a place, draw a shape, or select a file.");
-  }
+  if (!polys.length) return clearArea();
   if (props.source !== "drawn" && draw.enabled) draw.clear();
   if (props.name) $("name").value = props.name;
   area = { polys, props };
   $("save").disabled = $("use").disabled = true;
   setData("area", geometry(polys));
-  if (zoom) fit(polys);
+  // terra-draw fills the drawn shapes; the area layer then gives only the outline of their merge
+  loaded.then(() => map.setPaintProperty("area-fill", "fill-opacity", props.source === "drawn" ? 0 : 0.18));
+  if (zoom) fitTo(geometry(polys));
   const km2 = Math.round(areaKm2(polys) * 100) / 100;
   const vertices = polys.flat().reduce((s, r) => s + r.length - 1, 0);
-  say(`${km2.toLocaleString("en")} km², ${polys.length} polygon${polys.length > 1 ? "s" : ""}, ${vertices.toLocaleString("en")} vertices\n` +
-      `Source: ${esc(props.source)}` +
-      (km2 > 10000 ? `\n<span class="warn">A large area. The cut can take minutes, and the build can need more than 1 GB of memory.</span>` : ""));
-  $("extracts").innerHTML = "<p class='note'>Finding the Geofabrik extracts…</p>";
+  $("summary").innerHTML =
+    `<div class="stats"><div class="stat"><b>${num(km2, 2)}</b><span>km²</span></div>` +
+    `<div class="stat"><b>${num(polys.length)}</b><span>polygon${polys.length > 1 ? "s" : ""}</span></div>` +
+    `<div class="stat"><b>${num(vertices)}</b><span>vertices</span></div></div>` +
+    `<div class="source">${icon(props.source === "drawn" ? "pen" : props.source.startsWith("Nominatim") ? "search" : "file")}${esc(props.source)}</div>` +
+    (km2 > 10000 ? `<div class="callout">${icon("alert")}<span>A large area. The cut can take minutes, and the build can need more than 1 GB of memory.</span></div>` : "");
+  $("extracts-box").hidden = false;
+  $("extracts").innerHTML = `<p class="small muted">Finding the extracts…</p>`;
   const mine = area;
   cover = (await covering(polys)).slice(0, 3);
   if (area !== mine) return;
   area.props = { ...props, area_km2: km2, geofabrik: cover.map((x) => ({ id: x.id, name: x.name, pbf: x.pbf })) };
   $("extracts").innerHTML = cover.length
-    ? "<h2>Region files</h2><p class='note'>The smallest Geofabrik extracts that cover the area. Download one, then select it in duckOSM in the browser.</p>" +
-      cover.map((x, i) => `<label><input type="radio" name="extract" value="${i}"> show <a href="${esc(x.pbf)}">${esc(x.name)}</a> ` +
-        `<span class="note">(${esc(x.id)}, ${Math.round(x.km2).toLocaleString("en")} km²)</span></label>`).join("")
-    : "<p class='note'>No Geofabrik extract covers the area. Use the planet file, or the Overpass option of duckOSM in the browser.</p>";
+    ? cover.map((x, i) => `<label><input type="radio" name="extract" value="${i}" aria-label="Show ${esc(x.name)} on the map">` +
+        `<span class="x">${esc(x.name)}<span>${esc(x.id)} · ${num(Math.round(x.km2))} km²</span></span>` +
+        `<a class="dl" href="${esc(x.pbf)}" title="Download ${esc(x.name)} (.osm.pbf)" aria-label="Download ${esc(x.name)}">${icon("download")}</a></label>`).join("")
+    : `<p class="small muted">No Geofabrik extract covers the area. Use the planet file, or the Overpass option of duckOSM in the browser.</p>`;
   setData("extract", null);
   $("save").disabled = $("use").disabled = false;
   window.areas = (window.areas ?? 0) + 1;  // for boundary_e2e.py
@@ -238,7 +403,7 @@ async function setArea(polys, props, { zoom = true } = {}) {
 
 $("extracts").onchange = (ev) => setData("extract", { type: "Feature", properties: {}, geometry: geometry(cover[Number(ev.target.value)].polygon) });
 
-// ---- find: Nominatim, at most 1 request each second, the last 20 answers kept ----
+// ---- search: Nominatim, at most 1 request each second, the last 20 answers kept ----
 let queue = Promise.resolve(), last = 0;
 const cache = new Map();
 function nominatim(path, params) {
@@ -261,34 +426,42 @@ function list(features) {
   found = features;
   $("found").innerHTML = found.map((f, i) => {
     const p = f.properties, ok = polygons(f.geometry).length > 0;
-    return `<label class="${ok ? "" : "point"}" data-i="${i}"><input type="radio" name="hit" value="${i}"${ok ? "" : " disabled"}> ${esc(p.display_name)} ` +
-      `<span class="note">(${esc(p.addresstype ?? p.type)}, ${esc(p.osm_type)} ${esc(p.osm_id)}${ok ? "" : ", a point: no boundary"})</span></label>`;
-  }).join("") || "<p class='note'>No place found.</p>";
+    const [title, ...rest] = p.display_name.split(", ");
+    return `<label class="${ok ? "" : "point"}" data-i="${i}"><input type="radio" name="hit" value="${i}"${ok ? "" : " disabled"}>` +
+      `<span><span class="t">${esc(title)}</span><span class="badge">${esc(p.addresstype ?? p.type)}</span>` +
+      (ok ? "" : `<span class="badge no">a point: no boundary</span>`) +
+      `<span class="d">${esc(rest.join(", ") || `${p.osm_type} ${p.osm_id}`)}</span></span></label>`;
+  }).join("") || `<p class="small muted">No place found.</p>`;
 }
 
+const searching = () => ($("found").innerHTML = `<p class="small muted">Searching…</p>`);
 $("search").onsubmit = async (ev) => {
   ev.preventDefault();
   const q = $("q").value.trim();
   if (!q) return;
-  $("found").innerHTML = "<p class='note'>Searching…</p>";
+  searching();
   try { list(await nominatim("search", { q, limit: "8" })); }
-  catch (e) { $("found").innerHTML = `<p class="warn">The search failed: ${esc(e.message)}</p>`; }
+  catch (e) { $("found").innerHTML = `<p class="small error">The search failed: ${esc(e.message)}</p>`; }
 };
 
 // what is here: the areas at 5 levels around the point that the user clicks
-const picking = (on) => { $("here").setAttribute("aria-pressed", on); map.getCanvas().style.cursor = on ? "crosshair" : ""; };
+function picking(on) {
+  $("here").setAttribute("aria-pressed", on);
+  document.body.classList.toggle("picking", on);
+  if (on) status("Click a point on the map.", 0); else if ($("status").textContent.startsWith("Click a point")) status("");
+}
 $("here").onclick = () => picking($("here").getAttribute("aria-pressed") !== "true");
 map.on("click", async (ev) => {
   if ($("here").getAttribute("aria-pressed") !== "true") return;
   picking(false);
   const { lng: lon, lat } = ev.lngLat, got = [];
-  $("found").innerHTML = "<p class='note'>Searching…</p>";
+  searching();
   for (const zoom of [14, 10, 8, 5, 3]) {
     try {
       for (const f of await nominatim("reverse", { lat: lat.toFixed(6), lon: lon.toFixed(6), zoom }))
         if (!got.some((g) => g.properties.osm_id === f.properties.osm_id && g.properties.osm_type === f.properties.osm_type)) got.push(f);
       list(got);
-    } catch (e) { $("found").insertAdjacentHTML("beforeend", `<p class="warn">${esc(e.message)}</p>`); }
+    } catch (e) { $("found").insertAdjacentHTML("beforeend", `<p class="small error">${esc(e.message)}</p>`); }
   }
 });
 
@@ -297,6 +470,7 @@ const point = (ev) => { const l = ev.target.closest("label"); if (l) preview(Num
 $("found").addEventListener("mouseover", point);
 $("found").addEventListener("focusin", point);
 $("found").onmouseleave = () => preview(null);
+$("found").onclick = (ev) => { const l = ev.target.closest("label.point"); if (l) fitTo(found[Number(l.dataset.i)].geometry); };
 $("found").onchange = (ev) => {
   const f = found[Number(ev.target.value)], p = f.properties;
   const level = Number(p.extratags?.admin_level);
@@ -307,22 +481,39 @@ $("found").onchange = (ev) => {
 
 // ---- draw ----
 let selected = null;
+const hints = {
+  select: "Click a shape to select it. Drag it to move it. Drag a corner or a point to change it. Drag the empty map to move the map.",
+  rectangle: "Drag on the map from one corner to the other.",
+  polygon: "Click each vertex. Click the first vertex, or push Enter, to close the polygon. Escape stops.",
+  circle: "Drag on the map from the center outward.",
+  freehand: "Drag on the map around the area.",
+};
 const toolButtons = [...document.querySelectorAll("[data-mode]")];
 function tool(mode) {
   for (const b of toolButtons) b.setAttribute("aria-pressed", b.dataset.mode === mode);
+  if (mode) $("hint").textContent = hints[mode];
   if (draw.enabled) draw.setMode(mode ?? "static");
 }
-for (const b of toolButtons) b.onclick = () => tool(b.getAttribute("aria-pressed") === "true" ? null : b.dataset.mode);
+for (const b of toolButtons) b.onclick = () => tool(b.dataset.mode);
+addEventListener("keydown", (ev) => {
+  if ($("draw").hidden || ev.target.closest("input") || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  const mode = { s: "select", r: "rectangle", p: "polygon", c: "circle", f: "freehand" }[ev.key.toLowerCase()];
+  if (mode) tool(mode);
+});
 
 // the drawn shapes, merged where they overlap
 async function drawn() {
   const shapes = draw.getSnapshot().filter((f) => f.geometry.type === "Polygon" && f.properties.mode !== "select").map((f) => f.geometry.coordinates);
-  if (!shapes.length) return area?.props.source === "drawn" ? setArea([], {}) : undefined;
+  if (!shapes.length) return area?.props.source === "drawn" ? clearArea() : undefined;
   const { union } = await import("polyclip-ts");
   const polys = shapes.length > 1 ? union(...shapes) : shapes;
   setArea(polys, { name: area?.props.source === "drawn" ? $("name").value : "drawn area", osm_id: null, admin_level: null, source: "drawn" }, { zoom: false });
 }
-draw.on("finish", drawn);
+draw.on("finish", (id, ctx) => {
+  drawn();
+  // a new shape is selected at once, so the user can move it or change it
+  if (ctx.action === "draw") setTimeout(() => { tool("select"); draw.selectFeature(id); });
+});
 draw.on("change", (ids, type) => {
   if (type !== "delete") return;
   if (ids.includes(selected)) { selected = null; $("delete").disabled = true; }  // the Delete key
@@ -331,7 +522,7 @@ draw.on("change", (ids, type) => {
 draw.on("select", (id) => { selected = id; $("delete").disabled = false; });
 draw.on("deselect", () => { selected = null; $("delete").disabled = true; });
 $("delete").onclick = () => { if (selected != null) { draw.removeFeatures([selected]); selected = null; $("delete").disabled = true; drawn(); } };
-$("clear").onclick = () => { draw.clear(); drawn(); };
+$("clear").onclick = () => { draw.clear(); drawn(); tool("rectangle"); };
 
 // ---- file ----
 function readGeoJSON(text, fileName) {
@@ -345,7 +536,7 @@ function readGeoJSON(text, fileName) {
 }
 async function openFile(file) {
   try { await setArea(...readGeoJSON(await file.text(), file.name)); }
-  catch (e) { say(`<span class="warn">The file is not usable: ${esc(e.message)}</span>`); }
+  catch (e) { status(`The file is not usable: ${e.message}`, 8000); }
 }
 $("file").onchange = () => {
   if ($("file").files[0]) openFile($("file").files[0]);
@@ -376,7 +567,7 @@ $("use").onclick = () => {
     localStorage.setItem("duckosm.boundary", text());
     location.href = "index.html";
   } catch (e) {
-    say(`<span class="warn">The browser did not keep the boundary (${esc(e.message)}). Download it, and select the file in duckOSM in the browser.</span>`);
+    status(`The browser did not keep the boundary (${e.message}). Download it, and select the file in duckOSM in the browser.`, 10000);
   }
 };
 
