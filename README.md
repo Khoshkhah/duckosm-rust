@@ -1,6 +1,8 @@
 # duckosm-rust
 
-Status: **spike**. The driving, walking and cycling networks of Monaco equal the output of duckOSM (every row), with and without `merge_segments`, with the sidewalk rule, and with the dangling-path connector. See [docs/design.md](docs/design.md) and [docs/benchmark.md](docs/benchmark.md).
+Status: **spike**. The driving, walking and cycling networks of Monaco equal the output of duckOSM (every row), with and without `merge_segments`, with the sidewalk rule, and with the dangling-path connector. A WebAssembly build runs the same network step in a browser tab. See [docs/design.md](docs/design.md) and [docs/benchmark.md](docs/benchmark.md).
+
+The repository is [Khoshkhah/duckosm-rust](https://github.com/Khoshkhah/duckosm-rust) (private).
 
 `duckosm-rust` is the Rust part of [duckOSM](https://github.com/Khoshkhah/duckOSM). It is a Cargo
 workspace. The first crate, `duckosm-core`, reads an `.osm.pbf` file and writes the road edges and
@@ -12,7 +14,7 @@ Make the first step of duckOSM easy to install and easy to run:
 
 - `pip install` a wheel. The wheel does not need DuckDB.
 - One CLI program, with no Python.
-- Later, a WebAssembly build for the browser.
+- A WebAssembly build for the browser: a PBF file in, GeoParquet files out, with no server.
 
 ## How it fits with duckOSM
 
@@ -46,10 +48,20 @@ res = dr.build_from_config("area.yaml", strict=False)   # res["skipped"]: duckOS
 dr.edge_id_hash(osm_id, source, target)
 ```
 
+```bash
+# the browser page (WebAssembly): build it, then open http://localhost:8000 and select a PBF file
+cargo build --release --target wasm32-unknown-unknown -p duckosm-wasm
+wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/pkg target/wasm32-unknown-unknown/release/duckosm_wasm.wasm
+python3 -m http.server 8000 -d crates/duckosm-wasm/www
+```
+
+In the browser, a city or a region fits: Estonia (121 MB PBF) uses 676 MiB, and Kentucky (148 MB)
+uses 2,053 MiB of the 4 GB limit. Section 7 of the design has the numbers.
+
 ## Read next
 
 - [docs/design.md](docs/design.md): the design, the `edge_id` decision, the test plan and the milestones.
-- [docs/development.md](docs/development.md): the toolchain status and the install steps.
+- [docs/development.md](docs/development.md): the toolchain status, the install steps and the WebAssembly build.
 - [tools/edge_id_reference.py](tools/edge_id_reference.py): the `edge_id` hash in plain Python.
 
 ## License
