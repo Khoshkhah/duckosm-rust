@@ -80,3 +80,12 @@ that duckOSM wrote in `pbf/` and leave the component filter on.
 
 Known difference: a connector between two facing dangling ends can have the other direction label
 (`edge_ref`, `is_reverse`, sometimes `highway`). See section 6 of the design.
+
+## Build and test the Python wheel
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install maturin
+.venv/bin/maturin build --release -m crates/duckosm-py/Cargo.toml -o wheels          # with DuckDB (the first build takes minutes)
+.venv/bin/maturin build --release -m crates/duckosm-py/Cargo.toml --no-default-features -o wheels_small   # without DuckDB: 2 MB
+python3 -m venv /tmp/t && /tmp/t/bin/pip install wheels/duckosm_rust-*.whl duckdb && /tmp/t/bin/python tests/test_wheel.py
+```

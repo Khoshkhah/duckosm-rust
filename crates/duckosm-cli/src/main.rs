@@ -1,9 +1,6 @@
 use clap::Parser;
-use duckosm_core::filter::Mode;
-use duckosm_core::network::{build_network, Options};
-use duckosm_core::pbf;
+use duckosm_build::{build, parse_modes, NetworkMode, NetworkOptions, Params};
 use std::path::PathBuf;
-use std::time::Instant;
 
 /// duckosm-rust: build the driving network of an .osm.pbf file (a spike).
 #[derive(Parser)]
@@ -70,40 +67,28 @@ fn run() -> Result<(), String> {
     } else {
         "geoparquet"
     };
-    let formats: Vec<&str> = cli
+    let mut p = Params {
+        name: cli.name.clone(),
+        geoparquet: false,
+        duckdb: false,
+        ..Params::default()
+    };
+    for f in cli
         .format
         .as_deref()
         .unwrap_or(default_format)
         .split(',')
         .map(str::trim)
-        .collect();
-    for f in &formats {
-        if !["duckdb", "geoparquet"].contains(f) {
-            return Err(format!("unknown format '{f}' (use duckdb or geoparquet)"));
+    {
+        match f {
+            "duckdb" => p.duckdb = true,
+            "geoparquet" => p.geoparquet = true,
+            _ => return Err(format!("unknown format '{f}' (use duckdb or geoparquet)")),
         }
     }
-    std::fs::create_dir_all(&cli.out).map_err(|e| e.to_string())?;
-    let t0 = Instant::now();
-    let lap = |what: &str, t: &mut Instant| {
-        if cli.timing {
-            eprintln!("  {what}: {:.3} s", t.elapsed().as_secs_f64());
-        }
-        *t = Instant::now();
-    };
-    let mut t = Instant::now();
-    let mut ways = pbf::read_ways(&cli.pbf)?;
-    lap("read ways", &mut t);
-    let coords = pbf::read_coords(&cli.pbf, &ways)?;
-    lap("read nodes", &mut t);
-    let modes: Vec<Mode> = cli
-        .modes
-        .split(',')
-        .map(|m| {
-            Mode::parse(m.trim())
-                .ok_or_else(|| format!("unknown mode '{m}' (use driving, walking or cycling)"))
-        })
-        .collect::<Result<_, _>>()?;
-    let opts = Options {
+    p.modes = parse_modes(&cli.modes)?;
+    p.infer_sidewalks = !cli.no_sidewalk_inference;
+    p.options = NetworkOptions {
         keep_largest_component: !cli.no_component_filter,
         cycling_dismount: !cli.no_cycling_dismount,
         merge_segments: !cli.no_merge_segments,
@@ -113,68 +98,32 @@ fn run() -> Result<(), String> {
         process_speeds: !cli.no_speeds,
         calculate_costs: !cli.no_speeds && !cli.no_costs,
     };
-    let pq_dir = if formats.contains(&"geoparquet") {
-        cli.out.clone()
-    } else {
-        std::env::temp_dir().join(format!("duckosm-{}", std::process::id()))
-    };
-    std::fs::create_dir_all(&pq_dir).map_err(|e| e.to_string())?;
-    if !cli.no_sidewalk_inference && modes.contains(&Mode::Walking) {
-        let n = duckosm_core::sidewalks::infer_separate_sidewalks(&mut ways, &coords);
-        lap("sidewalk rule", &mut t);
-        eprintln!("sidewalk rule: {n} roads get sidewalk=separate");
-    }
-    for mode in &modes {
-        let net = build_network(&ways, &coords, *mode, &opts)?;
-        lap(&format!("build {}", mode.name()), &mut t);
+    let sum = build(&cli.pbf, &cli.out, &p)?;
+    if sum.sidewalk_roads > 0 || p.modes.contains(&NetworkMode::Walking) {
         eprintln!(
-            "{}: {} edges, {} nodes, {} private edges ({:?})",
-            mode.name(),
-            net.edges.len(),
-            net.nodes.len(),
-            net.private_edges.len(),
-            net.stats
+            "sidewalk rule: {} roads get sidewalk=separate",
+            sum.sidewalk_roads
         );
-        let oc = duckosm_parquet::EdgeCols {
-            dismount: *mode == Mode::Cycling && opts.cycling_dismount,
-            speeds: opts.process_speeds,
-            costs: opts.calculate_costs,
-        };
-        let n = mode.name();
-        duckosm_parquet::write_edges(&pq_dir.join(format!("edges_{n}.parquet")), &net.edges, oc)?;
-        duckosm_parquet::write_edges(
-            &pq_dir.join(format!("private_edges_{n}.parquet")),
-            &net.private_edges,
-            oc,
-        )?;
-        duckosm_parquet::write_nodes(&pq_dir.join(format!("nodes_{n}.parquet")), &net.nodes)?;
-        if opts.merge_segments {
-            duckosm_parquet::write_edge_id_map(
-                &pq_dir.join(format!("edge_id_map_{n}.parquet")),
-                &net.edge_id_map,
-            )?;
-        }
-        lap(&format!("write geoparquet {n}"), &mut t);
     }
-    if formats.contains(&"duckdb") {
-        #[cfg(feature = "duckdb")]
-        {
-            let names: Vec<&str> = modes.iter().map(|m| m.name()).collect();
-            duckosm_duckdb::write_database(
-                &cli.out.join(format!("{}.duckdb", cli.name)),
-                &pq_dir,
-                &names,
-            )?;
-            lap("write duckdb", &mut t);
-        }
-        #[cfg(not(feature = "duckdb"))]
-        return Err("this build has no DuckDB output (cargo feature 'duckdb' is off)".into());
-    }
-    if !formats.contains(&"geoparquet") {
-        let _ = std::fs::remove_dir_all(&pq_dir);
+    for m in &sum.modes {
+        eprintln!(
+            "{}: {} edges, {} nodes, {} private edges, {} connectors, {} edge_id_map rows",
+            m.mode.name(),
+            m.edges,
+            m.nodes,
+            m.private_edges,
+            m.connectors,
+            m.edge_id_map
+        );
     }
     if cli.timing {
-        eprintln!("  total: {:.3} s", t0.elapsed().as_secs_f64());
+        for (what, secs) in &sum.steps {
+            eprintln!("  {what}: {secs:.3} s");
+        }
+        eprintln!(
+            "  total: {:.3} s",
+            sum.steps.iter().map(|s| s.1).sum::<f64>()
+        );
     }
     Ok(())
 }

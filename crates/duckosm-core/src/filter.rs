@@ -19,6 +19,21 @@ impl Mode {
         }
     }
 
+    /// Parse a list of mode names.
+    pub fn parse_all<S: AsRef<str>>(names: &[S]) -> Result<Vec<Mode>, String> {
+        names
+            .iter()
+            .map(|m| {
+                Mode::parse(m.as_ref().trim()).ok_or_else(|| {
+                    format!(
+                        "unknown mode '{}' (use driving, walking or cycling)",
+                        m.as_ref()
+                    )
+                })
+            })
+            .collect()
+    }
+
     pub fn parse(s: &str) -> Option<Mode> {
         match s {
             "driving" => Some(Mode::Driving),

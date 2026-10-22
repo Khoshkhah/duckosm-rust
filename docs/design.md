@@ -164,7 +164,12 @@ Common to both formats:
 - `refs` is a list column. `export-gis` does not write it. Rust writes it by default, because the
   tests need it. The option `--no-refs` removes it. (Not built yet.)
 
-## 4. Python API plan
+## 4. Python API
+
+Status 2026-10-21: the module `duckosm_rust` exists (crate `duckosm-py`, PyO3 and maturin, one `abi3` wheel for
+Python 3.9 and newer; the build runs without the GIL). It has `build(...)` and `edge_id_hash(...)`. The
+plan below is what it follows. Not done: `build_from_config`, and wheels for other systems (the wheel built
+on this machine has the tag `manylinux_2_35`, so it needs glibc 2.35 or newer).
 
 The names follow duckOSM. The keyword names are the config keys of duckOSM.
 

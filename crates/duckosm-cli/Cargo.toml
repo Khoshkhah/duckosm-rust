@@ -10,10 +10,8 @@ path = "src/main.rs"
 
 [features]
 default = ["duckdb"]
-duckdb = ["dep:duckosm-duckdb"]
+duckdb = ["duckosm-build/duckdb"]
 
 [dependencies]
-duckosm-core = { path = "../duckosm-core" }
-duckosm-parquet = { path = "../duckosm-parquet" }
-duckosm-duckdb = { path = "../duckosm-duckdb", optional = true }
+duckosm-build = { path = "../duckosm-build", default-features = false }
 clap = { version = "4", features = ["derive"] }

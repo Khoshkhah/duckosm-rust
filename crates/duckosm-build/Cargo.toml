@@ -1,0 +1,16 @@
+[package]
+name = "duckosm-build"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["duckdb"]
+duckdb = ["dep:duckosm-duckdb"]
+# Pure-Rust compression for the GeoParquet files (WebAssembly); the default is zstd.
+snap = ["duckosm-parquet/snap"]
+
+[dependencies]
+duckosm-core = { path = "../duckosm-core" }
+duckosm-parquet = { path = "../duckosm-parquet" }
+duckosm-duckdb = { path = "../duckosm-duckdb", optional = true }
