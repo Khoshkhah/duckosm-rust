@@ -305,7 +305,7 @@ M0 includes a check that `duckosm-core` builds for `wasm32-unknown-unknown`.
 | M | Content | Exit criteria |
 |---|---|---|
 | M0 | Setup and spike. Rust installed. Cargo workspace. `edge_id` module. Golden files. A CLI that builds the driving network of one PBF and writes `.duckdb` and GeoParquet. | `cargo test` passes the hash vectors and the Monaco golden test. **Done on 2026-10-21**, except: the Monaco double build (is the Python output the same on each run?) and the build for `wasm32-unknown-unknown` are still open. |
-| M1 | Monaco, driving. All steps in the table that are marked "Yes", for driving, without `merge_segments`. | All 2,765 `edge_id` values equal the golden file. All columns in section 6 pass. GeoPandas and DuckDB read the output. **Reached in the spike** for the output in `.duckdb` and GeoParquet (see [benchmark.md](benchmark.md) for the other areas). |
+| M1 | Monaco, driving. All steps in the table that are marked "Yes", for driving, without `merge_segments`. | All 2,765 `edge_id` values equal the golden file. All columns in section 6 pass. GeoPandas and DuckDB read the output. **Reached in the spike** for the output in `.duckdb` and GeoParquet (see [benchmark.md](benchmark.md) for the speed; only Monaco is tested). |
 | M2 | Walking and cycling. `merge_segments` and `edge_id_map`. `lanes`. `private_edges`. | The same checks pass for the three modes, with `merge_segments` on and off. Tartu passes as a local golden. |
 | M3 | Release 0.1.0. CLI, Python wheel, config subset, `layers.json`. | A fresh virtual environment runs `pip install` and builds Monaco with an equal result. The CLI binary does the same. The Estonia numbers are written down. Wheels build for Linux, macOS and Windows. |
 | M4 | WebAssembly and large areas. | A browser page turns a city PBF into GeoParquet. Estonia meets the targets. Optional: speeds and costs, turn restrictions. |
@@ -390,8 +390,9 @@ Decision (Kaveh, 2026-10-21): the repository is `duckosm-rust`.
 6. Is the strangler method in section 12 right: Python duckOSM calls the Rust wheel part by part,
    with `engine: rust` as the switch? Or do you want two separate tools?
 7. Cut to the boundary: keep `osmium` outside, or add a polygon cut to the Rust core in M3 or M4?
-8. Which PBF is the scale test? I use Estonia because its database exists, but the PBF is not in the
-   repository.
+8. Large areas are not tested yet. Which PBF is the scale test, and when do you want it? An Estonia PBF
+   is on disk (`osm-traffic-enrichment/map/estonia-latest.osm.pbf`, 121 MB).
+
 9. Is the order of the "Later" parts in section 11 right? After a part moves, do you delete its
    Python code or keep it as the reference?
 10. Which DuckDB version should the `.duckdb` file have? The program has DuckDB 1.5.6, duckOSM has
