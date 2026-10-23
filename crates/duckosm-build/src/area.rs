@@ -61,7 +61,10 @@ pub fn write_area_tables<W: Write + Send>(
         file("visualization_metadata_main.parquet")?,
         &metadata(a, shape.as_ref()),
     )?;
-    pq::write_transfers_to(file("transfers_mm.parquet")?, &transfers(a.nodes))?;
+    // duckOSM's multimodal step stops before it writes mm.* when edges.cost_s is missing, and the build goes on
+    if a.opts.calculate_costs {
+        pq::write_transfers_to(file("transfers_mm.parquet")?, &transfers(a.nodes))?;
+    }
     Ok(())
 }
 

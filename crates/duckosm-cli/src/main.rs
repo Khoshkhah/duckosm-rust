@@ -4,7 +4,7 @@ use duckosm_build::{
 };
 use std::path::PathBuf;
 
-/// duckosm-rust: build the driving network of an .osm.pbf file (a spike).
+/// duckosm-rust: build the road networks of duckOSM (driving, walking, cycling) from an .osm.pbf file.
 #[derive(Parser)]
 #[command(version)]
 struct Cli {

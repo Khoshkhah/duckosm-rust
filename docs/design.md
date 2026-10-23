@@ -179,7 +179,7 @@ Common to both formats:
 
 Status 2026-10-21: the module `duckosm_rust` exists (crate `duckosm-py`, PyO3 and maturin, one `abi3` wheel for
 Python 3.9 and newer; the build runs without the GIL). It has `build(...)`, `build_from_config(...)` and `edge_id_hash(...)`. The
-plan below is what it follows. A CI workflow builds the wheels on 5 systems on each push to `main` of the GitHub
+plan below is what it follows. A CI workflow builds the wheels on 5 systems for each tag `v*` of the GitHub
 repository `Khoshkhah/duckosm-rust` (private, created on 2026-10-22); on
 this machine a `manylinux2014` wheel (glibc 2.17 or newer) was built with zig and tested. A plain build here has
 the tag `manylinux_2_35`. See [development.md](development.md).
@@ -191,8 +191,9 @@ import duckosm_rust as dr
 
 res = dr.build("monaco.osm.pbf", "out/", modes=["driving", "walking"], formats=["duckdb", "geoparquet"],
                merge_segments=True, global_junctions=True, keep_largest_component=True)
-res.counts          # {"driving": {"edges": 2765, "nodes": 1719}, ...}
-res.files           # {"duckdb": "out/monaco.duckdb", "edges_driving": "out/edges_driving.parquet", ...}
+res["modes"]        # {"driving": {"edges": 2765, "nodes": 1719, "private_edges": ..., ...}, ...}
+res["files"]        # {"duckdb": "out/monaco.duckdb", "edges_driving": "out/edges_driving.parquet", ...}
+res["seconds"]      # the time of each step
 
 dr.build_from_config("config/sample_monaco.yaml")   # a subset of the config keys
 dr.edge_id_hash(osm_id, source, target)             # same name and result as duckosm.edge_id_hash
@@ -497,7 +498,7 @@ this size, the build must write the edges while it makes them, and not keep all 
 | M0 | Setup and spike. Rust installed. Cargo workspace. `edge_id` module. Golden files. A CLI that builds the driving network of one PBF and writes `.duckdb` and GeoParquet. | `cargo test` passes the hash vectors and the Monaco golden test. **Done on 2026-10-21.** The Python output is the same on each run (two golden builds of Monaco: 0 rows differ). The build for `wasm32-unknown-unknown` is checked for compile only (section 7). |
 | M1 | Monaco, driving. All steps in the table that are marked "Yes", for driving, without `merge_segments`. | All 2,765 `edge_id` values equal the golden file. All columns in section 6 pass. GeoPandas and DuckDB read the output. **Reached in the spike** for the output in `.duckdb` and GeoParquet (see [benchmark.md](benchmark.md) for the speed; only Monaco is tested). |
 | M2 | Walking and cycling. `merge_segments` and `edge_id_map`. `lanes`. `private_edges`. | The same checks pass for the three modes, with `merge_segments` on and off. Tartu passes as a local golden (done, see section 6). **Reached on Monaco on 2026-10-21** for 9 variants (`merge_segments` and `global_junctions` on or off, the component filter, the sidewalk rule, the connector, the connector with the component filter, and everything on with speeds and the walk and cycle types) in the three modes: 0 rows differ in `edges`, `private_edges`, `nodes` and `edge_id_map`. Tartu is done (section 6). The sidewalk rule finds the same 46 roads in Monaco as duckOSM. It is a geometric rule with float thresholds, so a different area can give a difference at a threshold. It assumes right-hand traffic, as duckOSM does. |
-| M3 | Release 0.1.0. CLI, Python wheel, config subset, `layers.json`. | A fresh virtual environment runs `pip install` and builds Monaco with an equal result. The CLI binary does the same. The Estonia numbers are written down. Wheels build for Linux, macOS and Windows. **Estonia done on 2026-10-22** (section 6, item 6d). The CI built and tested the wheels for Linux, macOS and Windows on 2026-10-22 (Windows without sccache). `layers.json` is written. A tag `v*` makes a GitHub Release with the wheels (no PyPI yet, open question 2). |
+| M3 | Release 0.1.0. CLI, Python wheel, config subset, `layers.json`. | A fresh virtual environment runs `pip install` and builds Monaco with an equal result. The CLI binary does the same. The Estonia numbers are written down. Wheels build for Linux, macOS and Windows. **Estonia done on 2026-10-22** (section 6, item 6d). The CI built and tested the wheels for Linux, macOS and Windows on 2026-10-22 (Windows without sccache). `layers.json` is written. A tag `v*` makes a GitHub Release with the wheels (no PyPI yet, open question 2). **Released as v0.1.0 and v0.2.0 on 2026-10-22. Checked again on 2026-10-23 for 0.3.0** (the browser work and the git dependency roadstyle-rs): a new virtual environment with the wheel passes `tests/test_wheel.py`, and the wheel and the CLI each build duckOSM's `config/sample_monaco.yaml` with a result equal to duckOSM's `monaco.duckdb` (`tools/compare_tables.py` and `tools/compare_with_duckosm.py`; only the connector labels of item 3c differ). The check found one bug: a `.duckdb` build without costs failed in the view `mm.edges`. Now, as in duckOSM, such a build has no `mm.*`. From 0.3.0, the release also has the CLI program for the 5 systems. |
 | M4 | WebAssembly and large areas. | A browser page turns a city PBF into GeoParquet. Estonia meets the targets. Optional: speeds and costs, turn restrictions. **Browser page done on 2026-10-21** (section 7): Monaco gives the same rows as the native output in the three modes. Estonia uses 710 MiB in the driving mode, and Kentucky (148 MB PBF) fits in 2,053 MiB. Not done: the large-area targets of the native program. |
 
 ## 10. Long-term vision

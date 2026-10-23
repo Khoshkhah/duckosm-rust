@@ -1,6 +1,6 @@
 # duckosm-rust
 
-Status: **the network step is complete, release 0.1.0 is in preparation**. The driving, walking and cycling networks of Monaco, Tartu and Estonia equal the output of duckOSM (every row of every table; only the direction labels of some connectors differ, which duckOSM does not fix). Estonia takes 19 s and 1.5 GB, against 1,545 s and 10 GB in duckOSM. It also builds the edge graph and the turn restrictions. Python duckOSM can use it with `options.engine: rust`. A WebAssembly build runs the same network step in a browser tab. See [docs/design.md](docs/design.md) and [docs/benchmark.md](docs/benchmark.md).
+Status: **version 0.3.0** ([CHANGELOG.md](CHANGELOG.md)). The network step is complete. The driving, walking and cycling networks of Monaco, Tartu and Estonia equal the output of duckOSM (every row of every table; only the direction labels of some connectors differ, which duckOSM does not fix). Estonia takes 19 s and 1.5 GB, against 1,545 s and 10 GB in duckOSM. It also builds the edge graph and the turn restrictions. Python duckOSM can use it with `options.engine: rust`. A WebAssembly build runs the same network step in a browser tab. See [docs/design.md](docs/design.md) and [docs/benchmark.md](docs/benchmark.md).
 
 The repository is [Khoshkhah/duckosm-rust](https://github.com/Khoshkhah/duckosm-rust) (private).
 
@@ -31,10 +31,28 @@ Python. Section 11 of the design rates every part.
                                                          \-> duckOSM (later: the rest of the pipeline)
 ```
 
+## Install
+
+Each version is on the [Releases](https://github.com/Khoshkhah/duckosm-rust/releases) page: one Python wheel and
+one CLI archive for each system (Linux x86_64 and aarch64, macOS x86_64 and arm64, Windows x64). The wheel is
+for Python 3.9 and newer. DuckDB 1.5.6 is in the wheel and in the program, so no installed DuckDB is necessary.
+The repository is private, so `gh` (signed in) downloads the files:
+
+```bash
+# the Python wheel (here: Linux x86_64)
+gh release download v0.3.0 --repo Khoshkhah/duckosm-rust --pattern '*manylinux_2_28_x86_64.whl'
+pip install duckosm_rust-0.3.0-*.whl
+# the CLI program (here: Linux x86_64; it needs glibc 2.35 or newer)
+gh release download v0.3.0 --repo Khoshkhah/duckosm-rust --pattern '*linux-x86_64.tar.gz'
+tar xzf duckosm-rust-0.3.0-linux-x86_64.tar.gz && ./duckosm-rust --version
+```
+
+There is no PyPI package yet (design.md, open question 2).
+
 ## Use it
 
 ```bash
-# the program (a CLI)
+# the program (a CLI), or build it from the source
 cargo build --release          # target/release/duckosm-rust
 duckosm-rust area.osm.pbf -o out --name area --modes driving,walking,cycling   # out/area.duckdb and out/*.parquet
 duckosm-rust --config area.yaml --allow-skipped                                # a duckOSM config file

@@ -84,6 +84,49 @@ jobs:
           pip install duckosm-rust --no-index --no-deps --find-links dist --force-reinstall
           python tests/test_wheel.py
 
+  # The CLI program for the same systems, as one archive for each system. The Linux program needs glibc 2.35 or
+  # newer (the runner's glibc).
+  cli:
+    name: CLI ${{ matrix.name }}
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: linux-x86_64, runner: ubuntu-22.04}
+          - {name: linux-aarch64, runner: ubuntu-22.04-arm}
+          - {name: macos-x86_64, runner: macos-15-intel}
+          - {name: macos-aarch64, runner: macos-latest}
+          - {name: windows-x64, runner: windows-latest}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build the CLI
+        run: cargo build --release -p duckosm-cli
+      - name: Test the CLI on the Monaco sample (the counts of tests/test_wheel.py), and make the archive
+        shell: bash
+        run: |
+          set -e
+          bin=target/release/duckosm-rust; [ -f $bin.exe ] && bin=$bin.exe
+          $bin tests/data/monaco_sample.osm.pbf -o cli-test --modes driving,walking,cycling --no-merge-segments \
+            --no-component-filter --no-speeds --no-costs --no-connect-paths --no-sidewalk-inference 2> cli-test.log
+          cat cli-test.log
+          grep -q "^driving: 3092 edges, 1904 nodes, 724 private edges" cli-test.log
+          grep -q "^walking: 12238 edges, 4818 nodes, 166 private edges" cli-test.log
+          grep -q "^cycling: 10670 edges, 4867 nodes, 141 private edges" cli-test.log
+          mkdir dist
+          v=${GITHUB_REF_NAME#v}; [ "$GITHUB_REF_TYPE" = tag ] || v=dev
+          if [ -f target/release/duckosm-rust.exe ]; then
+            7z a dist/duckosm-rust-$v-${{ matrix.name }}.zip ./target/release/duckosm-rust.exe README.md LICENSE
+          else
+            tar czf dist/duckosm-rust-$v-${{ matrix.name }}.tar.gz -C target/release duckosm-rust -C ../.. README.md LICENSE
+          fi
+      - uses: actions/upload-artifact@v6
+        with:
+          name: cli-${{ matrix.name }}
+          path: dist
+
   sdist:
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-22.04
@@ -98,18 +141,17 @@ jobs:
           name: wheels-sdist
           path: dist
 
-  # A tag v* makes a GitHub Release with the wheels and the sdist (no PyPI: the name waits for the
-  # DuckDB trademark answer, design.md open question 2).
+  # A tag v* makes a GitHub Release with the wheels, the sdist and the CLI archives (no PyPI: the name waits for
+  # the DuckDB trademark answer, design.md open question 2).
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [rust, wheels, sdist]
+    needs: [rust, wheels, cli, sdist]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v6
         with:
-          pattern: wheels-*
           merge-multiple: true
           path: dist
       - name: Make the release and upload the files
