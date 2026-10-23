@@ -167,6 +167,9 @@
   details { margin-top: 10px; } summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
   .progress { margin: 10px 0 0; padding: 9px 11px; border-radius: 9px; background: var(--surface); font-size: 12.5px; white-space: pre-wrap; }
   .progress:empty { display: none; }
+  .steplog { width: 100%; margin-top: 8px; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .steplog th, .steplog td { text-align: left; padding: 2px 6px 2px 0; border-bottom: 1px solid var(--line, #ddd); }
+  .steplog td:nth-child(2), .steplog td:nth-child(3) { text-align: right; padding-right: 12px; }
   .grid2 { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; }
   select, textarea { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 9px; }
   select { height: 34px; padding: 0 8px; }
@@ -354,6 +357,9 @@
   </details>
   <p id="buildhint" class="small" style="margin:10px 0 0; color: var(--warn)" aria-live="polite"></p>
   <p id="buildstatus" class="progress" aria-live="polite"></p>
+  <details id="steplog" open hidden><summary>Time and memory of each step</summary>
+    <table class="steplog"><thead><tr><th>Step</th><th>Time (s)</th><th>Memory (MiB)</th><th>Memory of</th></tr></thead><tbody></tbody></table>
+  </details>
 </section>
 
 <section id="step5-card" class="step" aria-labelledby="step5" hidden>
@@ -932,6 +938,17 @@ canBuild();
 
 // ---- step 4: build ----
 const progress = (text) => ($("buildstatus").textContent = text);
+// the log: a row for each step of the build, the tables and the map. Memory of: the build module (its WebAssembly memory,
+// which only grows), DuckDB (its buffers) or the map module (roadstyle's, in its own worker).
+function logSteps(rows, of, fresh) {
+  const body = $("steplog").querySelector("tbody");
+  if (fresh) body.textContent = "";
+  for (const r of rows) {
+    const tr = body.insertRow();
+    for (const v of [r.step, num(r.ms / 1000, 2), r.mib == null ? "" : num(r.mib, 1), r.mib == null ? "" : of]) tr.insertCell().textContent = v;
+  }
+  $("steplog").hidden = !body.rows.length;
+}
 duck.duckReady.then((s) => (window.timings = { duckdbStart: s })).catch((e) => progress("DuckDB did not start: " + e.message));
 let areaName = "area", timezones = null;
 $("run").onclick = async () => {
@@ -940,6 +957,7 @@ $("run").onclick = async () => {
   building = true;
   canBuild();
   $("step5-card").hidden = true;
+  $("steplog").hidden = true;
   removeRoads();
   areaName = $("name").value.trim() || "area";
   try {
@@ -966,21 +984,30 @@ $("run").onclick = async () => {
     // table (www/timezones.json, loaded one time, then from the cache of the browser)
     const region = area?.props.geofabrik?.[0]?.id;
     if (region) msg.tz = JSON.stringify((await (timezones ??= fetch("timezones.json").then((r) => r.json()))).regions[region] ?? null);
+    const b0 = performance.now();
     const out = await duck.build(msg, (t) => progress(t + "…"));
+    logSteps(download ? [{ step: "download from " + download.server, ms: download.seconds * 1000 }] : [], "", true);
+    logSteps(out.log, "build module");
+    const b1 = performance.now();
+    logSteps([{ step: "send the files to the page", ms: b1 - b0 - out.seconds.load * 1000 - out.seconds.build * 1000 - out.log.at(-1).ms }], "");
+    const duckMib = () => duck.memoryMiB().catch(() => null);
     if (spatial) {
       progress("loading DuckDB's spatial extension…");
       await spatial;
+      logSteps([{ step: "wait for DuckDB's spatial extension", ms: performance.now() - b1 }], "");
     }
     const built = performance.now();
     progress("loading the tables into DuckDB…");
     await duck.loadTables(out.files);
     const loaded = performance.now();
+    logSteps([{ step: "load the tables into DuckDB", ms: loaded - built, mib: await duckMib() }], "DuckDB");
     let featuresSeconds = null;
     if (out.featuresSql) {
       progress("making the base-map layers…");
       const f0 = performance.now();
       await duck.loadFeatures(out.files, out.featuresSql);
       featuresSeconds = (performance.now() - f0) / 1000;
+      logSteps([{ step: "make the base-map layers", ms: featuresSeconds * 1000, mib: await duckMib() }], "DuckDB");
     }
     const ready = performance.now();
     window.timings = Object.assign(window.timings || {}, {
@@ -988,9 +1015,9 @@ $("run").onclick = async () => {
       memoryMiB: out.memoryMiB, threads: out.threads, download, features: featuresSeconds,
     });
     const got = download ? `OSM data from ${download.server}: ${num(download.bytes / 2 ** 20, 1)} MB in ${num(download.seconds, 1)} s.\n` : "";
-    progress(`${out.summary}\n\n${got}Build ${num(out.seconds.build, 2)} s, tables into DuckDB ${num((loaded - built) / 1000, 2)} s, ` +
-             `${featuresSeconds == null ? "" : `base-map layers ${num(featuresSeconds, 2)} s, `}` +
-             `ready for SQL ${num((ready - start) / 1000, 2)} s after the click; ${out.memoryMiB} MiB, ${out.threads} thread(s).`);
+    progress(`${out.summary}\n\n${got}Total ${num((ready - start) / 1000, 2)} s, from the click on Build until the tables are ` +
+             `in DuckDB and you can query them (the table below gives each step). Build module: ${out.memoryMiB} MiB, ` +
+             `${out.threads} thread(s).`);
     files();
     // the base map from the layers of the build, when there are layers
     const own = duck.tables.some((t) => t.mode === "features"), opt = $("basemap").querySelector("option[value=duckosm]");
@@ -1047,6 +1074,9 @@ async function showRoads() {
     setBase();
     window.timings = Object.assign(window.timings || {}, { map: { roadsSql: r.roadsSeconds, style: r.styleSeconds,
       total: (performance.now() - t0) / 1000, memoryMiB: r.memoryMiB } });
+    const total = (performance.now() - t0) / 1000;
+    logSteps([{ step: "map: the roads table", ms: r.roadsSeconds * 1000 }, { step: "map: the style", ms: r.styleSeconds * 1000, mib: r.memoryMiB },
+      { step: "map: draw", ms: (total - r.roadsSeconds - r.styleSeconds) * 1000 }], "map module");
     $("mapnote").textContent = `${r.style.layers.length} layers: roads table ${num(r.roadsSeconds, 2)} s, style ${num(r.styleSeconds, 2)} s ` +
       `(${r.memoryMiB} MiB), map ${num((performance.now() - t0) / 1000, 2)} s. Click a road for its data.`;
   } catch (e) {

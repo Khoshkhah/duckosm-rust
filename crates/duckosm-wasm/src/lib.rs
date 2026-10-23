@@ -35,6 +35,65 @@ pub struct Output {
     pub files: Object,
     /// One line for each mode: the numbers of rows.
     pub summary: String,
+    /// The time and the memory of each step, JSON: `[{"step": name, "ms": time, "mib": WebAssembly memory after it}]`.
+    pub log: String,
+}
+
+/// The time and the memory of each step of [`run`] (the page shows them with its option "Log of each step").
+pub struct StepLog {
+    last: f64,
+    rows: Vec<(String, f64, f64)>,
+}
+
+impl StepLog {
+    fn start() -> StepLog {
+        StepLog {
+            last: now_ms(),
+            rows: Vec::new(),
+        }
+    }
+
+    /// The end of a step: its time since the step before, and the memory now.
+    fn step(&mut self, name: &str) {
+        let t = now_ms();
+        self.rows
+            .push((name.to_string(), t - self.last, memory_mib()));
+        self.last = t;
+    }
+
+    /// The steps as JSON (the names are plain text, with no quotes).
+    pub fn json(&self) -> String {
+        let rows: Vec<String> = self
+            .rows
+            .iter()
+            .map(|(s, ms, mib)| format!(r#"{{"step":"{s}","ms":{ms:.1},"mib":{mib:.1}}}"#))
+            .collect();
+        format!("[{}]", rows.join(","))
+    }
+}
+
+/// Milliseconds: the browser's clock in WebAssembly (std has no clock there), the system's natively (the tests).
+#[cfg(target_arch = "wasm32")]
+fn now_ms() -> f64 {
+    js_sys::Date::now()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn now_ms() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0.0, |d| d.as_secs_f64() * 1000.0)
+}
+
+/// The WebAssembly memory in MiB. It only grows, so it is the largest size until now. 0 natively.
+#[cfg(target_arch = "wasm32")]
+fn memory_mib() -> f64 {
+    (core::arch::wasm32::memory_size(0) * 65536) as f64 / 1048576.0
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn memory_mib() -> f64 {
+    0.0
 }
 
 /// Sends the bytes to a JavaScript array part by part, so the files are not kept in the WebAssembly
@@ -275,7 +334,7 @@ fn js_build(
     let files = Object::new();
     let built_at = (js_sys::Date::now() * 1000.0) as i64;
     let tz = TIMEZONE_ENTRY.with(|e| e.borrow().clone());
-    let summary = run(
+    let (summary, log) = run(
         input,
         modes,
         fixes_yaml.as_deref(),
@@ -293,14 +352,18 @@ fn js_build(
         },
     )
     .map_err(|e| JsError::new(&e))?;
-    Ok(Output { files, summary })
+    Ok(Output {
+        files,
+        summary,
+        log: log.json(),
+    })
 }
 
 /// The steps of `duckosm_build::build` without files and without a clock (WebAssembly has neither): the OSM
 /// fixes, the relations for the turn restrictions, the sidewalk rule, then each mode, written with
 /// `write_tables` to a writer from `file`, then the tables of the area (`write_area_tables`; `boundary` is the
 /// boundary file, `built_at` the time in microseconds). With `raw` (only for `Input::Area`), also `raw.*` with
-/// `write_raw`. Returns one summary line for each mode.
+/// `write_raw`. Returns one summary line for each mode, and the time and memory of each step.
 #[allow(clippy::too_many_arguments)] // ponytail: one parameter for each build input; a struct if more come
 pub fn run<W: Write + Send>(
     input: Input,
@@ -312,7 +375,8 @@ pub fn run<W: Write + Send>(
     timezone_entry: Option<&str>,
     raw: bool,
     mut file: impl FnMut(&str) -> Result<W, String>,
-) -> Result<String, String> {
+) -> Result<(String, StepLog), String> {
+    let mut log = StepLog::start();
     let modes = parse_modes(modes)?;
     let opts = Options {
         levels,
@@ -377,9 +441,15 @@ pub fn run<W: Write + Send>(
             )
         }
     };
+    log.step(if raw_tables.is_some() {
+        "read the file (with the raw cut)"
+    } else {
+        "read the file"
+    });
     fixes.add_new_nodes(&mut ways, &mut coords);
     if modes.contains(&Mode::Walking) {
         sidewalks::infer_separate_sidewalks(&mut ways, &coords);
+        log.step("sidewalk rule");
     }
     let mut summary = Vec::new();
     let mut mode_nodes = Vec::new();
@@ -387,7 +457,9 @@ pub fn run<W: Write + Send>(
     let mut lane_edges = duckosm_core::lanes::LaneEdges::default();
     for mode in &modes {
         let net = build_network_with(&ways, &coords, *mode, &opts, &fixes, &relations)?;
+        log.step(&format!("{} network", mode.name()));
         write_tables(&net, *mode, &opts, &ways, &mut file)?;
+        log.step(&format!("{} files", mode.name()));
         fixes.set_arrows(&mut ways, &net.ways, *mode);
         lane_edges.add(*mode, &net);
         if levels != Method::None {
@@ -406,6 +478,7 @@ pub fn run<W: Write + Send>(
         if *mode == Mode::Driving && bus {
             if let Some(r) = raw_tables.as_ref() {
                 let n = write_bus(r, &net, &mut file)?;
+                log.step("bus routes");
                 summary.push(format!("bus: {n} routes"));
             }
         }
@@ -421,10 +494,12 @@ pub fn run<W: Write + Send>(
         timezone_entry,
     };
     write_area_tables(&area, &mut file)?;
+    log.step("area tables");
     if let Some(mut r) = raw_tables.filter(|_| raw) {
         // the tags that the steps set on the network's ways (the sidewalk rule, the arrows of the fixes)
         r.sync_tags(&ways);
         write_raw(&r, &mut file)?;
+        log.step("raw files");
         summary.push(format!(
             "raw: {} nodes, {} ways, {} relations",
             r.nodes.len(),
@@ -434,9 +509,11 @@ pub fn run<W: Write + Send>(
     }
     if let Some(l) = write_levels(&level_edges, levels, built_at, &mut file)? {
         summary.push(l);
+        log.step("drawing levels");
     }
     if let Some(l) = write_lane_profile(&lane_edges, &ways, &fixes, &mut file)? {
         summary.push(l);
+        log.step("lane profile");
     }
-    Ok(summary.join("\n"))
+    Ok((summary.join("\n"), log))
 }

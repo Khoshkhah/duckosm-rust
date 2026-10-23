@@ -127,6 +127,9 @@ export async function loadTables(files) {
 }
 
 export const query = (sql) => conn.query(sql);
+// the memory of DuckDB in MiB (its buffers: the tables, the caches), for the log of the steps
+export const memoryMiB = async () =>
+  Number((await conn.query("SELECT sum(memory_usage_bytes) AS b FROM duckdb_memory()")).toArray()[0].b) / 2 ** 20;
 
 // the base-map layers (docs/features.md): DuckDB's spatial extension, loaded once (the first time, the browser downloads it, 4.5 MB)
 let spatial = null;
