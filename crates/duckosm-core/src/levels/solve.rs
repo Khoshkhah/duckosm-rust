@@ -105,7 +105,16 @@ pub fn solve(rules: &Rules, max_level: i64) -> Result<Solved, String> {
         }
         arcs.extend(more);
     }
-    // the cost: the sum of (b - a) over all casing parts, and a large weight on the span H - L
+    // the cost: the sum of (b - a) over all casing parts, and a large weight w4 on the span H - L. The weight is larger
+    // than any sum, so this is two steps: first the least span, then the least sum at that span. The least span is the
+    // longest chain of the rules (`least_span`); the box then has that size, and the flow carries only the casing
+    // parts. The best numbers are the same. (As a supply of w4 at H and L, the flow took 260 phases on Burnaby: 17 s.)
+    let w4 = 3 * n as i64 * 2 * max_level + 1;
+    let (span, start) = least_span(&arcs, 4 * n, &pi);
+    pi = start;
+    for a in arcs.iter_mut().filter(|a| a.0 == hi && a.1 == z) {
+        a.2 = span;
+    }
     let mut supply = vec![0i64; nodes];
     for r in 0..n {
         for h in 0..3 {
@@ -113,12 +122,9 @@ pub fn solve(rules: &Rules, max_level: i64) -> Result<Solved, String> {
             supply[col(r, h)] += 1;
         }
     }
-    let w4 = 3 * n as i64 * 2 * max_level + 1;
-    supply[hi] = -w4;
-    supply[lo] = w4;
     let (g, _) = network(&arcs, nodes, |k| (k == Kind::Hard).then_some(INF));
     let flow = g.solve(&supply, &mut pi)?;
-    stages[2] = -(0..g.from.len()).map(|e| flow[e] * g.cost[e]).sum::<i64>();
+    stages[2] = w4 * span - (0..g.from.len()).map(|e| flow[e] * g.cost[e]).sum::<i64>();
     let x = least_numbers(&g, &flow, &pi);
     let parts = (0..n)
         .map(|r| [x[col(r, 0)], x[col(r, 1)], x[col(r, 2)], x[r]])
@@ -160,6 +166,41 @@ fn network(
         }
     }
     (g, idx)
+}
+
+/// The least span of the numbers of the `roads` first nodes (all except H, L and 0) under the hard rules: minus the
+/// shortest distance from a node to another one, with a Dijkstra on the costs reduced by `pi`. Also returns potentials
+/// for the last stage: the distances from an extra node with an arc of cost 0 to each node (they are 0 or less), with H
+/// at the least distance and L and 0 at 0 (the box of size `span`).
+fn least_span(arcs: &[(usize, usize, i64, Kind)], roads: usize, pi: &[i64]) -> (i64, Vec<i64>) {
+    let mut out: Vec<Vec<(u32, i64)>> = vec![Vec::new(); roads];
+    for &(i, j, w, kind) in arcs {
+        if kind == Kind::Hard && i < roads && j < roads {
+            out[i].push((j as u32, w + pi[i] - pi[j]));
+        }
+    }
+    // an extra node with an arc of cost 0 to each node; `top` keeps its reduced costs not negative
+    let top = *pi[..roads].iter().max().unwrap();
+    let mut dist: Vec<i64> = pi[..roads].iter().map(|&p| top - p).collect();
+    let mut heap: BinaryHeap<Reverse<(i64, usize)>> =
+        (0..roads).map(|v| Reverse((dist[v], v))).collect();
+    while let Some(Reverse((d, u))) = heap.pop() {
+        if d > dist[u] {
+            continue;
+        }
+        for &(v, c) in &out[u] {
+            debug_assert!(c >= 0);
+            let v = v as usize;
+            if d + c < dist[v] {
+                dist[v] = d + c;
+                heap.push(Reverse((d + c, v)));
+            }
+        }
+    }
+    let mut start: Vec<i64> = (0..roads).map(|v| dist[v] - top + pi[v]).collect();
+    let span = -*start.iter().min().unwrap();
+    start.extend([-span, 0, 0]); // H, L and 0
+    (span, start)
 }
 
 /// roadstyle's numbers from the flow: the shortest distances from an extra node (an arc of cost 0 to each node) in

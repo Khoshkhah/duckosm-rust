@@ -3,7 +3,7 @@
 //! rounds. docs/levels.md, "The finding".
 
 use std::cmp::Reverse;
-use std::collections::BinaryHeap;
+use std::collections::{BinaryHeap, VecDeque};
 
 /// The capacity of an arc with no limit.
 pub const INF: i64 = i64::MAX / 4;
@@ -65,15 +65,7 @@ impl Network {
                 fill[v as usize] += 1;
             }
         }
-        // a residual arc: (head, residual capacity, cost)
-        let arc = |r: usize, flow: &[i64]| -> (usize, i64, i64) {
-            let k = r / 2;
-            if r % 2 == 0 {
-                (self.to[k] as usize, self.cap[k] - flow[k], self.cost[k])
-            } else {
-                (self.from[k] as usize, flow[k], -self.cost[k])
-            }
-        };
+        let arc = |r: usize, flow: &[i64]| self.residual(r, flow);
         let mut dist = vec![i64::MAX; n];
         let mut level = vec![u32::MAX; n];
         let mut next = vec![0usize; n];
@@ -115,90 +107,64 @@ impl Network {
             for v in 0..n {
                 pi[v] += dist[v].min(reach);
             }
-            // Dinic on the arcs of reduced cost 0, from the nodes with excess to the nodes that take flow.
-            // ponytail: Tartu needs 20 to 50 phases of about 25 ms in the last stage (4 s); a push-relabel here, or a
-            // better start potential for the last stage, if large areas in the page need it.
+            // A push-relabel on the arcs of reduced cost 0 (FIFO, with a global relabel from time to time): it moves the
+            // excess to the nodes that take flow until no such path is left. It has no phases: Dinic needed 274 phases,
+            // each a search of the whole graph, in the last stage of Burnaby (17 s). A node at height n has no path left.
+            let top = n as u32;
+            let mut work = usize::MAX; // a global relabel first
+            let mut active = VecDeque::new();
+            let mut queued = vec![false; n];
             loop {
-                level.fill(u32::MAX);
-                let mut queue: Vec<usize> = (0..n).filter(|&v| excess[v] > 0).collect();
-                for &v in &queue {
-                    level[v] = 0;
+                if work > n + adj.len() {
+                    // the heights: the distances to the nodes that take flow, by a backward search
+                    self.heights(&start, &adj, &flow, pi, &excess, &mut level);
+                    next.copy_from_slice(&start[..n]);
+                    active.clear();
+                    for v in 0..n {
+                        queued[v] = excess[v] > 0 && level[v] < top;
+                        if queued[v] {
+                            active.push_back(v);
+                        }
+                    }
+                    work = 0;
                 }
-                let mut i = 0;
-                let mut found = false;
-                while i < queue.len() {
-                    let u = queue[i];
-                    i += 1;
-                    if excess[u] < 0 {
-                        found = true;
+                let Some(u) = active.pop_front() else { break };
+                queued[u] = false;
+                while excess[u] > 0 && level[u] < top {
+                    if next[u] == start[u + 1] {
+                        // relabel: one above the lowest node that u can push to
+                        let mut h = top;
+                        for &r in &adj[start[u]..start[u + 1]] {
+                            let (v, res, c) = arc(r as usize, &flow);
+                            if res > 0 && c + pi[u] - pi[v] == 0 {
+                                h = h.min(level[v] + 1);
+                            }
+                        }
+                        level[u] = h;
+                        next[u] = start[u];
+                        work += start[u + 1] - start[u] + 12;
                         continue;
                     }
-                    if found {
-                        break; // the level graph needs only the levels up to the first node that takes flow
-                    }
-                    for &r in &adj[start[u]..start[u + 1]] {
-                        let (v, res, c) = arc(r as usize, &flow);
-                        if res > 0 && level[v] == u32::MAX && c + pi[u] - pi[v] == 0 {
-                            level[v] = level[u] + 1;
-                            queue.push(v);
+                    let r = adj[next[u]] as usize;
+                    let (v, res, c) = arc(r, &flow);
+                    if res > 0 && c + pi[u] - pi[v] == 0 && level[u] == level[v] + 1 {
+                        let amount = excess[u].min(res);
+                        if r % 2 == 0 {
+                            flow[r / 2] += amount;
+                        } else {
+                            flow[r / 2] -= amount;
+                        }
+                        excess[u] -= amount;
+                        excess[v] += amount;
+                        if excess[v] > 0 && !queued[v] {
+                            queued[v] = true;
+                            active.push_back(v);
+                        }
+                        if amount < res {
+                            break; // u has no excess left, and the arc has room for the next time
                         }
                     }
-                }
-                if !found {
-                    break;
-                }
-                next.copy_from_slice(&start[..n]);
-                for s in 0..n {
-                    while excess[s] > 0 && level[s] == 0 {
-                        // one path s -> t on the level graph, by depth-first search
-                        let mut path: Vec<usize> = Vec::new();
-                        let mut u = s;
-                        let t = loop {
-                            if excess[u] < 0 && u != s {
-                                break Some(u);
-                            }
-                            let mut moved = false;
-                            while next[u] < start[u + 1] {
-                                let r = adj[next[u]] as usize;
-                                let (v, res, c) = arc(r, &flow);
-                                if res > 0 && level[v] == level[u] + 1 && c + pi[u] - pi[v] == 0 {
-                                    path.push(r);
-                                    u = v;
-                                    moved = true;
-                                    break;
-                                }
-                                next[u] += 1;
-                            }
-                            if !moved {
-                                level[u] = u32::MAX; // a dead end
-                                match path.pop() {
-                                    Some(r) => {
-                                        u = if r % 2 == 0 {
-                                            self.from[r / 2] as usize
-                                        } else {
-                                            self.to[r / 2] as usize
-                                        };
-                                        next[u] += 1;
-                                    }
-                                    None => break None,
-                                }
-                            }
-                        };
-                        let Some(t) = t else { break };
-                        let mut amount = excess[s].min(-excess[t]);
-                        for &r in &path {
-                            amount = amount.min(arc(r, &flow).1);
-                        }
-                        for &r in &path {
-                            if r % 2 == 0 {
-                                flow[r / 2] += amount;
-                            } else {
-                                flow[r / 2] -= amount;
-                            }
-                        }
-                        excess[s] -= amount;
-                        excess[t] += amount;
-                    }
+                    next[u] += 1;
                 }
             }
         }
@@ -207,6 +173,55 @@ impl Network {
         }
         self.check(supply, &flow, pi)?;
         Ok(flow)
+    }
+
+    /// A residual arc `r` (2k: arc k forward, 2k + 1: arc k backward): its head, its room and its cost.
+    fn residual(&self, r: usize, flow: &[i64]) -> (usize, i64, i64) {
+        let k = r / 2;
+        if r % 2 == 0 {
+            (self.to[k] as usize, self.cap[k] - flow[k], self.cost[k])
+        } else {
+            (self.from[k] as usize, flow[k], -self.cost[k])
+        }
+    }
+
+    /// The heights of the push-relabel: the number of arcs of reduced cost 0 with room from each node to a node that
+    /// takes flow (negative excess), or n if there is no such path.
+    fn heights(
+        &self,
+        start: &[usize],
+        adj: &[u32],
+        flow: &[i64],
+        pi: &[i64],
+        excess: &[i64],
+        height: &mut [u32],
+    ) {
+        let n = height.len();
+        height.fill(n as u32);
+        let mut queue: Vec<usize> = (0..n).filter(|&v| excess[v] < 0).collect();
+        for &v in &queue {
+            height[v] = 0;
+        }
+        let mut i = 0;
+        while i < queue.len() {
+            let v = queue[i];
+            i += 1;
+            // the arcs into v: the partners of the residual arcs out of v
+            for &r in &adj[start[v]..start[v + 1]] {
+                let back = r as usize ^ 1;
+                let (head, res, c) = self.residual(back, flow);
+                debug_assert_eq!(head, v);
+                let u = if r % 2 == 0 {
+                    self.to[r as usize / 2] as usize
+                } else {
+                    self.from[r as usize / 2] as usize
+                };
+                if res > 0 && height[u] == n as u32 && c + pi[u] - pi[v] == 0 {
+                    height[u] = height[v] + 1;
+                    queue.push(u);
+                }
+            }
+        }
     }
 
     /// The proof that `flow` is the best flow: it keeps the supplies and the capacities, and no arc has a reduced

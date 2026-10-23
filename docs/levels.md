@@ -116,7 +116,7 @@ meta row):
 |---|---|---|
 | `mod.rs` | `compute(edges, method)`: the edges of all modes, the tags rule, the rows of a solve (the ground, the compaction, the heads and the caps), the hash | 259 |
 | `input.rs` | the roads, the bands, the priorities, the relations and the casing parts (roadstyle's `level_input`), with the UTM projection and the plane geometry | 625 |
-| `flow.rs` | a minimum-cost flow with whole numbers (`i64`): the primal-dual algorithm (Dijkstra, then a maximum flow of Dinic on the arcs of reduced cost 0), and its check | 270 |
+| `flow.rs` | a minimum-cost flow with whole numbers (`i64`): the primal-dual algorithm (Dijkstra, then a push-relabel maximum flow on the arcs of reduced cost 0), and its check | 320 |
 | `solve.rs` | the stages, the rules that each stage leaves, and the numbers from the last flow | 236 |
 
 `duckosm-build` writes the two tables after the other area tables (`write_levels` in `area.rs`), as
@@ -125,6 +125,17 @@ schema `visualization`. The page loads them, puts them in its zip and in `load.s
 
 The flow is not the network simplex of the design: the primal-dual algorithm is shorter and simple to check, and
 the costs of the levels are small (0, -1 and the span), so it needs few rounds of Dijkstra (2 to 8 on Tartu).
+
+The last stage is done in two steps (2026-10-23). Its cost is the sum of `b - a` plus a large weight on the span
+of the numbers. The weight is larger than any sum, so the best answers are the answers with the least span, and
+among them the least sum. The least span is the longest chain of rules: one Dijkstra on the reduced costs gives
+it (`least_span` in `solve.rs`). Then the box of the numbers gets that size, and the flow carries only the casing
+parts. The set of best answers is the same, so the numbers and the stage values do not change. Before, the weight
+was a supply at the two span nodes. That sent millions of units through the whole graph.
+
+The maximum flow in each round is a push-relabel (FIFO, with a global relabel by a backward search). Dinic needed
+one search of the whole graph for each distinct path length: 274 phases in the last stage of Burnaby. A
+push-relabel has no phases.
 
 The geometry of `input.rs` must give the same pairs as shapely and GEOS. Thus it copies their rules, not only
 their idea:
@@ -243,8 +254,17 @@ The page (headless Chromium, `e2e.py`, the Monaco sample with its boundary, 8 th
 `tags` and 1.0 s with `solve`; the map draws from the stored levels in both cases.
 
 Against the targets of the design: Monaco is less than 1 s, and WebAssembly is not slower than three times native.
-Tartu misses its target of 3 s: the last stage takes most of the time (see "Risks"). The memory of a solve on
+Tartu missed its target of 3 s with Dinic; with the changes of 2026-10-23 it takes 1.0 s (below). The memory of a solve on
 Tartu is 72 MB more natively (the target was 50 MB) and 28 MiB more in WebAssembly.
+
+The faster solver (2026-10-23: the least span first, and a push-relabel; three modes, release build). The rows are
+equal to the rows of the solver before, on every row: Monaco 13,298, Burnaby 64,314 (driving) and 157,808 (three
+modes). Tartu: 64,828 of 64,828 rows equal to roadstyle's (`tools/compare_levels.py`).
+
+| Area | Roads | Native before | Native after | WebAssembly before (whole build, Node) | WebAssembly after |
+|---|---|---|---|---|---|
+| Tartu | 32,546 | 4.1 s | 1.0 s | | |
+| Burnaby (South Coast file, cut with osmium) | 79,199 | about 20 s | 3.1 s | 21.8 s (tags: 2.5 s) | 5.2 s |
 
 ## Risks
 
@@ -253,8 +273,8 @@ Tartu is 72 MB more natively (the target was 50 MB) and 28 MiB more in WebAssemb
   pairs hold on the Rust result).
 - **The UTM zone.** geopandas chooses the zone from the center of the box. An area across two zones can get the
   other zone in pyproj's database. That changes the metres a little, not the rules.
-- **The time of large areas.** The last stage needs 20 to 50 phases of the maximum flow on Tartu (about 25 ms
-  each). A push-relabel, or a better start for the last stage, can make it faster (`ponytail:` note in `flow.rs`).
+- **The time of large areas.** Before 2026-10-23, the last stage took 260 phases of Dinic on Burnaby (17 s, 79,199
+  roads). The two steps of the last stage and the push-relabel make it 3 s (see "Time and memory").
 
 ## Kaveh's answers (2026-10-22)
 

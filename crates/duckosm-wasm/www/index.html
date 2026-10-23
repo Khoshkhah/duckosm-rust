@@ -167,9 +167,16 @@
   details { margin-top: 10px; } summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
   .progress { margin: 10px 0 0; padding: 9px 11px; border-radius: 9px; background: var(--surface); font-size: 12.5px; white-space: pre-wrap; }
   .progress:empty { display: none; }
-  .steplog { width: 100%; margin-top: 8px; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
-  .steplog th, .steplog td { text-align: left; padding: 2px 6px 2px 0; border-bottom: 1px solid var(--line, #ddd); }
-  .steplog td:nth-child(2), .steplog td:nth-child(3) { text-align: right; padding-right: 12px; }
+  .steplog { width: 100%; margin-top: 6px; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .steplog th, .steplog td { padding: 3px 6px; border-bottom: 1px solid var(--line); }
+  .steplog th { text-align: right; color: var(--muted); font-weight: 500; }
+  .steplog th:first-child, .steplog td:first-child { text-align: left; }
+  .steplog td { text-align: right; white-space: nowrap; }
+  .steplog td:first-child { white-space: normal; }
+  .steplog tr.group td { padding-top: 9px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; border-bottom: 0; }
+  .steplog tr.total td { font-weight: 600; border-bottom: 0; }
+  /* the time cell: a bar for the share of the slowest step */
+  .steplog td.t { background: linear-gradient(to left, color-mix(in srgb, var(--c, #2563eb) 22%, transparent) var(--w), transparent var(--w)); }
   .grid2 { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; }
   select, textarea { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 9px; }
   select { height: 34px; padding: 0 8px; }
@@ -184,6 +191,11 @@
   #files .tb .m { display: flex; flex-wrap: wrap; gap: 4px 14px; font-variant-numeric: tabular-nums; }
   #files .tb .m .i { white-space: nowrap; }
   #files .tb .m .i span { color: var(--muted); font-size: 11.5px; }
+  #files .layers { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px; margin-top: 6px; }
+  #files .layers a { display: flex; justify-content: space-between; gap: 8px; padding: 4px 8px; border-radius: 6px;
+    background: var(--surface); text-decoration: none; font-variant-numeric: tabular-nums; }
+  #files .layers a:hover { outline: 1px solid var(--line); }
+  #files .layers a span { color: var(--muted); font-size: 11.5px; }
   .maplibregl-popup-content { color: #111827; font-size: 12.5px; }
 
   #status { position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 3; background: var(--fg); color: var(--bg); padding: 7px 14px; border-radius: 99px; font-size: 13px; box-shadow: var(--shadow); }
@@ -358,7 +370,8 @@
   <p id="buildhint" class="small" style="margin:10px 0 0; color: var(--warn)" aria-live="polite"></p>
   <p id="buildstatus" class="progress" aria-live="polite"></p>
   <details id="steplog" open hidden><summary>Time and memory of each step</summary>
-    <table class="steplog"><thead><tr><th>Step</th><th>Time (s)</th><th>Memory (MiB)</th><th>Memory of</th></tr></thead><tbody></tbody></table>
+    <table class="steplog"><thead><tr><th>Step</th><th>Time (s)</th><th>Memory (MiB)</th></tr></thead><tbody></tbody>
+      <tfoot><tr class="total"><td>Total</td><td></td><td></td></tr></tfoot></table>
   </details>
 </section>
 
@@ -938,16 +951,32 @@ canBuild();
 
 // ---- step 4: build ----
 const progress = (text) => ($("buildstatus").textContent = text);
-// the log: a row for each step of the build, the tables and the map. Memory of: the build module (its WebAssembly memory,
-// which only grows), DuckDB (its buffers) or the map module (roadstyle's, in its own worker).
-function logSteps(rows, of, fresh) {
+// the log: a row for each step of the build, the tables and the map, under a heading for each part. The memory is that of
+// the part: the build module (its WebAssembly memory, which only grows), DuckDB (its buffers) or the map module.
+const STEP_GROUPS = { build: "Build (WebAssembly module)", page: "In the page", duckdb: "DuckDB", map: "Map (roadstyle module)" };
+function logSteps(rows, group, fresh) {
   const body = $("steplog").querySelector("tbody");
   if (fresh) body.textContent = "";
+  // a new map (another mode) replaces the rows of the last map
+  if (group === "map") for (const tr of [...body.rows]) if (tr.dataset.group === "map") tr.remove();
   for (const r of rows) {
+    if (body.rows[body.rows.length - 1]?.dataset.group !== group) {
+      const h = body.insertRow();
+      h.className = "group";
+      h.dataset.group = group;
+      Object.assign(h.insertCell(), { colSpan: 3, textContent: STEP_GROUPS[group] });
+    }
     const tr = body.insertRow();
-    for (const v of [r.step, num(r.ms / 1000, 2), r.mib == null ? "" : num(r.mib, 1), r.mib == null ? "" : of]) tr.insertCell().textContent = v;
+    tr.dataset.group = group;
+    tr.dataset.ms = r.ms;
+    tr.insertCell().textContent = r.step;
+    Object.assign(tr.insertCell(), { className: "t", textContent: num(r.ms / 1000, 2) });
+    tr.insertCell().textContent = r.mib == null ? "" : num(r.mib, 1);
   }
-  $("steplog").hidden = !body.rows.length;
+  const steps = [...body.rows].filter((tr) => tr.dataset.ms), slowest = Math.max(...steps.map((tr) => +tr.dataset.ms), 1);
+  for (const tr of steps) tr.cells[1].style.setProperty("--w", `${(100 * +tr.dataset.ms) / slowest}%`);
+  $("steplog").querySelector("tfoot td:nth-child(2)").textContent = num(steps.reduce((t, tr) => t + +tr.dataset.ms, 0) / 1000, 2);
+  $("steplog").hidden = !steps.length;
 }
 duck.duckReady.then((s) => (window.timings = { duckdbStart: s })).catch((e) => progress("DuckDB did not start: " + e.message));
 let areaName = "area", timezones = null;
@@ -986,28 +1015,28 @@ $("run").onclick = async () => {
     if (region) msg.tz = JSON.stringify((await (timezones ??= fetch("timezones.json").then((r) => r.json()))).regions[region] ?? null);
     const b0 = performance.now();
     const out = await duck.build(msg, (t) => progress(t + "…"));
-    logSteps(download ? [{ step: "download from " + download.server, ms: download.seconds * 1000 }] : [], "", true);
-    logSteps(out.log, "build module");
+    logSteps(download ? [{ step: "download from " + download.server, ms: download.seconds * 1000 }] : [], "page", true);
+    logSteps(out.log, "build");
     const b1 = performance.now();
-    logSteps([{ step: "send the files to the page", ms: b1 - b0 - out.seconds.load * 1000 - out.seconds.build * 1000 - out.log.at(-1).ms }], "");
+    logSteps([{ step: "send the files to the page", ms: b1 - b0 - out.seconds.load * 1000 - out.seconds.build * 1000 - out.log.at(-1).ms }], "page");
     const duckMib = () => duck.memoryMiB().catch(() => null);
     if (spatial) {
       progress("loading DuckDB's spatial extension…");
       await spatial;
-      logSteps([{ step: "wait for DuckDB's spatial extension", ms: performance.now() - b1 }], "");
+      logSteps([{ step: "wait for DuckDB's spatial extension", ms: performance.now() - b1 }], "page");
     }
     const built = performance.now();
     progress("loading the tables into DuckDB…");
     await duck.loadTables(out.files);
     const loaded = performance.now();
-    logSteps([{ step: "load the tables into DuckDB", ms: loaded - built, mib: await duckMib() }], "DuckDB");
+    logSteps([{ step: "load the tables", ms: loaded - built, mib: await duckMib() }], "duckdb");
     let featuresSeconds = null;
     if (out.featuresSql) {
       progress("making the base-map layers…");
       const f0 = performance.now();
       await duck.loadFeatures(out.files, out.featuresSql);
       featuresSeconds = (performance.now() - f0) / 1000;
-      logSteps([{ step: "make the base-map layers", ms: featuresSeconds * 1000, mib: await duckMib() }], "DuckDB");
+      logSteps([{ step: "make the base-map layers", ms: featuresSeconds * 1000, mib: await duckMib() }], "duckdb");
     }
     const ready = performance.now();
     window.timings = Object.assign(window.timings || {}, {
@@ -1075,8 +1104,8 @@ async function showRoads() {
     window.timings = Object.assign(window.timings || {}, { map: { roadsSql: r.roadsSeconds, style: r.styleSeconds,
       total: (performance.now() - t0) / 1000, memoryMiB: r.memoryMiB } });
     const total = (performance.now() - t0) / 1000;
-    logSteps([{ step: "map: the roads table", ms: r.roadsSeconds * 1000 }, { step: "map: the style", ms: r.styleSeconds * 1000, mib: r.memoryMiB },
-      { step: "map: draw", ms: (total - r.roadsSeconds - r.styleSeconds) * 1000 }], "map module");
+    logSteps([{ step: "the roads table (DuckDB)", ms: r.roadsSeconds * 1000 }, { step: "the style", ms: r.styleSeconds * 1000, mib: r.memoryMiB },
+      { step: "draw the map", ms: (total - r.roadsSeconds - r.styleSeconds) * 1000 }], "map");
     $("mapnote").textContent = `${r.style.layers.length} layers: roads table ${num(r.roadsSeconds, 2)} s, style ${num(r.styleSeconds, 2)} s ` +
       `(${r.memoryMiB} MiB), map ${num((performance.now() - t0) / 1000, 2)} s. Click a road for its data.`;
   } catch (e) {
@@ -1149,8 +1178,13 @@ function files() {
   $("files").innerHTML = Object.entries(duck.TABLES).filter(([name]) => duck.tables.some((t) => t.table === name)).map(([name, what]) =>
     `<div class="tb"><b>${name}</b><p>${esc(what)}</p><div class="m">` +
     modes.map((m) => duck.tables.find((t) => t.table === name && t.mode === m)).filter(Boolean).map(link).join("") + "</div></div>").join("") +
-    (feats.length ? `<div class="tb"><b>features</b><p>${esc(duck.FEATURES_TEXT)} <a href="${duck.FEATURES_REFERENCE}" target="_blank" rel="noopener">The layers</a></p>` +
-      `<div class="m">${feats.map(link).join("")}</div></div>` : "");
+    (feats.length ? `<div class="tb"><b>features</b><p>The base-map layers (duckOSM features.*), one file each, with its number of rows. A click downloads the file. ` +
+      `The files have no tags column, as duckOSM's export. <a href="${duck.FEATURES_REFERENCE}" target="_blank" rel="noopener">The columns of each layer</a></p><div class="layers">` +
+      feats.map((t) => {
+        const u = URL.createObjectURL(new Blob([t.bytes], { type: "application/vnd.apache.parquet" }));
+        urls.push(u);
+        return `<a href="${u}" download="${esc(t.name)}" title="Download ${esc(t.name)}, ${size(t.bytes.length)}">${esc(t.table.replace(/_/g, " "))} <span>${num(t.rows)}</span></a>`;
+      }).join("") + "</div></div>" : "");
 }
 $("reference").href = duck.REFERENCE;
 $("zip").onclick = async () => {
