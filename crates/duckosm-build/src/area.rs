@@ -4,6 +4,8 @@
 
 use duckosm_core::filter::Mode;
 use duckosm_core::geom::Pt;
+use duckosm_core::fixes::OsmFixes;
+use duckosm_core::lanes::{self, LaneEdges};
 use duckosm_core::levels::{self, LevelEdges, Method};
 use duckosm_core::model::{Node, Way};
 use duckosm_core::network::{self, Coords, Options};
@@ -258,6 +260,21 @@ pub fn write_levels<W: Write + Send>(
         );
     }
     Ok(Some(line))
+}
+
+/// `driving.lane_profile` (docs/lane_profile.md), when the driving mode was built: `lane_profile_driving.parquet`.
+/// `ways` are the ways after all modes. Returns a summary line.
+pub fn write_lane_profile<W: Write + Send>(
+    edges: &LaneEdges,
+    ways: &[Way],
+    fixes: &OsmFixes,
+    mut file: impl FnMut(&str) -> Result<W, String>,
+) -> Result<Option<String>, String> {
+    let Some(rows) = lanes::lane_profile(edges, ways, fixes) else {
+        return Ok(None);
+    };
+    pq::write_lane_profile_to(file("lane_profile_driving.parquet")?, &rows)?;
+    Ok(Some(format!("lane profile: {} lanes", rows.len())))
 }
 
 /// Microseconds since 1970 as roadstyle writes a time: `2026-10-22T00:20:45+00:00`.

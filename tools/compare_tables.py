@@ -1,4 +1,4 @@
-"""Compare the tables of group 1 (docs/tables.md) of duckosm-rust with a duckOSM database, row by row.
+"""Compare the tables of group 1 and the lane profile (docs/tables.md) of duckosm-rust with a duckOSM database, row by row.
 
     python tools/compare_tables.py golden.duckdb ours.duckdb [modes]
 
@@ -35,6 +35,8 @@ for m in MODES:
     differ(f"{m}.ways", "SELECT * EXCLUDE (tags), list_sort(map_entries(tags)) AS tags FROM {db}." + m + ".ways")
     differ(f"{m}.way_nodes", "SELECT * FROM {db}." + m + ".way_nodes")
     differ(f"{m}.virtual_nodes", "SELECT node_id, ST_AsText(geom) FROM {db}." + m + ".virtual_nodes")
+if "driving" in MODES:
+    differ("driving.lane_profile", "SELECT * FROM {db}.driving.lane_profile")
 differ("main.global_junctions", "SELECT * FROM {db}.main.global_junctions")
 differ("main.boundary", "SELECT * EXCLUDE (geom), ST_AsText(ST_Normalize(geom)) AS g FROM {db}.main.boundary")
 differ("main.visualization_metadata", "SELECT center_lat, center_lon, initial_zoom, timezone, "

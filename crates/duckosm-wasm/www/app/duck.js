@@ -24,6 +24,7 @@ export const TABLES = {
   turn_restrictions: "Driving: the OpenStreetMap turn restrictions at a node, as pairs of edges.",
   turn_path_restrictions: "Driving: the turn restrictions through a via way, as paths of edges.",
   turn_permission: "The turn rules that the graph cannot hold: a rule for some vehicles or with a condition.",
+  lane_profile: "Driving: each lane of each edge and bus-only edge, from left to right, with its use, width and arrow.",
   edge_id_map: "For each merged edge, the edges that it was made from.",
   ways: "The OpenStreetMap ways that the mode kept, with all their tags and nodes.",
   way_nodes: "The nodes of each way, in order.",

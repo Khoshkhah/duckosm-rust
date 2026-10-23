@@ -22,3 +22,7 @@ yaml-rust2 = "0.13"
 tzf-rs = { version = "2.1", default-features = false, features = ["bundled"] }
 # main.boundary keeps the order of the properties of the file, as GDAL does
 serde_json = { version = "1", features = ["preserve_order"] }
+
+[dev-dependencies]
+# the tests read the .duckdb file that the build writes (the version of duckosm-duckdb)
+duckdb = { version = "=1.10506.1", features = ["bundled"] }

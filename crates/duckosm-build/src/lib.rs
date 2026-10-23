@@ -4,6 +4,7 @@
 use duckosm_core::boundary::Boundary;
 use duckosm_core::filter::Mode;
 use duckosm_core::fixes::OsmFixes;
+use duckosm_core::lanes::LaneEdges;
 use duckosm_core::levels::LevelEdges;
 use duckosm_core::model::{Network, Way};
 use duckosm_core::network::{build_network_with, Options};
@@ -16,7 +17,7 @@ use std::time::Instant;
 pub mod area;
 pub mod config;
 
-pub use area::{write_area_tables, write_levels, Area};
+pub use area::{write_area_tables, write_lane_profile, write_levels, Area};
 
 pub use duckosm_core::filter::Mode as NetworkMode;
 pub use duckosm_core::levels::Method as LevelsMethod;
@@ -94,6 +95,8 @@ pub struct Summary {
     pub sidewalk_roads: usize,
     /// A summary of the drawing levels, when they were made.
     pub levels: Option<String>,
+    /// A summary of the lane profile, when the driving mode was built.
+    pub lanes: Option<String>,
 }
 
 /// Write the tables of one mode, each to a writer from `file`, which gets the file name (for example
@@ -258,6 +261,7 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
     std::fs::create_dir_all(&pq_dir).map_err(|e| e.to_string())?;
     let mut mode_nodes = Vec::new();
     let mut level_edges = LevelEdges::default();
+    let mut lane_edges = LaneEdges::default();
     for mode in &p.modes {
         let net = build_network_with(&ways, &coords, *mode, &p.options, &fixes, &relations)?;
         lap(&format!("build {}", mode.name()), &mut sum);
@@ -282,6 +286,7 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
         });
         // duckOSM: the arrows of the fixes go into the raw tags after this mode, so the next modes see them
         fixes.set_arrows(&mut ways, &net.ways, *mode);
+        lane_edges.add(*mode, &net);
         if p.options.levels != LevelsMethod::None {
             level_edges.add(*mode, false, &net.edges);
             level_edges.add(*mode, true, &net.private_edges);
@@ -333,6 +338,15 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
     })?;
     if sum.levels.is_some() {
         lap("levels", &mut sum);
+    }
+    sum.lanes = write_lane_profile(&lane_edges, &ways, &fixes, |name| {
+        let path = pq_dir.join(name);
+        sum.files
+            .push((name.trim_end_matches(".parquet").to_string(), path.clone()));
+        std::fs::File::create(&path).map_err(|e| e.to_string())
+    })?;
+    if sum.lanes.is_some() {
+        lap("lane profile", &mut sum);
     }
     if p.geoparquet {
         write_layers_json(&pq_dir, &sum)?;

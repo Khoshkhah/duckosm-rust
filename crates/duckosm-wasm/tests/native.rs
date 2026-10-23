@@ -54,6 +54,7 @@ fn browser_build_equals_native_build() {
     names.sort();
     assert_eq!(names, want, "the same files");
     assert!(names.contains(&"edge_graph_walking.parquet".to_string()));
+    assert!(names.contains(&"lane_profile_driving.parquet".to_string()));
     for n in &names {
         let (a, b) = (
             std::fs::read(native.join(n)).unwrap(),
@@ -118,9 +119,9 @@ fn browser_area_build_equals_native_build() {
     )
     .unwrap();
     // 3 modes x 10 files (edges, private_edges, nodes, virtual_nodes, ways, way_nodes, edge_id_map, edge_graph,
-    // turn_permission, and in driving the two turn restriction tables) + 4 area files + 3 raw files + the 2 levels
-    // files (solve)
-    assert_eq!(names.len(), 3 * 9 + 2 + 4 + 3 + 2, "{names:?}");
+    // turn_permission, and in driving the two turn restriction tables and the lane profile) + 4 area files + 3 raw
+    // files + the 2 levels files (solve)
+    assert_eq!(names.len(), 3 * 9 + 3 + 4 + 3 + 2, "{names:?}");
     assert!(names.contains(&"raw_ways.parquet".to_string()));
     for n in &names {
         let (a, b) = (

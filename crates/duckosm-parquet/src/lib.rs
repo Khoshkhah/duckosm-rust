@@ -11,6 +11,7 @@ use duckosm_core::geom::Pt;
 use duckosm_core::graph::{
     GraphRow, MemberType, Relation, TurnPath, TurnPermission, TurnRestriction,
 };
+use duckosm_core::lanes::LaneRow;
 use duckosm_core::model::{Attrs, Edge, MapRow, Node, Way};
 use duckosm_core::network::Options;
 use duckosm_core::raw::{RawNode, RawTags, RawWay};
@@ -648,6 +649,32 @@ pub fn write_transfers_to<W: Write + Send>(out: W, rows: &[Transfer]) -> Result<
             texts(c.iter().map(|r| Some(r.to_mode))),
             Arc::new(cost.finish()),
             texts(c.iter().map(|r| Some(r.kind))),
+        ]
+    })
+}
+
+/// Write `driving.lane_profile`.
+pub fn write_lane_profile_to<W: Write + Send>(out: W, rows: &[LaneRow]) -> Result<(), String> {
+    let fields = vec![
+        field("edge_id", DataType::Int64),
+        field("lane_num", DataType::Int32),
+        field("use", DataType::Utf8),
+        field("width_m", DataType::Float64),
+        field("turn", DataType::Utf8),
+        field("source", DataType::Utf8),
+        field("width_source", DataType::Utf8),
+    ];
+    write_rows(out, fields, rows, |c| {
+        let mut width = Float64Builder::new();
+        c.iter().for_each(|r| width.append_value(r.width_m));
+        vec![
+            i64s(c.iter().map(|r| r.edge_id)),
+            i32s(c.iter().map(|r| Some(r.lane_num))),
+            texts(c.iter().map(|r| Some(r.use_))),
+            Arc::new(width.finish()),
+            texts(c.iter().map(|r| r.turn.as_deref())),
+            texts(c.iter().map(|r| Some(r.source.as_str()))),
+            texts(c.iter().map(|r| Some(r.width_source.as_str()))),
         ]
     })
 }
