@@ -164,7 +164,7 @@ against it (complementary slackness). This is a proof that the flow is the best.
 - Python package: `build(..., levels="tags")`, with the same three values.
 - WebAssembly: a last argument `levels` of `build`, `build_area` and `build_osm_json` (`undefined` is `tags`).
   `run_node.mjs` takes it as its fifth argument.
-- The page: in step 4 (**Build**), "Drawing order: from the tags (fast) | solved (roadstyle's optimization)". The
+- The page: in step 4 (**Build**), "Drawing order: From the tags (fast) | Optimized (slower)". The
   default is "from the tags". The map reads `visualization.edge_levels`; it computes `TAG_LEVELS` only for a build
   without that table.
 

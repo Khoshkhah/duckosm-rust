@@ -126,7 +126,7 @@ To change the allowed pages later, change `ALLOWED_ORIGINS` and run `npx wrangle
 - `e2e.py relay ... --boundary tests/data/monaco.geojson`: the page got the Monaco extract through the relay of
   `serve.py`, kept it, selected it, and built it. The 20 tables are equal, on every row, to the native build of
   the same file (`duckosm-rust <file> --boundary ...`, 2,762 driving edges).
-- In headless Chromium: before **Get**, Build is off and step 4 says "Click Get at an extract in step 3, or select
+- In headless Chromium: before **Get**, Build is off and step 4 says "Get a file in step 3, or select
   a region file". After **Get**, Build is on. After a reload, the page selects the kept file at once. After
   **Delete**, the file is gone and Build is off.
 - Not tested: the deploy on Cloudflare (it needs the account), a large region, and Firefox and Safari (their
