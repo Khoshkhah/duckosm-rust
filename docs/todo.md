@@ -29,8 +29,8 @@ gzip; [tables.md](tables.md)). Kaveh chose it on 2026-10-23. Two other ways, for
 
 ## The tables
 
-- **Group 2** ([tables.md](tables.md)): `driving.lane_profile` (in progress in its own session). The bus routes
-  are done ([bus.md](bus.md)).
+- **Group 2** ([tables.md](tables.md)) is done: `driving.lane_profile` ([lane_profile.md](lane_profile.md)) and the
+  bus routes ([bus.md](bus.md)).
 
 ## Publishing
 
