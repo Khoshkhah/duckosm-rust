@@ -933,7 +933,7 @@ canBuild();
 // ---- step 4: build ----
 const progress = (text) => ($("buildstatus").textContent = text);
 duck.duckReady.then((s) => (window.timings = { duckdbStart: s })).catch((e) => progress("DuckDB did not start: " + e.message));
-let areaName = "area";
+let areaName = "area", timezones = null;
 $("run").onclick = async () => {
   const modes = [...document.querySelectorAll("input[name=mode]:checked")].map((c) => c.value).join(",");
   if (!modes) return status("Select at least one mode.");
@@ -962,6 +962,10 @@ $("run").onclick = async () => {
       download = { seconds: (performance.now() - d0) / 1000, bytes: got.bytes.byteLength, server: got.server };
       msg = { json: got.bytes, boundary: text(), modes, fixes, levels, threads };
     }
+    // the time zone of main.visualization_metadata: the entry of the area's smallest Geofabrik region in the time zone
+    // table (www/timezones.json, loaded one time, then from the cache of the browser)
+    const region = area?.props.geofabrik?.[0]?.id;
+    if (region) msg.tz = JSON.stringify((await (timezones ??= fetch("timezones.json").then((r) => r.json()))).regions[region] ?? null);
     const out = await duck.build(msg, (t) => progress(t + "…"));
     if (spatial) {
       progress("loading DuckDB's spatial extension…");

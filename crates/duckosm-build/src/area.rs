@@ -26,6 +26,10 @@ pub struct Area<'a> {
     pub opts: &'a Options,
     /// The build time, microseconds since 1970 (UTC). The caller gives it: WebAssembly has no clock in Rust.
     pub built_at: i64,
+    /// The entry of the area's Geofabrik region in the time zone table (`www/timezones.json`, JSON text): the
+    /// page gives it, because the browser build has no world map of the zones. None: the map of `tzf-rs`
+    /// (the cargo feature `tzf`, natively), else no time zone.
+    pub timezone_entry: Option<&'a str>,
 }
 
 /// duckOSM `multimodal.transfer_s`: the seconds of a change of mode.
@@ -146,15 +150,18 @@ fn metadata(a: &Area, shape: Option<&(Vec<Vec<Vec<Pt>>>, String)>) -> Metadata {
         center_lat: (s + n) / 2.0,
         center_lon: (w + e) / 2.0,
         initial_zoom,
-        timezone: timezone(a.nodes),
+        timezone: lookup_point(a.nodes).and_then(|(x, y)| match a.timezone_entry {
+            Some(entry) => zone_of_entry(entry, x, y),
+            None => zone_of_map(x, y),
+        }),
         built_at: a.built_at,
         version: format!("duckosm-rust {}", env!("CARGO_PKG_VERSION")),
     }
 }
 
-/// duckOSM `utils.add_timezone`: the nodes of driving (else of the first mode), without the virtual nodes;
-/// the node nearest (median x, median y); its IANA time zone.
-fn timezone(nodes: &[(Mode, Vec<Node>)]) -> Option<String> {
+/// duckOSM `utils.add_timezone`: the point of the time zone is the node nearest (median x, median y) of the
+/// nodes of driving (else of the first mode), without the virtual nodes.
+fn lookup_point(nodes: &[(Mode, Vec<Node>)]) -> Option<(f64, f64)> {
     let (_, ns) = nodes
         .iter()
         .find(|(m, _)| *m == Mode::Driving)
@@ -180,10 +187,54 @@ fn timezone(nodes: &[(Mode, Vec<Node>)]) -> Option<String> {
         let d = |n: &Node| (n.lon - mx).powi(2) + (n.lat - my).powi(2);
         d(a).total_cmp(&d(b))
     })?;
-    let tz = tzf_rs::DefaultFinder::new()
-        .get_tz_name(near.lon, near.lat)
-        .to_string();
+    Some((near.lon, near.lat))
+}
+
+/// The zone at a point from the world map of `tzf-rs` (the native build).
+#[cfg(feature = "tzf")]
+fn zone_of_map(x: f64, y: f64) -> Option<String> {
+    let tz = tzf_rs::DefaultFinder::new().get_tz_name(x, y).to_string();
     (!tz.is_empty()).then_some(tz)
+}
+
+#[cfg(not(feature = "tzf"))]
+fn zone_of_map(_: f64, _: f64) -> Option<String> {
+    None
+}
+
+/// The zone at a point from an entry of the time zone table (tools/make_timezone_table.py): a name; null; or
+/// `{"zones": [[name, MultiPolygon coordinates], ...]}`, the smaller zones first: the first zone whose part has
+/// the point (the even-odd rule over the rings of a polygon), else the last.
+fn zone_of_entry(entry: &str, x: f64, y: f64) -> Option<String> {
+    let v: Value = serde_json::from_str(entry).ok()?;
+    if let Some(name) = v.as_str() {
+        return Some(name.to_string());
+    }
+    let zones = v["zones"].as_array()?;
+    let pt = |c: &Value| Some((c[0].as_f64()?, c[1].as_f64()?));
+    let in_polygon = |rings: &Value| -> bool {
+        let mut inside = false;
+        for ring in rings.as_array().into_iter().flatten() {
+            let r: Vec<(f64, f64)> = ring
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(pt)
+                .collect();
+            for i in 0..r.len() {
+                let (a, b) = (r[i], r[(i + r.len() - 1) % r.len()]);
+                if (a.1 > y) != (b.1 > y) && x < (b.0 - a.0) * (y - a.1) / (b.1 - a.1) + a.0 {
+                    inside = !inside;
+                }
+            }
+        }
+        inside
+    };
+    let found = zones
+        .iter()
+        .find(|z| z[1].as_array().into_iter().flatten().any(in_polygon))
+        .or(zones.last())?;
+    found[0].as_str().map(str::to_string)
 }
 
 /// `mm.transfers` (duckOSM `MultimodalBuilder`, the coarse version): at each node that walking shares with

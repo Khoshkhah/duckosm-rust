@@ -722,6 +722,7 @@ dependencies = [
  "duckosm-build",
  "duckosm-core",
  "js-sys",
+ "serde_json",
  "wasm-bindgen",
  "wasm-bindgen-rayon",
  "web-sys",
