@@ -10,7 +10,7 @@
 #                     target/roadstyle (or ROADSTYLE_REPO, a local copy). duckosm-core uses the same commit for the levels.
 set -e
 NIGHTLY=nightly-2026-10-15
-ROADSTYLE_COMMIT=900b43e
+ROADSTYLE_COMMIT=900b43eb7a466bfe1c5e99f629edcee6ecd49014   # the full SHA: a fetch by SHA needs it
 ROADSTYLE_REPO=${ROADSTYLE_REPO:-https://github.com/Khoshkhah/roadstyle.git}
 cargo build --release --target wasm32-unknown-unknown -p duckosm-wasm
 wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/pkg target/wasm32-unknown-unknown/release/duckosm_wasm.wasm
@@ -23,9 +23,10 @@ RUSTFLAGS='-C target-feature=+atomics,+bulk-memory,+mutable-globals -C link-arg=
 wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/pkg-threads \
   target/threads/wasm32-unknown-unknown/release/duckosm_wasm.wasm
 R=target/roadstyle
-[ -d $R ] || git clone -q "$ROADSTYLE_REPO" $R
-git -C $R fetch -q origin 2>/dev/null || true
-git -C $R checkout -q $ROADSTYLE_COMMIT
+# fetch only this commit: a folder from an older build (or the CI cache) can have no ref that contains it
+[ -d $R/.git ] || git init -q $R
+git -C $R fetch -q --depth 1 "$ROADSTYLE_REPO" $ROADSTYLE_COMMIT
+git -C $R checkout -q --force FETCH_HEAD
 cargo build --release --target wasm32-unknown-unknown --manifest-path $R/rust/Cargo.toml -p roadstyle-wasm
 rm -rf crates/duckosm-wasm/www/map/pkg
 wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/map/pkg \
