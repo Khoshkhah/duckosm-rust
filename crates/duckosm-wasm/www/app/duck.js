@@ -54,6 +54,9 @@ export const duckReady = (async () => {
   await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
   URL.revokeObjectURL(url);
   conn = await db.connect();
+  // Each build registers its files under the same names (edges_driving.parquet, ...). DuckDB's external file cache keeps parts of
+  // a file by its name, so a second build read old parts with the new file ("Snappy decompression failure").
+  await conn.query("SET enable_external_file_cache = false");
   return (performance.now() - t0) / 1000;
 })();
 
