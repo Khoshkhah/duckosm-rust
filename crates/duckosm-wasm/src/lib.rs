@@ -246,6 +246,19 @@ pub fn build_osm_json(
     )
 }
 
+thread_local! {
+    /// The time zone table entry of the next build (`set_timezone_entry`).
+    static TIMEZONE_ENTRY: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+/// The entry of the area's Geofabrik region in the page's time zone table (`www/timezones.json`), as JSON text,
+/// for the builds after this call: the time zone of `main.visualization_metadata`. The browser build has no world
+/// map of the zones; without an entry, the time zone is NULL.
+#[wasm_bindgen]
+pub fn set_timezone_entry(entry: Option<String>) {
+    TIMEZONE_ENTRY.with(|e| *e.borrow_mut() = entry);
+}
+
 fn js_build(
     input: Input,
     modes: &str,
@@ -261,6 +274,7 @@ fn js_build(
     };
     let files = Object::new();
     let built_at = (js_sys::Date::now() * 1000.0) as i64;
+    let tz = TIMEZONE_ENTRY.with(|e| e.borrow().clone());
     let summary = run(
         input,
         modes,
@@ -268,6 +282,7 @@ fn js_build(
         boundary,
         levels,
         built_at,
+        tz.as_deref(),
         raw,
         |name| {
             let parts = Array::new();
@@ -293,6 +308,7 @@ pub fn run<W: Write + Send>(
     boundary: Option<&str>,
     levels: Method,
     built_at: i64,
+    timezone_entry: Option<&str>,
     raw: bool,
     mut file: impl FnMut(&str) -> Result<W, String>,
 ) -> Result<String, String> {
@@ -391,6 +407,7 @@ pub fn run<W: Write + Send>(
         nodes: &mode_nodes,
         opts: &opts,
         built_at,
+        timezone_entry,
     };
     write_area_tables(&area, &mut file)?;
     if let Some(mut r) = raw_tables {

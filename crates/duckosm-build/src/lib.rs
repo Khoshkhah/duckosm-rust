@@ -317,6 +317,7 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
         nodes: &mode_nodes,
         opts: &p.options,
         built_at,
+        timezone_entry: None,
     };
     write_area_tables(&area, |name| {
         let path = pq_dir.join(name);

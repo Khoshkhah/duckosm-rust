@@ -32,8 +32,14 @@ They come from separate duckOSM tools or options.
 
 ## Decisions (Kaveh, 2026-10-22)
 
-- **The time zone** (`visualization_metadata.timezone`): from the Rust crate `tzf-rs` (MIT; its data is ODbL),
-  natively and in the browser. duckOSM uses Python's `timezonefinder`.
+- **The time zone** (`visualization_metadata.timezone`): one value for each area, the zone at the node nearest
+  the middle of the area's nodes (duckOSM's rule). Natively, the CLI and the Python package find it with the world
+  map of the Rust crate `tzf-rs` (MIT; its data is ODbL), as duckOSM does with Python's `timezonefinder`. In the
+  browser, that map would make the module 2.7 MB larger (with gzip). So the page has one table file
+  (`www/timezones.json`, 447 KB with gzip, loaded at the first build, then cached; Kaveh's choice, 2026-10-23):
+  for each Geofabrik region, its zone name, and the borders of the zones only where a region really has more
+  than one zone (`tools/make_timezone_table.py`). The page gives the build the entry of the area's smallest
+  region (`set_timezone_entry`). Two other ways are in [todo.md](todo.md).
 - **The drawing levels**: the tags rule is the default, and a Rust port of roadstyle's solver (the real
   optimization, as in Python duckOSM) is an option. Done: [levels.md](levels.md). `edge_levels_meta.source` says
   which one made the table.
@@ -82,5 +88,10 @@ Checks:
   (Monaco, an area and a fixes file).
 - The page (`e2e.py`): the same files as the native CLI, on every row (`built_at` apart). The zip has them all.
 - Tartu from the Estonia file, natively: 1.11 s with these tables, 0.99 s without; the same memory.
-- The WebAssembly module is 9.6 MB (3.7 MB with gzip), against 5.3 MB (1.0 MB) before: the time zone data.
+- The time zone: first with the world map of `tzf-rs` in the WebAssembly module too (9.6 MB, 3.7 MB with gzip).
+  Then, by Kaveh's choice, the page's table: the module is 5.9 MB (1.19 MB with gzip), and the page loads
+  `timezones.json` (445 KB with gzip) at the first build. The table's check: 4,022 of 4,038 random land points
+  (99.6 %) in the regions with more zones give `timezonefinder`'s zone; the others are within a few km of a border.
+  The browser build with the table's Monaco entry writes the same files as the native build with `tzf-rs`, byte for
+  byte (`cargo test -p duckosm-wasm`). The page: `Europe/Monaco` for Monaco, `Europe/Tallinn` for Tartu.
 

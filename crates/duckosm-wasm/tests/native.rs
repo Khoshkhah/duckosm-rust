@@ -7,6 +7,15 @@ use duckosm_build::{build, Params};
 use duckosm_core::filter::Mode;
 use std::path::PathBuf;
 
+/// The Monaco entry of the page's time zone table: the browser build must find the zone that the native build
+/// finds with the world map of tzf-rs.
+fn monaco_timezone() -> String {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("www/timezones.json");
+    let table: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    table["regions"]["monaco"].to_string()
+}
+
 const FIXES: &str = "overrides:\n  - osm_id: 93137596\n    lanes: 1\n";
 /// The fixes of duckOSM's Monaco file that change raw.ways: a tag and the arrows of the lanes.
 const FIXES_AREA: &str = "overrides:\n  - osm_id: 93137596\n    lanes: 1\n  - osm_id: 4227277\n    turn_lanes_forward: none|none\n";
@@ -37,6 +46,7 @@ fn browser_build_equals_native_build() {
         None,
         duckosm_core::levels::Method::Tags,
         0,
+        Some(&monaco_timezone()),
         false,
         |name| {
             names.push(name.to_string());
@@ -110,6 +120,7 @@ fn browser_area_build_equals_native_build() {
         Some(&std::fs::read_to_string(&geojson).unwrap()),
         duckosm_core::levels::Method::Solve,
         0,
+        Some(&monaco_timezone()),
         true,
         |name| {
             names.push(name.to_string());

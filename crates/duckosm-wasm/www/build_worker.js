@@ -28,6 +28,7 @@ onmessage = async ({ data }) => {
     postMessage({ step: "building the networks" });
     const fixes = data.fixes || undefined;
     const levels = data.levels || undefined;   // "tags" (the default) or "solve"
+    pkg.set_timezone_entry(data.tz);           // the entry of the page's time zone table, or undefined: no time zone
     const res = data.region
       ? build_area(data.region, data.boundary, data.modes, fixes, !!data.raw, levels)
       : data.json
