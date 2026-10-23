@@ -25,13 +25,13 @@ the user cannot see the area before the build.
 
 ## The layout
 
-On a computer, the map fills the window. A panel of 370 px floats over the map on the left side, with round
-corners and a shadow. Kaveh asked for a more professional design after the first version (2026-10-22), so the
-panel has three numbered steps:
+On a computer, the map fills the window. A panel of 370 px is on the left side, over the map, from the top to
+the bottom of the window. Kaveh asked for a more professional design after the first version (2026-10-22), so
+the panel has three numbered steps:
 
 ```
 +--------------------------+------------------------------------------+
-| [#] Boundary tool        |                                   [+][-] |
+| [#] Boundary tool  [☾][<]|                                   [+][-] |
 |                          |                                          |
 | 1 CHOOSE AN AREA         |               the map                    |
 | [Search | Draw | File ]  |     (the area: a blue fill and line)     |
@@ -40,11 +40,12 @@ panel has three numbered steps:
 |                          |                                          |
 | 2 THE AREA               |                                          |
 | [Tartu linn           ]  |                                          |
-| [38.91 km²][1 pol.][271] |                         +--------------+ |
-| (warning, if large)      |                         | legend       | |
-|                          |                         +--------------+ |
+| [38.91 km²][1 pol.][271] |                                          |
+| (warning, if large)      |                                          |
+|                          |                                          |
 | 3 REGION FILE            |                                          |
 | (o) Estonia      [down]  |                                          |
+| ON THE MAP (the legend)  |                                          |
 |--------------------------|                                          |
 | [GeoJSON] [Use in duckOSM]|  scale    MapLibre | OpenFreeMap | OSM  |
 +--------------------------+------------------------------------------+
@@ -55,14 +56,23 @@ panel has three numbered steps:
   panel.
 - The area shows as three tiles: km², polygons and vertices. Below them are the source and, for a large area,
   a yellow warning.
-- A legend on the map gives the three line styles: the area, a match (preview) and a Geofabrik extract.
+- The last part of the panel, **On the map**, is the legend: the three line styles of the area, a match
+  (preview) and a Geofabrik extract. The rows of the area and of the extract are buttons that zoom the map to
+  them.
+- The header has two buttons:
+  - The theme button changes between the light and the dark theme. At the start, the page uses the theme of
+    the system.
+  - The collapse button moves the panel out of the view, and the map then fills the window. A button
+    "Boundary tool" at the top left opens the panel again.
+
+  The browser keeps the two choices (`localStorage`, the keys `duckosm.theme` and `duckosm.panel`).
 - Short messages (for example "Click a point on the map.") show at the top of the map and go away.
 - The buttons have icons (inline SVG, no icon library) and text.
 - On a narrow screen (700 px wide or less, a phone), the map is at the top (52 % of the height) and the panel
   is below it. The page scrolls, and the output buttons stay at the bottom of the screen. The buttons and the
-  tabs are 44 px high, for a finger. The legend and the scale are not shown.
-- The page has the light and the dark theme of the system, as `index.html`. The map style stays light (the
-  style of OpenFreeMap has no dark variant).
+  tabs are 44 px high, for a finger. The scale is not shown. The collapse button keeps only the header of the
+  panel, and the map becomes higher.
+- The map style stays light in the two themes (the style of OpenFreeMap has no dark variant).
 
 ## The map
 
@@ -75,7 +85,9 @@ panel has three numbered steps:
   the old position while the user moves a shape (found by Kaveh, 2026-10-22).
 - A preview (a dashed purple line) shows an area that the user points to in the list of matches. A click on a
   point match zooms the map to it.
-- The outline of a suggested Geofabrik extract shows as a dashed orange line when the user selects it.
+- The outline of a suggested Geofabrik extract shows as a dashed orange line when the user selects it, and the
+  map zooms out to show all of it.
+- When the user points to a match that is not fully in the view, the map moves to show it.
 
 ## The ways to make an area
 
