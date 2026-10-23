@@ -64,8 +64,8 @@ with sync_playwright() as p:
     assert pr["area_km2"] == 2.39 and pr["name"] == "Monaco" and pr["geofabrik"][0]["id"] == "monaco", pr
     print("file: ok,", pr["area_km2"], "km²,", [x["id"] for x in pr["geofabrik"]])
 
-    # two rectangles that overlap, drawn with mouse drags: one polygon. The panel covers the left side of the
-    # map, so the drags are on the right side.
+    # two rectangles that overlap, drawn with mouse drags: one polygon. The panel and the drawing tools cover
+    # the left side of the map, so the drags are on the right side.
     box = page.locator("#map canvas").bounding_box()
     assert box
 
@@ -76,7 +76,6 @@ with sync_playwright() as p:
         page.mouse.up()
         page.wait_for_timeout(300)
 
-    page.click("#tab-draw")
     n = areas(page)
     for rect in [(0.45, 0.3, 0.6, 0.5), (0.55, 0.4, 0.75, 0.6)]:
         page.click("[data-mode=rectangle]")

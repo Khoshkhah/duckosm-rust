@@ -31,30 +31,35 @@ the panel has three numbered steps:
 
 ```
 +--------------------------+------------------------------------------+
-| [#] Boundary tool  [☾][<]|                                   [+][-] |
-|                          |                                          |
-| 1 CHOOSE AN AREA         |               the map                    |
-| [Search | Draw | File ]  |     (the area: a blue fill and line)     |
-|  (the controls of the    |                                          |
-|   selected tab)          |                                          |
-|                          |                                          |
-| 2 THE AREA               |                                          |
+| [#] Boundary tool  [☾][<]| +----+                            [+][-] |
+|                          | |DRAW|                                   |
+| 1 CHOOSE AN AREA         | | ↖  |        the map                    |
+| [ Search  |   File    ]  | |----|  (the area: a blue fill and line)  |
+|  (the controls of the    | | ▭  |                                   |
+|   selected tab)          | | ⬠  |                                   |
+|--------------------------| | ○  |                                   |
+| 2 THE AREA               | | ∿  |                                   |
 | [Tartu linn           ]  |                                          |
 | [38.91 km²][1 pol.][271] |                                          |
-| (warning, if large)      |                                          |
-|                          |                                          |
-| 3 REGION FILE            |                                          |
-| (o) Estonia      [down]  |                                          |
+| (warning, if large)      | |----|                                   |
+|                          | | ⧉  |                                   |
+|--------------------------| | ␡  |                                   |
+| 3 REGION FILE            | | ✕  |                                   |
+| (o) Estonia      [down]  | +----+                                   |
 |--------------------------|                                          |
 | [GeoJSON] [Use in duckOSM]|  scale    MapLibre | OpenFreeMap | OSM  |
 +--------------------------+------------------------------------------+
 ```
 
-- Step 1 has three tabs: **Search** (the name search and **What is here?**), **Draw** (the drawing tools) and
-  **File**. Steps 2 and 3 show the area and the region files. The two output buttons stay at the bottom of the
-  panel.
-- The area shows as three tiles: km², polygons and vertices. Below them are the source and, for a large area,
-  a yellow warning.
+- Step 1 has two tabs: **Search** (the name search and **What is here?**) and **File**. A note below the tabs
+  says that the drawing tools are on the map. Steps 2 and 3 show the area and the region files. A line
+  separates the three steps (Kaveh, 2026-10-22). The two output buttons stay at the bottom of the panel.
+- The drawing tools are in a box on the map, at the left side next to the panel (Kaveh asked for the tools in
+  a box, 2026-10-22). The box has three groups: Select, the four shapes, and Merge, Delete and Clear. A button
+  shows its name and its key when the user points to it. The tools work with any tab of the panel.
+- The area shows as three tiles: km², polygons and vertices. Below them are the source (for example "Source:
+  drawn on the map" or "Source: OpenStreetMap relation 2153396 (Nominatim)") and, for a large area, a yellow
+  warning. The `source` property of the file keeps its short value (`drawn`, `Nominatim relation 2153396`).
 - The page has no legend. A legend was first on the map and then in the panel, and Kaveh found it unnecessary
   (2026-10-22): the panel tells the user what each line is when it shows.
 - The header has two buttons:
@@ -68,7 +73,8 @@ the panel has three numbered steps:
 - The buttons have icons (inline SVG, no icon library) and text.
 - On a narrow screen (700 px wide or less, a phone), the map is at the top (52 % of the height) and the panel
   is below it. The page scrolls, and the output buttons stay at the bottom of the screen. The buttons and the
-  tabs are 44 px high, for a finger. The scale is not shown. The collapse button keeps only the header of the
+  tabs are 44 px high, for a finger. The drawing tools are a row at the top of the map. The zoom buttons and
+  the scale are not shown (two fingers zoom the map). The collapse button keeps only the header of the
   panel, and the map becomes higher.
 - The map style stays light in the two themes (the style of OpenFreeMap has no dark variant).
 
@@ -77,14 +83,17 @@ the panel has three numbered steps:
 - MapLibre GL JS 5.24.0 (the version of roadstyle), from cdn.jsdelivr.net.
 - The base map: OpenFreeMap, style `https://tiles.openfreemap.org/styles/liberty`. It is free, it needs no key,
   and it sends a CORS header, so it works with the COOP and COEP headers of `www/serve.py`.
-- The area shows as a blue fill and a blue line. When the area comes from a search or a file, the map zooms to
-  it.
+- The three kinds of line differ in color and in pattern, so the page needs no legend. Each line has a white
+  edge, so it does not look like a border of the base map (Kaveh found that the lines looked the same,
+  2026-10-22).
+- The area shows as a blue fill and a solid blue line. When the area comes from a search or a file, the map
+  zooms to it.
 - A drawn area shows only as the shapes of terra-draw. The tool does not draw a copy of them: a copy stays at
   the old position while the user moves a shape (found by Kaveh, 2026-10-22).
-- A preview (a dashed purple line) shows an area that the user points to in the list of matches. A click on a
-  point match zooms the map to it.
-- The outline of a suggested Geofabrik extract shows as a dashed orange line when the user selects it, and the
-  map zooms out to show all of it.
+- A preview (a light purple fill and a solid purple line, with the name along the line) shows an area that the
+  user points to in the list of matches. A click on a point match zooms the map to it.
+- The outline of a suggested Geofabrik extract shows as a dashed orange line, with its name along the line
+  (for example "Estonia (Geofabrik)"), when the user selects it. The map zooms out to show all of it.
 - When the user points to a match that is not fully in the view, the map moves to show it.
 
 ## The ways to make an area
@@ -122,7 +131,7 @@ The drawing tools come from terra-draw 1.38.0 with its MapLibre adapter 1.5.0 (M
   it or change it at once, and drag the map. Kaveh found that the first version did not let him move a shape:
   it could do that only after a click on **Edit**, and while a drawing tool was on, a drag on the map drew a
   new shape.
-- The panel shows a hint for the selected tool.
+- A hint for the selected tool shows at the top of the map. A click on the tool that is on switches it off.
 - Each shape is one polygon of the area. One shape gives a Polygon, more shapes that do not touch give a
   MultiPolygon.
 - Escape stops the drawing of a shape.
