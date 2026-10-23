@@ -54,8 +54,8 @@ dr.edge_id_hash(osm_id, source, target)
 ```
 
 ```bash
-# the browser page (WebAssembly): build it, then open http://localhost:8000. Make a boundary with the boundary
-# tool (boundary.html), select the boundary and a region PBF file that covers it, build, and run SQL
+# the browser page (WebAssembly): build it, then open http://localhost:8000. Choose an area on the map, select a
+# region PBF file that covers it, build, see the roads on the map, and run SQL
 # (docs/development.md, "WebAssembly": the module with threads needs nightly Rust and the headers of serve.py)
 ./crates/duckosm-wasm/build.sh
 python3 crates/duckosm-wasm/www/serve.py 8000

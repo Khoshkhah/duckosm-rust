@@ -1,7 +1,10 @@
 # The boundary tool: design and plan
 
 Status: agreed by Kaveh and implemented on 2026-10-22. The decisions on the open questions are in
-[Decisions](#decisions).
+[Decisions](#decisions). **Later the same day, the tool became the app** ([app.md](app.md)): the page is
+`index.html`, the build is in the same panel (steps 3 to 5), and **Use in duckOSM** became **Build**. The
+sections below describe the area steps; where they name `boundary.html`, the hand-off or the old `index.html`,
+app.md replaces them.
 
 The boundary tool (`crates/duckosm-wasm/www/boundary.html`) makes the area that duckOSM builds: a boundary
 (GeoJSON) and a name. Kaveh (2026-10-22): "the boundary tools is not nice and user friendly! it should have map

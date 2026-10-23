@@ -1,6 +1,6 @@
-"""The boundary tool in headless Chromium (Playwright): a file, rectangles drawn and moved with the mouse, Merge
-shapes, a search, and the hand-off to index.html. Each output file must have the format of `duckosm boundary`
-(docs/boundary_tool.md).
+"""The area steps of the app (index.html) in headless Chromium (Playwright): a file, rectangles drawn and moved
+with the mouse, Merge shapes, a search, and the Build button. Each output file must have the format of `duckosm
+boundary` (docs/boundary_tool.md, docs/app.md). e2e.py tests the build.
 
     python crates/duckosm-wasm/www/boundary_e2e.py [--no-search]
 
@@ -24,7 +24,7 @@ a.add_argument("--no-search", action="store_true", help="do not ask Nominatim")
 args = a.parse_args()
 
 server = start(0, quiet=True)
-url = f"http://127.0.0.1:{server.server_address[1]}/boundary.html"
+url = f"http://127.0.0.1:{server.server_address[1]}/index.html"
 
 
 def areas(page):
@@ -133,17 +133,18 @@ with sync_playwright() as p:
         else:
             print("search: skipped,", page.inner_text("#found"))
 
-    # the hand-off to index.html
+    # Build: on when the area and its data are ready (step 3), off without a region file
     page.click("#tab-file")
     n = areas(page)
     page.set_input_files("#file", str(MONACO))
     boundary(page, n + 1)
-    page.click("#use")
-    page.wait_for_url("**/index.html")
-    page.wait_for_function("!document.getElementById('area').textContent.startsWith('No boundary')")
-    area = page.inner_text("#area")
-    assert area.startswith("Monaco, 2.39 km², from the boundary tool"), area
-    print("hand-off: ok,", area.splitlines()[0])
+    page.click("#tab-region")
+    assert page.is_disabled("#run"), "Build is on without a region file"
+    page.set_input_files("#region", str(MONACO.with_name("monaco_sample.osm.pbf")))
+    assert page.is_enabled("#run"), "Build is off with an area and a region file"
+    page.click("#tab-overpass")
+    assert page.is_enabled("#run"), "Build is off with an area and Overpass"
+    print("build button: ok")
 
     assert not errors, errors
     browser.close()

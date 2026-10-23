@@ -40,13 +40,13 @@ with sync_playwright() as p:
     page = browser.new_page(accept_downloads=True)
     page.on("pageerror", lambda e: print("page error:", e))
     page.goto(url)
-    page.wait_for_function("document.getElementById('status').textContent.startsWith('DuckDB is ready')", timeout=120_000)
+    page.wait_for_function("window.mapReady && window.timings && window.timings.duckdbStart", timeout=120_000)
     if args.boundary:
-        page.set_input_files("#boundary", args.boundary)
-        page.wait_for_function("!document.getElementById('area').textContent.startsWith('No boundary')")
-        print("area:", page.inner_text("#area").splitlines()[0])
+        page.set_input_files("#file", args.boundary)   # the File tab of step 1
+        page.wait_for_function("window.areas >= 1", timeout=60_000)
+        print("area:", page.input_value("#name"), "|", " ".join(page.inner_text("#summary").split()))
     source = "cut" if not args.boundary else "overpass" if args.pbf == "overpass" else "region"
-    page.check(f"input[name=source][value={source}]")
+    page.click(f"#tab-{source}")
     if source != "overpass":
         page.set_input_files("#pbf" if source == "cut" else "#region", args.pbf)
     if args.fixes:
@@ -54,14 +54,14 @@ with sync_playwright() as p:
     for box in page.query_selector_all("input[name=mode]"):
         box.set_checked(box.get_attribute("value") in args.modes.split(","))
     page.click("#run")
-    page.wait_for_function("!document.getElementById('query').disabled || document.getElementById('status').textContent.startsWith('Error')",
+    page.wait_for_function("!document.getElementById('step5-card').hidden || document.getElementById('buildstatus').textContent.startsWith('Error')",
                            timeout=1_800_000)
-    status = page.inner_text("#status")
+    status = page.inner_text("#buildstatus")
     if status.startswith("Error"):
         raise SystemExit(status)
     print(status)
     page.click("#query")
-    page.wait_for_selector("#result table, #result:has-text('Error')", timeout=60_000)
+    page.wait_for_selector("#result table, #result .error", timeout=60_000)
     print("query:", page.inner_text("#result p"))
     with page.expect_download(timeout=60_000) as d:
         page.click("#duckdb")
@@ -75,11 +75,11 @@ with sync_playwright() as p:
     for name, data in files:
         (out / name).write_bytes(base64.b64decode(data))
     # the roads map (map/): its note, and a picture of it
-    page.wait_for_function("/layers;|failed/.test(document.getElementById('mapnote').textContent)", timeout=600_000)
+    page.wait_for_function("/layers:|failed/.test(document.getElementById('mapnote').textContent)", timeout=600_000)
     print("map:", page.inner_text("#mapnote"))
     page.wait_for_function("window.duckMap && window.duckMap.loaded()", timeout=600_000)   # the tiles are cut and drawn
     print("map view:", page.evaluate("(() => { const m = window.duckMap; return {center: m.getCenter(), zoom: m.getZoom()}; })()"))
-    page.locator("#map").screenshot(path=str(out / "map.png"))
+    page.screenshot(path=str(out / "map.png"))
     print(json.dumps(page.evaluate("window.timings")))
     browser.close()
 server.shutdown()

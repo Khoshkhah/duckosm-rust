@@ -165,8 +165,8 @@ with a name, as a duckOSM config with `name` and `boundary`. Decisions:
 - `www/boundary.html` is the boundary tool: a map (MapLibre, OpenFreeMap) with a side panel. The area comes from
   a Nominatim search, a click on the map (what is here), the drawing tools (rectangle, polygon, circle,
   freehand, edit), or a GeoJSON file. The design is in [boundary_tool.md](boundary_tool.md). It writes the format of `duckosm boundary` (the area in km² is the same as duckOSM's: 2.39 for Monaco),
-  with `geofabrik`: the three smallest extracts that cover the area, with their links. "Use in duckOSM" gives
-  the boundary to `index.html` through the storage of the site.
+  with `geofabrik`: the three smallest extracts that cover the area, with their links. Later it became the app
+  ([app.md](app.md)): the area, the build and the roads map are one page, `index.html`.
 - `www/geofabrik.json` (1.6 MB, 0.5 MB gzip, 554 extracts) comes from Geofabrik's `index-v1.json`
   (`tools/make_geofabrik_index.py`). The polygons are about 1 km larger than the extracts, so an area at the
   border of an extract is not lost (with the simplified polygons only, Monaco was not in its own extract).

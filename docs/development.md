@@ -84,12 +84,15 @@ not (then the page has one thread):
 python3 crates/duckosm-wasm/www/serve.py 8000
 ```
 
-Then go to `http://localhost:8000`. Select a boundary (make it with the boundary tool, `boundary.html`), a
-region PBF file that covers it (the tool names the smallest Geofabrik extract), the modes and an optional OSM
-fixes file, and click **Build**. The page can also get the data from the Overpass API, or take a PBF file that
-is already cut. The build runs in a Web Worker (`build_worker.js`), which reads the region file piece by piece. The page loads the tables into duckdb-wasm, so you
-can run SQL on them. It gives the Parquet files and `load.sql`, which makes a `.duckdb` file from them
-(`duckdb area.duckdb < load.sql`). The page loads duckdb-wasm from cdn.jsdelivr.net.
+Then go to `http://localhost:8000`. The page is one app ([app.md](app.md)): choose an area on the map (a
+search, a drawing or a file), select a region PBF file that covers it (the page names the smallest Geofabrik
+extracts), the modes and an optional OSM fixes file, and click **Build**. The data can also come from the
+Overpass API, or from a PBF file that is already cut. The build runs in a Web Worker (`build_worker.js`), which
+reads the region file piece by piece. The page loads the tables into duckdb-wasm and shows the roads on the
+same map. You can run SQL on the tables, and download the Parquet files and `load.sql`, which makes a
+`.duckdb` file from them (`duckdb area.duckdb < load.sql`). The build side of the page is `app/duck.js`. The
+page loads MapLibre, terra-draw, polyclip-ts and duckdb-wasm from cdn.jsdelivr.net, and the map from
+OpenFreeMap.
 
 Run the same `.wasm` file in Node. The script writes all files and prints the time and the WebAssembly memory:
 
@@ -111,10 +114,8 @@ The test writes its files to `target/tmp/duckosm-wasm-native/`. Compare them wit
 the page as JSON. The CLI writes zstd and the page writes snap, so compare `out-area` and `out-cli` by rows,
 not with `cmp`.
 
-Open the boundary tool at `http://localhost:8000/boundary.html`. It loads MapLibre GL JS, terra-draw and
-polyclip-ts from cdn.jsdelivr.net, and the map from OpenFreeMap. Check it in headless Chromium (a file, two
-rectangles drawn with the mouse, a Nominatim search, and the hand-off to `index.html`; `--no-search` skips
-the search):
+Check the area steps of the page in headless Chromium (a file, two rectangles drawn with the mouse, a
+Nominatim search, and the Build button; `--no-search` skips the search):
 
 ```bash
 python crates/duckosm-wasm/www/boundary_e2e.py
