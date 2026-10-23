@@ -1587,16 +1587,18 @@ dependencies = [
 [[package]]
 name = "roadstyle-rs"
 version = "0.0.1"
-source = "git+https://github.com/Khoshkhah/roadstyle.git?rev=832cf4c#832cf4ceb48df9161a6358d49a24a7352bcea448"
+source = "git+https://github.com/Khoshkhah/roadstyle.git?rev=aba5884#aba588464d79f5d6795acda92759dbbfdeef9c4c"
 dependencies = [
  "arrow-array 60.0.0",
  "arrow-schema 60.0.0",
+ "base64 0.22.1",
  "bytes",
  "indexmap",
  "parquet",
  "rstar",
  "serde_json",
  "sha2",
+ "yaml-rust2",
 ]
 
 [[package]]

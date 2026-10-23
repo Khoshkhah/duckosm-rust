@@ -107,16 +107,19 @@ Kaveh's layout of 2026-10-23: the data in card 5, the map in card 6.
   prefix. A layer with `text-font` gets a font of OpenFreeMap (Noto Sans).
 - When the roads show, the fill of the area goes away and only its line stays, so the fill does not change
   the colors of the roads.
-- A click on a road shows its data, but not while the user draws or uses **What is here?**. The popup is roadstyle's: its look
-  (`popup.css`) and its text (`popup.js`: the name in bold, then the fields of the style's `roadstyle:interaction` popup
-  list), both directions of a pair drawn as one line, and a "Street View" link that opens the window. `build.sh` takes
-  the two files from roadstyle at `ROADSTYLE_COMMIT` into `www/map/roadstyle/` (not in git). The map draws the roads
-  from roadstyle's pieces (`rs-simple`), and the road's properties come from the map worker by its number
-  (`__rs_edge`). Before the tiles, the click looked for the source `rs-roads`, whose layers are hidden, and found
-  nothing.
+- **roadstyle's dashboard** (2026-10-23, Kaveh: "go") does the map's interaction: the 2D/3D button, Street View with
+  its marker, Google 3D, the road popup, the hover tooltip, the purple glow of the selected road, and the legend of a
+  `color_by`. It is roadstyle's one module `src/roadstyle/static/dashboard/`, which `build.sh` takes at
+  `ROADSTYLE_COMMIT` into `www/map/roadstyle/dashboard/` (not in git; `e2e.py` checks that the served files are
+  roadstyle's). The page calls `rsDashboard(map, {prefix: "rs-", tiles: true, simple: "roads-simple", engine: {props}})`
+  once, before the roads; after each build or network change, `showRoads` adds the roads style's sources and layers
+  with the prefix (the one vector source `rs-roads`, with `promoteId: {simple: "__rs_edge"}` for the glow) and gives the
+  style to `rs.setStyle`. A click asks the map worker for the road's properties (`engine.props`). The page removes the
+  popup and the selection while the user draws or uses **What is here?**. The legend sits beside the panel.
 - The buttons under the zoom buttons (Kaveh's design of 2026-10-23, from roadstyle's map: the same icons, sizes and
   spacing): 3D, the 3D buildings switch, Street View, Google 3D (only with a key), and the base map (▦) last:
-  - **3D** tilts the map to 60 degrees. A second click makes the map flat again. It does not change the buildings.
+  - **3D** (roadstyle's 2D/3D button) tilts the map; it then shows "2D", which makes it flat again. It does not change
+    the buildings.
   - **3D buildings** (the building icon, Kaveh's choice A of 2026-10-23) gives the footprints that show their height.
     Off (the default), they stay flat. So the map can be tilted with flat buildings, or flat with 3D buildings. The
     page keeps the switch (`duckosm.buildings`).
@@ -126,23 +129,15 @@ Kaveh's layout of 2026-10-23: the data in card 5, the map in card 6.
     OpenFreeMap's layers, also its labels (with 3D buildings on and without the duckOSM 3D buildings, its 3D buildings stay). After a
     build with the base-map layers, the list also has **duckOSM layers**. Satellite turns them off, because they
     cover the photo. The page keeps the base map.
-  - **Street View** (the person) opens roadstyle's floating window. A click on a road shows Google Street View at
-    the point of the road nearest the click, looking the way the road runs (on a two-way road, 2.5 m to the right
-    lane). Roadstyle's marker shows on the map where Street View stands and the way it looks. The arrows move 15 m
-    along the road. The window can be dragged and resized, stays inside the map, and the page keeps whether it is open
-    and where. No key is needed; it loads only in a page served over http(s).
-  - **Your Google Maps key**: the key button in the Street View window's bar (or card 6, "Google 3D: your Google Maps
-    key"). The key stays in this browser (`localStorage`), never in the address or the code. With a key, at once (no
-    reload): the Street View window gets roadstyle's **Linked** mode (a real panorama; the map's marker walks and turns
-    with the viewer) beside **Classic**, and the **Google 3D** button comes, before the base map. The Google 3D window
-    shows Google's photorealistic 3D view, with its camera and the map's linked both ways.
-  - The code of the two windows is roadstyle's: `build.sh` takes it from roadstyle's
-    `src/roadstyle/static/web_template.html` at `ROADSTYLE_COMMIT`, with the script `crates/duckosm-wasm/roadstyle_windows.py`,
-    into `www/map/roadstyle/windows.js` (not in git). The script applies the page's changes as exact replacements and
-    stops when roadstyle changes one of those lines. The road's whole line comes from DuckDB by its `edge_id`
-    (`roadLine` in `app/duck.js`), because the tiles cut the roads. Not the same as roadstyle: in the Linked mode,
-    off the clicked road the marker follows the viewer freely (roadstyle snaps it to the nearest drawn road, whose
-    whole line the page does not have in memory), and the clicked road is not highlighted.
+  - **Street View** (the person) opens roadstyle's floating window. A click on a road shows Google Street View there.
+    The window can be dragged and resized, stays inside the map, and the page keeps whether it is open and where. No
+    key is needed; it loads only in a page served over http(s). Open (at roadstyle `aba5884`): with tiles, the
+    dashboard does not find the clicked road's line (`_svFeat` in `svspot.js` does not use `_svTiled`), so Street View
+    stands at the click and looks north, and the map has no marker. The fix is in roadstyle's dashboard.
+  - **Your Google Maps key** (card 6, "Google 3D: your Google Maps key"): the key stays in this browser
+    (`localStorage`), never in the address or the code. The dashboard reads it when the page opens; with it, the
+    Street View window has roadstyle's **Linked** mode beside **Classic**, and the **Google 3D** button comes before
+    the base map (its camera and the map's linked both ways).
   - No button hides the footprints: the style alone decides if they show (Kaveh's rule).
 - Only one 3D building layer shows: roadstyle's own when the duckOSM layers show (from the zoom of their buildings,
   15; below it OpenFreeMap's), else OpenFreeMap's. Before, the
@@ -160,7 +155,7 @@ Kaveh's layout of 2026-10-23: the data in card 5, the map in card 6.
 Street View's Linked mode and Google 3D need a Google Maps JavaScript API key. Kaveh has two keys (2026-10-23):
 
 - **Local work (localhost):** the environment variable `GOOGLE_MAPS_KEY` of his shell. The page does not read it: the
-  user enters the key once (the key button in the Street View window, or card 6), and the page keeps it in this
+  user enters the key once (card 6; the page uses it the next time it opens), and the page keeps it in this
   browser (`localStorage`). The headless tests read it from the environment only for the test, and never write it to
   a file, a log or a screenshot.
 - **The published page (later, GitHub Pages):** the repository secret `GOOGLE_MAPS_KEY`, as roadstyle does for its

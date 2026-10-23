@@ -275,16 +275,6 @@ export function tile(url) {
   const [gen, source, z, x, y] = url.slice("rs://".length).split("/");
   return +gen !== generation ? Promise.resolve(new ArrayBuffer(0)) : ask({ tile: [source, +z, +x, +y] }, new ArrayBuffer(0));
 }
-// the line of the road edge_id (its popup's value) as [[lon, lat], ...]: from the first mode table that has it, or null. The map's
-// tiles cut the roads, and roadstyle's Street View and Google 3D need the whole line (map/roadstyle_windows.js).
-export async function roadLine(edgeId) {
-  if (!/^-?\d+$/.test(String(edgeId))) return null;
-  const parts = tables.filter((t) => MODES.includes(t.mode) && (t.table === "edges" || t.table === "private_edges"))
-    .map((t) => `SELECT ST_AsGeoJSON(geometry) AS g FROM ${t.mode}.${t.table} WHERE edge_id = ${edgeId}`);
-  if (!parts.length) return null;
-  const row = (await conn.query(parts.join(" UNION ALL ") + " LIMIT 1")).toArray()[0];
-  return row ? JSON.parse(row.g).coordinates : null;
-}
 // the properties of road number `edge` of the map (the property __rs_edge of what the map draws), or null
 export const roadProps = async (edge) => JSON.parse((await ask({ props: ["roads", edge] }, "null")) || "null");
 

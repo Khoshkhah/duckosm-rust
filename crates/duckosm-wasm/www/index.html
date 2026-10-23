@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>duckOSM in the browser</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css" crossorigin>
-<!-- roadstyle's popup look (src/roadstyle/static/popup.css, copied by build.sh from roadstyle at ROADSTYLE_COMMIT) -->
+<!-- roadstyle's dashboard and popup look (src/roadstyle/static/, copied by build.sh from roadstyle at ROADSTYLE_COMMIT) -->
+<link rel="stylesheet" href="map/roadstyle/dashboard/dashboard.css">
 <link rel="stylesheet" href="map/roadstyle/popup.css">
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js" crossorigin></script>
 <script type="importmap">
@@ -229,6 +230,9 @@
   @media (min-width: 701px) {
     .maplibregl-ctrl-top-left, .maplibregl-ctrl-bottom-left { left: 370px; transition: left 0.25s ease; }
     body.collapsed .maplibregl-ctrl-top-left, body.collapsed .maplibregl-ctrl-bottom-left { left: 0; }
+    /* roadstyle's legend (dashboard.css: left 10px) beside the panel, not under it, and above the scale bar */
+    .co-lg { left: 380px; bottom: 36px; transition: left 0.25s ease; }
+    body.collapsed .co-lg { left: 10px; }
     #status { left: calc(50% + 185px); }
     body.collapsed #status { left: 50%; }
   }
@@ -278,7 +282,6 @@
 
 <div id="map" role="region" aria-label="Map of the area"></div>
 <div id="mapctl" class="maplibregl-ctrl mapctl">
-  <div class="maplibregl-ctrl-group"><button id="b3d" type="button" title="3D view" aria-label="3D view" aria-pressed="false">3D</button></div>
   <div class="maplibregl-ctrl-group"><button id="bbld" type="button" title="3D buildings" aria-label="3D buildings" aria-pressed="false"><svg><use href="#i-building"/></svg></button></div>
 </div>
 <div id="basectl" class="maplibregl-ctrl mapctl">
@@ -464,8 +467,7 @@ import { TerraDraw, TerraDrawRectangleMode, TerraDrawPolygonMode, TerraDrawCircl
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import * as duck from "./app/duck.js";
 import * as regions from "./app/regions.js";
-import { roadstyleWindows } from "./map/roadstyle/windows.js";   // made by build.sh from roadstyle's template (roadstyle_windows.py)
-import { POPUP, _rfields } from "./map/roadstyle/popup.js";   // roadstyle's popup text (static/popup.js, copied by build.sh)
+import { rsDashboard } from "./map/roadstyle/dashboard/index.js";   // roadstyle's map dashboard (copied by build.sh at ROADSTYLE_COMMIT)
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
@@ -528,22 +530,22 @@ async function covering(polys) {
 const empty = { type: "FeatureCollection", features: [] };
 const map = new maplibregl.Map({ container: "map", style: "https://tiles.openfreemap.org/styles/liberty", center: [10, 50], zoom: 3 });
 map.addControl(new maplibregl.NavigationControl(), "top-right");
-map.addControl({ onAdd: () => $("mapctl"), onRemove: () => {} }, "top-right");   // 3D and the base map: under the zoom buttons
-// roadstyle's Street View and Google 3D windows and their buttons, after the base map (Google 3D only with the user's key)
-const rsWin = roadstyleWindows(map, { key: (() => { try { return localStorage.getItem("duckosm.googleKey"); } catch (e) { return null; } })() });
-map.addControl({ onAdd: () => $("basectl"), onRemove: () => {} }, "top-right");   // the base map last, as in roadstyle
-// a key button in the Street View window (before its close button): the Linked mode and Google 3D need a Google Maps key
-{
-  const bar = document.querySelector(".rs-svw:not(.rs-g3d) .rs-svw-bar"), b = document.createElement("button");
-  b.type = "button"; b.title = "Your Google Maps key: the Linked mode and Google 3D";
-  b.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="display:block;pointer-events:none">' +
-    '<circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 9.3-9.3M16 7l3 3M14 9l2 2"/></svg>';
-  b.onclick = () => {
-    const k = prompt("Your Google Maps JavaScript API key (kept only in this browser):", kept("duckosm.googleKey") ?? "");
-    if (k?.trim()) { keep("duckosm.googleKey", k.trim()); $("gkey").value = k.trim(); rsWin.setKey(k.trim()); $("basectl").parentElement.appendChild($("basectl")); }
-  };
-  bar.insertBefore(b, bar.lastChild);
-}
+// roadstyle's dashboard (docs/app.md), made once, before the roads: the 2D/3D button, Street View with its marker, Google 3D (with the
+// user's key), the road popup and the hover and select glow. The roads come later as vector tiles (the prefix rs-; showRoads gives
+// each new roads style to rs.setStyle), and a click asks the map worker for the road's properties. The page's base map stays its own.
+const googleKey = (() => { try { return localStorage.getItem("duckosm.googleKey") || ""; } catch (e) { return ""; } })();
+const rs = rsDashboard(map, { style: null, prefix: "rs-", tiles: true, simple: "roads-simple",
+  engine: { props: (id) => duck.roadProps(id) }, select_color: "#7c4dff",   // the look's theme.selection.select
+  street_view: "window", street_view_key: googleKey, google_3d: !!googleKey });
+// the page's 3D buildings switch right after the dashboard's 2D/3D button, and its base map last, as in roadstyle
+map.addControl({ onAdd: () => $("mapctl"), onRemove: () => {} }, "top-right");
+map.addControl({ onAdd: () => $("basectl"), onRemove: () => {} }, "top-right");
+[...$("mapctl").parentElement.children].find((c) => /^[23]D$/.test(c.querySelector("button")?.textContent ?? ""))?.after($("mapctl"));
+// no road popup or selection while the user draws a shape or picks a point (the dashboard has its own click on the roads)
+document.addEventListener("rs:select", () => {
+  if ($("draw").hidden && $("here").getAttribute("aria-pressed") !== "true") return;
+  setTimeout(() => { window.rsDeselect?.(); document.querySelectorAll(".maplibregl-popup").forEach((p) => p.remove()); });
+});
 // the tiles of the roads map: roadstyle's module makes each one when the map asks for it (app/duck.js tile())
 maplibregl.addProtocol("rs", async (params) => ({ data: await duck.tile(params.url) }));
 map.addControl(new maplibregl.ScaleControl(), "bottom-left");
@@ -1198,7 +1200,6 @@ $("run").onclick = async () => {
 // map and under the area line, the matches, the extracts and the drawn shapes (as GeoLibre's roadstyle plugin adds a style) ----
 let roadsRun = 0;
 const ROAD_KEYS = ["name", "edge_id", "osm_id", "highway", "edge_ref", "lanes", "bridge", "tunnel", "access"];   // kept in the tiles
-let popupFields = null;   // the road popup's fields: the style's metadata roadstyle:interaction.popup (roadstyle's look)
 // the roads of the base map (OpenFreeMap's transportation layers) go away while the duckOSM roads show, so the two do not compete
 let roadsShown = false;
 function removeRoads() {
@@ -1221,13 +1222,14 @@ async function showRoads() {
   try {
     const t0 = performance.now();
     const r = await duck.roadsStyle($("mapmode").value, areaName, ROAD_KEYS);
-    popupFields = r.style.metadata?.["roadstyle:interaction"]?.popup ?? null;
     if (run !== roadsRun) return;                       // another choice came in the meantime
     await loaded;
     removeRoads();
     const own = r.style.metadata?.["roadstyle:images"] || {};
     await addImages(Object.fromEntries(Object.entries(own).map(([n, v]) => ["rs-" + n, v])));
-    for (const [id, src] of Object.entries(r.style.sources)) map.addSource("rs-" + id, src);
+    // the one vector source "roads" (its source layers: roads, simple, slots, ov<i>); promoteId: a road's pieces have the road's id,
+    // so the dashboard lights them all with one feature state
+    for (const [id, src] of Object.entries(r.style.sources)) map.addSource("rs-" + id, id === "roads" ? { ...src, promoteId: { simple: "__rs_edge" } } : src);
     for (const l of r.style.layers) {
       let json = JSON.stringify(l);
       for (const n of Object.keys(own)) json = json.replaceAll(`"${n}"`, `"rs-${n}"`);   // the image names in the layout
@@ -1236,6 +1238,7 @@ async function showRoads() {
       if (layer.layout?.visibility === "none") offLayers.add("rs-" + l.id);
     }
     map.setLayoutProperty("area-fill", "visibility", "none");   // the fill would change the colors of the roads
+    rs.setStyle(r.style);   // the dashboard reads the new roads style (its layers and metadata)
     roadsShown = true;
     setBase();
     // the first tiles: the map is drawn when it is idle (at most 60 s)
@@ -1277,9 +1280,7 @@ $("gkey-save").onclick = () => {
   const k = $("gkey").value.trim();
   if (!k) return;
   keep("duckosm.googleKey", k);
-  rsWin.setKey(k);
-  $("basectl").parentElement.appendChild($("basectl"));   // the new Google 3D button goes before the base map
-  $("gkey-note").textContent = "Saved. The Google 3D button is on the map, under the Street View button.";
+  $("gkey-note").textContent = "Saved. Open the page again to use it: then the Google 3D button and Street View's Linked mode are on the map.";
 };
 $("gkey-del").onclick = () => {
   try { localStorage.removeItem("duckosm.googleKey"); } catch (e) { /* no storage */ }
@@ -1305,6 +1306,7 @@ const BLANKS = { blank: "#efede8", blank_dark: "#14181d" };   // roadstyle's til
 const view = { base: BASEMAPS[kept("duckosm.basemap")] || BLANKS[kept("duckosm.basemap")] ? kept("duckosm.basemap") : "",
   buildings: kept("duckosm.buildings") === "1" };
 const offLayers = new Set();   // the layers that roadstyle adds hidden (showRoads)
+const isOv = (l) => l.source === "rs-roads" && /^ov\d/.test(l["source-layer"] ?? "");   // a base-map layer of the build
 const heights = {};            // the 3D heights of OpenFreeMap's buildings: [height, base] for each layer
 function setBase() {
   if (map.getLayer("base-over")) map.removeLayer("base-over");
@@ -1314,7 +1316,7 @@ function setBase() {
   const style = map.getStyle().layers;
   for (const l of baseLayers) show(style.find((x) => x.id === l.id) ?? l, v === "" && !(roadsShown && l.road));
   // one 3D layer: when the duckOSM layers have their 3D buildings, OpenFreeMap's stop at the zoom where ours start
-  const ours = own && style.find((l) => l.type === "fill-extrusion" && l.source?.startsWith("rs-ov"));
+  const ours = own && style.find((l) => l.type === "fill-extrusion" && isOv(l));
   for (const l of style) if (l.type === "fill-extrusion" && !l.source?.startsWith("rs-")) {
     heights[l.id] ??= [map.getPaintProperty(l.id, "fill-extrusion-height"), map.getPaintProperty(l.id, "fill-extrusion-base"), l.minzoom ?? 0, l.maxzoom ?? 24];
     const [height, base, minzoom, maxzoom] = heights[l.id];
@@ -1323,7 +1325,7 @@ function setBase() {
     map.setLayerZoomRange(l.id, minzoom, ours && view.buildings ? Math.max(minzoom, ours.minzoom ?? 0) : maxzoom);
     if (view.buildings && !ours) show(l, true);   // without the duckOSM 3D buildings, OpenFreeMap's show over every base map
   }
-  for (const l of style) if (l.source?.startsWith("rs-ov")) show(l, own && (!offLayers.has(l.id) || (l.type === "fill-extrusion" && view.buildings)));
+  for (const l of style) if (isOv(l)) show(l, own && (!offLayers.has(l.id) || (l.type === "fill-extrusion" && view.buildings)));
   const bottom = style[0].id;
   if (BLANKS[v]) map.addLayer({ id: "base-over", type: "background", paint: { "background-color": BLANKS[v] } }, bottom);
   else if (BASEMAPS[v]) {
@@ -1344,35 +1346,8 @@ for (const r of document.querySelectorAll("input[name=base]")) r.onchange = () =
 };
 $("ownlayers").onchange = () => loaded.then(setBase);
 $("bbld").onclick = () => { view.buildings = !view.buildings; keep("duckosm.buildings", view.buildings ? "1" : "0"); loaded.then(setBase); };
-$("b3d").onclick = () => {
-  const tilt = $("b3d").ariaPressed !== "true";
-  $("b3d").ariaPressed = String(tilt);
-  map.easeTo({ pitch: tilt ? 60 : 0, bearing: tilt ? map.getBearing() : 0 });
-};
-map.on("pitchend", () => { $("b3d").ariaPressed = String(map.getPitch() > 0); });
 loaded.then(setBase);
 
-// a click on a road shows its data, but not while the user draws or picks a point (the tiles carry these properties: ROAD_KEYS is
-// declared above showRoads)
-// The map draws the roads from roadstyle's pieces (rs-simple) and names (rs-slots); __rs_edge is the road's number, and the map worker
-// gives the road's properties.
-map.on("click", async (e) => {
-  if (!$("draw").hidden || $("here").getAttribute("aria-pressed") === "true") return;
-  const f = map.queryRenderedFeatures(e.point).find((x) => x.source.startsWith("rs-") && x.properties.__rs_edge != null && !x.source.startsWith("rs-ov"));
-  if (!f) return;
-  const p = (await duck.roadProps(f.properties.__rs_edge)) ?? {};
-  // roadstyle's popup (popup.js, and _both and _sv of web_template.html at 2bccdcb): the name, the style's popup fields, both
-  // directions of a pair drawn as one line, and the Street View link; the values escaped (roadstyle's _rfields does not)
-  const safe = (q) => Object.fromEntries(Object.entries(q).map(([k, v]) => [k, typeof v === "string" ? esc(v) : v]));
-  const fields = (q) => _rfields(safe(q), popupFields);
-  const twin = p.__rs_edge2 != null ? (await duck.roadProps(p.__rs_edge2)) ?? {} : {};
-  const sec = (n, q) => '<div style="color:#777;margin-top:.3em">Direction ' + n + "</div>" + fields(q);
-  const html = Object.keys(twin).length ? (p.__rs_dup ? sec(1, twin) + sec(2, p) : sec(1, p) + sec(2, twin)) : fields(p);
-  const sv = '<div class="rs-sv" style="margin-top:4px"><a href="#" onclick="rsSetStreetView(true);return false">Street View</a></div>';
-  new maplibregl.Popup({ closeButton: true, maxWidth: POPUP.maxWidth }).setLngLat(e.lngLat).setHTML((html || "(no data)") + sv).addTo(map);
-  // Street View and Google 3D (map/roadstyle_windows.js) need the road's whole line: DuckDB gives it by the edge_id
-  rsWin.select((await duck.roadLine(p.edge_id).catch(() => null)) ?? [], e.lngLat, p, f.properties.__rs_edge);
-});
 window.duckMap = map;   // for e2e.py
 
 // SQL on the tables
