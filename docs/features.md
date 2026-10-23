@@ -132,9 +132,9 @@ These are the changes, each in its own small commit, so they merge easily with t
   extension (4.5 MB)."
 - `app/duck.js`:
   - When the box is on, `LOAD spatial` starts at once, in parallel with the build.
-  - After the build: the three raw files go into `raw.*`, `features.sql` runs, and `main.boundary` is made from the boundary
-    (`ST_GeomFromGeoJSON`; `features_sql.js` uses it for the background). `raw.*` stays for SQL, as in a duckOSM `.duckdb` file. The
-    raw files are not in the downloads.
+  - After the build: the three raw files go into `raw.*` and `features.sql` runs. `features_sql.js` uses `main.boundary` for the
+    background; since the merge with the tables of group 1 ([tables.md](tables.md)), the build writes it. `raw.*` stays for SQL, as
+    in a duckOSM `.duckdb` file. The raw files are not in the downloads.
   - The rows of each `features.*` table go into `tables`, with `mode: "features"`, so the list of downloads and `load.sql` show them.
   - `zipAll`: `features_<table>.parquet` (DuckDB writes them with `COPY`, as duckOSM's `_export_geoparquet`: every column except
     `tags`, because a nested column is not for GDAL), their entries in `layers.json` (`{"file", "kind": "features", "table",
@@ -229,8 +229,9 @@ Changes from the design:
   geometry as WKB (`ST_GeomFromWKB`, with `enable_geoparquet_conversion` off). The type is `GEOMETRY` without a CRS, the type of
   duckOSM's tables. `load.sql` does not change.
 - **The lane arrows of the fixes.** duckOSM writes `turn_lanes_forward` and `turn_lanes_backward` into `raw.ways` as `turn:lanes:*`.
-  The Rust reader of the fixes skipped them; it now reads them, and they go only into `raw.ways`. A member without a role is NULL,
-  as `ST_READOSM` gives it.
+  The Rust reader of the fixes skipped them. After the merge with the tables of group 1, the network's ways hold all their tags, and
+  the arrows (`OsmFixes::set_arrows`, for each mode that keeps the way) and the sidewalk tags are set on them. `Raw::sync_tags` then
+  copies the changed tags into `raw.ways`, with the order of `map_concat`. A member without a role is NULL, as `ST_READOSM` gives it.
 - **The order in the page.** DuckDB loads spatial during the build, and the tables wait for it. The first build of a page
   downloads the extension (4.5 MB), so the time from the click to the first query includes that download.
 - The layers are made only from a region file. With a cut file or with Overpass, the box has no effect.

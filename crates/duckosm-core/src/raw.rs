@@ -4,6 +4,7 @@
 
 use crate::fixes::{NewNode, OsmFixes, NEW_WAY_ID_MIN};
 use crate::graph::Relation;
+use crate::model::Way;
 use crate::util::FxHashMap;
 
 /// The tags in the order of the PBF file. No tags: an empty list (NULL in `raw.*`).
@@ -121,32 +122,17 @@ impl Raw {
         self.ways.sort_by_key(|w| w.id);
     }
 
-    /// duckOSM's fixes for each mode write the arrows of the lanes (`turn_lanes_forward` / `_backward`) into
-    /// `raw.ways`, on a way that the mode has. ponytail: `in_network` is the network input (the highway ways and
-    /// ferry lines), not the road filter of each mode; a rule for a way that no mode keeps is rare.
-    pub fn set_arrows(&mut self, fixes: &OsmFixes, in_network: impl Fn(i64) -> bool) {
-        for r in fixes
-            .ways
-            .iter()
-            .filter(|r| !r.turn_lanes.is_empty() && in_network(r.osm_id))
-        {
-            if let Some(w) = self.way_mut(r.osm_id) {
-                set_tags(
-                    &mut w.tags,
-                    r.turn_lanes.iter().map(|(k, v)| (k.as_str(), v.as_str())),
-                );
-            }
-        }
-    }
-
-    /// duckOSM's sidewalk rule writes `sidewalk=separate` and `duckosm:sidewalk=inferred` on the roads it finds.
-    pub fn mark_sidewalks(&mut self, ids: &[i64]) {
-        for &id in ids {
-            if let Some(w) = self.way_mut(id) {
-                set_tags(
-                    &mut w.tags,
-                    [("sidewalk", "separate"), ("duckosm:sidewalk", "inferred")],
-                );
+    /// The tags that the network steps set on their ways after the fixes (the sidewalk rule's `sidewalk=separate` and
+    /// `duckosm:sidewalk=inferred`, the arrows of the fixes for each mode) go into `raw.ways`, as duckOSM's `UPDATE raw.ways
+    /// ... map_concat` does: a changed value in its place, a new key at the end.
+    pub fn sync_tags(&mut self, ways: &[Way]) {
+        for w in ways {
+            if let Some(r) = self.way_mut(w.id) {
+                let new: Vec<(&str, &str)> = w
+                    .all_tags()
+                    .filter(|(k, v)| !r.tags.iter().any(|t| t.0 == *k && t.1 == *v))
+                    .collect();
+                set_tags(&mut r.tags, new);
             }
         }
     }

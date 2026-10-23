@@ -950,7 +950,7 @@ $("run").onclick = async () => {
     if (source === "region") {
       msg = { region: regionFile, boundary: text(), modes, fixes, threads, raw: feats };   // the worker reads the File piece by piece
     } else if (source === "cut") {
-      msg = { pbf: await $("pbf").files[0].arrayBuffer(), modes, fixes, threads };
+      msg = { pbf: await $("pbf").files[0].arrayBuffer(), boundary: area ? text() : null, modes, fixes, threads };
     } else {
       const d0 = performance.now();
       const got = await duck.overpass(area.polys, (t) => progress(t + "…"));
@@ -970,7 +970,7 @@ $("run").onclick = async () => {
     if (out.featuresSql) {
       progress("making the base-map layers…");
       const f0 = performance.now();
-      await duck.loadFeatures(out.files, out.featuresSql, area ? text() : null);
+      await duck.loadFeatures(out.files, out.featuresSql);
       featuresSeconds = (performance.now() - f0) / 1000;
     }
     const ready = performance.now();

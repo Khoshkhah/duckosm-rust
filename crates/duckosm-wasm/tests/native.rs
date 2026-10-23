@@ -25,6 +25,7 @@ fn browser_build_equals_native_build() {
         geoparquet: true,
         duckdb: false,
         osm_fixes: Some(fixes),
+        built_at: Some(0),
         ..Params::default()
     };
     build(&pbf, &native, &p).unwrap();
@@ -33,6 +34,8 @@ fn browser_build_equals_native_build() {
         duckosm_wasm::Input::Pbf(&std::fs::read(&pbf).unwrap()),
         "driving,walking,cycling",
         Some(FIXES),
+        None,
+        0,
         false,
         |name| {
             names.push(name.to_string());
@@ -86,6 +89,7 @@ fn browser_area_build_equals_native_build() {
         boundary: Some(geojson.clone()),
         raw: true,
         osm_fixes: Some(fixes.clone()),
+        built_at: Some(0),
         ..Params::default()
     };
     build(&pbf, &native, &p).unwrap();
@@ -101,6 +105,8 @@ fn browser_area_build_equals_native_build() {
         duckosm_wasm::Input::Area(&open, &boundary),
         "driving,walking,cycling",
         Some(FIXES_AREA),
+        Some(&std::fs::read_to_string(&geojson).unwrap()),
+        0,
         true,
         |name| {
             names.push(name.to_string());
@@ -108,7 +114,9 @@ fn browser_area_build_equals_native_build() {
         },
     )
     .unwrap();
-    assert_eq!(names.len(), 23);
+    // 3 modes x 10 files (edges, private_edges, nodes, virtual_nodes, ways, way_nodes, edge_id_map, edge_graph,
+    // turn_permission, and in driving the two turn restriction tables) + 4 area files + 3 raw files
+    assert_eq!(names.len(), 3 * 9 + 2 + 4 + 3, "{names:?}");
     assert!(names.contains(&"raw_ways.parquet".to_string()));
     for n in &names {
         let (a, b) = (

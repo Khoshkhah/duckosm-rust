@@ -72,12 +72,13 @@ fn three_modes_equal_duckosm() {
             // the edge graph has its own golden test (graph.rs)
             build_graph: false,
             extract_restrictions: false,
+            ways_tables: false,
         };
         let net = if cf {
             build_network(&cut_ways, &cut_coords, mode, &opts)
         } else if variant.ends_with("_sw") || variant.ends_with("_ft") {
             let mut w = ways.clone();
-            let n = infer_separate_sidewalks(&mut w, &coords).len();
+            let n = infer_separate_sidewalks(&mut w, &coords);
             assert_eq!(n, 46, "roads with sidewalk=separate");
             build_network(&w, &coords, mode, &opts)
         } else {

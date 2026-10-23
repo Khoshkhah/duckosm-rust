@@ -189,8 +189,8 @@ fn level(w: &Way) -> i32 {
     }
 }
 
-/// Find the roads that get `sidewalk=separate`, set the tag on them, and return their way ids.
-pub fn infer_separate_sidewalks(ways: &mut [Way], coords: &Coords) -> Vec<i64> {
+/// Find the roads that get `sidewalk=separate`, set the tag on them, and return how many.
+pub fn infer_separate_sidewalks(ways: &mut [Way], coords: &Coords) -> usize {
     // 1. The lines: car roads and sidewalk lines (nodes without coordinates leave the line).
     let mut raw: Vec<(usize, Vec<P>, u8)> = Vec::new(); // (index in ways, points, kind)
     for (wi, w) in ways.iter().enumerate() {
@@ -226,7 +226,7 @@ pub fn infer_separate_sidewalks(ways: &mut [Way], coords: &Coords) -> Vec<i64> {
         }
     }
     if !raw.iter().any(|r| r.2 == 2) || !raw.iter().any(|r| r.2 == 1) {
-        return Vec::new();
+        return 0;
     }
     // the local frame: metres, from the mean latitude of the lines (the mean of the means)
     let lat0 = raw
@@ -384,11 +384,11 @@ pub fn infer_separate_sidewalks(ways: &mut [Way], coords: &Coords) -> Vec<i64> {
     }
 
     // 3. Tag the roads. (lines[k] is made from raw[k])
-    let mut ids = Vec::with_capacity(found.len());
+    let n = found.len();
     for k in found {
-        let w = &mut ways[raw[k].0];
-        w.tags.set("sidewalk", "separate");
-        ids.push(w.id);
+        // duckOSM: map_concat(tags, MAP {'sidewalk': 'separate', 'duckosm:sidewalk': 'inferred'})
+        ways[raw[k].0].set_tag("sidewalk", "separate");
+        ways[raw[k].0].set_tag("duckosm:sidewalk", "inferred");
     }
-    ids
+    n
 }

@@ -31,7 +31,7 @@ onmessage = async ({ data }) => {
       ? build_area(data.region, data.boundary, data.modes, fixes, !!data.raw)
       : data.json
         ? build_osm_json(new Uint8Array(data.json), data.boundary || undefined, data.modes, fixes)
-        : build(new Uint8Array(data.pbf), data.modes, fixes);
+        : build(new Uint8Array(data.pbf), data.modes, fixes, data.boundary || undefined);
     const t2 = performance.now();
     // one buffer for each file: duckdb-wasm registers a file as one buffer
     const files = {};

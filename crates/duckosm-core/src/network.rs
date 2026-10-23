@@ -37,6 +37,9 @@ pub struct Options {
     /// Build `turn_restrictions` and `turn_path_restrictions` in the driving mode (duckOSM
     /// `options.extract_restrictions`, on by default). They need the relations of the PBF.
     pub extract_restrictions: bool,
+    /// Keep the ways of the mode for the tables `ways` and `way_nodes` (duckOSM writes them always). Off saves
+    /// the memory of their node lists in a large area.
+    pub ways_tables: bool,
 }
 
 impl Default for Options {
@@ -53,6 +56,7 @@ impl Default for Options {
             functional_types: true,
             build_graph: true,
             extract_restrictions: true,
+            ways_tables: true,
         }
     }
 }
@@ -84,6 +88,10 @@ impl Coords {
 
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &(i64, Pt)> {
+        self.0.iter()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -132,7 +140,7 @@ fn node_uses<'a>(ways: impl Iterator<Item = (&'a [i64], bool)> + Clone) -> Vec<(
 }
 
 /// `main.global_junctions`: node id -> is a road junction (false: only paths are cut there).
-fn global_junctions(ways: &[Way]) -> FxHashMap<i64, bool> {
+pub fn global_junctions(ways: &[Way]) -> FxHashMap<i64, bool> {
     let built = ways.iter().filter(|w| filter::is_built_highway(&w.tags));
     let uses = node_uses(built.map(|w| (&w.refs[..], filter::is_road_raw(&w.tags))));
     junction_map(uses, |run| {
@@ -553,6 +561,7 @@ pub fn build_network_with(
         edge_id_map,
         graph,
         stats,
+        ways: if opts.ways_tables { mw } else { Vec::new() },
     })
 }
 

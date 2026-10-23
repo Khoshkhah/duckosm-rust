@@ -6,12 +6,12 @@
 //!   duckOSM `processors/osm_overrides.py`).
 //!
 //! The rules for the arrows of the lanes (`turn_lanes_*`) and `turn_restrictions` are not part of the
-//! network step (the arrows go only into `raw.ways`, `raw::Raw::set_arrows`). The reader keeps only highway ways and ferry lines, so a `tags` rule on another way
+//! network step. The reader keeps only highway ways and ferry lines, so a `tags` rule on another way
 //! has no effect here.
 
 use crate::filter::{Mode, ModeWay};
 use crate::geom::Pt;
-use crate::model::{Tags, Way};
+use crate::model::Way;
 use crate::network::Coords;
 use crate::util::FxHashMap;
 use std::sync::Arc;
@@ -37,9 +37,9 @@ pub struct WayFix {
     pub layer: Option<i32>,
     /// Remove the way from the networks of these modes.
     pub exclude_modes: Vec<Mode>,
-    /// The arrows of the lanes: `turn:lanes:forward` / `turn:lanes:backward` and their value (`turn_lanes_forward` /
-    /// `turn_lanes_backward`). The network step does not read them; they go into `raw.ways`.
-    pub turn_lanes: Vec<(String, String)>,
+    /// The painted arrows (`turn_lanes_forward` / `turn_lanes_backward`) as the raw tags
+    /// `turn:lanes:forward` / `turn:lanes:backward` (see [`OsmFixes::set_arrows`]).
+    pub arrows: Vec<(String, String)>,
 }
 
 /// A node of a new way: an OSM node, or a new node at (longitude, latitude).
@@ -90,11 +90,11 @@ impl OsmFixes {
             return Ok(());
         }
         // tags_from copies the tags before any fix changes them
-        let tags_from: FxHashMap<i64, Tags> = self
+        let tags_from: FxHashMap<i64, Way> = self
             .new_ways
             .iter()
             .filter_map(|n| n.tags_from)
-            .filter_map(|id| find(ways, id).map(|w| (id, w.tags.clone())))
+            .filter_map(|id| find(ways, id).map(|w| (id, w.clone())))
             .collect();
         let removed: Vec<i64> = self
             .ways
@@ -118,7 +118,7 @@ impl OsmFixes {
                 }
             }
             for (k, v) in &r.tags {
-                w.tags.set(k, v);
+                w.set_tag(k, v);
             }
         }
         let mut seen = Vec::new();
@@ -132,7 +132,9 @@ impl OsmFixes {
             seen.push(n.id);
             let src = n.tags_from.and_then(|id| tags_from.get(&id));
             let own = n.tags.iter().map(|(k, v)| (k.as_str(), v.as_str()));
-            let tags = Tags::from_pairs(own.chain(src.into_iter().flat_map(|t| t.osm_pairs())));
+            let pairs: Vec<(&str, &str)> = own
+                .chain(src.into_iter().flat_map(|w| w.all_tags()))
+                .collect();
             let refs = n
                 .nodes
                 .iter()
@@ -142,11 +144,7 @@ impl OsmFixes {
                     NewNode::At(_) => n.id * 1000 + i as i64 + 1,
                 })
                 .collect();
-            ways.push(Way {
-                id: n.id,
-                refs,
-                tags,
-            });
+            ways.push(Way::new(n.id, refs, pairs.iter().copied()));
         }
         ways.sort_by_key(|w| w.id);
         Ok(())
@@ -174,6 +172,25 @@ impl OsmFixes {
         }
         ways.retain(|w| !absent.contains(&w.id));
         coords.extend(new_nodes);
+    }
+
+    /// After a mode is built: the arrows of a rule become raw tags of its way, when this mode kept the way
+    /// (duckOSM `OSMOverrideProcessor`: `UPDATE raw.ways` in each mode, after that mode made its `ways`).
+    /// So the `ways` tables of the modes after it show them, as in duckOSM; the lane steps read them there.
+    pub fn set_arrows(&self, ways: &mut [Way], kept: &[ModeWay], mode: Mode) {
+        for r in self
+            .ways
+            .iter()
+            .filter(|r| !r.arrows.is_empty() && !r.exclude_modes.contains(&mode))
+        {
+            if kept.iter().any(|w| w.id == r.osm_id) {
+                if let Ok(i) = ways.binary_search_by_key(&r.osm_id, |w| w.id) {
+                    for (k, v) in &r.arrows {
+                        ways[i].set_tag(k, v);
+                    }
+                }
+            }
+        }
     }
 
     /// For one mode, after the road filter. Returns the number of rules that matched a way.
@@ -240,11 +257,7 @@ mod tests {
     use crate::filter::mode_way;
 
     fn way(id: i64, refs: &[i64], tags: &[(&str, &str)]) -> Way {
-        Way {
-            id,
-            refs: refs.to_vec(),
-            tags: Tags::from_pairs(tags.iter().copied()),
-        }
+        Way::new(id, refs.to_vec(), tags.iter().copied())
     }
 
     #[test]

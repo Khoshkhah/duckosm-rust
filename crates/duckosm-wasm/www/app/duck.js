@@ -25,6 +25,13 @@ export const TABLES = {
   turn_path_restrictions: "Driving: the turn restrictions through a via way, as paths of edges.",
   turn_permission: "The turn rules that the graph cannot hold: a rule for some vehicles or with a condition.",
   edge_id_map: "For each merged edge, the edges that it was made from.",
+  ways: "The OpenStreetMap ways that the mode kept, with all their tags and nodes.",
+  way_nodes: "The nodes of each way, in order.",
+  virtual_nodes: "Always empty, as in duckOSM: the virtual nodes are in nodes.",
+  global_junctions: "The nodes where all modes cut their roads, so an edge has the same id in each mode.",
+  boundary: "The area: the boundary and its properties.",
+  visualization_metadata: "One row: the center and zoom of the area for a map, its time zone, and the build time.",
+  transfers: "The changes of mode (walk to car or bike, and back) at the nodes that the modes share.",
 };
 export const REFERENCE = "https://khoshkhah.github.io/duckOSM/reference/database/";
 export const FEATURES_TEXT = "The base-map layers (duckOSM features.*): water, land use, buildings, streets and railways, sites, paved areas, " +
@@ -64,20 +71,34 @@ const split = (name) => {
   return { mode: base.slice(base.lastIndexOf("_") + 1), table: base.slice(0, base.lastIndexOf("_")) };
 };
 // the same SQL as the native .duckdb writer (crates/duckosm-duckdb)
-const select = (table) => (table === "nodes" ? "SELECT node_id, geometry AS geom" : "SELECT *");
+// the same rules as the native .duckdb writer (crates/duckosm-duckdb, select): duckOSM's names and types
+const select = (table) => ({
+  nodes: "SELECT node_id, geometry AS geom",
+  virtual_nodes: "SELECT node_id, geometry AS geom",
+  boundary: "SELECT * EXCLUDE (geometry), geometry AS geom",
+  visualization_metadata: "SELECT boundary_geojson::JSON AS boundary_geojson, center_lat, center_lon, initial_zoom, timezone, built_at, duckosm_version",
+}[table] ?? "SELECT *");
+const MODES = ["driving", "walking", "cycling"];
+// duckOSM's view mm.edges: the edges of all modes with a mode column, the modes in name order
+const mmEdges = (modes) => `CREATE OR REPLACE VIEW mm.edges AS ` + [...modes].sort().map((m) =>
+  `SELECT '${m}' AS mode, edge_id, source, target, cost_s, length_m, highway, name, geometry FROM ${m}.edges`).join(" UNION ALL ");
 // The page reads the geometry as WKB and makes a GEOMETRY without a CRS, the type of duckOSM's tables: when DuckDB's spatial extension
 // (the base-map layers) loads before the first value of the type GEOMETRY('OGC:CRS84'), duckdb-wasm 1.33.1-dev57.0 (spatial 28db190)
 // fails on each such value ("stoi: no conversion"), and a GeoParquet file gives that type. 'EPSG:4326' works; native DuckDB has no
 // such error. https://github.com/duckdb/duckdb-wasm/issues/2199
 const GEOM = "ST_GeomFromWKB(geometry)";
-const selectWkb = (table) => (table === "nodes" ? `SELECT node_id, ${GEOM} AS geom`
-  : table === "edges" || table === "private_edges" ? `SELECT * REPLACE (${GEOM} AS geometry)` : "SELECT *");
+const selectWkb = (table, cols) => {
+  const sql = select(table);
+  if (sql.includes("geometry AS geom")) return sql.replace("geometry AS geom", `${GEOM} AS geom`);
+  return sql === "SELECT *" && cols.includes("geometry") ? `SELECT * REPLACE (${GEOM} AS geometry)` : sql;
+};
 
 // the files of a build into DuckDB, one schema for each mode; the old tables go away
 export async function loadTables(files) {
   await duckReady;
-  for (const m of new Set(tables.map((t) => t.mode))) await conn.query(`DROP SCHEMA IF EXISTS ${m} CASCADE`);
-  await conn.query("DROP SCHEMA IF EXISTS raw CASCADE; DROP TABLE IF EXISTS main.boundary; SET enable_geoparquet_conversion = false");
+  // the schemas of the last build go away; main cannot, so its tables do
+  for (const t of tables) await conn.query(t.mode === "main" ? `DROP TABLE IF EXISTS main.${t.table}` : `DROP SCHEMA IF EXISTS ${t.mode} CASCADE`);
+  await conn.query("DROP SCHEMA IF EXISTS raw CASCADE; SET enable_geoparquet_conversion = false");
   tables = [];
   for (const [name, bytes] of Object.entries(files)) {
     if (name.startsWith("raw_")) continue;     // loadFeatures reads them
@@ -86,11 +107,14 @@ export async function loadTables(files) {
     // ponytail: two copies of each file; read them back from DuckDB if memory matters.
     await db.registerFileBuffer(name, bytes.slice());
     await conn.query(`CREATE SCHEMA IF NOT EXISTS ${mode}`);
-    await conn.query(`CREATE OR REPLACE TABLE ${mode}.${table} AS ${selectWkb(table)} FROM read_parquet('${name}')`);
+    const cols = (await conn.query(`DESCRIBE SELECT * FROM read_parquet('${name}')`)).toArray().map((r) => r.column_name);
+    await conn.query(`CREATE OR REPLACE TABLE ${mode}.${table} AS ${selectWkb(table, cols)} FROM read_parquet('${name}')`);
     const rows = Number((await conn.query(`SELECT count(*) AS n FROM ${mode}.${table}`)).toArray()[0].n);
     tables.push({ mode, table, name, bytes, rows });
   }
   await conn.query("SET enable_geoparquet_conversion = true");
+  const modes = MODES.filter((m) => tables.some((t) => t.mode === m && t.table === "edges"));
+  if (tables.some((t) => t.mode === "mm")) await conn.query(mmEdges(modes));
   await conn.query(MACROS);
 }
 
@@ -101,19 +125,13 @@ let spatial = null;
 export const loadSpatial = () => (spatial ??= duckReady.then(() => conn.query("INSTALL spatial; LOAD spatial")));
 
 // duckOSM's raw.* files of the build, then duckOSM's SQL of the layers (features.sql, from the wasm module) makes features.*; raw.* stays
-// for SQL, as in a duckOSM .duckdb file. main.boundary (the background of the map) comes from the boundary. Each features table also
-// becomes features_<table>.parquet, as duckOSM's GeoParquet export (every column but tags).
-export async function loadFeatures(files, sql, boundary) {
+// for SQL, as in a duckOSM .duckdb file. Each features table also becomes features_<table>.parquet, as duckOSM's GeoParquet export
+// (every column but tags).
+export async function loadFeatures(files, sql) {
   await loadSpatial();
   for (const name of ["raw_nodes.parquet", "raw_ways.parquet", "raw_relations.parquet"]) await db.registerFileBuffer(name, files[name]);
   await conn.query(sql);
   for (const name of ["raw_nodes.parquet", "raw_ways.parquet", "raw_relations.parquet"]) await db.dropFile(name);
-  if (boundary) {
-    const lit = (v) => (v == null ? "NULL" : `'${String(v).replaceAll("'", "''")}'`);
-    const feats = JSON.parse(boundary).features ?? [];
-    await conn.query("CREATE OR REPLACE TABLE main.boundary AS " + feats.map((f) =>
-      `SELECT ${lit(f.properties?.name)} AS name, ST_GeomFromGeoJSON(${lit(JSON.stringify(f.geometry))}) AS geom`).join(" UNION ALL "));
-  }
   const names = (await conn.query("SELECT table_name AS t FROM information_schema.tables WHERE table_catalog = 'memory' " +
     "AND table_schema = 'features' ORDER BY 1")).toArray().map((r) => r.t);
   for (const table of names) {
@@ -134,6 +152,7 @@ export function loadSql(areaName) {
     `-- In the folder of the files: duckdb ${file}.duckdb < load.sql`];
   for (const m of new Set(tables.map((t) => t.mode))) lines.push(`CREATE SCHEMA IF NOT EXISTS ${m};`);
   for (const t of tables) lines.push(`CREATE TABLE ${t.mode}.${t.table} AS ${select(t.table)} FROM read_parquet('${t.name}');`);
+  if (tables.some((t) => t.mode === "mm")) lines.push(mmEdges(MODES.filter((m) => tables.some((t) => t.mode === m))) + ";");
   lines.push(MACROS.trim());
   return lines.join("\n") + "\n";
 }

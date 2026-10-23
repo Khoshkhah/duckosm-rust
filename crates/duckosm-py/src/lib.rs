@@ -23,7 +23,7 @@ use std::path::PathBuf;
     merge_segments = true, global_junctions = true, keep_largest_component = true,
     cycling_dismount = true, infer_separate_sidewalks = true, connectivity_rescue = true,
     connect_snap_m = 10.0, process_speeds = true, calculate_costs = true, functional_types = true,
-    osm_overrides = None, build_graph = true, extract_restrictions = true, boundary = None
+    osm_overrides = None, build_graph = true, extract_restrictions = true, boundary = None, ways_tables = true
 ))]
 #[allow(clippy::too_many_arguments)]
 fn build<'py>(
@@ -47,6 +47,7 @@ fn build<'py>(
     build_graph: bool,
     extract_restrictions: bool,
     boundary: Option<PathBuf>,
+    ways_tables: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let mut p = Params {
         name,
@@ -86,6 +87,7 @@ fn build<'py>(
         functional_types,
         build_graph,
         extract_restrictions,
+        ways_tables,
     };
     // the build runs without the GIL, so other Python threads go on
     let sum = py

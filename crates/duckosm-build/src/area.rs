@@ -1,0 +1,224 @@
+//! The tables of the whole area, after the modes (docs/tables.md, group 1): `main.global_junctions`,
+//! `main.boundary`, `main.visualization_metadata` and `mm.transfers`, as duckOSM writes them. The files are
+//! `<table>_<schema>.parquet`, so a reader of `<table>_<mode>.parquet` takes them without a change.
+
+use duckosm_core::filter::Mode;
+use duckosm_core::geom::Pt;
+use duckosm_core::model::{Node, Way};
+use duckosm_core::network::{self, Coords, Options};
+use duckosm_parquet::{self as pq, Metadata, Prop, Transfer};
+use serde_json::Value;
+use std::io::Write;
+
+/// What the area tables are made from.
+pub struct Area<'a> {
+    /// The boundary file (GeoJSON text), if the area has one.
+    pub boundary: Option<&'a str>,
+    /// The ways as read (after the fixes): the global junctions.
+    pub ways: &'a [Way],
+    /// The coordinates of the nodes: the box of the area when there is no boundary.
+    pub coords: &'a Coords,
+    /// The nodes of each mode that was built: the transfers and the time zone.
+    pub nodes: &'a [(Mode, Vec<Node>)],
+    pub opts: &'a Options,
+    /// The build time, microseconds since 1970 (UTC). The caller gives it: WebAssembly has no clock in Rust.
+    pub built_at: i64,
+}
+
+/// duckOSM `multimodal.transfer_s`: the seconds of a change of mode.
+const TRANSFER_S: f64 = 60.0;
+
+pub fn write_area_tables<W: Write + Send>(
+    a: &Area,
+    mut file: impl FnMut(&str) -> Result<W, String>,
+) -> Result<(), String> {
+    if a.opts.global_junctions {
+        let mut gj: Vec<(i64, bool)> = network::global_junctions(a.ways).into_iter().collect();
+        gj.sort_unstable();
+        pq::write_global_junctions_to(file("global_junctions_main.parquet")?, &gj)?;
+    }
+    let shape = match a.boundary {
+        Some(text) => {
+            let (props, polys, multi, json) = boundary(text)?;
+            pq::write_boundary_to(
+                file("boundary_main.parquet")?,
+                &props,
+                &pq::polygons_wkb(&polys, multi),
+                multi,
+            )?;
+            Some((polys, json))
+        }
+        None => None,
+    };
+    pq::write_metadata_to(
+        file("visualization_metadata_main.parquet")?,
+        &metadata(a, shape.as_ref()),
+    )?;
+    pq::write_transfers_to(file("transfers_mm.parquet")?, &transfers(a.nodes))?;
+    Ok(())
+}
+
+/// The first feature of a boundary file: its properties, typed as GDAL types them for DuckDB's `ST_Read`, its
+/// polygons, whether it is a MultiPolygon, and its geometry as GeoJSON text.
+#[allow(clippy::type_complexity)]
+fn boundary(text: &str) -> Result<(Vec<(String, Prop)>, Vec<Vec<Vec<Pt>>>, bool, String), String> {
+    let doc: Value = serde_json::from_str(text).map_err(|e| format!("boundary: {e}"))?;
+    let feature = match doc["type"].as_str() {
+        Some("FeatureCollection") => doc["features"]
+            .get(0)
+            .cloned()
+            .ok_or("boundary: no feature")?,
+        Some("Feature") => doc,
+        _ => serde_json::json!({ "type": "Feature", "properties": {}, "geometry": doc }),
+    };
+    let props = feature["properties"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .map(|(k, v)| {
+            let p = match v {
+                Value::Number(n) if n.is_i64() => match i32::try_from(n.as_i64().unwrap()) {
+                    Ok(i) => Prop::Int(i),
+                    Err(_) => Prop::BigInt(n.as_i64().unwrap()),
+                },
+                Value::Number(n) => Prop::Double(n.as_f64().unwrap_or(f64::NAN)),
+                Value::Bool(b) => Prop::Bool(*b),
+                Value::String(s) => Prop::Text(Some(s.clone())),
+                Value::Null => Prop::Text(None),
+                other => Prop::Text(Some(other.to_string())),
+            };
+            (k.clone(), p)
+        })
+        .collect();
+    let g = &feature["geometry"];
+    let ring = |r: &Value| -> Vec<Pt> {
+        r.as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|c| Some((c[0].as_f64()?, c[1].as_f64()?)))
+            .collect()
+    };
+    let polygon =
+        |p: &Value| -> Vec<Vec<Pt>> { p.as_array().into_iter().flatten().map(ring).collect() };
+    let (polys, multi) = match g["type"].as_str() {
+        Some("Polygon") => (vec![polygon(&g["coordinates"])], false),
+        Some("MultiPolygon") => (
+            g["coordinates"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(polygon)
+                .collect(),
+            true,
+        ),
+        _ => return Err("boundary: the geometry is not a Polygon or a MultiPolygon".into()),
+    };
+    Ok((props, polys, multi, g.to_string()))
+}
+
+/// `main.visualization_metadata` (duckOSM importer.py): the center and the zoom of the box of the boundary
+/// (else of all nodes), and the time zone at the node nearest the median of the nodes of a mode.
+fn metadata(a: &Area, shape: Option<&(Vec<Vec<Vec<Pt>>>, String)>) -> Metadata {
+    let pts: Vec<Pt> = match shape {
+        Some((polys, _)) => polys.iter().flatten().flatten().copied().collect(),
+        None => a.coords.iter().map(|(_, p)| *p).collect(),
+    };
+    let (mut w, mut s, mut e, mut n) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+    for p in &pts {
+        (w, s, e, n) = (w.min(p.0), s.min(p.1), e.max(p.0), n.max(p.1));
+    }
+    let width = e - w;
+    // DuckDB: CAST(LEAST(14, GREATEST(1, LOG2(360 / width))) AS INTEGER), which rounds
+    let initial_zoom = if width < 0.0001 {
+        14
+    } else {
+        (360.0 / width).log2().clamp(1.0, 14.0).round() as i32
+    };
+    let boundary_geojson = match shape {
+        Some((_, json)) => json.clone(),
+        None => format!("{{\"type\":\"Polygon\",\"coordinates\":[[[{w},{s}],[{e},{s}],[{e},{n}],[{w},{n}],[{w},{s}]]]}}"),
+    };
+    Metadata {
+        boundary_geojson,
+        center_lat: (s + n) / 2.0,
+        center_lon: (w + e) / 2.0,
+        initial_zoom,
+        timezone: timezone(a.nodes),
+        built_at: a.built_at,
+        version: format!("duckosm-rust {}", env!("CARGO_PKG_VERSION")),
+    }
+}
+
+/// duckOSM `utils.add_timezone`: the nodes of driving (else of the first mode), without the virtual nodes;
+/// the node nearest (median x, median y); its IANA time zone.
+fn timezone(nodes: &[(Mode, Vec<Node>)]) -> Option<String> {
+    let (_, ns) = nodes
+        .iter()
+        .find(|(m, _)| *m == Mode::Driving)
+        .or(nodes.first())?;
+    let ns: Vec<&Node> = ns.iter().filter(|n| n.node_id > 0).collect();
+    let median = |mut v: Vec<f64>| -> f64 {
+        v.sort_by(f64::total_cmp);
+        let m = v.len() / 2;
+        if v.len() % 2 == 1 {
+            v[m]
+        } else {
+            (v[m - 1] + v[m]) / 2.0
+        }
+    };
+    if ns.is_empty() {
+        return None;
+    }
+    let (mx, my) = (
+        median(ns.iter().map(|n| n.lon).collect()),
+        median(ns.iter().map(|n| n.lat).collect()),
+    );
+    let near = ns.iter().min_by(|a, b| {
+        let d = |n: &Node| (n.lon - mx).powi(2) + (n.lat - my).powi(2);
+        d(a).total_cmp(&d(b))
+    })?;
+    let tz = tzf_rs::DefaultFinder::new()
+        .get_tz_name(near.lon, near.lat)
+        .to_string();
+    (!tz.is_empty()).then_some(tz)
+}
+
+/// `mm.transfers` (duckOSM `MultimodalBuilder`, the coarse version): at each node that walking shares with
+/// driving or cycling, a change to that mode and a change back, each for `TRANSFER_S` seconds.
+fn transfers(nodes: &[(Mode, Vec<Node>)]) -> Vec<Transfer> {
+    let ids = |m: Mode| -> Option<Vec<i64>> {
+        nodes.iter().find(|(x, _)| *x == m).map(|(_, ns)| {
+            let mut v: Vec<i64> = ns.iter().map(|n| n.node_id).collect();
+            v.sort_unstable();
+            v.dedup();
+            v
+        })
+    };
+    let Some(walk) = ids(Mode::Walking) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for (m, name, (to, back)) in [
+        (Mode::Cycling, "cycling", ("bike_park", "bike_unpark")),
+        (Mode::Driving, "driving", ("park", "retrieve")),
+    ] {
+        let Some(other) = ids(m) else { continue };
+        for &n in walk.iter().filter(|n| other.binary_search(n).is_ok()) {
+            out.push(Transfer {
+                node_id: n,
+                from_mode: "walking",
+                to_mode: name,
+                cost_s: TRANSFER_S,
+                kind: to,
+            });
+            out.push(Transfer {
+                node_id: n,
+                from_mode: name,
+                to_mode: "walking",
+                cost_s: TRANSFER_S,
+                kind: back,
+            });
+        }
+    }
+    out
+}

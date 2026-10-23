@@ -15,54 +15,81 @@ pub fn write_database(db: &Path, parquet_dir: &Path, modes: &[&str]) -> Result<(
     let _ = std::fs::remove_file(db);
     let con = Connection::open(db).map_err(|e| e.to_string())?;
     for mode in modes {
-        write_mode(&con, parquet_dir, mode)?;
+        write_schema(&con, parquet_dir, mode, MODE_TABLES)?;
+    }
+    write_schema(
+        &con,
+        parquet_dir,
+        "main",
+        &["global_junctions", "boundary", "visualization_metadata"],
+    )?;
+    write_schema(&con, parquet_dir, "mm", &["transfers"])?;
+    if parquet_dir.join("transfers_mm.parquet").exists() {
+        con.execute_batch(&mm_edges(modes))
+            .map_err(|e| e.to_string())?;
     }
     con.execute_batch(MACROS).map_err(|e| e.to_string())
 }
 
-fn write_mode(con: &Connection, parquet_dir: &Path, mode: &str) -> Result<(), String> {
-    let p = |f: &str| {
-        parquet_dir
-            .join(format!("{f}_{mode}.parquet"))
-            .display()
-            .to_string()
-            .replace('\'', "''")
-    };
-    let sql = format!(
-        "CREATE SCHEMA {mode};
-         CREATE TABLE {mode}.edges AS SELECT * FROM read_parquet('{e}');
-         CREATE TABLE {mode}.private_edges AS SELECT * FROM read_parquet('{pe}');
-         CREATE TABLE {mode}.nodes AS SELECT node_id, geometry AS geom FROM read_parquet('{n}');
-         {map}",
-        e = p("edges"),
-        pe = p("private_edges"),
-        n = p("nodes"),
-        map = if parquet_dir
-            .join(format!("edge_id_map_{mode}.parquet"))
-            .exists()
-        {
-            format!(
-                "CREATE TABLE {mode}.edge_id_map AS SELECT * FROM read_parquet('{}');",
-                p("edge_id_map")
-            )
-        } else {
-            String::new()
-        },
-    );
-    con.execute_batch(&sql).map_err(|e| e.to_string())?;
-    // the edge graph and the turn restrictions, when the options made them
-    for table in [
-        "edge_graph",
-        "turn_permission",
-        "turn_restrictions",
-        "turn_path_restrictions",
-    ] {
-        if parquet_dir.join(format!("{table}_{mode}.parquet")).exists() {
+/// The tables of a mode, when their files exist (the options decide which ones exist).
+const MODE_TABLES: &[&str] = &[
+    "edges",
+    "private_edges",
+    "nodes",
+    "virtual_nodes",
+    "ways",
+    "way_nodes",
+    "edge_id_map",
+    "edge_graph",
+    "turn_permission",
+    "turn_restrictions",
+    "turn_path_restrictions",
+];
+
+/// The SELECT of a table from its file, with duckOSM's names and types. The same rules are in the page
+/// (crates/duckosm-wasm/www/app/duck.js) and in its load.sql.
+pub fn select(table: &str) -> &'static str {
+    match table {
+        "nodes" | "virtual_nodes" => "SELECT node_id, geometry AS geom",
+        "boundary" => "SELECT * EXCLUDE (geometry), geometry AS geom",
+        "visualization_metadata" => {
+            "SELECT boundary_geojson::JSON AS boundary_geojson, center_lat, center_lon, initial_zoom, timezone, built_at, duckosm_version"
+        }
+        _ => "SELECT *",
+    }
+}
+
+/// duckOSM's view `mm.edges`: the edges of all modes with a `mode` column, the modes in name order.
+pub fn mm_edges(modes: &[&str]) -> String {
+    let mut m = modes.to_vec();
+    m.sort_unstable();
+    let parts: Vec<String> = m
+        .iter()
+        .map(|m| format!("SELECT '{m}' AS mode, edge_id, source, target, cost_s, length_m, highway, name, geometry FROM {m}.edges"))
+        .collect();
+    format!(
+        "CREATE OR REPLACE VIEW mm.edges AS {};",
+        parts.join(" UNION ALL ")
+    )
+}
+
+fn write_schema(
+    con: &Connection,
+    parquet_dir: &Path,
+    schema: &str,
+    tables: &[&str],
+) -> Result<(), String> {
+    con.execute_batch(&format!("CREATE SCHEMA IF NOT EXISTS {schema};"))
+        .map_err(|e| e.to_string())?;
+    for table in tables {
+        let file = parquet_dir.join(format!("{table}_{schema}.parquet"));
+        if file.exists() {
+            let f = file.display().to_string().replace('\'', "''");
             con.execute_batch(&format!(
-                "CREATE TABLE {mode}.{table} AS SELECT * FROM read_parquet('{}');",
-                p(table)
+                "CREATE TABLE {schema}.{table} AS {} FROM read_parquet('{f}');",
+                select(table)
             ))
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("{schema}.{table}: {e}"))?;
         }
     }
     Ok(())

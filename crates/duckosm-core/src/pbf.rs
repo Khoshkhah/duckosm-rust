@@ -4,7 +4,7 @@ use crate::boundary::Boundary;
 use crate::filter;
 use crate::geom::Pt;
 use crate::graph::{MemberType, Relation};
-use crate::model::{Tags, Way};
+use crate::model::{OtherTags, Tags, Way};
 use crate::network::Coords;
 use crate::raw::{Raw, RawNode, RawTags, RawWay};
 use crate::util::{FxHashMap, FxHashSet};
@@ -526,6 +526,7 @@ fn way(w: &osmpbf::Way) -> Option<Way> {
         id: w.id(),
         refs: w.refs().collect(),
         tags,
+        other: OtherTags::of(w.tags()),
     })
 }
 
