@@ -6,6 +6,7 @@ use arrow_array::builder::{
 };
 use arrow_array::{ArrayRef, RecordBatch};
 use arrow_schema::{DataType, Field, Fields, Schema, TimeUnit};
+use duckosm_core::bus::{Route, RouteEdge};
 use duckosm_core::filter::{Mode, ModeWay};
 use duckosm_core::geom::Pt;
 use duckosm_core::graph::{
@@ -965,6 +966,68 @@ pub fn write_edge_levels_meta_to<W: Write + Send>(out: W, m: &LevelsMeta) -> Res
             texts(c.iter().map(|r| Some(r.edge_hash.as_str()))),
             texts(c.iter().map(|r| Some(r.roadstyle_version))),
             texts(c.iter().map(|r| Some(r.created.as_str()))),
+        ]
+    })
+}
+
+/// Write `bus.routes` (`gaps` is a list of text, VARCHAR[]).
+pub fn write_routes_to<W: Write + Send>(out: W, rows: &[Route]) -> Result<(), String> {
+    let fields = vec![
+        field("osm_id", DataType::Int64),
+        field("route", DataType::Utf8),
+        field("ref", DataType::Utf8),
+        field("name", DataType::Utf8),
+        field("operator", DataType::Utf8),
+        field("from", DataType::Utf8),
+        field("to", DataType::Utf8),
+        field("network", DataType::Utf8),
+        field("edges", DataType::Int32),
+        field("outside", DataType::Int32),
+        field(
+            "gaps",
+            DataType::List(Arc::new(Field::new("item", DataType::Utf8, true))),
+        ),
+    ];
+    write_rows(out, fields, rows, |c| {
+        let mut gaps = ListBuilder::new(StringBuilder::new());
+        for r in c {
+            r.gaps.iter().for_each(|g| gaps.values().append_value(g));
+            gaps.append(true);
+        }
+        vec![
+            i64s(c.iter().map(|r| r.osm_id)),
+            texts(c.iter().map(|r| r.route.as_deref())),
+            texts(c.iter().map(|r| r.ref_.as_deref())),
+            texts(c.iter().map(|r| r.name.as_deref())),
+            texts(c.iter().map(|r| r.operator.as_deref())),
+            texts(c.iter().map(|r| r.from.as_deref())),
+            texts(c.iter().map(|r| r.to.as_deref())),
+            texts(c.iter().map(|r| r.network.as_deref())),
+            i32s(c.iter().map(|r| Some(r.edges))),
+            i32s(c.iter().map(|r| Some(r.outside))),
+            Arc::new(gaps.finish()),
+        ]
+    })
+}
+
+/// Write `bus.route_edges`.
+pub fn write_route_edges_to<W: Write + Send>(out: W, rows: &[RouteEdge]) -> Result<(), String> {
+    let fields = vec![
+        field("route_id", DataType::Int64),
+        field("ref", DataType::Utf8),
+        field("seq", DataType::Int32),
+        field("edge_id", DataType::Int64),
+        field("edge_ref", DataType::Utf8),
+        field("bus_lane", DataType::Boolean),
+    ];
+    write_rows(out, fields, rows, |c| {
+        vec![
+            i64s(c.iter().map(|r| r.route_id)),
+            texts(c.iter().map(|r| r.ref_.as_deref())),
+            i32s(c.iter().map(|r| Some(r.seq))),
+            i64s(c.iter().map(|r| r.edge_id)),
+            texts(c.iter().map(|r| r.edge_ref.as_deref())),
+            bools(c.iter().map(|r| r.bus_lane)),
         ]
     })
 }

@@ -1,6 +1,6 @@
 # The bus routes: `bus.routes` and `bus.route_edges`
 
-Status: design, for Kaveh's review (2026-10-22). Group 2 of [tables.md](tables.md).
+Status: done on 2026-10-23 (the decisions and the results are at the end). Group 2 of [tables.md](tables.md).
 
 ## What duckOSM does
 
@@ -79,7 +79,7 @@ Thus, when the build makes the bus routes, it does the raw cut. It writes the `r
 | A way that the route travels in both directions (there and back) | Each pass gives its own pairs, so the `#nf` edge and later the `#nr` edge. |
 | A two-way street, first or last way of a run, joined in its middle, no role | The gap `ambiguous`. |
 | A one-way street against the route, with a contraflow bus lane | The bus lane edge from `private_edges` (`bus_lane` true). |
-| One pair on two edges in the same direction | An error, as duckOSM. |
+| One pair on two edges in the same direction | The gap `two_edges` (Kaveh's decision): the build goes on. duckOSM stops with an error. |
 | No driving mode | No bus tables, as duckOSM. |
 | OSM JSON input (Overpass) | No bus tables, as duckOSM (PBF only). |
 | No boundary | See question 1. |
@@ -104,3 +104,31 @@ Thus, when the build makes the bus routes, it does the raw cut. It writes the `r
 2. **The cost.** With the bus routes on by default, each build with a boundary does the raw cut. Is that correct,
    or do you want the bus routes off by default?
 3. **One pair on two edges**: an error, as duckOSM, or a gap? An error stops the build in the page too.
+
+## Decisions (Kaveh, 2026-10-23)
+
+1. **No boundary: no bus tables.** The program prints "no bus tables: the build has no area outline (--boundary)".
+   The page always has a boundary.
+2. **On by default**, as in duckOSM: whenever a build has a boundary and the driving mode. `--no-bus-routes` (CLI),
+   `bus_routes=False` (Python) or `options.bus_routes: false` (a duckOSM config) turns them off.
+3. **One pair on two edges: a gap**, `two_edges`, not an error.
+
+## Result (2026-10-23)
+
+- `duckosm-core/src/bus.rs`: the port of `bus.py`, with unit tests (a street there and back, a roundabout, a role
+  conflict, an ambiguous end, a way outside the area).
+- `duckosm-build::write_bus`, after the driving mode, in the native build and in the page. When the bus routes are
+  on, a build with a boundary does the raw cut; it writes the `raw_*.parquet` files only with `--raw`.
+- The files `routes_bus.parquet` and `route_edges_bus.parquet`; the schema `bus` in the `.duckdb` file; the two
+  tables in the page (SQL, the zip, `load.sql`, the table list).
+
+Checks:
+- Monaco, against duckOSM's `monaco.duckdb` (`tools/compare_tables.py`, a build with `config/sample_monaco.yaml`):
+  `bus.routes` 56 rows and `bus.route_edges` 5,609 rows, equal on every row.
+- Tartu from the Estonia file: duckOSM's `write_bus_routes` on a copy of the Rust `.duckdb` file (with the `raw.*`
+  of `--raw`) gives 74 routes and 16,421 route edges, equal to the Rust tables on every row, with the 12 routes that
+  have gaps.
+- `cargo test -p duckosm-wasm`: the browser build writes the same 40 files as the native build, byte for byte.
+- The page (`e2e.py`, Monaco): the two files equal to the native files, on every row.
+- The cost on Tartu: 1.30 to 1.61 s with the bus routes, 1.30 to 1.45 s without (in the noise).
+

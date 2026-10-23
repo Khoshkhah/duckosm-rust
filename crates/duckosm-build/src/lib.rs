@@ -139,6 +139,20 @@ pub fn write_tables<W: Write + Send>(
     Ok(())
 }
 
+/// Write `bus.routes` and `bus.route_edges` (docs/bus.md) of the driving network `net`, from the route relations and
+/// the ways of the raw cut: `routes_bus.parquet` and `route_edges_bus.parquet`. Returns the number of routes.
+pub fn write_bus<W: Write + Send>(
+    raw: &Raw,
+    net: &Network,
+    mut file: impl FnMut(&str) -> Result<W, String>,
+) -> Result<usize, String> {
+    let (routes, edges) =
+        duckosm_core::bus::routes(&raw.relations, &raw.ways, &net.edges, &net.private_edges);
+    duckosm_parquet::write_routes_to(file("routes_bus.parquet")?, &routes)?;
+    duckosm_parquet::write_route_edges_to(file("route_edges_bus.parquet")?, &edges)?;
+    Ok(routes.len())
+}
+
 /// Write duckOSM's `raw.*` tables, each to a writer from `file`: `raw_nodes.parquet`, `raw_ways.parquet` and
 /// `raw_relations.parquet`. `features.sql` loads them and makes the base-map layers.
 pub fn write_raw<W: Write + Send>(
@@ -203,13 +217,18 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
         return Err("raw.* (the base-map layers) needs a boundary".into());
     }
     let mut raw = None;
+    // the bus routes need the route relations and the member ways of the raw cut, so a boundary
+    let bus = p.options.bus_routes && p.modes.contains(&Mode::Driving);
+    if bus && p.boundary.is_none() {
+        eprintln!("no bus tables: the build has no area outline (--boundary)");
+    }
     let (mut ways, mut coords, area_relations) = match &p.boundary {
         // duckOSM with a boundary: cut the PBF (osmium complete_ways, or smart for raw.*), then the fixes on the raw ways
         Some(path) => {
             let text =
                 std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
             let boundary = Boundary::parse(&text)?;
-            let (mut ways, coords, relations) = if p.raw {
+            let (mut ways, coords, relations) = if p.raw || bus {
                 let open = || pbf::BlobReader::from_path(pbf_path).map_err(|e| e.to_string());
                 let (w, c, r, mut rw) = pbf::read_area_raw(open, &boundary)?;
                 rw.apply_fixes(&fixes);
@@ -286,9 +305,20 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
             level_edges.add(*mode, false, &net.edges);
             level_edges.add(*mode, true, &net.private_edges);
         }
+        if *mode == Mode::Driving && bus {
+            if let Some(r) = raw.as_ref() {
+                write_bus(r, &net, |name| {
+                    let path = pq_dir.join(name);
+                    sum.files
+                        .push((name.trim_end_matches(".parquet").to_string(), path.clone()));
+                    std::fs::File::create(&path).map_err(|e| e.to_string())
+                })?;
+                lap("bus routes", &mut sum);
+            }
+        }
         mode_nodes.push((*mode, net.nodes));
     }
-    if let Some(r) = raw.as_mut() {
+    if let Some(r) = raw.as_mut().filter(|_| p.raw) {
         // the tags that the steps set on the network's ways (the sidewalk rule, the arrows of the fixes)
         r.sync_tags(&ways);
         write_raw(r, |name| {

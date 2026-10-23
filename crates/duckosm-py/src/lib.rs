@@ -27,7 +27,7 @@ use std::path::PathBuf;
     cycling_dismount = true, infer_separate_sidewalks = true, connectivity_rescue = true,
     connect_snap_m = 10.0, process_speeds = true, calculate_costs = true, functional_types = true,
     osm_overrides = None, build_graph = true, extract_restrictions = true, boundary = None, ways_tables = true,
-    levels = "tags".to_string()
+    bus_routes = true, levels = "tags".to_string()
 ))]
 #[allow(clippy::too_many_arguments)]
 fn build<'py>(
@@ -52,6 +52,7 @@ fn build<'py>(
     extract_restrictions: bool,
     boundary: Option<PathBuf>,
     ways_tables: bool,
+    bus_routes: bool,
     levels: String,
 ) -> PyResult<Bound<'py, PyDict>> {
     let mut p = Params {
@@ -93,6 +94,7 @@ fn build<'py>(
         build_graph,
         extract_restrictions,
         ways_tables,
+        bus_routes,
         levels: Method::parse(&levels).ok_or_else(|| {
             PyValueError::new_err(format!("levels: '{levels}' is not tags, solve or none"))
         })?,

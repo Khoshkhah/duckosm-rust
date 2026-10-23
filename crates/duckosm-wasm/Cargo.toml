@@ -26,3 +26,5 @@ threads = ["dep:wasm-bindgen-rayon"]
 [dev-dependencies]
 # the tests read the page's time zone table
 serde_json = "1"
+# the native build of the tests finds the time zone with tzf-rs (the browser module does not have it)
+duckosm-build = { path = "../duckosm-build", default-features = false, features = ["snap", "tzf"] }

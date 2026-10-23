@@ -72,6 +72,10 @@ struct Cli {
     /// Do not write ways and way_nodes (duckOSM writes them always; off saves memory in a large area).
     #[arg(long)]
     no_ways_tables: bool,
+    /// Do not make the bus routes, bus.routes and bus.route_edges (duckOSM option bus_routes: false). They need
+    /// --boundary and the driving mode.
+    #[arg(long, conflicts_with = "config")]
+    no_bus_routes: bool,
     /// A duckOSM OSM fixes file (YAML). With --config, it replaces the config's osm_overrides.
     #[arg(long, value_name = "FILE")]
     fixes: Option<PathBuf>,
@@ -135,6 +139,7 @@ fn run() -> Result<(), String> {
             build_graph: !cli.no_graph,
             extract_restrictions: !cli.no_restrictions,
             ways_tables: !cli.no_ways_tables,
+            bus_routes: !cli.no_bus_routes,
             ..NetworkOptions::default()
         };
         (

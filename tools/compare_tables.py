@@ -1,4 +1,4 @@
-"""Compare the tables of group 1 (docs/tables.md) of duckosm-rust with a duckOSM database, row by row.
+"""Compare the tables of group 1 (docs/tables.md) and the bus routes (docs/bus.md) of duckosm-rust with a duckOSM database, row by row.
 
     python tools/compare_tables.py golden.duckdb ours.duckdb [modes]
 
@@ -40,5 +40,7 @@ differ("main.boundary", "SELECT * EXCLUDE (geom), ST_AsText(ST_Normalize(geom)) 
 differ("main.visualization_metadata", "SELECT center_lat, center_lon, initial_zoom, timezone, "
        "ST_AsText(ST_Normalize(ST_GeomFromGeoJSON(boundary_geojson))) AS g FROM {db}.main.visualization_metadata")
 differ("mm.transfers", "SELECT * FROM {db}.mm.transfers")
+differ("bus.routes", "SELECT * FROM {db}.bus.routes")
+differ("bus.route_edges", "SELECT * FROM {db}.bus.route_edges")
 differ("mm.edges (view)", "SELECT mode, edge_id, source, target, cost_s, length_m, highway, name FROM {db}.mm.edges")
 sys.exit(1 if bad else 0)

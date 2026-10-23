@@ -130,8 +130,8 @@ fn browser_area_build_equals_native_build() {
     .unwrap();
     // 3 modes x 10 files (edges, private_edges, nodes, virtual_nodes, ways, way_nodes, edge_id_map, edge_graph,
     // turn_permission, and in driving the two turn restriction tables) + 4 area files + 3 raw files + the 2 levels
-    // files (solve)
-    assert_eq!(names.len(), 3 * 9 + 2 + 4 + 3 + 2, "{names:?}");
+    // files (solve) + the 2 bus files
+    assert_eq!(names.len(), 3 * 9 + 2 + 4 + 3 + 2 + 2, "{names:?}");
     assert!(names.contains(&"raw_ways.parquet".to_string()));
     for n in &names {
         let (a, b) = (

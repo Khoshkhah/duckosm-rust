@@ -283,7 +283,6 @@ pub fn read(path: &Path, pbf_is_cut: bool, strict: bool) -> Result<FromConfig, S
             "the H3 cells (from_cell, to_cell, lca_res, h3_cell)",
         ),
         ("build_features", true, "the base-map layers (features.*)"),
-        ("bus_routes", true, "the bus routes (bus.*)"),
         ("boundary_cells", false, "the boundary cells"),
     ] {
         if options.bool(key, default)? {
@@ -349,6 +348,7 @@ pub fn read(path: &Path, pbf_is_cut: bool, strict: bool) -> Result<FromConfig, S
         build_graph,
         extract_restrictions: options.bool("extract_restrictions", true)?,
         ways_tables: true,
+        bus_routes: options.bool("bus_routes", true)?,
         // duckOSM: options.levels (on by default) solves the drawing order; off writes no table
         levels: if options.bool("levels", true)? {
             Method::Solve

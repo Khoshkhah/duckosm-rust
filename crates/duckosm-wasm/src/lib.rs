@@ -2,8 +2,8 @@
 //! chosen modes out, as GeoParquet bytes. The same steps and the same writer as the native build.
 
 use duckosm_build::{
-    config::parse_osm_fixes, parse_modes, write_area_tables, write_levels, write_raw, write_tables,
-    Area, FEATURES_SQL,
+    config::parse_osm_fixes, parse_modes, write_area_tables, write_bus, write_levels, write_raw,
+    write_tables, Area, FEATURES_SQL,
 };
 use duckosm_core::boundary::Boundary;
 use duckosm_core::filter::Mode;
@@ -324,6 +324,8 @@ pub fn run<W: Write + Send>(
     };
     let need_relations = opts.extract_restrictions && modes.contains(&Mode::Driving);
     let mut raw_tables = None;
+    // the bus routes need the raw cut (an area build only; docs/bus.md)
+    let bus = opts.bus_routes && modes.contains(&Mode::Driving);
     let (mut ways, mut coords, relations) = match input {
         Input::Pbf(bytes) => {
             let mut ways = pbf::read_ways_bytes(bytes)?;
@@ -337,7 +339,7 @@ pub fn run<W: Write + Send>(
             (ways, coords, relations)
         }
         Input::Area(open, boundary) => {
-            let (mut ways, coords, relations) = if raw {
+            let (mut ways, coords, relations) = if raw || bus {
                 let (w, c, r, mut rt) = pbf::read_area_raw(open, boundary)?;
                 rt.apply_fixes(&fixes);
                 raw_tables = Some(rt);
@@ -399,6 +401,12 @@ pub fn run<W: Write + Send>(
             net.graph.edge_graph.as_ref().map_or(0, Vec::len),
             net.graph.turn_restrictions.as_ref().map_or(0, Vec::len),
         ));
+        if *mode == Mode::Driving && bus {
+            if let Some(r) = raw_tables.as_ref() {
+                let n = write_bus(r, &net, &mut file)?;
+                summary.push(format!("bus: {n} routes"));
+            }
+        }
         mode_nodes.push((*mode, net.nodes));
     }
     let area = Area {
@@ -411,7 +419,7 @@ pub fn run<W: Write + Send>(
         timezone_entry,
     };
     write_area_tables(&area, &mut file)?;
-    if let Some(mut r) = raw_tables {
+    if let Some(mut r) = raw_tables.filter(|_| raw) {
         // the tags that the steps set on the network's ways (the sidewalk rule, the arrows of the fixes)
         r.sync_tags(&ways);
         write_raw(&r, &mut file)?;

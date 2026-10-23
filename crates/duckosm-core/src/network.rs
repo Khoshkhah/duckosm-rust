@@ -40,6 +40,9 @@ pub struct Options {
     /// Keep the ways of the mode for the tables `ways` and `way_nodes` (duckOSM writes them always). Off saves
     /// the memory of their node lists in a large area.
     pub ways_tables: bool,
+    /// Make `bus.routes` and `bus.route_edges` (duckOSM `options.bus_routes`, on by default; docs/bus.md). They need
+    /// the driving mode and a boundary (the raw cut has the route relations).
+    pub bus_routes: bool,
     /// The drawing order of the roads, `visualization.edge_levels` (docs/levels.md): the tags rule (the
     /// default), roadstyle's solver, or no table.
     pub levels: crate::levels::Method,
@@ -60,6 +63,7 @@ impl Default for Options {
             build_graph: true,
             extract_restrictions: true,
             ways_tables: true,
+            bus_routes: true,
             levels: crate::levels::Method::Tags,
         }
     }

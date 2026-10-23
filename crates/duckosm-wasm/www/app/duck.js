@@ -32,6 +32,8 @@ export const TABLES = {
   boundary: "The area: the boundary and its properties.",
   visualization_metadata: "One row: the center and zoom of the area for a map, its time zone, and the build time.",
   transfers: "The changes of mode (walk to car or bike, and back) at the nodes that the modes share.",
+  routes: "The bus lines (OpenStreetMap route relations): their number, name and operator, and the ways that could not be followed.",
+  route_edges: "The driving edges that each bus line travels, in order and in its direction.",
   edge_levels: "The drawing order of each edge: a bridge over the road under it, a tunnel under the road over it.",
   edge_levels_meta: "One row: how the drawing order was made (from the tags, or solved) and for which edges.",
 };

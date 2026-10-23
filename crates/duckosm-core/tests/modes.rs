@@ -73,6 +73,7 @@ fn three_modes_equal_duckosm() {
             build_graph: false,
             extract_restrictions: false,
             ways_tables: false,
+            bus_routes: false,
             levels: duckosm_core::levels::Method::None,
         };
         let net = if cf {

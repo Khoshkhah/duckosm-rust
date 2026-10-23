@@ -24,6 +24,7 @@ pub fn write_database(db: &Path, parquet_dir: &Path, modes: &[&str]) -> Result<(
         &["global_junctions", "boundary", "visualization_metadata"],
     )?;
     write_schema(&con, parquet_dir, "mm", &["transfers"])?;
+    write_schema(&con, parquet_dir, "bus", &["routes", "route_edges"])?;
     if parquet_dir
         .join("edge_levels_visualization.parquet")
         .exists()
