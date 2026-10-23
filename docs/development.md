@@ -84,6 +84,9 @@ not (then the page has one thread):
 python3 crates/duckosm-wasm/www/serve.py 8000
 ```
 
+`serve.py` also has the relay of the page ([relay.md](relay.md)): open `http://localhost:8000/?relay=relay`, and
+**Get** in step 3 downloads a Geofabrik extract into the browser.
+
 Then go to `http://localhost:8000`. The page is one app ([app.md](app.md)): choose an area on the map (a
 search, a drawing or a file), select a region PBF file that covers it (the page names the smallest Geofabrik
 extracts), the modes and an optional OSM fixes file, and click **Build**. The data can also come from the

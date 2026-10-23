@@ -84,6 +84,10 @@ The page keeps the selected file only in memory. After a reload, the user select
 - `e2e.py` uses the new page: the boundary goes in through the File tab. `boundary_e2e.py` opens `index.html`
   and checks that **Build** is on after an area and a region file.
 
+## Later: the relay
+
+A region file can come into the page without a manual download: [relay.md](relay.md).
+
 ## Not in this plan
 
 - Several areas in one session (a list of builds).

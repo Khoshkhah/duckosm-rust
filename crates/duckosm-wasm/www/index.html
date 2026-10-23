@@ -142,6 +142,11 @@
   #extracts .x span { display: block; font-size: 12px; color: var(--muted); }
   #extracts a.dl { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; color: var(--muted); }
   #extracts a.dl:hover { background: var(--surface); color: var(--accent); }
+  .btn.sm { height: 30px; padding: 0 10px; font-size: 12.5px; }
+  #extracts .got { font-size: 12px; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #kept { margin-top: 12px; display: grid; gap: 4px; }
+  #kept .k { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+  #kept .k span { flex: 1; min-width: 0; }
 
   footer { display: grid; grid-template-columns: 1fr 1.5fr; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--line); background: var(--bg); }
 
@@ -303,8 +308,9 @@
   </div>
   <section id="src-region" role="tabpanel" aria-labelledby="tab-region">
     <label class="pick"><svg><use href="#i-upload"/></svg><span id="region-name">Select the region file (.osm.pbf)</span><input id="region" type="file" accept=".pbf"></label>
-    <p class="small muted" style="margin-top:0">The file must cover the area; the page cuts it to the boundary while it reads it. The smallest Geofabrik extracts that cover the area are below: download one. Click an extract to see it on the map, and again to hide it.</p>
+    <p id="extracts-help" class="small muted" style="margin-top:0">The file must cover the area; the page cuts it to the boundary while it reads it. The smallest Geofabrik extracts that cover the area are below. Click an extract to see it on the map, and again to hide it.</p>
     <div id="extracts" role="radiogroup" aria-label="Show an extract on the map"><p class="small muted">Choose an area: the extracts that cover it show here.</p></div>
+    <div id="kept" aria-live="polite"></div>
   </section>
   <section id="src-overpass" role="tabpanel" aria-labelledby="tab-overpass" hidden>
     <p class="small muted" style="margin:0">The data comes from the <a href="https://wiki.openstreetmap.org/wiki/Overpass_API">Overpass API</a>. Use it for a city or a smaller area: the public servers have limits and are often full.</p>
@@ -364,6 +370,7 @@ import { TerraDraw, TerraDrawRectangleMode, TerraDrawPolygonMode, TerraDrawCircl
          TerraDrawSelectMode, ValidateNotSelfIntersecting } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import * as duck from "./app/duck.js";
+import * as regions from "./app/regions.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
@@ -578,13 +585,12 @@ async function setArea(polys, props, { zoom = true } = {}) {
   cover = (await covering(polys)).slice(0, 3);
   if (area !== mine) return;
   area.props = { ...props, area_km2: km2, geofabrik: cover.map((x) => ({ id: x.id, name: x.name, pbf: x.pbf })) };
-  $("extracts").innerHTML = cover.length
-    ? cover.map((x, i) => `<label><input type="radio" name="extract" value="${i}" aria-label="Show ${esc(x.name)} on the map">` +
-        `<span class="x">${esc(x.name)}<span>${esc(x.id)} · ${num(Math.round(x.km2))} km²</span></span>` +
-        `<a class="dl" href="${esc(x.pbf)}" title="Download ${esc(x.name)} (.osm.pbf)" aria-label="Download ${esc(x.name)}">${icon("download")}</a></label>`).join("")
-    : `<p class="small muted">No Geofabrik extract covers the area. Use the planet file, or the Overpass option of duckOSM in the browser.</p>`;
   showExtract(null);
   shown = null;
+  renderExtracts();
+  // an extract that is kept in the browser and covers the area: the smallest one is the region file at once
+  const k = cover.map((x) => keptRegions.find((r) => r.id === x.id)).find(Boolean);
+  if (k && (!regionFile || regionKept)) useKept(k);
   $("save").disabled = false;
   canBuild();
   window.areas = (window.areas ?? 0) + 1;  // for boundary_e2e.py
@@ -806,16 +812,98 @@ function canBuild() {
   const missing = building ? "" : source === "cut" ? (!$("pbf").files[0] && "Select the cut file in step 3.")
     : !area ? "Choose an area in step 1."
     : area.props.area_km2 == null ? "Finding the extracts…"
-    : source === "region" && !$("region").files[0] && "Select the region file in step 3. Download one of the extracts there first, if you do not have it.";
+    : source === "region" && !regionFile && (regions.relay ? "Click Get at an extract in step 3, or select a region file."
+                                                             : "Select the region file in step 3. Download one of the extracts there first, if you do not have it.");
   $("run").disabled = building || !!missing;
   $("buildhint").textContent = missing || "";
   $("run").title = missing || "Build the networks of the area";
 }
-for (const id of ["region", "pbf", "fixes"]) $(id).onchange = () => {
+for (const id of ["pbf", "fixes"]) $(id).onchange = () => {
   const f = $(id).files[0];
-  if (f) $(`${id}-name`).textContent = `${f.name} (${num(f.size / 2 ** 20, 1)} MB)`;
+  if (f) $(`${id}-name`).textContent = `${f.name} (${mb(f.size)} MB)`;
   canBuild();
 };
+$("region").onchange = () => {
+  const f = $("region").files[0];
+  if (f) { regionKept = null; setRegion(f, `${f.name} (${mb(f.size)} MB)`); }
+};
+
+// ---- step 3: a region file kept in the browser (app/regions.js, docs/relay.md): Get downloads an extract through the relay one time
+let regionFile = null, regionKept = null, keptRegions = [], getting = null;    // getting: {id, abort} during a download
+function mb(b) { return num(b / 2 ** 20, b < 10 * 2 ** 20 ? 1 : 0); }
+function setRegion(file, label) {
+  regionFile = file;
+  $("region-name").textContent = label;
+  canBuild();
+  renderExtracts();
+}
+function useKept(k) {
+  regionKept = k.id;
+  setRegion(k.file, `${k.name} (kept in this browser, ${mb(k.size)} MB)`);
+}
+const day = (d) => (d ? new Date(d).toISOString().slice(0, 10) : "");
+function renderExtracts() {
+  if (area?.props.area_km2 == null) return;   // "Choose an area" or "Finding the extracts" stays
+  if (regions.relay) $("extracts-help").firstChild.textContent = "The file must cover the area; the page cuts it to the boundary while it reads it. " +
+    "Get one of the smallest Geofabrik extracts that cover it: the page keeps it in this browser. Click an extract to see it on the map, and again to hide it.";
+  $("extracts").innerHTML = cover.length ? cover.map((x, i) => {
+    const k = keptRegions.find((r) => r.id === x.id), inUse = k && regionKept === k.id;
+    const what = getting?.id === x.id ? `<span class="got" id="got">0 %</span><button class="btn sm" data-cancel>Cancel</button>`
+      : k ? `<button class="btn sm" data-use="${i}"${inUse ? " disabled" : ""}>${inUse ? "In use" : "Use"}</button>`
+      : regions.relay ? `<button class="btn sm" data-get="${i}"${getting ? " disabled" : ""}>Get</button>` : "";
+    return `<label><input type="radio" name="extract" value="${i}"${i === shown ? " checked" : ""} aria-label="Show ${esc(x.name)} on the map">` +
+      `<span class="x">${esc(x.name)}<span>${k ? `kept · ${mb(k.size)} MB · ${day(k.modified)}` : `${esc(x.id)} · ${num(Math.round(x.km2))} km²`}</span></span>${what}` +
+      `<a class="dl" href="${esc(x.pbf)}" title="Download ${esc(x.name)} (.osm.pbf) to this computer" aria-label="Download ${esc(x.name)}">${icon("download")}</a></label>`;
+  }).join("") : `<p class="small muted">No Geofabrik extract covers the area. Use the planet file, or the Overpass tab.</p>`;
+}
+function renderKept() {
+  $("kept").innerHTML = keptRegions.length ? `<p class="small muted" style="margin:0">Kept in this browser:</p>` + keptRegions.map((k) =>
+    `<div class="k"><span>${esc(k.name)} · ${mb(k.size)} MB · ${day(k.modified)}</span>` +
+    `<button class="btn sm" data-del="${esc(k.id)}" title="Delete it from this browser">Delete</button></div>`).join("") : "";
+}
+async function refreshKept() {
+  try { keptRegions = await regions.kept(); } catch (e) { keptRegions = []; }   // no storage (for example a private window)
+  renderKept();
+  renderExtracts();
+}
+async function get(x) {
+  const abort = new AbortController();
+  getting = { id: x.id, abort };
+  renderExtracts();
+  let last = 0;
+  try {
+    const k = await regions.download(x, (got, total) => {
+      if (performance.now() - last < 150 || !$("got")) return;
+      last = performance.now();
+      $("got").textContent = total ? `${Math.floor((100 * got) / total)} % · ${mb(got)} of ${mb(total)} MB` : `${mb(got)} MB`;
+    }, abort.signal);
+    getting = null;
+    await refreshKept();
+    useKept(keptRegions.find((r) => r.id === k.id) ?? k);
+    status(`${x.name} is kept in this browser.`);
+  } catch (e) {
+    getting = null;
+    renderExtracts();
+    status(e.name === "AbortError" ? "The download stopped." : `The download failed: ${e.message}`, 10000);
+  }
+}
+$("extracts").addEventListener("click", (ev) => {
+  const b = ev.target.closest("button");
+  if (!b) return;
+  ev.preventDefault();
+  if (b.hasAttribute("data-cancel")) getting?.abort.abort();
+  else if (b.dataset.use) useKept(keptRegions.find((r) => r.id === cover[Number(b.dataset.use)].id));
+  else if (b.dataset.get) get(cover[Number(b.dataset.get)]);
+});
+$("kept").onclick = async (ev) => {
+  const id = ev.target.closest("button[data-del]")?.dataset.del;
+  if (!id) return;
+  await regions.remove(id);
+  if (regionKept === id) { regionKept = null; regionFile = null; $("region-name").textContent = "Select the region file (.osm.pbf)"; }
+  await refreshKept();
+  canBuild();
+};
+refreshKept();
 canBuild();
 
 // ---- step 4: build ----
@@ -837,7 +925,7 @@ $("run").onclick = async () => {
     const threads = Number(new URLSearchParams(location.search).get("threads")) || undefined;  // ?threads=N: the size of the pool
     let msg, download = null;
     if (source === "region") {
-      msg = { region: $("region").files[0], boundary: text(), modes, fixes, threads };   // the worker reads the File piece by piece
+      msg = { region: regionFile, boundary: text(), modes, fixes, threads };   // the worker reads the File piece by piece
     } else if (source === "cut") {
       msg = { pbf: await $("pbf").files[0].arrayBuffer(), modes, fixes, threads };
     } else {

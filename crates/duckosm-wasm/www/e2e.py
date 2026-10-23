@@ -4,7 +4,9 @@ map.png), and download the Parquet files and load.sql. Prints the times of the p
     python crates/duckosm-wasm/www/e2e.py <file.osm.pbf> <out folder> [--boundary area.geojson] [--modes driving,walking,cycling] [--fixes file.yaml]
 
 With --boundary, the PBF file is a region file and the page cuts it to the boundary; without, the file is
-already cut. With --boundary and the PBF file "overpass", the data comes from the Overpass API.
+already cut. With --boundary and the PBF file "overpass", the data comes from the Overpass API. With --boundary
+and the PBF file "relay", the page gets the smallest extract through the relay of serve.py (docs/relay.md) and
+keeps it in the browser.
 
 Build the page first (docs/development.md, "WebAssembly"). The page loads duckdb-wasm from cdn.jsdelivr.net, so
 the computer needs the network.
@@ -33,7 +35,8 @@ out = pathlib.Path(args.out)
 out.mkdir(parents=True, exist_ok=True)
 
 server = start(0, isolated=not args.one_thread, quiet=True)
-url = f"http://127.0.0.1:{server.server_address[1]}/index.html" + (f"?threads={args.threads}" if args.threads else "")
+params = [f"threads={args.threads}"] * bool(args.threads) + ["relay=relay"] * (args.pbf == "relay")
+url = f"http://127.0.0.1:{server.server_address[1]}/index.html" + ("?" + "&".join(params) if params else "")
 
 with sync_playwright() as p:
     browser = p.chromium.launch()
@@ -47,7 +50,11 @@ with sync_playwright() as p:
         print("area:", page.input_value("#name"), "|", " ".join(page.inner_text("#summary").split()))
     source = "cut" if not args.boundary else "overpass" if args.pbf == "overpass" else "region"
     page.click(f"#tab-{source}")
-    if source != "overpass":
+    if args.pbf == "relay":
+        page.click("#extracts button[data-get]")      # the smallest extract that covers the area
+        page.wait_for_selector("#extracts button:has-text('In use')", timeout=1_800_000)
+        print("relay:", page.inner_text("#region-name"), "|", " ".join(page.inner_text("#kept").split()))
+    elif source != "overpass":
         page.set_input_files("#pbf" if source == "cut" else "#region", args.pbf)
     if args.fixes:
         page.set_input_files("#fixes", args.fixes)

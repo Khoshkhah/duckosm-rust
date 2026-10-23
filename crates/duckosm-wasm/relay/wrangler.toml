@@ -1,0 +1,8 @@
+# The relay of duckOSM in the browser (docs/relay.md). Deploy: npx wrangler deploy (in this folder).
+name = "duckosm-relay"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+# the pages that may use the relay, comma separated (http://localhost and 127.0.0.1 are always allowed)
+ALLOWED_ORIGINS = "https://khoshkhah.github.io"
