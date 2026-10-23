@@ -117,6 +117,18 @@ Kaveh's layout of 2026-10-23: the data in card 5, the map in card 6.
     Blank. All except OpenFreeMap hide all of OpenFreeMap's layers, also its labels (in the 3D view without the duckOSM 3D buildings, its 3D buildings stay). After a
     build with the base-map layers, the list also has **duckOSM layers**. Satellite turns them off, because they
     cover the photo. The page keeps the base map.
+  - **Street View** (the person) opens roadstyle's floating window. A click on a road shows Google Street View at
+    the point of the road nearest the click, looking the way the road runs (on a two-way road, 2.5 m to the right
+    lane). The arrows move 15 m along the road. The window can be dragged and resized, stays inside the map, and the
+    page keeps whether it is open and where. No key is needed; it loads only in a page served over http(s).
+  - **Google 3D** shows only after you save your own Google Maps JavaScript API key in card 6 ("Google 3D: your
+    Google Maps key"). The key stays in this browser (`localStorage`), never in the address or the code. The window
+    shows Google's photorealistic 3D view, with its camera and the map's linked both ways. With a key, the Street View
+    window also has roadstyle's Linked mode.
+  - The code of the two windows is a copy of roadstyle's (`www/map/roadstyle_windows.js`, from roadstyle
+    `src/roadstyle/static/web_template.html` at commit `2bccdcb`; the changes are marked "duckosm-rust:"). The road's
+    whole line comes from DuckDB by its `edge_id` (`roadLine` in `app/duck.js`), because the tiles cut the roads. Not
+    copied yet: roadstyle's Street View marker on the map.
   - There is no buildings button: the style alone decides if the footprints show, and 3D only adds the 3D
     version (Kaveh's rule).
 - Only one 3D building layer shows: roadstyle's own when the duckOSM layers show (from the zoom of their buildings,

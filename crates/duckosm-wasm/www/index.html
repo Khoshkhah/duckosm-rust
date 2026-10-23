@@ -429,6 +429,13 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
   </div>
   <div class="row" id="showrow" style="margin-top:10px" hidden><button id="show" class="btn primary">Show on map</button></div>
   <p id="mapnote" class="progress" aria-live="polite"></p>
+  <details style="margin-top:10px"><summary>Google 3D: your Google Maps key</summary>
+    <p class="small muted" style="margin:6px 0">Google's 3D view needs a Google Maps JavaScript API key. The key stays only in this browser.
+      <a href="https://khoshkhah.github.io/roadstyle/guides/google-key/" target="_blank" rel="noopener">How to get a key</a></p>
+    <div class="row" style="margin-top:0"><input id="gkey" type="password" autocomplete="off" placeholder="The key" aria-label="Google Maps key" style="flex:1;min-width:0">
+      <button id="gkey-save" class="btn">Save</button><button id="gkey-del" class="btn">Remove</button></div>
+    <p id="gkey-note" class="small muted" aria-live="polite" style="margin:6px 0 0"></p>
+  </details>
 </section>
 
 </div>
@@ -445,6 +452,7 @@ import { TerraDraw, TerraDrawRectangleMode, TerraDrawPolygonMode, TerraDrawCircl
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import * as duck from "./app/duck.js";
 import * as regions from "./app/regions.js";
+import { roadstyleWindows } from "./map/roadstyle_windows.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
@@ -508,6 +516,8 @@ const empty = { type: "FeatureCollection", features: [] };
 const map = new maplibregl.Map({ container: "map", style: "https://tiles.openfreemap.org/styles/liberty", center: [10, 50], zoom: 3 });
 map.addControl(new maplibregl.NavigationControl(), "top-right");
 map.addControl({ onAdd: () => $("mapctl"), onRemove: () => {} }, "top-right");   // 3D and the base map: under the zoom buttons
+// roadstyle's Street View and Google 3D windows and their buttons, after the base map (Google 3D only with the user's key)
+const rsWin = roadstyleWindows(map, { key: (() => { try { return localStorage.getItem("duckosm.googleKey"); } catch (e) { return null; } })() });
 // the tiles of the roads map: roadstyle's module makes each one when the map asks for it (app/duck.js tile())
 maplibregl.addProtocol("rs", async (params) => ({ data: await duck.tile(params.url) }));
 map.addControl(new maplibregl.ScaleControl(), "bottom-left");
@@ -1231,6 +1241,20 @@ async function visualization() {
   else $("mapnote").textContent = `${num(roadCount.all)} roads: a large map. Click Show on map to draw it.`;
 }
 $("show").onclick = showRoads;
+// the Google Maps key of Google 3D: only in this browser's storage, never in the address or the page's code
+$("gkey").value = kept("duckosm.googleKey") ?? "";
+$("gkey-save").onclick = () => {
+  const k = $("gkey").value.trim();
+  if (!k) return;
+  keep("duckosm.googleKey", k);
+  rsWin.google3d(k);
+  $("gkey-note").textContent = "Saved. The Google 3D button is on the map, under the Street View button.";
+};
+$("gkey-del").onclick = () => {
+  try { localStorage.removeItem("duckosm.googleKey"); } catch (e) { /* no storage */ }
+  $("gkey").value = "";
+  $("gkey-note").textContent = "Removed. The Google 3D button goes away the next time the page opens.";
+};
 $("mapmode").onchange = () => { if (roadsShown) showRoads(); };
 
 // the base map: OpenFreeMap, or a layer over it (under the roads): roadstyle's keyless raster map, or an empty background
@@ -1305,6 +1329,8 @@ map.on("click", async (e) => {
   const p = (await duck.roadProps(f.properties.__rs_edge)) ?? {};
   const rows = ROAD_KEYS.filter((k) => p[k] != null && p[k] !== "").map((k) => `<b>${k}</b> ${esc(p[k])}`);
   new maplibregl.Popup().setLngLat(e.lngLat).setHTML(rows.join("<br>") || "(no data)").addTo(map);
+  // Street View and Google 3D (map/roadstyle_windows.js) need the road's whole line: DuckDB gives it by the edge_id
+  rsWin.select((await duck.roadLine(p.edge_id).catch(() => null)) ?? [], e.lngLat, p, f.properties.__rs_edge);
 });
 window.duckMap = map;   // for e2e.py
 
