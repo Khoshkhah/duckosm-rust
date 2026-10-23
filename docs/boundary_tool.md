@@ -30,33 +30,43 @@ the bottom of the window. Kaveh asked for a more professional design after the f
 the panel has three numbered steps:
 
 ```
-+--------------------------+------------------------------------------+
-| [#] Boundary tool  [☾][<]| +----+                            [+][-] |
-|                          | |DRAW|                                   |
-| 1 CHOOSE AN AREA         | | ↖  |        the map                    |
-| [ Search  |   File    ]  | |----|  (the area: a blue fill and line)  |
-|  (the controls of the    | | ▭  |                                   |
-|   selected tab)          | | ⬠  |                                   |
-|--------------------------| | ○  |                                   |
-| 2 THE AREA               | | ∿  |                                   |
-| [Tartu linn           ]  | |    |                                   |
-| [38.91 km²][1 pol.][271] | |    |                                   |
-| (warning, if large)      | |----|                                   |
-|                          | | ⧉  |                                   |
-|--------------------------| | ␡  |                                   |
-| 3 REGION FILE            | | ✕  |                                   |
-| (o) Estonia      [down]  | +----+                                   |
-|--------------------------|                                          |
-| [GeoJSON] [Use in duckOSM]|  scale    MapLibre | OpenFreeMap | OSM  |
-+--------------------------+------------------------------------------+
++----------------------------+----------------------------------------+
+| [#] Boundary tool    [☾][<]|                                 [+][-] |
+| +========================+ |                                        |
+| | (1) CHOOSE AN AREA     | |               the map                  |
+| | [Search | Draw | File] | |    (the area: a blue fill and line)    |
+| | +--------------------+ | |                                        |
+| | | DRAW A SHAPE       | | |                                        |
+| | | [▭ Rectangle R]    | | |                                        |
+| | | [⬠ Polygon   P]... | | |                                        |
+| | | CHANGE THE SHAPES  | | |                                        |
+| | | [Select][Merge]... | | |                                        |
+| | | (the hint)         | | |                                        |
+| | +--------------------+ | |                                        |
+| +------------------------+ |                                        |
+| +========================+ |                                        |
+| | (2) THE AREA           | |                                        |
+| | [Tartu linn          ] | |                                        |
+| | [38.91 km²][1][271]    | |                                        |
+| +------------------------+ |                                        |
+| +========================+ |                                        |
+| | (3) REGION FILE        | |                                        |
+| | (o) Estonia    [down]  | |                                        |
+| +------------------------+ |                                        |
+|----------------------------|                                        |
+| [GeoJSON] [Use in duckOSM] | scale     MapLibre | OpenFreeMap | OSM  |
++----------------------------+----------------------------------------+
 ```
 
-- Step 1 has two tabs: **Search** (the name search and **What is here?**) and **File**. A note below the tabs
-  says that the drawing tools are on the map. Steps 2 and 3 show the area and the region files. A line
-  separates the three steps (Kaveh, 2026-10-22). The two output buttons stay at the bottom of the panel.
-- The drawing tools are in a box on the map, at the left side next to the panel (Kaveh asked for the tools in
-  a box, 2026-10-22). The box has three groups: Select, the four shapes, and Merge, Delete and Clear. A button
-  shows its name and its key when the user points to it. The tools work with any tab of the panel.
+- Each step is a card on the gray background of the panel (Kaveh asked for a clear separation of the steps,
+  2026-10-22). The top edge and the number of a card have the color of the line of that step on the map:
+  purple for step 1 (a match), blue for step 2 (the area), orange for step 3 (an extract). The two output
+  buttons stay at the bottom of the panel.
+- Step 1 has three tabs: **Search** (the name search and **What is here?**), **Draw** and **File**.
+- The Draw tab has the drawing tools in a box with two groups: "Draw a shape" (Rectangle, Polygon, Circle and
+  Freehand, each with its key) and "Change the shapes" (Select, Merge, Delete and Clear). Below them is a hint
+  for the selected tool. The tools work only in the Draw tab: another tab switches them off. (For a short
+  time the tools were a box on the map; Kaveh asked for them in the Draw tab.)
 - The area shows as three tiles: km², polygons and vertices. Below them are the source (for example "Source:
   drawn on the map" or "Source: OpenStreetMap relation 2153396 (Nominatim)") and, for a large area, a yellow
   warning. The `source` property of the file keeps its short value (`drawn`, `Nominatim relation 2153396`).
@@ -73,8 +83,7 @@ the panel has three numbered steps:
 - The buttons have icons (inline SVG, no icon library) and text.
 - On a narrow screen (700 px wide or less, a phone), the map is at the top (52 % of the height) and the panel
   is below it. The page scrolls, and the output buttons stay at the bottom of the screen. The buttons and the
-  tabs are 44 px high, for a finger. The drawing tools are a row at the top of the map. The zoom buttons and
-  the scale are not shown (two fingers zoom the map). The collapse button keeps only the header of the
+  tabs are 44 px high, for a finger. The scale is not shown. The collapse button keeps only the header of the
   panel, and the map becomes higher.
 - The map style stays light in the two themes (the style of OpenFreeMap has no dark variant).
 
@@ -131,7 +140,8 @@ The drawing tools come from terra-draw 1.38.0 with its MapLibre adapter 1.5.0 (M
   it or change it at once, and drag the map. Kaveh found that the first version did not let him move a shape:
   it could do that only after a click on **Edit**, and while a drawing tool was on, a drag on the map drew a
   new shape.
-- A hint for the selected tool shows at the top of the map. A click on the tool that is on switches it off.
+- The hint for the selected tool shows below the tools. When the Draw tab opens, the tool is Rectangle, or
+  Select if there are shapes.
 - Each shape is one polygon of the area. One shape gives a Polygon, more shapes that do not touch give a
   MultiPolygon.
 - Escape stops the drawing of a shape.
