@@ -31,5 +31,7 @@ rm -rf crates/duckosm-wasm/www/map/pkg
 # roadstyle's popup look and text, the same files that roadstyle's pages use (src/roadstyle/static/)
 mkdir -p crates/duckosm-wasm/www/map/roadstyle
 cp $R/src/roadstyle/static/popup.css $R/src/roadstyle/static/popup.js crates/duckosm-wasm/www/map/roadstyle/
+# roadstyle's Street View and Google 3D windows, taken from its page template with the page's changes (no copy in git)
+python3 crates/duckosm-wasm/roadstyle_windows.py $R/src/roadstyle/static/web_template.html crates/duckosm-wasm/www/map/roadstyle/windows.js
 wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/map/pkg \
   $R/rust/target/wasm32-unknown-unknown/release/roadstyle_wasm.wasm

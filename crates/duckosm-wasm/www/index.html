@@ -18,20 +18,19 @@
 <style>
   :root {
     --bg: #ffffff; --surface: #f6f7f9; --fg: #111827; --muted: #6b7280; --line: #e5e7eb;
-    --blank: #efede8;   /* roadstyle's blank base map (basemaps.py "blank"); dark: its "blank_dark" */
     --accent: #2563eb; --accent-fg: #ffffff; --accent-soft: #dbeafe; --warn: #b45309; --warn-soft: #fef3c7;
     --error: #b91c1c; --shadow: 0 10px 30px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.08);
   }
   /* the theme of the system, unless the user selected one (the button in the header sets data-theme) */
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme=light]) {
-      --bg: #17181c; --surface: #22242a; --fg: #f3f4f6; --muted: #9ca3af; --line: #33363d; --blank: #14181d;
+      --bg: #17181c; --surface: #22242a; --fg: #f3f4f6; --muted: #9ca3af; --line: #33363d;
       --accent: #60a5fa; --accent-fg: #0b1220; --accent-soft: #1e3a5f; --warn: #fbbf24; --warn-soft: #3b2f12;
       --error: #f87171; --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
     }
   }
   :root[data-theme=dark] {
-    --bg: #17181c; --surface: #22242a; --fg: #f3f4f6; --muted: #9ca3af; --line: #33363d; --blank: #14181d;
+    --bg: #17181c; --surface: #22242a; --fg: #f3f4f6; --muted: #9ca3af; --line: #33363d;
     --accent: #60a5fa; --accent-fg: #0b1220; --accent-soft: #1e3a5f; --warn: #fbbf24; --warn-soft: #3b2f12;
     --error: #f87171; --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   }
@@ -43,6 +42,9 @@
   .mapctl { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
   .mapctl > .maplibregl-ctrl-group { margin: 0; position: relative; }
   /* roadstyle's map buttons (web_template.html, 2bccdcb): the text of 3D, the base map's ▦ character */
+  /* every map button is white in both themes: its icon dark (roadstyle's map has no dark theme; its Street View and
+     Google 3D icons are currentColor, which the page's dark theme made white) */
+  .maplibregl-ctrl-group button { color: #333; }
   .mapctl button { display: grid; place-items: center; font: 700 11px/1 system-ui, sans-serif; letter-spacing: .03em; color: #333; }
   .mapctl button.bm-icon { font: 16px/1 system-ui, sans-serif; letter-spacing: 0; color: #5b616b; }
   .mapctl button.bm-icon:hover { color: #334155; }
@@ -84,7 +86,8 @@
   .step h2 .n { background: var(--c); color: #fff; }
   #step1-card { --c: #7c3aed; } #step2-card { --c: #2563eb; } #extracts-box { --c: #ea580c; }
   h2 .n { width: 20px; height: 20px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 11px; }
-  svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  /* the panel's icons; not the map's and the floating windows' own SVGs (roadstyle's Street View marker and icons) */
+  svg:not(.maplibregl-map svg):not(.rs-svw svg) { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
   a { color: var(--accent); }
   .muted { color: var(--muted); }
   .small { font-size: 12.5px; }
@@ -285,7 +288,8 @@
       <label><input type="radio" name="base" value=""><span class="sw" style="background:#f2efe9"></span>OpenFreeMap</label>
       <label><input type="radio" name="base" value="esri_gray"><span class="sw" style="background:#e4e4e4"></span>Light gray</label>
       <label><input type="radio" name="base" value="satellite"><span class="sw" style="background:linear-gradient(135deg,#3d5a3a,#7b8a5c 50%,#a09a7c)"></span>Satellite</label>
-      <label><input type="radio" name="base" value="blank"><span class="sw" style="background:var(--blank)"></span>Blank</label>
+      <label><input type="radio" name="base" value="blank"><span class="sw" style="background:#efede8"></span>Blank</label>
+      <label><input type="radio" name="base" value="blank_dark"><span class="sw" style="background:#14181d"></span>Blank dark</label>
       <hr id="ownsep" hidden>
       <label id="ownbox" hidden><input type="checkbox" id="ownlayers" checked>duckOSM layers</label>
     </div></div>
@@ -460,7 +464,7 @@ import { TerraDraw, TerraDrawRectangleMode, TerraDrawPolygonMode, TerraDrawCircl
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import * as duck from "./app/duck.js";
 import * as regions from "./app/regions.js";
-import { roadstyleWindows } from "./map/roadstyle_windows.js";
+import { roadstyleWindows } from "./map/roadstyle/windows.js";   // made by build.sh from roadstyle's template (roadstyle_windows.py)
 import { POPUP, _rfields } from "./map/roadstyle/popup.js";   // roadstyle's popup text (static/popup.js, copied by build.sh)
 
 const $ = (id) => document.getElementById(id);
@@ -528,6 +532,18 @@ map.addControl({ onAdd: () => $("mapctl"), onRemove: () => {} }, "top-right");  
 // roadstyle's Street View and Google 3D windows and their buttons, after the base map (Google 3D only with the user's key)
 const rsWin = roadstyleWindows(map, { key: (() => { try { return localStorage.getItem("duckosm.googleKey"); } catch (e) { return null; } })() });
 map.addControl({ onAdd: () => $("basectl"), onRemove: () => {} }, "top-right");   // the base map last, as in roadstyle
+// a key button in the Street View window (before its close button): the Linked mode and Google 3D need a Google Maps key
+{
+  const bar = document.querySelector(".rs-svw:not(.rs-g3d) .rs-svw-bar"), b = document.createElement("button");
+  b.type = "button"; b.title = "Your Google Maps key: the Linked mode and Google 3D";
+  b.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="display:block;pointer-events:none">' +
+    '<circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 9.3-9.3M16 7l3 3M14 9l2 2"/></svg>';
+  b.onclick = () => {
+    const k = prompt("Your Google Maps JavaScript API key (kept only in this browser):", kept("duckosm.googleKey") ?? "");
+    if (k?.trim()) { keep("duckosm.googleKey", k.trim()); $("gkey").value = k.trim(); rsWin.setKey(k.trim()); $("basectl").parentElement.appendChild($("basectl")); }
+  };
+  bar.insertBefore(b, bar.lastChild);
+}
 // the tiles of the roads map: roadstyle's module makes each one when the map asks for it (app/duck.js tile())
 maplibregl.addProtocol("rs", async (params) => ({ data: await duck.tile(params.url) }));
 map.addControl(new maplibregl.ScaleControl(), "bottom-left");
@@ -625,7 +641,7 @@ function theme(t) {
   $("theme").title = $("theme").ariaLabel = dark() ? "Light theme" : "Dark theme";
 }
 theme(kept("duckosm.theme"));
-$("theme").onclick = () => { const t = dark() ? "light" : "dark"; theme(t); keep("duckosm.theme", t); loaded.then(setBase); };   // the blank base map follows the theme
+$("theme").onclick = () => { const t = dark() ? "light" : "dark"; theme(t); keep("duckosm.theme", t); loaded.then(setBase); };
 function collapse(on) {
   document.body.classList.toggle("collapsed", on);
   $("panel").inert = on && innerWidth > 700;  // out of the view on a computer; on a phone the header stays
@@ -1261,7 +1277,7 @@ $("gkey-save").onclick = () => {
   const k = $("gkey").value.trim();
   if (!k) return;
   keep("duckosm.googleKey", k);
-  rsWin.google3d(k);
+  rsWin.setKey(k);
   $("basectl").parentElement.appendChild($("basectl"));   // the new Google 3D button goes before the base map
   $("gkey-note").textContent = "Saved. The Google 3D button is on the map, under the Street View button.";
 };
@@ -1285,7 +1301,8 @@ const BASEMAPS = {
 // The style alone shows the building footprints (and from which zoom). The 3D buildings switch adds their 3D version: the
 // duckOSM layers' own (roadstyle adds them hidden), and OpenFreeMap's, which is flat (height 0) when the switch is off.
 // The 3D view only tilts the map.
-const view = { base: BASEMAPS[kept("duckosm.basemap")] || kept("duckosm.basemap") === "blank" ? kept("duckosm.basemap") : "",
+const BLANKS = { blank: "#efede8", blank_dark: "#14181d" };   // roadstyle's tile-less base maps (basemaps.py), not the page's theme
+const view = { base: BASEMAPS[kept("duckosm.basemap")] || BLANKS[kept("duckosm.basemap")] ? kept("duckosm.basemap") : "",
   buildings: kept("duckosm.buildings") === "1" };
 const offLayers = new Set();   // the layers that roadstyle adds hidden (showRoads)
 const heights = {};            // the 3D heights of OpenFreeMap's buildings: [height, base] for each layer
@@ -1308,8 +1325,7 @@ function setBase() {
   }
   for (const l of style) if (l.source?.startsWith("rs-ov")) show(l, own && (!offLayers.has(l.id) || (l.type === "fill-extrusion" && view.buildings)));
   const bottom = style[0].id;
-  const blank = getComputedStyle(document.documentElement).getPropertyValue("--blank").trim();   // roadstyle's blank / blank_dark
-  if (v === "blank") map.addLayer({ id: "base-over", type: "background", paint: { "background-color": blank } }, bottom);
+  if (BLANKS[v]) map.addLayer({ id: "base-over", type: "background", paint: { "background-color": BLANKS[v] } }, bottom);
   else if (BASEMAPS[v]) {
     map.addSource("base-over", { type: "raster", tileSize: 256, ...BASEMAPS[v] });
     map.addLayer({ id: "base-over", type: "raster", source: "base-over" }, bottom);
