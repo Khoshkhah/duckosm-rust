@@ -45,7 +45,6 @@ the panel has three numbered steps:
 |                          |                                          |
 | 3 REGION FILE            |                                          |
 | (o) Estonia      [down]  |                                          |
-| ON THE MAP (the legend)  |                                          |
 |--------------------------|                                          |
 | [GeoJSON] [Use in duckOSM]|  scale    MapLibre | OpenFreeMap | OSM  |
 +--------------------------+------------------------------------------+
@@ -56,9 +55,8 @@ the panel has three numbered steps:
   panel.
 - The area shows as three tiles: km², polygons and vertices. Below them are the source and, for a large area,
   a yellow warning.
-- The last part of the panel, **On the map**, is the legend: the three line styles of the area, a match
-  (preview) and a Geofabrik extract. The rows of the area and of the extract are buttons that zoom the map to
-  them.
+- The page has no legend. A legend was first on the map and then in the panel, and Kaveh found it unnecessary
+  (2026-10-22): the panel tells the user what each line is when it shows.
 - The header has two buttons:
   - The theme button changes between the light and the dark theme. At the start, the page uses the theme of
     the system.
