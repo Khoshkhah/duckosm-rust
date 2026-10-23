@@ -131,10 +131,17 @@ with sync_playwright() as p:
             f = boundary(page, n + 1)
             print("search: ok,", f["properties"]["name"], f["properties"]["source"], f["properties"]["area_km2"], "km²")
             assert "Monaco-Ville" in page.inner_text("#found")
+            # after a selection, the other places of the list do not show on the map (Kaveh); a new search shows them again
+            shown = lambda: page.evaluate("window.duckMap.getSource('preview').serialize().data.features?.length ?? 1")
+            page.locator("#found label").nth(2).hover()
+            page.wait_for_timeout(300)
+            assert shown() == 0, "another place of the list showed after a selection"
             # a search while the user types, with no Enter
             page.fill("#q", "stockholm")
             page.wait_for_function("document.getElementById('found').textContent.includes('Stockholms län')", timeout=30_000)
-            print("search as you type: ok")
+            page.locator("#found label").first.hover()
+            page.wait_for_function("window.duckMap.getSource('preview').serialize().data.geometry != null", timeout=10_000)
+            print("search as you type: ok; after a selection only the selected place shows, a new search shows its list again")
         else:
             print("search: skipped,", page.inner_text("#found"))
 

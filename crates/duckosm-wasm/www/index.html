@@ -824,6 +824,8 @@ map.on("click", async (ev) => {
 
 let previewed = null;   // the place of the list under the mouse
 function preview(i) {
+  // after a selection only the selected place shows (Kaveh): the others of the list stay off the map until a new search
+  if (i != null && document.querySelector("#found input:checked")) i = null;
   previewed = i;
   setData("preview", i == null ? null : { type: "Feature", properties: { name: found[i].properties.display_name.split(",")[0] }, geometry: found[i].geometry });
   if (i != null) fitTo(found[i].geometry, { ifHidden: true });
