@@ -59,8 +59,9 @@ the panel has three numbered steps:
 ```
 
 - Each step is a card on the gray background of the panel (Kaveh asked for a clear separation of the steps,
-  2026-10-22). The top edge and the number of a card have the color of the line of that step on the map:
-  purple for step 1 (a match), blue for step 2 (the area), orange for step 3 (an extract). The two output
+  2026-10-22). The number of a card has the color of the line of that step on the map: purple
+  for step 1 (a match), blue for step 2 (the area), orange for step 3 (an extract). A colored top edge on each
+  card was removed (Kaveh, 2026-10-22). The two output
   buttons stay at the bottom of the panel.
 - Step 1 has three tabs: **Search** (the name search and **What is here?**), **Draw** and **File**.
 - The Draw tab has the drawing tools in a box with two groups: "Draw a shape" (Rectangle, Polygon, Circle and
