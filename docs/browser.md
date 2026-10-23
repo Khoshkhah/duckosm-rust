@@ -18,7 +18,7 @@ One web page, no server, no Python:
    file.
 4. The user can download the tables: one `.duckdb` file, or the GeoParquet files.
 
-Not in this plan (the visualization part, later): the map, the base-map layers `features.*`, the drawing order
+Not in this plan (the visualization part, later): the map, the base-map layers `features.*` (done later: [features.md](features.md)), the drawing order
 `visualization.edge_levels`, the bus routes, the multimodal graph `mm.*` of the route planner. The map side is
 in progress in the geolibre-roadstyle repository (`docs/design/rust-spike.md`): a Rust WebAssembly module that
 makes the style from a duckOSM database in duckdb-wasm.
@@ -226,7 +226,8 @@ style of roadstyle:
 
 - The choices: the roads of all modes or of one mode, and the base map: Esri light gray (the default),
   OpenStreetMap, or none. These are roadstyle's keyless raster maps; CARTO's tiles now need a key.
-- There is no base map from the data: duckOSM's `features.*` tables are not built in Rust yet.
+- There is no base map from the data: duckOSM's `features.*` tables are not built in Rust yet. (Done later, with duckOSM's SQL
+  in duckdb-wasm: [features.md](features.md).)
 
 | | Roads table (SQL) | Style (Rust) | Style memory | Map ready |
 |---|---|---|---|---|
@@ -237,4 +238,4 @@ The style holds the roads as inline GeoJSON (Tartu: about 226 MB of text). This 
 roadstyle's module stops at 100,000 roads. A smaller style needs another way to give the roads to MapLibre (for
 example vector tiles), in geolibre-roadstyle.
 
-**After M1:** duckOSM's base-map layers (`features.*`) in Rust, then the style can draw them.
+**After M1:** duckOSM's base-map layers (`features.*`), then the style can draw them. Done: [features.md](features.md).

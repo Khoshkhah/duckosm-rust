@@ -1,7 +1,8 @@
 # The base-map layers (`features.*`) in the app
 
-Status: design, for Kaveh's review (2026-10-22). Not implemented. Kaveh: "also we should add features for creating too not only 3
-transport mode".
+Status: done, 2026-10-22 (the result is at the end). Kaveh: "also we should add features for creating too not only 3 transport
+mode". Kaveh chose approach A. The other questions got the defaults of this document: the box is on, the files have no `tags`, and
+the native `--features` and the sea come later.
 
 ## What the user gets
 
@@ -114,6 +115,10 @@ a cut file (`build`) or Overpass (`build_osm_json`) does not get the layers in t
 measures). It writes `crates/duckosm-build/sql/features.sql`, with the duckOSM version in its first line. No SQL is written by hand.
 The `ocean` layer is not in it.
 
+One change to duckOSM's SQL (added after the first measures): `geom.way_line` comes from the column `line` of `raw_ways.parquet`.
+Rust writes each way there as WKB, from the points of its nodes, as `ST_MakeLine` makes it. duckOSM's `geom.way_pt` and its
+`ST_MakeLine` were 75 % of the SQL time on Tartu.
+
 - The wasm module gives the text: `features_sql()` (`include_str!`). The page needs no other file.
 - The native CLI can run the same text in its DuckDB: `duckosm --features`. This is a small step, but it needs the spatial extension
   in the native DuckDB 1.5.6 (`INSTALL spatial` downloads it one time). I put it last, and Kaveh decides if it is in this plan.
@@ -153,11 +158,11 @@ These are the changes, each in its own small commit, so they merge easily with t
 1. **Rust, the cut** (`tests/features.rs`): the `raw` cut of `monaco_sample.osm.pbf` with `monaco.geojson` gives the same nodes,
    ways and relations as osmium's `smart` cut (ids, tags, refs, roles, the coordinate bits). The osmium cut goes into `tests/data`
    (Monaco: 0.6 MB). Tartu from the Estonia file against `osmium extract -s smart`, by hand, with the numbers in this file.
-2. **Against the Monaco golden** (`tools/compare_with_duckosm.py`, a new part `features`): the native build with the fixes and the
-   raw files, then `features.sql` in DuckDB. `raw.*` must equal the golden `raw.*`, and each `features.*` table the golden table:
+2. **Against the Monaco golden** (`tools/compare_features.py --duckosm`): the native build with the fixes and the raw files
+   (`--raw`), then `features.sql` in DuckDB. `raw.*` must equal the golden `raw.*`, and each `features.*` table the golden table:
    the same rows on `osm_id`, `osm_type`, `kind`, `name`, `tags` and the WKB of `geom`, and `bearing` to 1e-9 degrees.
-3. **The page** (`www/e2e.py --features`): Monaco and Tartu from the region file, with the box on. The page's `features.*` must equal
-   the native result of check 2 (a hash of each table, as in the measures above). The map shows the base-map layers (the picture), and
+3. **The page** (`www/e2e.py`, the box is on by default): Monaco and Tartu from the region file. The page's
+   `features_<table>.parquet` files must equal the native result of check 2 (`tools/compare_features.py --page`). The map shows the base-map layers (the picture), and
    the zip has the `features_*.parquet` files and their `layers.json` entries.
 4. The times and the memory of Monaco and Tartu go into this file, as for B3 and B4.
 
@@ -186,3 +191,45 @@ first to leave out.
 3. `features_<table>.parquet` without `tags`, as duckOSM's GeoParquet export, or with `tags` (DuckDB reads it, GDAL can fail)?
 4. The native CLI `--features` (F7) in this plan, or later?
 5. The sea (`features.ocean` from Overture) later, as its own step?
+
+## Result (2026-10-22)
+
+Done as planned (steps F1 to F6 and F8), with the way lines in Rust and the changes below. F7 (the native `--features`) and the sea
+are not done. The commands are in [development.md](development.md#check-the-base-map-layers).
+
+Checks:
+- The `raw` cut of the Monaco sample equals osmium's `smart` cut: the same nodes, ways and relations, with the same tags, members and
+  coordinate bits (`tests/raw.rs`). Tartu from the Estonia file against `osmium extract -s smart` is equal too.
+- Monaco with duckOSM's fixes, three modes: `raw.*` and the 11 `features.*` tables equal the golden `monaco.duckdb` on every row.
+- The page, Monaco and Tartu from the region file: its 11 `features_<table>.parquet` files equal the native result on every row.
+- The network files do not change with `--raw` (Monaco and Tartu, 20 files each, byte for byte). The area build of the wasm module
+  with `raw` equals the native build, byte for byte (`crates/duckosm-wasm/tests/native.rs`, 23 files).
+- `boundary_e2e.py` and the relay check pass. Three builds in one page (with, without, with the layers) show and hide the tables,
+  the files and the Base map option correctly.
+
+Times, three runs of Tartu, one of Monaco; the computer had a load average of 2 to 4 from other work:
+
+| The page (8 threads) | Monaco | Tartu, with the layers | Tartu, without |
+|---|---|---|---|
+| Build (the cut and the networks) | 0.42 s | 2.19–2.25 s | 1.70–1.72 s |
+| Tables into DuckDB | 0.46 s | 0.62–0.65 s | 0.71 s |
+| The layers (`raw.*` and the SQL) | 0.31 s | 0.70–0.72 s (1.52 s with duckOSM's way lines) | |
+| From the click to the first query | 1.88 s | 3.73–3.80 s | 2.60–2.62 s |
+| WebAssembly memory of the build | 51 MiB | 190–193 MiB | 130–131 MiB |
+| The map: layers, style | 39 layers, 0.82 s | 41 layers, 6.2–6.3 s, 1,387 MiB | 5 layers, about 6 s, 1,387 MiB |
+
+Natively, Tartu takes 1.17 s and 334 MB with `--raw`, and 0.96 s and 228 MB without (before the way lines in Rust).
+
+Changes from the design:
+- **The geometry type in the page.** With the spatial extension loaded, duckdb-wasm (spatial `28db190`) fails on each value of
+  the type `GEOMETRY('OGC:CRS84')` with "stoi: no conversion". `EPSG:4326` works, and native DuckDB does not have this error. A
+  GeoParquet file gives that type, so after `LOAD spatial` the page could not read its own network files. The page now reads the
+  geometry as WKB (`ST_GeomFromWKB`, with `enable_geoparquet_conversion` off). The type is `GEOMETRY` without a CRS, the type of
+  duckOSM's tables. `load.sql` does not change.
+- **The lane arrows of the fixes.** duckOSM writes `turn_lanes_forward` and `turn_lanes_backward` into `raw.ways` as `turn:lanes:*`.
+  The Rust reader of the fixes skipped them; it now reads them, and they go only into `raw.ways`. A member without a role is NULL,
+  as `ST_READOSM` gives it.
+- **The order in the page.** DuckDB loads spatial during the build, and the tables wait for it. The first build of a page
+  downloads the extension (4.5 MB), so the time from the click to the first query includes that download.
+- The layers are made only from a region file. With a cut file or with Overpass, the box has no effect.
+
