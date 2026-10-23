@@ -301,6 +301,7 @@ fn js_build(
 /// `write_tables` to a writer from `file`, then the tables of the area (`write_area_tables`; `boundary` is the
 /// boundary file, `built_at` the time in microseconds). With `raw` (only for `Input::Area`), also `raw.*` with
 /// `write_raw`. Returns one summary line for each mode.
+#[allow(clippy::too_many_arguments)] // ponytail: one parameter for each build input; a struct if more come
 pub fn run<W: Write + Send>(
     input: Input,
     modes: &str,
