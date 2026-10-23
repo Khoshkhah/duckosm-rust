@@ -323,9 +323,8 @@
     <label><input type="checkbox" name="mode" value="cycling" checked>Cycling</label>
   </div>
   <details><summary>Advanced: corrections to the map data</summary>
-    <p class="small muted" style="margin:8px 0">Optional. A YAML file with your corrections of known errors in OpenStreetMap, applied
-      before the build: for example remove a road, make it one-way, change its lanes, or add a missing road. It is the
-      <code>osm_overrides</code> file of duckOSM. Most users do not need it.</p>
+    <p class="small muted" style="margin:8px 0">Optional: your fixes of OpenStreetMap errors, for example a one-way street.
+      <a href="https://khoshkhah.github.io/duckOSM/guides/fix-osm-errors/" target="_blank" rel="noopener">The file format</a> (turn rules are not used here).</p>
     <label class="pick" style="margin:0"><svg><use href="#i-upload"/></svg><span id="fixes-name">Select a corrections file (.yaml)</span><input id="fixes" type="file" accept=".yaml,.yml"></label>
   </details>
   <p id="buildstatus" class="progress" aria-live="polite"></p>
