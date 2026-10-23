@@ -21,8 +21,8 @@ gzip; [tables.md](tables.md)). Kaveh chose it on 2026-10-23. Two other ways, for
   base map, as in the GeoLibre plugin.
 - **Faster maps for a large area**: done in part (2026-10-23). The roads go to MapLibre as vector tiles that Rust
   makes when the map asks for them: Tartu 15.7 s to 7.4 s, and the page's memory 803 to 104 MiB
-  ([browser.md](browser.md)). Still to do: roadstyle's module makes the sources as JSON trees before the tiles
-  (Tartu: 3.6 s and 1.4 GB), so the limit of 100,000 roads stays. Making the tiles' features without the trees
+  ([browser.md](browser.md)). Since roadstyle-rs `900b43e` the sources `roads` and `simple` are typed pieces
+  (Tartu: the module's memory 1,387 to 878 MiB). Still to do: the limit of 100,000 roads stays. Making the tiles' features without the trees
   would lift it. The work is in geolibre-roadstyle (`wasm/`).
 - **The sea (`features.ocean`)**: not in the page for now (Kaveh, 2026-10-23). duckdb-wasm cannot read Overture's
   sea files in parts (27 GB in total). Two ways for later: read only the needed part of Overture's files in the page

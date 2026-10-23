@@ -239,7 +239,7 @@ style of roadstyle:
 The style held the roads as inline GeoJSON (Tartu: about 226 MB of text in the page).
 
 **Vector tiles (2026-10-23).** roadstyle's module (geolibre-roadstyle `wasm/`, commit `eea9f49`; since then roadstyle's
-own Rust engine, roadstyle repository `rust/`, commit `fba3192`) now gives the style
+own Rust engine, roadstyle repository `rust/`, commit `900b43e`) now gives the style
 with vector-tile sources (`rs://<generation>/<source>/{z}/{x}/{y}`). The map worker stays, and it makes each tile
 when MapLibre asks for it (`maplibregl.addProtocol("rs", ...)` in `index.html`, `tile()` in `app/duck.js`). The
 layers, the colors and the road popup are the same; the screenshots of the two maps differ only at the edges of
@@ -256,5 +256,10 @@ event), the same machine for both:
 
 The module still makes the sources as JSON trees before it makes the tiles, so its memory (1,387 MiB on Tartu) and
 its limit of 100,000 roads do not change. Next for large areas: make the tiles' features without the trees.
+
+**Typed sources (2026-10-23).** roadstyle-rs `900b43e` makes the sources `roads` and `simple` as typed pieces, not
+JSON trees (roadstyle's `rust/`; the same output, byte for byte). The page's Tartu map, the same machine, from the
+click to an idle map: the map module's memory 1,387 MiB to 878 MiB, the style step 4.4–5.0 s to 3.4–3.7 s, the map
+8.7–9.6 s to 7.6–7.8 s.
 
 **After M1:** duckOSM's base-map layers (`features.*`), then the style can draw them. Done: [features.md](features.md).
