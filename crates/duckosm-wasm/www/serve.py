@@ -48,7 +48,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 if r.headers.get(k):
                     self.send_header(k, r.headers[k])
             self.end_headers()
-            shutil.copyfileobj(r, self.wfile, 1 << 20)
+            try:
+                shutil.copyfileobj(r, self.wfile, 1 << 20)
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # the page stopped the download (Cancel)
 
     def log_message(self, *a):
         if not self.quiet:

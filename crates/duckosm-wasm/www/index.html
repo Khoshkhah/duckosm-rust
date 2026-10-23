@@ -143,6 +143,11 @@
   #extracts a.dl { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; color: var(--muted); }
   #extracts a.dl:hover { background: var(--surface); color: var(--accent); }
   .btn.sm { height: 30px; padding: 0 10px; font-size: 12.5px; }
+  #extracts label { flex-wrap: wrap; }
+  /* a download: a line of its own under the extract, so the row keeps its width */
+  #extracts .prog { flex-basis: 100%; display: flex; align-items: center; gap: 8px; padding-left: 23px; }
+  #extracts .prog .bar { flex: 1; min-width: 40px; height: 6px; border-radius: 3px; background: var(--surface); overflow: hidden; }
+  #extracts .prog .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.15s; }
   #extracts .got { font-size: 12px; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
   #kept { margin-top: 12px; display: grid; gap: 4px; }
   #kept .k { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
@@ -848,12 +853,14 @@ function renderExtracts() {
     "Get one of the smallest Geofabrik extracts that cover it: the page keeps it in this browser. Click an extract to see it on the map, and again to hide it.";
   $("extracts").innerHTML = cover.length ? cover.map((x, i) => {
     const k = keptRegions.find((r) => r.id === x.id), inUse = k && regionKept === k.id;
-    const what = getting?.id === x.id ? `<span class="got" id="got">0 %</span><button class="btn sm" data-cancel>Cancel</button>`
+    const prog = getting?.id === x.id ? `<span class="prog"><span class="bar"><i id="bar"></i></span><span class="got" id="got">0 %</span>` +
+      `<button class="btn sm" data-cancel>Cancel</button></span>` : "";
+    const what = getting?.id === x.id ? ""
       : k ? `<button class="btn sm" data-use="${i}"${inUse ? " disabled" : ""}>${inUse ? "In use" : "Use"}</button>`
       : regions.relay ? `<button class="btn sm" data-get="${i}"${getting ? " disabled" : ""}>Get</button>` : "";
     return `<label><input type="radio" name="extract" value="${i}"${i === shown ? " checked" : ""} aria-label="Show ${esc(x.name)} on the map">` +
       `<span class="x">${esc(x.name)}<span>${k ? `kept · ${mb(k.size)} MB · ${day(k.modified)}` : `${esc(x.id)} · ${num(Math.round(x.km2))} km²`}</span></span>${what}` +
-      `<a class="dl" href="${esc(x.pbf)}" title="Download ${esc(x.name)} (.osm.pbf) to this computer" aria-label="Download ${esc(x.name)}">${icon("download")}</a></label>`;
+      `<a class="dl" href="${esc(x.pbf)}" title="Download ${esc(x.name)} (.osm.pbf) to this computer" aria-label="Download ${esc(x.name)}">${icon("download")}</a>${prog}</label>`;
   }).join("") : `<p class="small muted">No Geofabrik extract covers the area. Use the planet file, or the Overpass tab.</p>`;
 }
 function renderKept() {
@@ -876,6 +883,7 @@ async function get(x) {
       if (performance.now() - last < 150 || !$("got")) return;
       last = performance.now();
       $("got").textContent = total ? `${Math.floor((100 * got) / total)} % · ${mb(got)} of ${mb(total)} MB` : `${mb(got)} MB`;
+      if (total) $("bar").style.width = `${(100 * got) / total}%`;
     }, abort.signal);
     getting = null;
     await refreshKept();
