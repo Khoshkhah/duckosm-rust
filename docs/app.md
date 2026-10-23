@@ -112,17 +112,19 @@ Kaveh's layout of 2026-10-23: the data in card 5, the map in card 6.
   (`__rs_edge`). Before the tiles, the click looked for the source `rs-roads`, whose layers are hidden, and found
   nothing.
 - The buttons under the zoom buttons (Kaveh's design of 2026-10-23):
-  - **3D** tilts the map to 60 degrees and shows the 3D buildings. A second click makes the map flat again.
+  - **3D** tilts the map to 60 degrees. A second click makes the map flat again. It does not change the buildings.
+  - **3D buildings** (the building icon, Kaveh's choice A of 2026-10-23) gives the footprints that show their height.
+    Off (the default), they stay flat. So the map can be tilted with flat buildings, or flat with 3D buildings. The
+    page keeps the switch (`duckosm.buildings`).
   - **Base map** (the grid) opens a list: OpenFreeMap, Light gray (Esri), Satellite (Esri World Imagery) and
-    Blank. All except OpenFreeMap hide all of OpenFreeMap's layers, also its labels (in the 3D view without the duckOSM 3D buildings, its 3D buildings stay). After a
+    Blank. All except OpenFreeMap hide all of OpenFreeMap's layers, also its labels (with 3D buildings on and without the duckOSM 3D buildings, its 3D buildings stay). After a
     build with the base-map layers, the list also has **duckOSM layers**. Satellite turns them off, because they
     cover the photo. The page keeps the base map.
-  - There is no buildings button: the style alone decides if the footprints show, and 3D only adds the 3D
-    version (Kaveh's rule).
+  - No button hides the footprints: the style alone decides if they show (Kaveh's rule).
 - Only one 3D building layer shows: roadstyle's own when the duckOSM layers show (from the zoom of their buildings,
   15; below it OpenFreeMap's), else OpenFreeMap's. Before, the
-  two layers drew over each other at different heights. With 3D off, OpenFreeMap's 3D layer is flat (height 0), so
-  that its footprints stay.
+  two layers drew over each other at different heights. With 3D buildings off, OpenFreeMap's 3D layer is flat (height 0),
+  so that its footprints stay.
 - The height of a building (roadstyle-rs, rule C of mapstyle's `docs/design/buildings_3d.md`): the higher of
   `height` and (`building:levels` + `roof:levels`) × 3.66 m (as OpenMapTiles), or the one that is there, else the
   height of its kind. The higher of the two keeps Tartu's buildings correct, where `height` is often an ETAK code.
