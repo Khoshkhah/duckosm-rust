@@ -5,7 +5,9 @@ duckOSM's layers change.
     /home/kaveh/projects/duckOSM/.venv/bin/python tools/make_features_sql.py [path/to/duckOSM]
 
 The file first loads raw_nodes.parquet, raw_ways.parquet and raw_relations.parquet (duckosm-rust --raw, or the page)
-into raw.*, with the column types of duckOSM. The sea (features.ocean) is not in it.
+into raw.*, with the column types of duckOSM. One change to duckOSM's SQL: geom.way_line comes from the `line` column of
+raw_ways.parquet (each way as WKB, made in Rust), not from geom.way_pt and ST_MakeLine: these two statements were 75 %
+of the time (Tartu). The sea (features.ocean) is not in it.
 """
 import pathlib
 import subprocess
@@ -25,6 +27,12 @@ CREATE OR REPLACE TABLE raw.ways AS SELECT osm_id, tags, refs FROM read_parquet(
 CREATE OR REPLACE TABLE raw.relations AS
     SELECT osm_id, tags, refs, ref_roles, ref_types::ENUM('node', 'way', 'relation')[] AS ref_types
     FROM read_parquet('raw_relations.parquet');"""
+
+
+# duckOSM's geom.way_pt and geom.way_line (ensure_foundation) -> the lines that Rust wrote
+WAY_LINE = """CREATE OR REPLACE TABLE geom.way_line AS
+    SELECT osm_id, tags, (refs[1] = refs[len(refs)]) AS is_closed, ST_GeomFromWKB(line) AS geom
+    FROM read_parquet('raw_ways.parquet') WHERE line IS NOT NULL;"""
 
 
 class Recorder:
@@ -47,6 +55,10 @@ con.execute("""LOAD spatial; CREATE SCHEMA raw;
                                 ref_types ENUM('node', 'way', 'relation')[])""")
 rec = Recorder(con)
 stats = FeaturesBuilder(rec).run()
+starts = [s.split(" AS")[0].split()[-1] for s in rec.sql]
+i = starts.index("geom.way_pt")
+assert starts[i + 1] == "geom.way_line", f"duckOSM's foundation changed: {starts[:5]}"
+rec.sql[i:i + 2] = [WAY_LINE]
 if any(v < 0 for v in stats.values()):
     sys.exit(f"a layer failed: {stats}")
 commit = subprocess.run(["git", "-C", str(DUCKOSM), "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()

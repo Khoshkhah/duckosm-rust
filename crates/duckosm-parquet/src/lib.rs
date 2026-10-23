@@ -556,21 +556,39 @@ pub fn write_raw_nodes_to<W: Write + Send>(out: W, rows: &[RawNode]) -> Result<(
     })
 }
 
-/// `raw.ways` of duckOSM: osm_id, tags, refs. The ways with fewer than 2 nodes are not in it.
-pub fn write_raw_ways_to<W: Write + Send>(out: W, rows: &[RawWay]) -> Result<(), String> {
+/// `raw.ways` of duckOSM: osm_id, tags, refs. The ways with fewer than 2 nodes are not in it. One more column, `line`: the
+/// way as WKB from the points of its nodes in `nodes` (sorted by id), as duckOSM's `geom.way_line` makes it with
+/// `ST_MakeLine` (a node that is not in `nodes` is left out; fewer than 2 points: NULL). features.sql reads it, so
+/// DuckDB does not join the nodes (docs/features.md).
+pub fn write_raw_ways_to<W: Write + Send>(
+    out: W,
+    rows: &[RawWay],
+    nodes: &[RawNode],
+) -> Result<(), String> {
     let rows: Vec<&RawWay> = rows.iter().filter(|w| w.refs.len() >= 2).collect();
     write_parts(out, &rows, |c| {
         let mut id = Int64Builder::with_capacity(c.len());
         let mut refs = ListBuilder::new(Int64Builder::new());
+        let mut line = BinaryBuilder::new();
         for w in c {
             id.append_value(w.id);
             refs.values().append_slice(&w.refs);
             refs.append(true);
+            let pts: Vec<Pt> = w
+                .refs
+                .iter()
+                .filter_map(|r| {
+                    let i = nodes.binary_search_by_key(r, |n| n.id).ok()?;
+                    Some((nodes[i].lon, nodes[i].lat))
+                })
+                .collect();
+            line.append_option((pts.len() >= 2).then(|| line_wkb(&pts)));
         }
         vec![
             ("osm_id", Arc::new(id.finish()) as ArrayRef),
             ("tags", tags_column(c.iter().map(|w| &w.tags))),
             ("refs", Arc::new(refs.finish())),
+            ("line", Arc::new(line.finish())),
         ]
     })
 }

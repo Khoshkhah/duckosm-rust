@@ -125,7 +125,7 @@ pub fn write_raw<W: Write + Send>(
 ) -> Result<(), String> {
     use duckosm_parquet as pq;
     pq::write_raw_nodes_to(file("raw_nodes.parquet")?, &raw.nodes)?;
-    pq::write_raw_ways_to(file("raw_ways.parquet")?, &raw.ways)?;
+    pq::write_raw_ways_to(file("raw_ways.parquet")?, &raw.ways, &raw.nodes)?;
     pq::write_raw_relations_to(file("raw_relations.parquet")?, &raw.relations)
 }
 

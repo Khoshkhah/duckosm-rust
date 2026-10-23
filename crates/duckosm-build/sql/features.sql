@@ -12,20 +12,9 @@ INSTALL spatial; LOAD spatial;
 
 CREATE SCHEMA IF NOT EXISTS geom;
 
-CREATE OR REPLACE TABLE geom.way_pt AS
-        SELECT w.osm_id, u.ord, ST_Point(n.lon, n.lat) AS pt
-        FROM raw.ways w,
-             UNNEST(w.refs) WITH ORDINALITY AS u(node_id, ord)
-        JOIN raw.nodes n ON n.osm_id = u.node_id;
-
 CREATE OR REPLACE TABLE geom.way_line AS
-        SELECT w.osm_id,
-               w.tags,
-               (w.refs[1] = w.refs[len(w.refs)]) AS is_closed,
-               ST_MakeLine(list(p.pt ORDER BY p.ord)) AS geom
-        FROM raw.ways w
-        JOIN geom.way_pt p USING (osm_id)
-        GROUP BY w.osm_id, w.tags, w.refs;
+    SELECT osm_id, tags, (refs[1] = refs[len(refs)]) AS is_closed, ST_GeomFromWKB(line) AS geom
+    FROM read_parquet('raw_ways.parquet') WHERE line IS NOT NULL;
 
 CREATE OR REPLACE TABLE geom.rel_member_line AS
         WITH m AS (
