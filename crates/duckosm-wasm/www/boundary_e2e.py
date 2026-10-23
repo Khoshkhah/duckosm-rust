@@ -64,6 +64,14 @@ with sync_playwright() as p:
     assert pr["area_km2"] == 2.39 and pr["name"] == "Monaco" and pr["geofabrik"][0]["id"] == "monaco", pr
     print("file: ok,", pr["area_km2"], "km²,", [x["id"] for x in pr["geofabrik"]])
 
+    # a click on an extract shows it, a second click hides it again
+    alps = page.locator("#extracts input").nth(2)
+    alps.click()
+    assert alps.is_checked()
+    alps.click()
+    assert not alps.is_checked()
+    print("extract: ok, shown and hidden")
+
     # two rectangles that overlap, drawn with mouse drags: one polygon. The panel covers the left side of the
     # map, so the drags are on the right side.
     box = page.locator("#map canvas").bounding_box()

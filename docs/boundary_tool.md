@@ -103,7 +103,11 @@ the panel has three numbered steps:
 - A preview (a light purple fill and a solid purple line, with the name along the line) shows an area that the
   user points to in the list of matches. A click on a point match zooms the map to it.
 - The outline of a suggested Geofabrik extract shows as a dashed orange line, with its name along the line
-  (for example "Estonia (Geofabrik)"), when the user selects it. The map zooms out to show all of it.
+  (for example "Estonia (Geofabrik)"), when the user clicks it. The map zooms out to show all of it. A second
+  click hides the extract, and the map zooms back to the area.
+- When the area is less than 24 px on the screen (for example when the map shows a large extract), a blue pin
+  marks it. The button with the magnifier in the header of step 2 zooms the map to the area. Kaveh found that
+  the area was easy to lose after a click in step 3 (2026-10-22).
 - When the user points to a match that is not fully in the view, the map moves to show it.
 
 ## The ways to make an area
