@@ -4,7 +4,7 @@
 
 // The address of the relay (relay/worker.js) after its deploy; empty: no relay, the user downloads the file. ?relay=<address> in the
 // address of the page gives another one (?relay=relay: the relay of serve.py).
-const RELAY = "";
+const RELAY = "https://duckosm-relay.khoshkhah.workers.dev";
 export const relay = new URLSearchParams(location.search).get("relay") ?? RELAY;
 
 const folder = () => navigator.storage.getDirectory().then((d) => d.getDirectoryHandle("regions", { create: true }));
