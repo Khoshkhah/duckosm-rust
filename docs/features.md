@@ -221,9 +221,11 @@ Times, three runs of Tartu, one of Monaco; the computer had a load average of 2 
 Natively, Tartu takes 1.17 s and 334 MB with `--raw`, and 0.96 s and 228 MB without (before the way lines in Rust).
 
 Changes from the design:
-- **The geometry type in the page.** With the spatial extension loaded, duckdb-wasm (spatial `28db190`) fails on each value of
-  the type `GEOMETRY('OGC:CRS84')` with "stoi: no conversion". `EPSG:4326` works, and native DuckDB does not have this error. A
-  GeoParquet file gives that type, so after `LOAD spatial` the page could not read its own network files. The page now reads the
+- **The geometry type in the page.** When the spatial extension loads before the first value of the type
+  `GEOMETRY('OGC:CRS84')`, duckdb-wasm (spatial `28db190`) fails on each such value with "stoi: no conversion". In the other
+  order, it works. `EPSG:4326` works, and native DuckDB does not have this error. A GeoParquet file gives that type, so after
+  `LOAD spatial` the page could not read its own network files. The bug is
+  [duckdb/duckdb-wasm#2199](https://github.com/duckdb/duckdb-wasm/issues/2199); our facts are in a comment there (2026-10-22). The page now reads the
   geometry as WKB (`ST_GeomFromWKB`, with `enable_geoparquet_conversion` off). The type is `GEOMETRY` without a CRS, the type of
   duckOSM's tables. `load.sql` does not change.
 - **The lane arrows of the fixes.** duckOSM writes `turn_lanes_forward` and `turn_lanes_backward` into `raw.ways` as `turn:lanes:*`.

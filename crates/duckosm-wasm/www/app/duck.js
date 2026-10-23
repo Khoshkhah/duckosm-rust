@@ -65,9 +65,10 @@ const split = (name) => {
 };
 // the same SQL as the native .duckdb writer (crates/duckosm-duckdb)
 const select = (table) => (table === "nodes" ? "SELECT node_id, geometry AS geom" : "SELECT *");
-// The page reads the geometry as WKB and makes a GEOMETRY without a CRS, the type of duckOSM's tables: with DuckDB's spatial extension
-// loaded (the base-map layers), duckdb-wasm 1.33.1-dev57.0 (spatial 28db190) fails on each value of the type GEOMETRY('OGC:CRS84')
-// ("stoi: no conversion"), and a GeoParquet file gives that type. ('EPSG:4326' works; native DuckDB has no such error.)
+// The page reads the geometry as WKB and makes a GEOMETRY without a CRS, the type of duckOSM's tables: when DuckDB's spatial extension
+// (the base-map layers) loads before the first value of the type GEOMETRY('OGC:CRS84'), duckdb-wasm 1.33.1-dev57.0 (spatial 28db190)
+// fails on each such value ("stoi: no conversion"), and a GeoParquet file gives that type. 'EPSG:4326' works; native DuckDB has no
+// such error. https://github.com/duckdb/duckdb-wasm/issues/2199
 const GEOM = "ST_GeomFromWKB(geometry)";
 const selectWkb = (table) => (table === "nodes" ? `SELECT node_id, ${GEOM} AS geom`
   : table === "edges" || table === "private_edges" ? `SELECT * REPLACE (${GEOM} AS geometry)` : "SELECT *");
