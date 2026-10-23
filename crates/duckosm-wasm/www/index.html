@@ -339,6 +339,10 @@
     <label><input type="checkbox" name="mode" value="walking" checked>Walking</label>
     <label><input type="checkbox" name="mode" value="cycling" checked>Cycling</label>
   </div>
+  <div class="checks" style="margin-top:6px"><label><input type="checkbox" id="features" checked>Base map layers</label></div>
+  <p class="small muted" style="margin:4px 0 0">Water, land use, buildings, railways and more, as duckOSM's
+    <a href="https://khoshkhah.github.io/duckOSM/reference/features/" target="_blank" rel="noopener">features tables</a>. Only with a region file.
+    The first time, the page downloads DuckDB's spatial extension (4.5 MB).</p>
   <div class="grid2" style="margin-top:10px">
     <label for="levels" class="small">Drawing order</label>
     <select id="levels"><option value="tags">from the tags (fast)</option><option value="solve">solved (roadstyle's optimization)</option></select>
@@ -358,7 +362,7 @@
     <label for="mapmode" class="small">Roads of</label>
     <select id="mapmode"><option value="all">all modes</option><option value="driving">driving</option><option value="walking">walking</option><option value="cycling">cycling</option></select>
     <label for="basemap" class="small">Base map</label>
-    <select id="basemap"><option value="">OpenFreeMap</option><option value="esri_gray">light gray (Esri)</option><option value="blank">none</option></select>
+    <select id="basemap"><option value="">OpenFreeMap</option><option value="esri_gray">light gray (Esri)</option><option value="blank">none</option><option value="duckosm" hidden>duckOSM layers</option></select>
   </div>
   <p id="mapnote" class="progress" aria-live="polite"></p>
   <h2 style="margin-top:16px">SQL</h2>
@@ -945,8 +949,11 @@ $("run").onclick = async () => {
     const threads = Number(new URLSearchParams(location.search).get("threads")) || undefined;  // ?threads=N: the size of the pool
     const levels = $("levels").value;   // visualization.edge_levels: the tags rule or the solver (docs/levels.md)
     let msg, download = null;
+    const feats = $("features").checked && source === "region";   // the base-map layers need the raw.* of a region file
+    // DuckDB loads its spatial extension during the build (the build worker does not use DuckDB); the tables wait for it
+    const spatial = feats ? duck.loadSpatial() : null;
     if (source === "region") {
-      msg = { region: regionFile, boundary: text(), modes, fixes, levels, threads };   // the worker reads the File piece by piece
+      msg = { region: regionFile, boundary: text(), modes, fixes, levels, threads, raw: feats };   // the worker reads the File piece by piece
     } else if (source === "cut") {
       msg = { pbf: await $("pbf").files[0].arrayBuffer(), boundary: area ? text() : null, modes, fixes, levels, threads };
     } else {
@@ -956,18 +963,36 @@ $("run").onclick = async () => {
       msg = { json: got.bytes, boundary: text(), modes, fixes, levels, threads };
     }
     const out = await duck.build(msg, (t) => progress(t + "…"));
+    if (spatial) {
+      progress("loading DuckDB's spatial extension…");
+      await spatial;
+    }
     const built = performance.now();
     progress("loading the tables into DuckDB…");
     await duck.loadTables(out.files);
+    const loaded = performance.now();
+    let featuresSeconds = null;
+    if (out.featuresSql) {
+      progress("making the base-map layers…");
+      const f0 = performance.now();
+      await duck.loadFeatures(out.files, out.featuresSql);
+      featuresSeconds = (performance.now() - f0) / 1000;
+    }
     const ready = performance.now();
     window.timings = Object.assign(window.timings || {}, {
-      wasmLoad: out.seconds.load, build: out.seconds.build, tables: (ready - built) / 1000, clickToQuery: (ready - start) / 1000,
-      memoryMiB: out.memoryMiB, threads: out.threads, download,
+      wasmLoad: out.seconds.load, build: out.seconds.build, tables: (loaded - built) / 1000, clickToQuery: (ready - start) / 1000,
+      memoryMiB: out.memoryMiB, threads: out.threads, download, features: featuresSeconds,
     });
     const got = download ? `OSM data from ${download.server}: ${num(download.bytes / 2 ** 20, 1)} MB in ${num(download.seconds, 1)} s.\n` : "";
-    progress(`${out.summary}\n\n${got}Build ${num(out.seconds.build, 2)} s, tables into DuckDB ${num((ready - built) / 1000, 2)} s, ` +
+    progress(`${out.summary}\n\n${got}Build ${num(out.seconds.build, 2)} s, tables into DuckDB ${num((loaded - built) / 1000, 2)} s, ` +
+             `${featuresSeconds == null ? "" : `base-map layers ${num(featuresSeconds, 2)} s, `}` +
              `ready for SQL ${num((ready - start) / 1000, 2)} s after the click; ${out.memoryMiB} MiB, ${out.threads} thread(s).`);
     files();
+    // the base map from the layers of the build, when there are layers
+    const own = duck.tables.some((t) => t.mode === "features"), opt = $("basemap").querySelector("option[value=duckosm]");
+    opt.hidden = !own;
+    if (own) $("basemap").value = "duckosm";
+    else if ($("basemap").value === "duckosm") $("basemap").value = "";
     $("step5-card").hidden = false;
     showRoads();
   } catch (e) {
@@ -1034,7 +1059,10 @@ const BASEMAPS = {
 function setBase() {
   if (map.getLayer("base-over")) map.removeLayer("base-over");
   if (map.getSource("base-over")) map.removeSource("base-over");
-  const v = $("basemap").value, under = map.getStyle().layers.find((l) => l.id.startsWith("rs-"))?.id ?? "area-fill";
+  const v = $("basemap").value;
+  // the base-map layers of the build (the style's sources ov<i>): only with "duckOSM layers"; outside the area, OpenFreeMap stays
+  for (const l of map.getStyle().layers) if (l.source?.startsWith("rs-ov")) map.setLayoutProperty(l.id, "visibility", v === "duckosm" ? "visible" : "none");
+  const under = map.getStyle().layers.find((l) => l.id.startsWith("rs-"))?.id ?? "area-fill";
   if (v === "blank") map.addLayer({ id: "base-over", type: "background", paint: { "background-color": dark() ? "#17181c" : "#ffffff" } }, under);
   else if (BASEMAPS[v]) {
     map.addSource("base-over", { type: "raster", tileSize: 256, ...BASEMAPS[v] });
@@ -1076,15 +1104,19 @@ let urls = [];
 function files() {
   urls.forEach(URL.revokeObjectURL);
   urls = [];
-  const modes = [...new Set(duck.tables.map((t) => t.mode))];
+  const modes = [...new Set(duck.tables.map((t) => t.mode))].filter((m) => m !== "features");
   const link = (t) => {
     const u = URL.createObjectURL(new Blob([t.bytes], { type: "application/vnd.apache.parquet" }));
     urls.push(u);
-    return `<span class="i"><a href="${u}" download="${esc(t.name)}" title="${esc(t.name)}, ${size(t.bytes.length)}">${t.mode}</a> <span>${num(t.rows)} rows</span></span>`;
+    const label = t.mode === "features" ? t.table : t.mode;
+    return `<span class="i"><a href="${u}" download="${esc(t.name)}" title="${esc(t.name)}, ${size(t.bytes.length)}">${label}</a> <span>${num(t.rows)} rows</span></span>`;
   };
+  const feats = duck.tables.filter((t) => t.mode === "features");
   $("files").innerHTML = Object.entries(duck.TABLES).filter(([name]) => duck.tables.some((t) => t.table === name)).map(([name, what]) =>
     `<div class="tb"><b>${name}</b><p>${esc(what)}</p><div class="m">` +
-    modes.map((m) => duck.tables.find((t) => t.table === name && t.mode === m)).filter(Boolean).map(link).join("") + "</div></div>").join("");
+    modes.map((m) => duck.tables.find((t) => t.table === name && t.mode === m)).filter(Boolean).map(link).join("") + "</div></div>").join("") +
+    (feats.length ? `<div class="tb"><b>features</b><p>${esc(duck.FEATURES_TEXT)} <a href="${duck.FEATURES_REFERENCE}" target="_blank" rel="noopener">The layers</a></p>` +
+      `<div class="m">${feats.map(link).join("")}</div></div>` : "");
 }
 $("reference").href = duck.REFERENCE;
 $("zip").onclick = async () => {

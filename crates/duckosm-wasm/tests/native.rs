@@ -8,6 +8,8 @@ use duckosm_core::filter::Mode;
 use std::path::PathBuf;
 
 const FIXES: &str = "overrides:\n  - osm_id: 93137596\n    lanes: 1\n";
+/// The fixes of duckOSM's Monaco file that change raw.ways: a tag and the arrows of the lanes.
+const FIXES_AREA: &str = "overrides:\n  - osm_id: 93137596\n    lanes: 1\n  - osm_id: 4227277\n    turn_lanes_forward: none|none\n";
 
 #[test]
 fn browser_build_equals_native_build() {
@@ -35,6 +37,7 @@ fn browser_build_equals_native_build() {
         None,
         duckosm_core::levels::Method::Tags,
         0,
+        false,
         |name| {
             names.push(name.to_string());
             std::fs::File::create(wasm.join(name)).map_err(|e| e.to_string())
@@ -61,7 +64,7 @@ fn browser_build_equals_native_build() {
 }
 
 /// The browser build of an area (a region PBF and a boundary, cut while it is read) equals the native build with
-/// the same boundary, byte for byte.
+/// the same boundary, byte for byte, with the `raw.*` files of the base-map layers and an OSM fixes file.
 #[test]
 fn browser_area_build_equals_native_build() {
     use duckosm_core::boundary::Boundary;
@@ -78,11 +81,15 @@ fn browser_area_build_equals_native_build() {
         tmp.join("duckosm-wasm-area"),
     );
     std::fs::create_dir_all(&wasm).unwrap();
+    let fixes = tmp.join("fixes-area.yaml");
+    std::fs::write(&fixes, FIXES_AREA).unwrap();
     let mut p = Params {
         modes: vec![Mode::Driving, Mode::Walking, Mode::Cycling],
         geoparquet: true,
         duckdb: false,
         boundary: Some(geojson.clone()),
+        raw: true,
+        osm_fixes: Some(fixes.clone()),
         built_at: Some(0),
         ..Params::default()
     };
@@ -99,10 +106,11 @@ fn browser_area_build_equals_native_build() {
     duckosm_wasm::run(
         duckosm_wasm::Input::Area(&open, &boundary),
         "driving,walking,cycling",
-        None,
+        Some(FIXES_AREA),
         Some(&std::fs::read_to_string(&geojson).unwrap()),
         duckosm_core::levels::Method::Solve,
         0,
+        true,
         |name| {
             names.push(name.to_string());
             std::fs::File::create(wasm.join(name)).map_err(|e| e.to_string())
@@ -110,8 +118,10 @@ fn browser_area_build_equals_native_build() {
     )
     .unwrap();
     // 3 modes x 10 files (edges, private_edges, nodes, virtual_nodes, ways, way_nodes, edge_id_map, edge_graph,
-    // turn_permission, and in driving the two turn restriction tables) + 4 area files + the 2 levels files (solve)
-    assert_eq!(names.len(), 3 * 9 + 2 + 4 + 2, "{names:?}");
+    // turn_permission, and in driving the two turn restriction tables) + 4 area files + 3 raw files + the 2 levels
+    // files (solve)
+    assert_eq!(names.len(), 3 * 9 + 2 + 4 + 3 + 2, "{names:?}");
+    assert!(names.contains(&"raw_ways.parquet".to_string()));
     for n in &names {
         let (a, b) = (
             std::fs::read(native.join(n)).unwrap(),

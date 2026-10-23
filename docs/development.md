@@ -139,6 +139,34 @@ curl -o index-v1.json https://download.geofabrik.de/index-v1.json
 python tools/make_geofabrik_index.py index-v1.json crates/duckosm-wasm/www/geofabrik.json   # needs shapely
 ```
 
+## Check the base-map layers
+
+The `raw.*` cut and the base-map layers (`features.*`) of [features.md](features.md). duckOSM's `monaco.duckdb`
+keeps its `raw.*` and is built with its OSM fixes, so `raw.*` and all 11 layers must be equal:
+
+```bash
+cargo test --release -p duckosm-core --test raw     # the raw cut equals osmium's smart cut (tests/data/monaco_smart.osm.pbf)
+./target/release/duckosm-rust tests/data/monaco_sample.osm.pbf --boundary tests/data/monaco.geojson -m driving,walking,cycling \
+    --fixes ../duckOSM/osm_overrides/osm_overrides.yaml --raw -f geoparquet -o out-raw
+python tools/compare_features.py out-raw --duckosm ../duckOSM/monaco.duckdb
+python crates/duckosm-wasm/www/e2e.py tests/data/monaco_sample.osm.pbf out-page --boundary tests/data/monaco.geojson \
+    --fixes ../duckOSM/osm_overrides/osm_overrides.yaml
+python tools/compare_features.py out-raw --page out-page     # the page's features_*.parquet against the native result
+```
+
+Another area against osmium (`osmium extract -s smart -p boundary.geojson region.osm.pbf -o cut.osm.pbf`):
+
+```bash
+RAW_CHECK="region.osm.pbf boundary.geojson cut.osm.pbf" cargo test --release -p duckosm-core --test raw -- --ignored
+```
+
+`crates/duckosm-build/sql/features.sql` is made from duckOSM's code. Make it again when duckOSM's layers change, then
+build the WebAssembly modules again (the module holds the text):
+
+```bash
+../duckOSM/.venv/bin/python tools/make_features_sql.py
+```
+
 ## Check the OSM fixes
 
 `monaco.duckdb` of duckOSM is built with its OSM fixes file, so all driving rows must be equal:

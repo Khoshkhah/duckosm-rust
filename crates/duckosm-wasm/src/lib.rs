@@ -2,7 +2,8 @@
 //! chosen modes out, as GeoParquet bytes. The same steps and the same writer as the native build.
 
 use duckosm_build::{
-    config::parse_osm_fixes, parse_modes, write_area_tables, write_levels, write_tables, Area,
+    config::parse_osm_fixes, parse_modes, write_area_tables, write_levels, write_raw, write_tables,
+    Area, FEATURES_SQL,
 };
 use duckosm_core::boundary::Boundary;
 use duckosm_core::filter::Mode;
@@ -135,14 +136,24 @@ impl Seek for BlobRead {
     }
 }
 
+/// duckOSM's SQL of the base-map layers (`features.*`): it loads the `raw_*.parquet` files of [`build_area`] with
+/// `raw` into `raw.*` and makes the layers. It needs DuckDB's spatial extension (docs/features.md).
+#[wasm_bindgen]
+pub fn features_sql() -> String {
+    FEATURES_SQL.to_string()
+}
+
 /// Build duckOSM's tables of an area: `region` is a `.osm.pbf` file (a `File` or `Blob`) that covers the
-/// `boundary` (GeoJSON, as `duckosm boundary` writes it). The file is cut to the boundary while it is read.
+/// `boundary` (GeoJSON, as `duckosm boundary` writes it). The file is cut to the boundary while it is read. With
+/// `raw`, the output also has `raw_nodes.parquet`, `raw_ways.parquet` and `raw_relations.parquet`: duckOSM's
+/// `raw.*` of the area, cut as osmium's `smart` does, the input of [`features_sql`].
 #[wasm_bindgen]
 pub fn build_area(
     region: Blob,
     boundary: &str,
     modes: &str,
     fixes_yaml: Option<String>,
+    raw: Option<bool>,
     levels: Option<String>,
 ) -> Result<Output, JsError> {
     let text = boundary;
@@ -156,6 +167,7 @@ pub fn build_area(
         modes,
         fixes_yaml,
         Some(text),
+        raw.unwrap_or(false),
         levels,
     )
 }
@@ -167,6 +179,7 @@ pub fn build_area_bytes(
     boundary: &str,
     modes: &str,
     fixes_yaml: Option<String>,
+    raw: Option<bool>,
     levels: Option<String>,
 ) -> Result<Output, JsError> {
     let text = boundary;
@@ -180,6 +193,7 @@ pub fn build_area_bytes(
         modes,
         fixes_yaml,
         Some(text),
+        raw.unwrap_or(false),
         levels,
     )
 }
@@ -201,6 +215,7 @@ pub fn build(
         modes,
         fixes_yaml,
         boundary.as_deref(),
+        false,
         levels,
     )
 }
@@ -226,6 +241,7 @@ pub fn build_osm_json(
         modes,
         fixes_yaml,
         boundary.as_deref(),
+        false,
         levels,
     )
 }
@@ -235,6 +251,7 @@ fn js_build(
     modes: &str,
     fixes_yaml: Option<String>,
     boundary: Option<&str>,
+    raw: bool,
     levels: Option<String>,
 ) -> Result<Output, JsError> {
     let levels = match levels.as_deref() {
@@ -251,6 +268,7 @@ fn js_build(
         boundary,
         levels,
         built_at,
+        raw,
         |name| {
             let parts = Array::new();
             Reflect::set(&files, &name.into(), &parts)
@@ -266,7 +284,8 @@ fn js_build(
 /// The steps of `duckosm_build::build` without files and without a clock (WebAssembly has neither): the OSM
 /// fixes, the relations for the turn restrictions, the sidewalk rule, then each mode, written with
 /// `write_tables` to a writer from `file`, then the tables of the area (`write_area_tables`; `boundary` is the
-/// boundary file, `built_at` the time in microseconds). Returns one summary line for each mode.
+/// boundary file, `built_at` the time in microseconds). With `raw` (only for `Input::Area`), also `raw.*` with
+/// `write_raw`. Returns one summary line for each mode.
 pub fn run<W: Write + Send>(
     input: Input,
     modes: &str,
@@ -274,6 +293,7 @@ pub fn run<W: Write + Send>(
     boundary: Option<&str>,
     levels: Method,
     built_at: i64,
+    raw: bool,
     mut file: impl FnMut(&str) -> Result<W, String>,
 ) -> Result<String, String> {
     let modes = parse_modes(modes)?;
@@ -286,6 +306,7 @@ pub fn run<W: Write + Send>(
         None => OsmFixes::default(),
     };
     let need_relations = opts.extract_restrictions && modes.contains(&Mode::Driving);
+    let mut raw_tables = None;
     let (mut ways, mut coords, relations) = match input {
         Input::Pbf(bytes) => {
             let mut ways = pbf::read_ways_bytes(bytes)?;
@@ -299,7 +320,14 @@ pub fn run<W: Write + Send>(
             (ways, coords, relations)
         }
         Input::Area(open, boundary) => {
-            let (mut ways, coords, relations) = pbf::read_area(open, boundary)?;
+            let (mut ways, coords, relations) = if raw {
+                let (w, c, r, mut rt) = pbf::read_area_raw(open, boundary)?;
+                rt.apply_fixes(&fixes);
+                raw_tables = Some(rt);
+                (w, c, r)
+            } else {
+                pbf::read_area(open, boundary)?
+            };
             fixes.apply_to_ways(&mut ways)?;
             (
                 ways,
@@ -365,6 +393,17 @@ pub fn run<W: Write + Send>(
         built_at,
     };
     write_area_tables(&area, &mut file)?;
+    if let Some(mut r) = raw_tables {
+        // the tags that the steps set on the network's ways (the sidewalk rule, the arrows of the fixes)
+        r.sync_tags(&ways);
+        write_raw(&r, &mut file)?;
+        summary.push(format!(
+            "raw: {} nodes, {} ways, {} relations",
+            r.nodes.len(),
+            r.ways.len(),
+            r.relations.len()
+        ));
+    }
     if let Some(l) = write_levels(&level_edges, levels, built_at, &mut file)? {
         summary.push(l);
     }

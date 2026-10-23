@@ -52,6 +52,8 @@ The page keeps the selected file only in memory. After a reload, the user select
 
 - The modes (three check boxes) and, under **Advanced: corrections to the map data**, the OSM fixes file
   (duckOSM `osm_overrides`), with one sentence that tells what it is (Kaveh found the first label unclear).
+- **Base map layers** (a check box, on): with a region file, the build also makes duckOSM's base-map layers
+  (`features.*`), see [features.md](features.md).
 - **Build** (in the footer) starts the build in the Web Worker (`build_worker.js`, with threads when the page
   is cross-origin isolated). The card shows the progress, then the summary and the times, as the old page.
 - A new build replaces the result of the last build.
@@ -61,7 +63,8 @@ The page keeps the selected file only in memory. After a reload, the user select
 - **Roads of**: all modes, or one mode. The roads show on the map in roadstyle's style (`map/`), as in step
   M1 of [browser.md](browser.md).
 - **Base map**: OpenFreeMap (the default), light gray (Esri), or none. The base map of the map stays
-  OpenFreeMap; the other two are a layer over it, under the roads.
+  OpenFreeMap; the other two are a layer over it, under the roads. After a build with the base-map layers, a fourth
+  option is the default: **duckOSM layers**, the layers of the build inside the area ([features.md](features.md)).
 - **SQL**: a text box, **Run**, and the result as a table (the first 200 rows) in the card.
 - **Downloads** (changed after Kaveh found that the files had no structure):
   - **Download all (.zip)**: a folder named after the area, with the Parquet files (the names of duckOSM's
@@ -69,7 +72,8 @@ The page keeps the selected file only in memory. After a reload, the user select
     GeoLibre plugin opens), `load.sql`, `boundary.geojson` and a `README.txt` that says what each table holds.
   - **load.sql** alone.
   - One block for each table: its name, one sentence on what it holds, and a link for each mode with the number
-    of rows. A link goes to duckOSM's reference of the columns.
+    of rows. A link goes to duckOSM's reference of the columns. With the base-map layers, one more block,
+    `features`, has a link for each layer; the zip has them as `features_<table>.parquet`, in `layers.json` too.
 
 ## The map
 

@@ -2,11 +2,13 @@
 map.png), and download the Parquet files and load.sql. Prints the times of the page as JSON (docs/browser.md, steps B3 and B4).
 
     python crates/duckosm-wasm/www/e2e.py <file.osm.pbf> <out folder> [--boundary area.geojson] [--modes driving,walking,cycling] [--fixes file.yaml]
+        [--no-features]
 
 With --boundary, the PBF file is a region file and the page cuts it to the boundary; without, the file is
 already cut. With --boundary and the PBF file "overpass", the data comes from the Overpass API. With --boundary
 and the PBF file "relay", the page gets the smallest extract through the relay of serve.py (docs/relay.md) and
-keeps it in the browser.
+keeps it in the browser. With a region file, the page also makes the base-map layers (docs/features.md), unless
+--no-features: the out folder gets their features_<table>.parquet files (tools/compare_features.py --page checks them).
 
 Build the page first (docs/development.md, "WebAssembly"). The page loads duckdb-wasm from cdn.jsdelivr.net, so
 the computer needs the network.
@@ -29,6 +31,7 @@ a.add_argument("--boundary")
 a.add_argument("out")
 a.add_argument("--modes", default="driving,walking,cycling")
 a.add_argument("--fixes")
+a.add_argument("--no-features", action="store_true", help="the box 'Base map layers' off")
 a.add_argument("--levels", choices=["tags", "solve"], default="tags", help="the drawing order (docs/levels.md)")
 a.add_argument("--one-thread", action="store_true", help="serve the page without the COOP and COEP headers")
 a.add_argument("--threads", type=int, help="the size of the thread pool (default: the cores, at most 8)")
@@ -62,6 +65,7 @@ with sync_playwright() as p:
         page.set_input_files("#fixes", args.fixes)
     for box in page.query_selector_all("input[name=mode]"):
         box.set_checked(box.get_attribute("value") in args.modes.split(","))
+    page.set_checked("#features", not args.no_features)
     page.select_option("#levels", args.levels)
     page.click("#run")
     page.wait_for_function("!document.getElementById('step5-card').hidden || document.getElementById('buildstatus').textContent.startsWith('Error')",
@@ -85,7 +89,7 @@ with sync_playwright() as p:
     parquet = [n for n in names if n.endswith(".parquet")]
     print(f"zip: {len(parquet)} Parquet files and", sorted(n.split("/", 1)[1] for n in names if not n.endswith(".parquet")))
     # the bytes of each file through its blob link (Chromium stops many downloads in a row)
-    files = page.evaluate("""async () => Promise.all([...document.querySelectorAll('#files a')].map(async (a) => {
+    files = page.evaluate("""async () => Promise.all([...document.querySelectorAll('#files a[download]')].map(async (a) => {
         const b = new Blob([await (await fetch(a.href)).arrayBuffer()]);
         const url = await new Promise((ok) => { const r = new FileReader(); r.onload = () => ok(r.result); r.readAsDataURL(b); });
         return [a.download, url.slice(url.indexOf(',') + 1)];

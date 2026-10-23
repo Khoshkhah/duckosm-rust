@@ -1,7 +1,8 @@
 # The relay: region files without a manual download
 
-Status: code and local checks done on 2026-10-22 (the results are at the end). Not deployed: the deploy needs
-Kaveh's Cloudflare account (the steps are in [Deploy the relay](#deploy-the-relay)).
+Status: deployed on 2026-10-23 at <https://duckosm-relay.khoshkhah.workers.dev> (Kaveh's Cloudflare account, the
+`workers.dev` subdomain `khoshkhah`), and the default relay of the page (`RELAY` in `www/app/regions.js`). The
+results of the checks are at the end.
 
 ## Why
 
@@ -130,4 +131,15 @@ To change the allowed pages later, change `ALLOWED_ORIGINS` and run `npx wrangle
   **Delete**, the file is gone and Build is off.
 - Not tested: the deploy on Cloudflare (it needs the account), a large region, and Firefox and Safari (their
   storage limits are different).
+
+## The deploy (2026-10-23)
+
+- The account had no `workers.dev` subdomain. Kaveh chose `khoshkhah` (it matches `khoshkhah.github.io`). Wrangler
+  has no command for it, so it was set with Cloudflare's API (`PUT /accounts/<id>/workers/subdomain`) and the
+  Wrangler login. The new name answered after about 80 s.
+- `npx wrangler deploy` in `crates/duckosm-wasm/relay`: the Worker `duckosm-relay`, 1.7 KiB.
+- Checks with `curl`: from `https://khoshkhah.github.io`, the Monaco extract (693,466 bytes) with
+  `access-control-allow-origin` and `cross-origin-resource-policy`; from another page 403; a URL that is not
+  Geofabrik 400.
+- The page on `localhost` with the deployed relay (no `?relay=`): Get, the kept file after a reload, Delete.
 

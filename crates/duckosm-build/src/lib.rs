@@ -7,6 +7,7 @@ use duckosm_core::fixes::OsmFixes;
 use duckosm_core::levels::LevelEdges;
 use duckosm_core::model::{Network, Way};
 use duckosm_core::network::{build_network_with, Options};
+use duckosm_core::raw::Raw;
 use duckosm_core::{pbf, sidewalks};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -38,6 +39,9 @@ pub struct Params {
     pub osm_fixes: Option<PathBuf>,
     /// A boundary (GeoJSON): the PBF is cut to it as osmium's `complete_ways` does. None: the PBF is the area.
     pub boundary: Option<PathBuf>,
+    /// Also write duckOSM's `raw.*` of the area (`raw_nodes.parquet`, ...), the input of the base-map layers
+    /// (docs/features.md). Needs a boundary.
+    pub raw: bool,
     /// The boundary of the area for `main.boundary` and `main.visualization_metadata`, when the PBF is
     /// already cut to it (a config with `--pbf-is-cut`). `boundary` is used when this is None.
     pub area_boundary: Option<PathBuf>,
@@ -57,6 +61,7 @@ impl Default for Params {
             infer_sidewalks: true,
             osm_fixes: None,
             boundary: None,
+            raw: false,
             area_boundary: None,
             built_at: None,
         }
@@ -134,6 +139,22 @@ pub fn write_tables<W: Write + Send>(
     Ok(())
 }
 
+/// Write duckOSM's `raw.*` tables, each to a writer from `file`: `raw_nodes.parquet`, `raw_ways.parquet` and
+/// `raw_relations.parquet`. `features.sql` loads them and makes the base-map layers.
+pub fn write_raw<W: Write + Send>(
+    raw: &Raw,
+    mut file: impl FnMut(&str) -> Result<W, String>,
+) -> Result<(), String> {
+    use duckosm_parquet as pq;
+    pq::write_raw_nodes_to(file("raw_nodes.parquet")?, &raw.nodes)?;
+    pq::write_raw_ways_to(file("raw_ways.parquet")?, &raw.ways, &raw.nodes)?;
+    pq::write_raw_relations_to(file("raw_relations.parquet")?, &raw.relations)
+}
+
+/// duckOSM's SQL of the base-map layers (`features.*`), from the `raw.*` files of [`write_raw`]: made by
+/// tools/make_features_sql.py from duckOSM's `FeaturesBuilder`. It needs DuckDB's spatial extension.
+pub const FEATURES_SQL: &str = include_str!("../sql/features.sql");
+
 /// `layers.json`: the list of the edge and node files with their counts, as `duckosm export-gis`
 /// writes it, so the roadstyle GeoLibre plugin opens the folder in one step.
 fn write_layers_json(dir: &Path, sum: &Summary) -> Result<(), String> {
@@ -178,13 +199,25 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
         Some(f) => config::read_osm_fixes(f)?,
         None => OsmFixes::default(),
     };
+    if p.raw && p.boundary.is_none() {
+        return Err("raw.* (the base-map layers) needs a boundary".into());
+    }
+    let mut raw = None;
     let (mut ways, mut coords, area_relations) = match &p.boundary {
-        // duckOSM with a boundary: cut the PBF (osmium complete_ways), then the fixes on the raw ways
+        // duckOSM with a boundary: cut the PBF (osmium complete_ways, or smart for raw.*), then the fixes on the raw ways
         Some(path) => {
             let text =
                 std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-            let (mut ways, coords, relations) =
-                pbf::read_area_path(pbf_path, &Boundary::parse(&text)?)?;
+            let boundary = Boundary::parse(&text)?;
+            let (mut ways, coords, relations) = if p.raw {
+                let open = || pbf::BlobReader::from_path(pbf_path).map_err(|e| e.to_string());
+                let (w, c, r, mut rw) = pbf::read_area_raw(open, &boundary)?;
+                rw.apply_fixes(&fixes);
+                raw = Some(rw);
+                (w, c, r)
+            } else {
+                pbf::read_area_path(pbf_path, &boundary)?
+            };
             lap("cut to the boundary", &mut sum);
             fixes.apply_to_ways(&mut ways)?;
             (ways, coords, Some(relations))
@@ -254,6 +287,17 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
             level_edges.add(*mode, true, &net.private_edges);
         }
         mode_nodes.push((*mode, net.nodes));
+    }
+    if let Some(r) = raw.as_mut() {
+        // the tags that the steps set on the network's ways (the sidewalk rule, the arrows of the fixes)
+        r.sync_tags(&ways);
+        write_raw(r, |name| {
+            let path = out.join(name);
+            sum.files
+                .push((name.trim_end_matches(".parquet").to_string(), path.clone()));
+            std::fs::File::create(&path).map_err(|e| e.to_string())
+        })?;
+        lap("write raw", &mut sum);
     }
     let boundary = match p.area_boundary.as_ref().or(p.boundary.as_ref()) {
         Some(path) => {
