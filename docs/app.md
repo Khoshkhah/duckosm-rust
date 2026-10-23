@@ -118,7 +118,8 @@ Kaveh's layout of 2026-10-23: the data in card 5, the map in card 6.
   spacing): 3D, the 3D buildings switch, Street View, Google 3D (only with a key), and the base map (▦) last:
   - **3D** tilts the map to 60 degrees and shows the 3D buildings. A second click makes the map flat again.
   - **Base map** (the grid) opens a list: OpenFreeMap, Light gray (Esri), Satellite (Esri World Imagery) and
-    Blank. All except OpenFreeMap hide all of OpenFreeMap's layers, also its labels (in the 3D view without the duckOSM 3D buildings, its 3D buildings stay). After a
+    Blank (roadstyle's colours: `#efede8`, and `#14181d` in the dark theme). All except OpenFreeMap hide all of
+    OpenFreeMap's layers, also its labels (in the 3D view without the duckOSM 3D buildings, its 3D buildings stay). After a
     build with the base-map layers, the list also has **duckOSM layers**. Satellite turns them off, because they
     cover the photo. The page keeps the base map.
   - **Street View** (the person) opens roadstyle's floating window. A click on a road shows Google Street View at
