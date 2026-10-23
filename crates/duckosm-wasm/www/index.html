@@ -1239,6 +1239,7 @@ function setBase() {
     map.setPaintProperty(l.id, "fill-extrusion-height", view.threeD ? height : 0);
     map.setPaintProperty(l.id, "fill-extrusion-base", view.threeD ? base : 0);
     map.setLayerZoomRange(l.id, minzoom, ours && view.threeD ? Math.max(minzoom, ours.minzoom ?? 0) : maxzoom);
+    if (view.threeD && !ours) show(l, true);   // without the duckOSM 3D buildings, OpenFreeMap's show over every base map
   }
   for (const l of style) if (l.source?.startsWith("rs-ov")) show(l, own && (!offLayers.has(l.id) || (l.type === "fill-extrusion" && view.threeD)));
   const bottom = style[0].id;
