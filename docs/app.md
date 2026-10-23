@@ -108,7 +108,7 @@ Kaveh's layout of 2026-10-23: the data in card 5, the map in card 6.
 - The buttons under the zoom buttons (Kaveh's design of 2026-10-23):
   - **3D** tilts the map to 60 degrees and shows the 3D buildings. A second click makes the map flat again.
   - **Base map** (the grid) opens a list: OpenFreeMap, Light gray (Esri), Satellite (Esri World Imagery) and
-    Blank. All except OpenFreeMap hide all of OpenFreeMap's layers, also its labels and 3D buildings. After a
+    Blank. All except OpenFreeMap hide all of OpenFreeMap's layers, also its labels (in the 3D view without the duckOSM 3D buildings, its 3D buildings stay). After a
     build with the base-map layers, the list also has **duckOSM layers**. Satellite turns them off, because they
     cover the photo. The page keeps the base map.
   - There is no buildings button: the style alone decides if the footprints show, and 3D only adds the 3D
