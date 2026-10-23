@@ -39,8 +39,8 @@ the panel has three numbered steps:
 |   selected tab)          | | ⬠  |                                   |
 |--------------------------| | ○  |                                   |
 | 2 THE AREA               | | ∿  |                                   |
-| [Tartu linn           ]  |                                          |
-| [38.91 km²][1 pol.][271] |                                          |
+| [Tartu linn           ]  | |    |                                   |
+| [38.91 km²][1 pol.][271] | |    |                                   |
 | (warning, if large)      | |----|                                   |
 |                          | | ⧉  |                                   |
 |--------------------------| | ␡  |                                   |
