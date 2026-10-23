@@ -193,9 +193,18 @@ export async function zipAll(areaName, boundary) {
 
 // the style of the roads map: duckdb-wasm writes roads.parquet (the drawing levels of visualization.edge_levels, else from the tags)
 // and, with the base-map layers, features.parquet; roadstyle's Rust module makes the MapLibre style in a new worker
-// (map/map_worker.js; a worker that ends gives its memory back)
-let look = null;
-export async function roadsStyle(mode, name) {
+// (map/map_worker.js), with vector-tile sources rs://<generation>/<source>/{z}/{x}/{y}. The worker stays to make the tiles that the
+// map asks for (tile()), until the next style (a worker that ends gives its memory back). keep: the road properties that the page
+// reads (its popup); the tiles have only these and the ones the style reads.
+let look = null, mapWorker = null, generation = 0, tileId = 0;
+const tileCalls = new Map();
+function endMapWorker() {
+  mapWorker?.terminate();
+  mapWorker = null;
+  for (const done of tileCalls.values()) done(undefined);
+  tileCalls.clear();
+}
+export async function roadsStyle(mode, name, keep = []) {
   const t = performance.now();
   const q = async (sql) => (await conn.query(sql)).toArray().map((r) => r.toJSON());
   await db.dropFile("roads.parquet").catch(() => {});     // duckdb-wasm does not see a second COPY to a kept file name
@@ -210,14 +219,38 @@ export async function roadsStyle(mode, name) {
     if (await writeFeatures(q, "memory", (await look).features.layers_yaml.layers)) features = await db.copyFileToBuffer("features.parquet");
   }
   const roadsSeconds = (performance.now() - t) / 1000;
+  endMapWorker();
+  const w = (mapWorker = new Worker(new URL("../map/map_worker.js", import.meta.url), { type: "module" }));
+  const prefix = `rs://${++generation}/`;
   const out = await new Promise((ok, fail) => {
-    const w = new Worker(new URL("../map/map_worker.js", import.meta.url), { type: "module" });
-    w.onmessage = ({ data }) => { w.terminate(); data.error ? fail(new Error(data.error)) : ok(data); };
-    w.onerror = (e) => { w.terminate(); fail(new Error(e.message || "the map worker failed")); };
-    w.postMessage({ roads, features, name }, [roads.buffer, ...(features ? [features.buffer] : [])]);
+    w.onmessage = ({ data }) => {
+      if (data.id != null) {
+        tileCalls.get(data.id)?.(data.data);
+        tileCalls.delete(data.id);
+      } else if (data.error) {
+        endMapWorker();
+        fail(new Error(data.error));
+      } else ok(data);
+    };
+    w.onerror = (e) => { endMapWorker(); fail(new Error(e.message || "the map worker failed")); };
+    w.postMessage({ roads, features, name, prefix, keep }, [roads.buffer, ...(features ? [features.buffer] : [])]);
   });
   return { style: JSON.parse(out.style), roadsSeconds, styleSeconds: out.seconds, memoryMiB: out.memoryMiB };
 }
+
+// a question to the map worker, answered by its id
+const ask = (msg, none) => !mapWorker ? Promise.resolve(none) : new Promise((done) => {
+  const id = ++tileId;
+  tileCalls.set(id, done);
+  mapWorker.postMessage({ ...msg, id });
+});
+// a tile of the roads map (MapLibre's request for rs://<generation>/<source>/<z>/<x>/<y>); a tile of an older style is empty
+export function tile(url) {
+  const [gen, source, z, x, y] = url.slice("rs://".length).split("/");
+  return +gen !== generation ? Promise.resolve(new ArrayBuffer(0)) : ask({ tile: [source, +z, +x, +y] }, new ArrayBuffer(0));
+}
+// the properties of road number `edge` of the map (the property __rs_edge of what the map draws), or null
+export const roadProps = async (edge) => JSON.parse((await ask({ props: ["roads", edge] }, "null")) || "null");
 
 // the data of an area from the Overpass API: the highway ways and ferry lines in the bounding box of each outer ring, with all their
 // nodes, and the type=restriction relations of these ways. duckosm-rust then keeps the ways with a node inside the boundary, as in

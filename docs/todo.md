@@ -19,9 +19,11 @@ gzip; [tables.md](tables.md)). Kaveh chose it on 2026-10-23. Two other ways, for
 
 - **A "Style" choice in step 5**: roadstyle's and mapstyle's 64 looks (mode, colors, paths) for the roads and the
   base map, as in the GeoLibre plugin.
-- **Faster maps for a large area**: the style holds the roads as inline GeoJSON (Tartu: 226 MB of text, about 9 s).
-  Vector tiles made in Rust when the map asks for them would show the map in about 1 s, also above roadstyle's
-  limit of 100,000 roads. The work is in geolibre-roadstyle.
+- **Faster maps for a large area**: done in part (2026-10-23). The roads go to MapLibre as vector tiles that Rust
+  makes when the map asks for them: Tartu 15.7 s to 7.4 s, and the page's memory 803 to 104 MiB
+  ([browser.md](browser.md)). Still to do: roadstyle's module makes the sources as JSON trees before the tiles
+  (Tartu: 3.6 s and 1.4 GB), so the limit of 100,000 roads stays. Making the tiles' features without the trees
+  would lift it. The work is in geolibre-roadstyle (`wasm/`).
 - **The sea (`features.ocean`)**: not in the page for now (Kaveh, 2026-10-23). duckdb-wasm cannot read Overture's
   sea files in parts (27 GB in total). Two ways for later: read only the needed part of Overture's files in the page
   (about 20 MB the first time, the same sea as duckOSM), or make the sea from the coastline ways of the region file

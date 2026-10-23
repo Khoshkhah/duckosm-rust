@@ -236,8 +236,24 @@ style of roadstyle:
 | Monaco | 0.2–0.4 s | 0.7–1.1 s | 296 MiB | 1.4–2.3 s |
 | Tartu (63,965 roads) | 0.8 s | 5.8–6.1 s | 1,388 MiB | 9.1–9.3 s, then MapLibre cuts the tiles |
 
-The style holds the roads as inline GeoJSON (Tartu: about 226 MB of text). This is the limit for larger areas:
-roadstyle's module stops at 100,000 roads. A smaller style needs another way to give the roads to MapLibre (for
-example vector tiles), in geolibre-roadstyle.
+The style held the roads as inline GeoJSON (Tartu: about 226 MB of text in the page).
+
+**Vector tiles (2026-10-23).** roadstyle's module (geolibre-roadstyle `wasm/`, commit `eea9f49`) now gives the style
+with vector-tile sources (`rs://<generation>/<source>/{z}/{x}/{y}`). The map worker stays, and it makes each tile
+when MapLibre asks for it (`maplibregl.addProtocol("rs", ...)` in `index.html`, `tile()` in `app/duck.js`). The
+layers, the colors and the road popup are the same; the screenshots of the two maps differ only at the edges of
+lines and in the place of one street name. The same commit makes roadstyle's slots step faster (Tartu: 2.3 s to
+0.7 s). Times in headless Chromium with software rendering, from the click to an idle map (the map's own idle
+event), the same machine for both:
+
+| | Roads table (SQL) | Style (Rust) | Map ready | Page memory (JS heap) |
+|---|---|---|---|---|
+| Monaco, GeoJSON | 0.2 s | 0.9 s | 3.1–3.4 s | 215–242 MiB |
+| Monaco, vector tiles | 0.2 s | 0.7 s | 2.0 s | 51–54 MiB |
+| Tartu, GeoJSON | 0.6 s | 6.5 s | 15.7 s | 803 MiB |
+| Tartu, vector tiles | 0.6 s | 3.6–4.5 s | 7.4–8.7 s | 104 MiB |
+
+The module still makes the sources as JSON trees before it makes the tiles, so its memory (1,387 MiB on Tartu) and
+its limit of 100,000 roads do not change. Next for large areas: make the tiles' features without the trees.
 
 **After M1:** duckOSM's base-map layers (`features.*`), then the style can draw them. Done: [features.md](features.md).

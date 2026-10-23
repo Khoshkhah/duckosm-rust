@@ -86,12 +86,16 @@ The page keeps the selected file only in memory. After a reload, the user select
 ## The map
 
 - The roads of roadstyle's style go onto the same map: their sources and layers are added with the prefix
-  `rs-`, as GeoLibre's roadstyle plugin does. They are over the base map and under the area line, the
+  `rs-`, as GeoLibre's roadstyle plugin does. The sources are vector tiles that the map worker makes when the map
+  asks for them (protocol `rs://`, [browser.md](browser.md)). They are over the base map and under the area line, the
   matches, the extracts and the drawn shapes. The style's images (the one-way arrow) are added under the same
   prefix. A layer with `text-font` gets a font of OpenFreeMap (Noto Sans).
 - When the roads show, the fill of the area goes away and only its line stays, so the fill does not change
   the colors of the roads.
-- A click on a road shows its data, but not while the user draws or uses **What is here?**.
+- A click on a road shows its data, but not while the user draws or uses **What is here?**. The map draws the roads
+  from roadstyle's pieces (`rs-simple`), and the road's properties come from the map worker by its number
+  (`__rs_edge`). Before the tiles, the click looked for the source `rs-roads`, whose layers are hidden, and found
+  nothing.
 - The buttons under the zoom buttons (2026-10-23, Kaveh's design):
   - **3D** tilts the map to 60 degrees and shows the 3D buildings. A second click makes the map flat again.
   - **Buildings** shows or hides all buildings.

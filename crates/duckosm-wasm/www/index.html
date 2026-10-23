@@ -502,6 +502,8 @@ async function covering(polys) {
 const empty = { type: "FeatureCollection", features: [] };
 const map = new maplibregl.Map({ container: "map", style: "https://tiles.openfreemap.org/styles/liberty", center: [10, 50], zoom: 3 });
 map.addControl(new maplibregl.NavigationControl(), "top-right");
+// the tiles of the roads map: roadstyle's module makes each one when the map asks for it (app/duck.js tile())
+maplibregl.addProtocol("rs", async (params) => ({ data: await duck.tile(params.url) }));
 map.addControl({ onAdd: () => $("mapctl"), onRemove: () => {} }, "top-right");   // 3D, buildings, base map: under the zoom buttons
 map.addControl(new maplibregl.ScaleControl(), "bottom-left");
 const loaded = new Promise((ok) => map.on("load", ok));
@@ -1127,6 +1129,7 @@ $("run").onclick = async () => {
 // ---- step 5: the roads on the map, in roadstyle's style (map/): its sources, images and layers with the prefix rs-, over the base
 // map and under the area line, the matches, the extracts and the drawn shapes (as GeoLibre's roadstyle plugin adds a style) ----
 let roadsRun = 0;
+const ROAD_KEYS = ["name", "edge_id", "osm_id", "highway", "edge_ref", "lanes", "bridge", "tunnel", "access"];   // the road popup
 // the roads of the base map (OpenFreeMap's transportation layers) go away while the duckOSM roads show, so the two do not compete
 let roadsShown = false;
 function removeRoads() {
@@ -1148,7 +1151,7 @@ async function showRoads() {
   $("mapnote").textContent = "making the map…";
   try {
     const t0 = performance.now();
-    const r = await duck.roadsStyle($("mapmode").value, areaName);
+    const r = await duck.roadsStyle($("mapmode").value, areaName, ROAD_KEYS);
     if (run !== roadsRun) return;                       // another choice came in the meantime
     await loaded;
     removeRoads();
@@ -1165,6 +1168,9 @@ async function showRoads() {
     map.setLayoutProperty("area-fill", "visibility", "none");   // the fill would change the colors of the roads
     roadsShown = true;
     setBase();
+    // the first tiles: the map is drawn when it is idle (at most 60 s)
+    await Promise.race([new Promise((ok) => map.once("idle", ok)), new Promise((ok) => setTimeout(ok, 60000))]);
+    if (run !== roadsRun) return;
     window.timings = Object.assign(window.timings || {}, { map: { roadsSql: r.roadsSeconds, style: r.styleSeconds,
       total: (performance.now() - t0) / 1000, memoryMiB: r.memoryMiB } });
     const total = (performance.now() - t0) / 1000;
@@ -1231,13 +1237,16 @@ $("b3d").onclick = () => {
 map.on("pitchend", () => { if ((map.getPitch() > 0) !== view.threeD) { view.threeD = map.getPitch() > 0; setBase(); } });
 loaded.then(setBase);
 
-// a click on a road shows its data, but not while the user draws or picks a point
-map.on("click", (e) => {
+// a click on a road shows its data, but not while the user draws or picks a point (the tiles carry these properties: ROAD_KEYS is
+// declared above showRoads)
+// The map draws the roads from roadstyle's pieces (rs-simple) and names (rs-slots); __rs_edge is the road's number, and the map worker
+// gives the road's properties.
+map.on("click", async (e) => {
   if (!$("draw").hidden || $("here").getAttribute("aria-pressed") === "true") return;
-  const f = map.queryRenderedFeatures(e.point).find((x) => x.source === "rs-roads");
+  const f = map.queryRenderedFeatures(e.point).find((x) => x.source.startsWith("rs-") && x.properties.__rs_edge != null && !x.source.startsWith("rs-ov"));
   if (!f) return;
-  const keys = ["name", "edge_id", "osm_id", "highway", "edge_ref", "lanes", "bridge", "tunnel", "access"];
-  const rows = keys.filter((k) => f.properties[k] != null && f.properties[k] !== "").map((k) => `<b>${k}</b> ${esc(f.properties[k])}`);
+  const p = (await duck.roadProps(f.properties.__rs_edge)) ?? {};
+  const rows = ROAD_KEYS.filter((k) => p[k] != null && p[k] !== "").map((k) => `<b>${k}</b> ${esc(p[k])}`);
   new maplibregl.Popup().setLngLat(e.lngLat).setHTML(rows.join("<br>") || "(no data)").addTo(map);
 });
 window.duckMap = map;   // for e2e.py

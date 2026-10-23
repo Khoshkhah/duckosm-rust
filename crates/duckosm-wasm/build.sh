@@ -5,11 +5,12 @@
 #   www/pkg-threads/  rayon on Web Workers (wasm-bindgen-rayon). It needs nightly Rust with rust-src, because the
 #                     standard library is built again with atomics, and a server that sends the COOP and COEP
 #                     headers (www/serve.py). The maximum memory is 4 GB, as in the build without threads.
-#   www/map/pkg/      roadstyle's Rust module for the roads map: geolibre-roadstyle's spike/rust at the commit ROADSTYLE_COMMIT,
-#                     cloned into target/geolibre-roadstyle (or ROADSTYLE_REPO, a local copy).
+#   www/map/pkg/      roadstyle's Rust module for the roads map (the style and its vector tiles): geolibre-roadstyle's wasm/
+#                     (roadstyle-wasm) at the commit ROADSTYLE_COMMIT, cloned into target/geolibre-roadstyle (or ROADSTYLE_REPO,
+#                     a local copy).
 set -e
 NIGHTLY=nightly-2026-10-15
-ROADSTYLE_COMMIT=38cd2aa
+ROADSTYLE_COMMIT=eea9f49
 ROADSTYLE_REPO=${ROADSTYLE_REPO:-https://github.com/Khoshkhah/geolibre-roadstyle.git}
 cargo build --release --target wasm32-unknown-unknown -p duckosm-wasm
 wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/pkg target/wasm32-unknown-unknown/release/duckosm_wasm.wasm
@@ -25,6 +26,7 @@ R=target/geolibre-roadstyle
 [ -d $R ] || git clone -q "$ROADSTYLE_REPO" $R
 git -C $R fetch -q origin 2>/dev/null || true
 git -C $R checkout -q $ROADSTYLE_COMMIT
-cargo build --release --target wasm32-unknown-unknown --lib --manifest-path $R/spike/rust/Cargo.toml
+cargo build --release --target wasm32-unknown-unknown --lib --manifest-path $R/wasm/Cargo.toml
+rm -rf crates/duckosm-wasm/www/map/pkg
 wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/map/pkg \
-  $R/spike/rust/target/wasm32-unknown-unknown/release/roadstyle_spike.wasm
+  $R/wasm/target/wasm32-unknown-unknown/release/roadstyle_wasm.wasm
