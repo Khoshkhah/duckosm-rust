@@ -86,16 +86,11 @@ Kaveh's layout of 2026-10-23: the data in card 5, the map in card 6.
 
 - **Network**: All, Driving, Walking, Cycling: only the modes of the build, and no list for a build with one mode.
   (It was "Roads of" in step 5; Kaveh did not understand the name.) A change draws the map again when it shows.
-- **Base map**: OpenFreeMap (the default), Satellite (Esri World Imagery), Gray (Esri) or Blank. All except
-  OpenFreeMap hide all of OpenFreeMap's layers, also its labels and 3D buildings.
-- **Layers**: **3D** (the map tilts to 60 degrees and shows the 3D buildings), **Buildings**, and after a build with
-  the base-map layers **duckOSM layers** ([features.md](features.md)). Satellite turns the duckOSM layers off, because
-  they cover the photo. The page keeps the base map and the buildings choice.
 - **Show on map** draws the roads of the network. After a build, the page draws them at once only for a small area
   (fewer than 20,000 roads: Monaco has 13,298). A larger area waits for the click (Tartu: 64,828 roads).
 - One line under it: the number of roads and the time of the last drawing. The table in step 4 has each step.
-- These choices were buttons on the map for one commit (3D, buildings, a base-map list). Now the map has only the
-  zoom buttons.
+- The base map and the layers are buttons on the map (see "The map"). For one commit they were in this card; Kaveh
+  wants them on the map ("it has a good design").
 
 ## The map
 
@@ -110,6 +105,14 @@ Kaveh's layout of 2026-10-23: the data in card 5, the map in card 6.
   from roadstyle's pieces (`rs-simple`), and the road's properties come from the map worker by its number
   (`__rs_edge`). Before the tiles, the click looked for the source `rs-roads`, whose layers are hidden, and found
   nothing.
+- The buttons under the zoom buttons (Kaveh's design of 2026-10-23):
+  - **3D** tilts the map to 60 degrees and shows the 3D buildings. A second click makes the map flat again.
+  - **Base map** (the grid) opens a list: OpenFreeMap, Light gray (Esri), Satellite (Esri World Imagery) and
+    Blank. All except OpenFreeMap hide all of OpenFreeMap's layers, also its labels and 3D buildings. After a
+    build with the base-map layers, the list also has **duckOSM layers**. Satellite turns them off, because they
+    cover the photo. The page keeps the base map.
+  - There is no buildings button: the style alone decides if the footprints show, and 3D only adds the 3D
+    version (Kaveh's rule).
 - Only one 3D building layer shows: OpenFreeMap's, or roadstyle's own over another base map. Before, the base-map
   switch also turned on roadstyle's hidden 3D layer, and the two layers drew over each other.
 
