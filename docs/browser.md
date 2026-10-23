@@ -54,9 +54,56 @@ Two changes from the plan:
 - **No `.duckdb` download from the page.** duckdb-wasm 1.33.1-dev57.0 keeps a written `.duckdb` file locked
   after `DETACH` ("already locked exclusively"), so `copyFileToBuffer` and `read_blob` fail. Closing the
   connection, `flushFiles` and an empty file buffer do not help. The page gives `load.sql` instead. Check
-  again with a newer duckdb-wasm.
+  again with a newer duckdb-wasm. (Repaired on 2026-10-23 with direct IO: see "The .duckdb download".)
 - duckdb-wasm moves a registered buffer into its worker, so the page gives it a copy and keeps the file for the
   download. Without the copy, the downloads had 0 bytes (found by `e2e.py`).
+
+## The .duckdb download (2026-10-23)
+
+Card 5 has the button **Download .duckdb** next to **Download all (.zip)**. The zip keeps `make_duckdb.sql`
+for a browser where the button fails.
+
+**The cause of the lock.** duckdb-wasm puts the files that DuckDB opens in its page buffer
+(`lib/src/io/file_page_buffer.cc`). A file with a write lock stays in that buffer after `DETACH`, and each
+next open of the file fails with "File ... is already locked exclusively". `copyFileToBuffer` opens the file,
+so it fails. `reset()` and `open()` of the instance do not release the file. The page buffer does not take a
+file that DuckDB opens with direct IO.
+
+**The repair.** The page opens DuckDB with `db.open({ path: ":memory:", useDirectIO: true })`.
+`duckdbFile()` in `app/duck.js` attaches `<area>.duckdb`, copies the tables of the build into it, makes
+`mm.edges` and the macros, detaches it, and reads it with `copyFileToBuffer`. It uses its own connection,
+so `USE` does not change the SQL box. The same version of duckdb-wasm (1.33.1-dev57.0) stays.
+
+The ways that were tested, first in a small test page outside the app (Monaco and Tartu, 3 modes):
+
+| Way | Result |
+|---|---|
+| 1. A newer duckdb-wasm | dev65.0 (2026-09-29, DuckDB 1.5.6): the same lock. dev110.0 (the `next` tag) is DuckDB 2.0-dev, and its Parquet extension is not on extensions.duckdb.org: it cannot read the files. |
+| 2. OPFS (`ATTACH 'opfs://area.duckdb'`) | Fails. `registerOPFSFileName` makes an empty file. dev57.0 writes the database, but the file has 0 bytes after `DETACH` and `dropFile`. dev65.0 refuses the empty file ("not a valid DuckDB database file", as native DuckDB 1.5.6 does). |
+| 3. File System Access (`showSaveFilePicker`) | Fails. For `BROWSER_FSACCESS`, duckdb-wasm calls `createSyncAccessHandle()`, which a browser gives only for OPFS files, not for a file on the disk. With an OPFS handle: the error of way 2. |
+| 4. A second instance, `terminate()` | Fails. After `DETACH`, `reset()` and `open()`, the file is still locked. With OPFS: the errors of way 2. |
+| Direct IO (`useDirectIO: true`) | **Works**, in dev57.0 and dev65.0, in Chromium and Firefox. |
+
+Direct IO, in headless Chromium (the time from the `ATTACH` until the page has the bytes; the peak memory of all
+Chromium processes, with the memory before the export in brackets):
+
+| | Monaco | Tartu |
+|---|---|---|
+| The test page, network tables only (35 tables) | 0.5 s, 760 MB (650 MB) | 1.5 s, 1,220 MB (825 MB) |
+| The test page in Firefox | 1.5 s | 4.6 s |
+| The page with the base-map layers (49 tables), from the click to the download | 1.1 s, 17.8 MB file | 2.2 s, 52.7 MB file |
+
+Checks (`tools/compare_duckdb.py`, all tables, column types, values, views and macros), in DuckDB 1.5.3 (the
+DuckDB of duckOSM) and 1.5.6:
+- The file of the button is equal to the file that `make_duckdb.sql` of the same build makes, for Monaco and
+  Tartu, in Chromium and Firefox.
+- With the base-map layers, the 11 `features.*` tables of the `.duckdb` file also have the `tags` column, as
+  in a duckOSM `.duckdb` file. The Parquet files (and so `make_duckdb.sql`) have no `tags`, as duckOSM's
+  GeoParquet export. All other columns and rows are equal.
+- Two clicks in a row, and a click after a second build, give the tables of the last build.
+- The start of DuckDB with `db.open()` takes the same time as before (0.8 to 1.5 s in both versions).
+
+Not tested: Safari (Playwright's WebKit needs system libraries that this computer does not have).
 
 ## Steps
 

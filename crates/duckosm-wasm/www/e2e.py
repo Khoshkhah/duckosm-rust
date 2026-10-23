@@ -1,6 +1,7 @@
 """The page in headless Chromium (Playwright): build an area, run a query, show the roads map (a picture in
 map.png; a large area waits for "Show on map", which the test clicks), and download the zip and the Parquet files. The
-out folder gets make_duckdb.sql from the zip. Prints the times of the page as JSON (docs/browser.md, steps B3 and B4).
+out folder gets make_duckdb.sql from the zip, and page.duckdb (the button "Download .duckdb"). Prints the times of
+the page as JSON (docs/browser.md, steps B3 and B4).
 
     python crates/duckosm-wasm/www/e2e.py <file.osm.pbf> <out folder> [--boundary area.geojson] [--modes driving,walking,cycling] [--fixes file.yaml]
         [--no-features]
@@ -18,6 +19,7 @@ import argparse
 import base64
 import json
 import pathlib
+import time
 import zipfile
 
 from playwright.sync_api import sync_playwright
@@ -87,6 +89,13 @@ with sync_playwright() as p:
         (out / "make_duckdb.sql").write_bytes(next(z.read(n) for n in names if n.endswith("/make_duckdb.sql")))
     parquet = [n for n in names if n.endswith(".parquet")]
     print(f"zip: {len(parquet)} Parquet files and", sorted(n.split("/", 1)[1] for n in names if not n.endswith(".parquet")))
+    # the .duckdb file: tools/compare_duckdb.py compares it with the file that make_duckdb.sql makes
+    t = time.time()
+    with page.expect_download(timeout=120_000) as d:
+        page.click("#duckdb")
+    seconds = time.time() - t
+    d.value.save_as(out / "page.duckdb")
+    print(f"duckdb: {d.value.suggested_filename}, {(out / 'page.duckdb').stat().st_size} bytes, {seconds:.2f} s")
     # the bytes of each file through its blob link (Chromium stops many downloads in a row)
     files = page.evaluate("""async () => Promise.all([...document.querySelectorAll('#files a[download]')].map(async (a) => {
         const b = new Blob([await (await fetch(a.href)).arrayBuffer()]);
