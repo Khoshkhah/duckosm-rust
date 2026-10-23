@@ -7,7 +7,10 @@
 //! dr.edge_id_hash(osm_id, source, target)
 //! ```
 
-use duckosm_build::{build as run_build, config, NetworkMode, NetworkOptions, Params, Summary};
+use duckosm_build::{
+    build as run_build, config, LevelsMethod as Method, NetworkMode, NetworkOptions, Params,
+    Summary,
+};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -23,7 +26,8 @@ use std::path::PathBuf;
     merge_segments = true, global_junctions = true, keep_largest_component = true,
     cycling_dismount = true, infer_separate_sidewalks = true, connectivity_rescue = true,
     connect_snap_m = 10.0, process_speeds = true, calculate_costs = true, functional_types = true,
-    osm_overrides = None, build_graph = true, extract_restrictions = true, boundary = None
+    osm_overrides = None, build_graph = true, extract_restrictions = true, boundary = None, ways_tables = true,
+    bus_routes = true, levels = "tags".to_string()
 ))]
 #[allow(clippy::too_many_arguments)]
 fn build<'py>(
@@ -47,6 +51,9 @@ fn build<'py>(
     build_graph: bool,
     extract_restrictions: bool,
     boundary: Option<PathBuf>,
+    ways_tables: bool,
+    bus_routes: bool,
+    levels: String,
 ) -> PyResult<Bound<'py, PyDict>> {
     let mut p = Params {
         name,
@@ -86,6 +93,11 @@ fn build<'py>(
         functional_types,
         build_graph,
         extract_restrictions,
+        ways_tables,
+        bus_routes,
+        levels: Method::parse(&levels).ok_or_else(|| {
+            PyValueError::new_err(format!("levels: '{levels}' is not tags, solve or none"))
+        })?,
     };
     // the build runs without the GIL, so other Python threads go on
     let sum = py

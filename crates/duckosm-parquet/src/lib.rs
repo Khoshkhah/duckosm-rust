@@ -1,16 +1,21 @@
 //! Write the edges and nodes of duckosm-core as GeoParquet (version 1.0, WKB geometry, EPSG:4326).
 
 use arrow_array::builder::{
-    BinaryBuilder, BooleanBuilder, Float32Builder, Int32Builder, Int64Builder, ListBuilder,
-    StringBuilder,
+    BinaryBuilder, BooleanBuilder, Float32Builder, Float64Builder, Int32Builder, Int64Builder,
+    ListBuilder, MapBuilder, StringBuilder, TimestampMicrosecondBuilder,
 };
 use arrow_array::{ArrayRef, RecordBatch};
-use arrow_schema::{DataType, Field, Schema};
-use duckosm_core::filter::Mode;
+use arrow_schema::{DataType, Field, Fields, Schema, TimeUnit};
+use duckosm_core::bus::{Route, RouteEdge};
+use duckosm_core::filter::{Mode, ModeWay};
 use duckosm_core::geom::Pt;
-use duckosm_core::graph::{GraphRow, TurnPath, TurnPermission, TurnRestriction};
-use duckosm_core::model::{Edge, MapRow, Node};
+use duckosm_core::graph::{
+    GraphRow, MemberType, Relation, TurnPath, TurnPermission, TurnRestriction,
+};
+use duckosm_core::lanes::LaneRow;
+use duckosm_core::model::{Attrs, Edge, MapRow, Node, Way};
 use duckosm_core::network::Options;
+use duckosm_core::raw::{RawNode, RawTags, RawWay};
 use parquet::arrow::ArrowWriter;
 use parquet::basic::Compression;
 use parquet::file::metadata::KeyValue;
@@ -492,6 +497,564 @@ pub fn write_turn_path_restrictions_to<W: Write + Send>(
             i64s(c.iter().map(|r| r.from_edge)),
             Arc::new(via.finish()),
             i64s(c.iter().map(|r| r.to_edge)),
+        ]
+    })
+}
+
+fn bools(rows: impl Iterator<Item = bool>) -> ArrayRef {
+    let mut b = BooleanBuilder::new();
+    rows.for_each(|v| b.append_value(v));
+    Arc::new(b.finish())
+}
+
+fn i32s(rows: impl Iterator<Item = Option<i32>>) -> ArrayRef {
+    let mut b = Int32Builder::new();
+    rows.for_each(|v| b.append_option(v));
+    Arc::new(b.finish())
+}
+
+/// The Arrow type of a `MAP(VARCHAR, VARCHAR)` column, as `MapBuilder` makes it.
+fn map_type() -> DataType {
+    let entries = Fields::from(vec![
+        Field::new("key", DataType::Utf8, false),
+        Field::new("value", DataType::Utf8, true),
+    ]);
+    DataType::Map(
+        Arc::new(Field::new("entries", DataType::Struct(entries), false)),
+        false,
+    )
+}
+
+/// Write `<mode>.ways` (duckOSM `RoadFilter`): the ways of the mode after the road filter and the fixes,
+/// with all their OSM tags (`all`: the ways as read, sorted by id, where the tags are).
+pub fn write_ways_to<W: Write + Send>(out: W, rows: &[ModeWay], all: &[Way]) -> Result<(), String> {
+    let fields = vec![
+        field("osm_id", DataType::Int64),
+        field("highway", DataType::Utf8),
+        field("name", DataType::Utf8),
+        field("maxspeed", DataType::Utf8),
+        field("oneway", DataType::Boolean),
+        field("bus_back", DataType::Boolean),
+        field("surface", DataType::Utf8),
+        field("service", DataType::Utf8),
+        field("access", DataType::Utf8),
+        field("junction", DataType::Utf8),
+        field("layer", DataType::Utf8),
+        field("bridge", DataType::Utf8),
+        field("tunnel", DataType::Utf8),
+        field("lanes_fwd", DataType::Int32),
+        field("lanes_bwd", DataType::Int32),
+        field("tags", map_type()),
+        list_field("refs"),
+    ];
+    write_rows(out, fields, rows, |c| {
+        let mut tags = MapBuilder::new(None, StringBuilder::new(), StringBuilder::new());
+        let mut refs = ListBuilder::new(Int64Builder::new());
+        for r in c {
+            if let Ok(i) = all.binary_search_by_key(&r.id, |w| w.id) {
+                for (k, v) in all[i].all_tags() {
+                    tags.keys().append_value(k);
+                    tags.values().append_value(v);
+                }
+            }
+            tags.append(true).expect("a map of strings");
+            refs.values().append_slice(&r.refs);
+            refs.append(true);
+        }
+        let a = |f: fn(&Attrs) -> Option<&str>| texts(c.iter().map(move |r| f(&r.attrs)));
+        vec![
+            i64s(c.iter().map(|r| r.id)),
+            texts(c.iter().map(|r| Some(r.attrs.highway.as_str()))),
+            a(|x| x.name.as_deref()),
+            a(|x| x.maxspeed.as_deref()),
+            bools(c.iter().map(|r| r.oneway)),
+            bools(c.iter().map(|r| r.bus_back)),
+            a(|x| x.surface.as_deref()),
+            a(|x| x.service.as_deref()),
+            texts(c.iter().map(|r| r.access.as_deref())),
+            a(|x| x.junction.as_deref()),
+            a(|x| x.layer.as_deref()),
+            a(|x| x.bridge.as_deref()),
+            a(|x| x.tunnel.as_deref()),
+            i32s(c.iter().map(|r| r.lanes_fwd)),
+            i32s(c.iter().map(|r| r.lanes_bwd)),
+            Arc::new(tags.finish()),
+            Arc::new(refs.finish()),
+        ]
+    })
+}
+
+/// Write `<mode>.way_nodes`: the nodes of `ways`, one row per node (`seq` from 0).
+pub fn write_way_nodes_to<W: Write + Send>(out: W, rows: &[ModeWay]) -> Result<(), String> {
+    let flat: Vec<(i64, i64, i64)> = rows
+        .iter()
+        .flat_map(|w| {
+            w.refs
+                .iter()
+                .enumerate()
+                .map(move |(i, &n)| (w.id, n, i as i64))
+        })
+        .collect();
+    let fields = vec![
+        field("way_id", DataType::Int64),
+        field("node_id", DataType::Int64),
+        field("seq", DataType::Int64),
+    ];
+    write_rows(out, fields, &flat, |c| {
+        vec![
+            i64s(c.iter().map(|r| r.0)),
+            i64s(c.iter().map(|r| r.1)),
+            i64s(c.iter().map(|r| r.2)),
+        ]
+    })
+}
+
+/// Write `main.global_junctions` (node id, is a road junction), sorted by node id.
+pub fn write_global_junctions_to<W: Write + Send>(
+    out: W,
+    rows: &[(i64, bool)],
+) -> Result<(), String> {
+    let fields = vec![
+        field("node_id", DataType::Int64),
+        field("is_road_junction", DataType::Boolean),
+    ];
+    write_rows(out, fields, rows, |c| {
+        vec![i64s(c.iter().map(|r| r.0)), bools(c.iter().map(|r| r.1))]
+    })
+}
+
+/// A row of `mm.transfers`: a change of mode at a node that walking shares with another mode.
+pub struct Transfer {
+    pub node_id: i64,
+    pub from_mode: &'static str,
+    pub to_mode: &'static str,
+    pub cost_s: f64,
+    pub kind: &'static str,
+}
+
+/// Write `mm.transfers`.
+pub fn write_transfers_to<W: Write + Send>(out: W, rows: &[Transfer]) -> Result<(), String> {
+    let fields = vec![
+        field("node_id", DataType::Int64),
+        field("from_mode", DataType::Utf8),
+        field("to_mode", DataType::Utf8),
+        field("cost_s", DataType::Float64),
+        field("kind", DataType::Utf8),
+    ];
+    write_rows(out, fields, rows, |c| {
+        let mut cost = Float64Builder::new();
+        c.iter().for_each(|r| cost.append_value(r.cost_s));
+        vec![
+            i64s(c.iter().map(|r| r.node_id)),
+            texts(c.iter().map(|r| Some(r.from_mode))),
+            texts(c.iter().map(|r| Some(r.to_mode))),
+            Arc::new(cost.finish()),
+            texts(c.iter().map(|r| Some(r.kind))),
+        ]
+    })
+}
+
+/// Write `driving.lane_profile`.
+pub fn write_lane_profile_to<W: Write + Send>(out: W, rows: &[LaneRow]) -> Result<(), String> {
+    let fields = vec![
+        field("edge_id", DataType::Int64),
+        field("lane_num", DataType::Int32),
+        field("use", DataType::Utf8),
+        field("width_m", DataType::Float64),
+        field("turn", DataType::Utf8),
+        field("source", DataType::Utf8),
+        field("width_source", DataType::Utf8),
+    ];
+    write_rows(out, fields, rows, |c| {
+        let mut width = Float64Builder::new();
+        c.iter().for_each(|r| width.append_value(r.width_m));
+        vec![
+            i64s(c.iter().map(|r| r.edge_id)),
+            i32s(c.iter().map(|r| Some(r.lane_num))),
+            texts(c.iter().map(|r| Some(r.use_))),
+            Arc::new(width.finish()),
+            texts(c.iter().map(|r| r.turn.as_deref())),
+            texts(c.iter().map(|r| Some(r.source.as_str()))),
+            texts(c.iter().map(|r| Some(r.width_source.as_str()))),
+        ]
+    })
+}
+
+/// A property of the boundary file, typed as DuckDB's `ST_Read` (GDAL) types it.
+pub enum Prop {
+    Int(i32),
+    BigInt(i64),
+    Double(f64),
+    Bool(bool),
+    Text(Option<String>),
+}
+
+/// The WKB of a Polygon (one polygon) or a MultiPolygon: polygons of rings of points.
+pub fn polygons_wkb(polys: &[Vec<Vec<Pt>>], multi: bool) -> Vec<u8> {
+    fn polygon(b: &mut Vec<u8>, rings: &[Vec<Pt>]) {
+        b.push(1u8);
+        b.extend_from_slice(&3u32.to_le_bytes());
+        b.extend_from_slice(&(rings.len() as u32).to_le_bytes());
+        for r in rings {
+            b.extend_from_slice(&(r.len() as u32).to_le_bytes());
+            for p in r {
+                b.extend_from_slice(&p.0.to_le_bytes());
+                b.extend_from_slice(&p.1.to_le_bytes());
+            }
+        }
+    }
+    let mut b = Vec::new();
+    if multi {
+        b.push(1u8);
+        b.extend_from_slice(&6u32.to_le_bytes());
+        b.extend_from_slice(&(polys.len() as u32).to_le_bytes());
+        polys.iter().for_each(|p| polygon(&mut b, p));
+    } else {
+        polygon(&mut b, &polys[0]);
+    }
+    b
+}
+
+/// Write `main.boundary`: one row with `OGC_FID` (0), the properties of the boundary file, and the shape in
+/// `geometry` (WKB, a Polygon or a MultiPolygon).
+pub fn write_boundary_to<W: Write + Send>(
+    out: W,
+    columns: &[(String, Prop)],
+    wkb: &[u8],
+    multi: bool,
+) -> Result<(), String> {
+    let mut fields = vec![field("OGC_FID", DataType::Int64)];
+    let mut cols: Vec<ArrayRef> = vec![i64s(std::iter::once(0))];
+    for (name, p) in columns {
+        let (t, col): (DataType, ArrayRef) = match p {
+            Prop::Int(v) => (DataType::Int32, i32s(std::iter::once(Some(*v)))),
+            Prop::BigInt(v) => (DataType::Int64, i64s(std::iter::once(*v))),
+            Prop::Double(v) => {
+                let mut b = Float64Builder::new();
+                b.append_value(*v);
+                (DataType::Float64, Arc::new(b.finish()))
+            }
+            Prop::Bool(v) => (DataType::Boolean, bools(std::iter::once(*v))),
+            Prop::Text(v) => (DataType::Utf8, texts(std::iter::once(v.as_deref()))),
+        };
+        fields.push(field(name, t));
+        cols.push(col);
+    }
+    fields.push(field("geometry", DataType::Binary));
+    let mut g = BinaryBuilder::new();
+    g.append_value(wkb);
+    cols.push(Arc::new(g.finish()));
+    let schema = Arc::new(Schema::new(fields));
+    let kind = if multi { "MultiPolygon" } else { "Polygon" };
+    let mut w = ArrowWriter::try_new(out, schema.clone(), Some(props(kind))).map_err(err)?;
+    w.write(&RecordBatch::try_new(schema, cols).map_err(err)?)
+        .map_err(err)?;
+    w.close().map_err(err)?;
+    Ok(())
+}
+
+/// The row of `main.visualization_metadata`.
+pub struct Metadata {
+    /// The boundary as GeoJSON text (the `JSON` column).
+    pub boundary_geojson: String,
+    pub center_lat: f64,
+    pub center_lon: f64,
+    pub initial_zoom: i32,
+    pub timezone: Option<String>,
+    /// Microseconds since 1970 (UTC).
+    pub built_at: i64,
+    pub version: String,
+}
+
+/// Write `main.visualization_metadata` (one row).
+pub fn write_metadata_to<W: Write + Send>(out: W, m: &Metadata) -> Result<(), String> {
+    let fields = vec![
+        field("boundary_geojson", DataType::Utf8),
+        field("center_lat", DataType::Float64),
+        field("center_lon", DataType::Float64),
+        field("initial_zoom", DataType::Int32),
+        field("timezone", DataType::Utf8),
+        field("built_at", DataType::Timestamp(TimeUnit::Microsecond, None)),
+        field("duckosm_version", DataType::Utf8),
+    ];
+    write_rows(out, fields, std::slice::from_ref(m), |c| {
+        let mut lat = Float64Builder::new();
+        let mut lon = Float64Builder::new();
+        let mut at = TimestampMicrosecondBuilder::new();
+        for r in c {
+            lat.append_value(r.center_lat);
+            lon.append_value(r.center_lon);
+            at.append_value(r.built_at);
+        }
+        vec![
+            texts(c.iter().map(|r| Some(r.boundary_geojson.as_str()))),
+            Arc::new(lat.finish()),
+            Arc::new(lon.finish()),
+            i32s(c.iter().map(|r| Some(r.initial_zoom))),
+            texts(c.iter().map(|r| r.timezone.as_deref())),
+            Arc::new(at.finish()),
+            texts(c.iter().map(|r| Some(r.version.as_str()))),
+        ]
+    })
+}
+
+/// Write rows as a plain Parquet file, one row group for each `ROW_GROUP` rows: `batch` makes the columns of a part.
+fn write_parts<W: Write + Send, T>(
+    out: W,
+    rows: &[T],
+    batch: impl Fn(&[T]) -> Vec<(&'static str, ArrayRef)>,
+) -> Result<(), String> {
+    let part = |c: &[T]| RecordBatch::try_from_iter(batch(c)).map_err(err);
+    let first = part(&rows[..rows.len().min(ROW_GROUP)])?;
+    let plain = WriterProperties::builder()
+        .set_compression(compression())
+        .set_max_row_group_row_count(Some(ROW_GROUP))
+        .build();
+    let mut w = ArrowWriter::try_new(out, first.schema(), Some(plain)).map_err(err)?;
+    w.write(&first).map_err(err)?;
+    for chunk in rows.chunks(ROW_GROUP).skip(1) {
+        w.write(&part(chunk)?).map_err(err)?;
+    }
+    w.close().map_err(err)?;
+    Ok(())
+}
+
+/// The tags as a DuckDB `MAP(VARCHAR, VARCHAR)`; no tags: NULL (as `ST_READOSM`).
+fn tags_column<'a>(rows: impl Iterator<Item = &'a RawTags>) -> ArrayRef {
+    let mut b = MapBuilder::new(None, StringBuilder::new(), StringBuilder::new());
+    for tags in rows {
+        for (k, v) in tags {
+            b.keys().append_value(k);
+            b.values().append_value(v);
+        }
+        b.append(!tags.is_empty())
+            .expect("the keys and the values have the same length");
+    }
+    Arc::new(b.finish())
+}
+
+/// `raw.nodes` of duckOSM: osm_id, lat, lon, tags.
+pub fn write_raw_nodes_to<W: Write + Send>(out: W, rows: &[RawNode]) -> Result<(), String> {
+    write_parts(out, rows, |c| {
+        let mut id = Int64Builder::with_capacity(c.len());
+        let (mut lat, mut lon) = (
+            Float64Builder::with_capacity(c.len()),
+            Float64Builder::with_capacity(c.len()),
+        );
+        for n in c {
+            id.append_value(n.id);
+            lat.append_value(n.lat);
+            lon.append_value(n.lon);
+        }
+        vec![
+            ("osm_id", Arc::new(id.finish()) as ArrayRef),
+            ("lat", Arc::new(lat.finish())),
+            ("lon", Arc::new(lon.finish())),
+            ("tags", tags_column(c.iter().map(|n| &n.tags))),
+        ]
+    })
+}
+
+/// `raw.ways` of duckOSM: osm_id, tags, refs. The ways with fewer than 2 nodes are not in it. One more column, `line`: the
+/// way as WKB from the points of its nodes in `nodes` (sorted by id), as duckOSM's `geom.way_line` makes it with
+/// `ST_MakeLine` (a node that is not in `nodes` is left out; fewer than 2 points: NULL). features.sql reads it, so
+/// DuckDB does not join the nodes (docs/features.md).
+pub fn write_raw_ways_to<W: Write + Send>(
+    out: W,
+    rows: &[RawWay],
+    nodes: &[RawNode],
+) -> Result<(), String> {
+    let rows: Vec<&RawWay> = rows.iter().filter(|w| w.refs.len() >= 2).collect();
+    write_parts(out, &rows, |c| {
+        let mut id = Int64Builder::with_capacity(c.len());
+        let mut refs = ListBuilder::new(Int64Builder::new());
+        let mut line = BinaryBuilder::new();
+        for w in c {
+            id.append_value(w.id);
+            refs.values().append_slice(&w.refs);
+            refs.append(true);
+            let pts: Vec<Pt> = w
+                .refs
+                .iter()
+                .filter_map(|r| {
+                    let i = nodes.binary_search_by_key(r, |n| n.id).ok()?;
+                    Some((nodes[i].lon, nodes[i].lat))
+                })
+                .collect();
+            line.append_option((pts.len() >= 2).then(|| line_wkb(&pts)));
+        }
+        vec![
+            ("osm_id", Arc::new(id.finish()) as ArrayRef),
+            ("tags", tags_column(c.iter().map(|w| &w.tags))),
+            ("refs", Arc::new(refs.finish())),
+            ("line", Arc::new(line.finish())),
+        ]
+    })
+}
+
+/// `raw.relations` of duckOSM: osm_id, tags, refs, ref_roles, ref_types (`node`, `way` or `relation`; DuckDB
+/// casts the text to duckOSM's ENUM).
+pub fn write_raw_relations_to<W: Write + Send>(out: W, rows: &[Relation]) -> Result<(), String> {
+    write_parts(out, rows, |c| {
+        let mut id = Int64Builder::with_capacity(c.len());
+        let mut refs = ListBuilder::new(Int64Builder::new());
+        let mut roles = ListBuilder::new(StringBuilder::new());
+        let mut types = ListBuilder::new(StringBuilder::new());
+        for r in c {
+            id.append_value(r.id);
+            for (m, t, role) in &r.members {
+                refs.values().append_value(*m);
+                // no role: NULL, as ST_READOSM
+                roles
+                    .values()
+                    .append_option((!role.is_empty()).then_some(role));
+                types.values().append_value(match t {
+                    MemberType::Node => "node",
+                    MemberType::Way => "way",
+                    MemberType::Relation => "relation",
+                });
+            }
+            refs.append(true);
+            roles.append(true);
+            types.append(true);
+        }
+        vec![
+            ("osm_id", Arc::new(id.finish()) as ArrayRef),
+            ("tags", tags_column(c.iter().map(|r| &r.tags))),
+            ("refs", Arc::new(refs.finish())),
+            ("ref_roles", Arc::new(roles.finish())),
+            ("ref_types", Arc::new(types.finish())),
+        ]
+    })
+}
+
+/// Write `visualization.edge_levels` (docs/levels.md): the four numbers of each edge, and the heads and the caps.
+pub fn write_edge_levels_to<W: Write + Send>(
+    out: W,
+    rows: &[duckosm_core::levels::Row],
+) -> Result<(), String> {
+    let fields = vec![
+        field("edge_id", DataType::Int64),
+        field("casing_start", DataType::Int64),
+        field("casing_level", DataType::Int64),
+        field("casing_end", DataType::Int64),
+        field("fill_level", DataType::Int64),
+        field("head_start_m", DataType::Float64),
+        field("head_end_m", DataType::Float64),
+        field("cap_start", DataType::Utf8),
+        field("cap_end", DataType::Utf8),
+    ];
+    write_rows(out, fields, rows, |c| {
+        let f64s = |get: fn(&duckosm_core::levels::Row) -> Option<f64>| -> ArrayRef {
+            let mut b = Float64Builder::new();
+            c.iter().for_each(|r| b.append_option(get(r)));
+            Arc::new(b.finish())
+        };
+        vec![
+            i64s(c.iter().map(|r| r.edge_id)),
+            i64s(c.iter().map(|r| r.casing_start)),
+            i64s(c.iter().map(|r| r.casing_level)),
+            i64s(c.iter().map(|r| r.casing_end)),
+            i64s(c.iter().map(|r| r.fill_level)),
+            f64s(|r| r.head_start_m),
+            f64s(|r| r.head_end_m),
+            texts(c.iter().map(|r| r.cap_start)),
+            texts(c.iter().map(|r| r.cap_end)),
+        ]
+    })
+}
+
+/// The one row of `visualization.edge_levels_meta`: where the numbers come from (`source` is `tags` or `solve`; a
+/// level area of duckOSM writes `area` and its folder in `area`).
+pub struct LevelsMeta {
+    pub source: &'static str,
+    pub n_edges: i64,
+    pub edge_hash: String,
+    pub roadstyle_version: &'static str,
+    /// ISO 8601 text, as roadstyle writes it (`2026-10-22T00:20:45+00:00`).
+    pub created: String,
+}
+
+/// Write `visualization.edge_levels_meta`.
+pub fn write_edge_levels_meta_to<W: Write + Send>(out: W, m: &LevelsMeta) -> Result<(), String> {
+    let fields = vec![
+        field("source", DataType::Utf8),
+        field("area", DataType::Utf8),
+        field("n_edges", DataType::Int64),
+        field("edge_hash", DataType::Utf8),
+        field("roadstyle_version", DataType::Utf8),
+        field("created", DataType::Utf8),
+    ];
+    write_rows(out, fields, std::slice::from_ref(m), |c| {
+        vec![
+            texts(c.iter().map(|r| Some(r.source))),
+            texts(c.iter().map(|_| None)),
+            i64s(c.iter().map(|r| r.n_edges)),
+            texts(c.iter().map(|r| Some(r.edge_hash.as_str()))),
+            texts(c.iter().map(|r| Some(r.roadstyle_version))),
+            texts(c.iter().map(|r| Some(r.created.as_str()))),
+        ]
+    })
+}
+
+/// Write `bus.routes` (`gaps` is a list of text, VARCHAR[]).
+pub fn write_routes_to<W: Write + Send>(out: W, rows: &[Route]) -> Result<(), String> {
+    let fields = vec![
+        field("osm_id", DataType::Int64),
+        field("route", DataType::Utf8),
+        field("ref", DataType::Utf8),
+        field("name", DataType::Utf8),
+        field("operator", DataType::Utf8),
+        field("from", DataType::Utf8),
+        field("to", DataType::Utf8),
+        field("network", DataType::Utf8),
+        field("edges", DataType::Int32),
+        field("outside", DataType::Int32),
+        field(
+            "gaps",
+            DataType::List(Arc::new(Field::new("item", DataType::Utf8, true))),
+        ),
+    ];
+    write_rows(out, fields, rows, |c| {
+        let mut gaps = ListBuilder::new(StringBuilder::new());
+        for r in c {
+            r.gaps.iter().for_each(|g| gaps.values().append_value(g));
+            gaps.append(true);
+        }
+        vec![
+            i64s(c.iter().map(|r| r.osm_id)),
+            texts(c.iter().map(|r| r.route.as_deref())),
+            texts(c.iter().map(|r| r.ref_.as_deref())),
+            texts(c.iter().map(|r| r.name.as_deref())),
+            texts(c.iter().map(|r| r.operator.as_deref())),
+            texts(c.iter().map(|r| r.from.as_deref())),
+            texts(c.iter().map(|r| r.to.as_deref())),
+            texts(c.iter().map(|r| r.network.as_deref())),
+            i32s(c.iter().map(|r| Some(r.edges))),
+            i32s(c.iter().map(|r| Some(r.outside))),
+            Arc::new(gaps.finish()),
+        ]
+    })
+}
+
+/// Write `bus.route_edges`.
+pub fn write_route_edges_to<W: Write + Send>(out: W, rows: &[RouteEdge]) -> Result<(), String> {
+    let fields = vec![
+        field("route_id", DataType::Int64),
+        field("ref", DataType::Utf8),
+        field("seq", DataType::Int32),
+        field("edge_id", DataType::Int64),
+        field("edge_ref", DataType::Utf8),
+        field("bus_lane", DataType::Boolean),
+    ];
+    write_rows(out, fields, rows, |c| {
+        vec![
+            i64s(c.iter().map(|r| r.route_id)),
+            texts(c.iter().map(|r| r.ref_.as_deref())),
+            i32s(c.iter().map(|r| Some(r.seq))),
+            i64s(c.iter().map(|r| r.edge_id)),
+            texts(c.iter().map(|r| r.edge_ref.as_deref())),
+            bools(c.iter().map(|r| r.bus_lane)),
         ]
     })
 }

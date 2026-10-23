@@ -18,7 +18,7 @@ One web page, no server, no Python:
    file.
 4. The user can download the tables: one `.duckdb` file, or the GeoParquet files.
 
-Not in this plan (the visualization part, later): the map, the base-map layers `features.*`, the drawing order
+Not in this plan (the visualization part, later): the map, the base-map layers `features.*` (done later: [features.md](features.md)), the drawing order
 `visualization.edge_levels`, the bus routes, the multimodal graph `mm.*` of the route planner. The map side is
 in progress in the geolibre-roadstyle repository (`docs/design/rust-spike.md`): a Rust WebAssembly module that
 makes the style from a duckOSM database in duckdb-wasm.
@@ -162,10 +162,11 @@ with a name, as a duckOSM config with `name` and `boundary`. Decisions:
   and `FileReaderSync` in the worker), so the file is not copied into WebAssembly memory. `build_osm_json` also
   takes the boundary: Overpass gives the ways in the box of each outer ring, and Rust keeps the ways with a node
   inside, as in the cut of a region file.
-- `www/boundary.html` is the boundary tool: a Nominatim search with a list of matches, or a GeoJSON file, or a
-  box. It writes the format of `duckosm boundary` (the area in km² is the same as duckOSM's: 2.39 for Monaco),
-  with `geofabrik`: the three smallest extracts that cover the area, with their links. "Use in duckOSM" gives
-  the boundary to `index.html` through the storage of the site.
+- `www/boundary.html` is the boundary tool: a map (MapLibre, OpenFreeMap) with a side panel. The area comes from
+  a Nominatim search, a click on the map (what is here), the drawing tools (rectangle, polygon, circle,
+  freehand, edit), or a GeoJSON file. The design is in [boundary_tool.md](boundary_tool.md). It writes the format of `duckosm boundary` (the area in km² is the same as duckOSM's: 2.39 for Monaco),
+  with `geofabrik`: the three smallest extracts that cover the area, with their links. Later it became the app
+  ([app.md](app.md)): the area, the build and the roads map are one page, `index.html`.
 - `www/geofabrik.json` (1.6 MB, 0.5 MB gzip, 554 extracts) comes from Geofabrik's `index-v1.json`
   (`tools/make_geofabrik_index.py`). The polygons are about 1 km larger than the extracts, so an area at the
   border of an extract is not lost (with the simplified polygons only, Monaco was not in its own extract).
@@ -212,5 +213,53 @@ faster. Not done: keep the
 region file in OPFS (the user selects the file again, which costs nothing), and an automatic download of the
 extract (it needs a server with CORS).
 
-**After B4: the visualization part.** The map from the tables in duckdb-wasm, with the Rust style module of
-geolibre-roadstyle. It needs the base-map layers and the drawing order in Rust (or a page without them).
+**M1: the roads map (2026-10-22).** Done. After the build, the page shows the roads on a MapLibre map (5.24.0), in the
+style of roadstyle:
+1. duckdb-wasm writes `roads.parquet` from the tables. `www/map/roads_sql.js` is a copy of geolibre-roadstyle's
+   `spike/worker/roads_sql.js` with one more option: `{levels: "tags"}`. The page has no level area, so the
+   drawing levels come from roadstyle's `compute_levels(method="tags")`, written in SQL: from layer, bridge
+   and tunnel, and the levels of the roads at each end node. Since 2026-10-22 the build writes
+   `visualization.edge_levels` (the tags rule, or roadstyle's solver: [levels.md](levels.md)), and the map reads
+   that table.
+2. roadstyle's Rust module (geolibre-roadstyle `spike/rust`, commit `38cd2aa`, built by `build.sh` into
+   `www/map/pkg/`) makes the complete MapLibre style in a worker (`www/map/map_worker.js`), with the look
+   `www/map/look.json` ("google" colors). A new worker for each style gives the memory back.
+3. MapLibre draws the style. The one-way arrow comes from `roadstyle:images`. A click on a road shows its data.
+
+- The choices: the roads of all modes or of one mode, and the base map: Esri light gray (the default),
+  OpenStreetMap, or none. These are roadstyle's keyless raster maps; CARTO's tiles now need a key.
+- There is no base map from the data: duckOSM's `features.*` tables are not built in Rust yet. (Done later, with duckOSM's SQL
+  in duckdb-wasm: [features.md](features.md).)
+
+| | Roads table (SQL) | Style (Rust) | Style memory | Map ready |
+|---|---|---|---|---|
+| Monaco | 0.2–0.4 s | 0.7–1.1 s | 296 MiB | 1.4–2.3 s |
+| Tartu (63,965 roads) | 0.8 s | 5.8–6.1 s | 1,388 MiB | 9.1–9.3 s, then MapLibre cuts the tiles |
+
+The style held the roads as inline GeoJSON (Tartu: about 226 MB of text in the page).
+
+**Vector tiles (2026-10-23).** roadstyle's module (geolibre-roadstyle `wasm/`, commit `eea9f49`; since then roadstyle's
+own Rust engine, roadstyle repository `rust/`, commit `900b43e`) now gives the style
+with vector-tile sources (`rs://<generation>/<source>/{z}/{x}/{y}`). The map worker stays, and it makes each tile
+when MapLibre asks for it (`maplibregl.addProtocol("rs", ...)` in `index.html`, `tile()` in `app/duck.js`). The
+layers, the colors and the road popup are the same; the screenshots of the two maps differ only at the edges of
+lines and in the place of one street name. The same commit makes roadstyle's slots step faster (Tartu: 2.3 s to
+0.7 s). Times in headless Chromium with software rendering, from the click to an idle map (the map's own idle
+event), the same machine for both:
+
+| | Roads table (SQL) | Style (Rust) | Map ready | Page memory (JS heap) |
+|---|---|---|---|---|
+| Monaco, GeoJSON | 0.2 s | 0.9 s | 3.1–3.4 s | 215–242 MiB |
+| Monaco, vector tiles | 0.2 s | 0.7 s | 2.0 s | 51–54 MiB |
+| Tartu, GeoJSON | 0.6 s | 6.5 s | 15.7 s | 803 MiB |
+| Tartu, vector tiles | 0.6 s | 3.6–4.5 s | 7.4–8.7 s | 104 MiB |
+
+The module still makes the sources as JSON trees before it makes the tiles, so its memory (1,387 MiB on Tartu) and
+its limit of 100,000 roads do not change. Next for large areas: make the tiles' features without the trees.
+
+**Typed sources (2026-10-23).** roadstyle-rs `900b43e` makes the sources `roads` and `simple` as typed pieces, not
+JSON trees (roadstyle's `rust/`; the same output, byte for byte). The page's Tartu map, the same machine, from the
+click to an idle map: the map module's memory 1,387 MiB to 878 MiB, the style step 4.4–5.0 s to 3.4–3.7 s, the map
+8.7–9.6 s to 7.6–7.8 s.
+
+**After M1:** duckOSM's base-map layers (`features.*`), then the style can draw them. Done: [features.md](features.md).

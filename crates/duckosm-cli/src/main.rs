@@ -1,5 +1,7 @@
 use clap::Parser;
-use duckosm_build::{build, config, parse_modes, NetworkMode, NetworkOptions, Params};
+use duckosm_build::{
+    build, config, parse_modes, LevelsMethod as Method, NetworkMode, NetworkOptions, Params,
+};
 use std::path::PathBuf;
 
 /// duckosm-rust: build the driving network of an .osm.pbf file (a spike).
@@ -67,12 +69,28 @@ struct Cli {
     /// Do not build turn_restrictions and turn_path_restrictions (duckOSM option extract_restrictions: false).
     #[arg(long, conflicts_with = "config")]
     no_restrictions: bool,
+    /// Do not write ways and way_nodes (duckOSM writes them always; off saves memory in a large area).
+    #[arg(long)]
+    no_ways_tables: bool,
+    /// Do not make the bus routes, bus.routes and bus.route_edges (duckOSM option bus_routes: false). They need
+    /// --boundary and the driving mode.
+    #[arg(long, conflicts_with = "config")]
+    no_bus_routes: bool,
     /// A duckOSM OSM fixes file (YAML). With --config, it replaces the config's osm_overrides.
     #[arg(long, value_name = "FILE")]
     fixes: Option<PathBuf>,
     /// A boundary (GeoJSON, as `duckosm boundary` writes it): the PBF is cut to it (as osmium complete_ways).
     #[arg(long, value_name = "FILE", conflicts_with = "config")]
     boundary: Option<PathBuf>,
+    /// With --boundary: also write duckOSM's raw.* of the area (raw_nodes.parquet, raw_ways.parquet,
+    /// raw_relations.parquet, as osmium's smart cut), the input of the base-map layers (docs/features.md).
+    #[arg(long, requires = "boundary")]
+    raw: bool,
+    /// The drawing order of the roads (visualization.edge_levels, docs/levels.md): tags (a rule on layer,
+    /// bridge and tunnel), solve (roadstyle's optimization) or none. Default: tags, or the config's
+    /// options.levels (on: solve).
+    #[arg(long, value_name = "METHOD")]
+    levels: Option<String>,
     /// Print the time of each step.
     #[arg(long)]
     timing: bool,
@@ -120,6 +138,9 @@ fn run() -> Result<(), String> {
             functional_types: !cli.no_functional_types,
             build_graph: !cli.no_graph,
             extract_restrictions: !cli.no_restrictions,
+            ways_tables: !cli.no_ways_tables,
+            bus_routes: !cli.no_bus_routes,
+            ..NetworkOptions::default()
         };
         (
             cli.pbf.clone().unwrap(),
@@ -127,11 +148,16 @@ fn run() -> Result<(), String> {
             p,
         )
     };
+    if let Some(m) = &cli.levels {
+        p.options.levels = Method::parse(m)
+            .ok_or_else(|| format!("--levels: '{m}' is not tags, solve or none"))?;
+    }
     if let Some(f) = &cli.fixes {
         p.osm_fixes = Some(f.clone());
     }
     if cli.boundary.is_some() {
         p.boundary = cli.boundary.clone();
+        p.raw = cli.raw;
     }
     p.geoparquet = false;
     p.duckdb = false;
@@ -168,6 +194,9 @@ fn run() -> Result<(), String> {
             m.edge_graph,
             m.turn_restrictions
         );
+    }
+    for l in sum.levels.iter().chain(&sum.lanes) {
+        eprintln!("{l}");
     }
     if cli.timing {
         for (what, secs) in &sum.steps {

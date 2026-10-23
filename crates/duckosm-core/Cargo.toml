@@ -17,3 +17,5 @@ rayon = { version = "1.12", optional = true }
 # OSM JSON (the output format of the Overpass API): the input of the browser page from a place name
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# roadstyle's engine in Rust (roadstyle repository, rust/): the drawing levels (levels.rs), roadstyle's rules in one place
+roadstyle-rs = { git = "https://github.com/Khoshkhah/roadstyle.git", rev = "900b43e" }

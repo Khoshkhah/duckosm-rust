@@ -45,6 +45,13 @@ python tools/compare_with_duckosm.py monaco_golden.duckdb out/monaco.duckdb [dri
 ```
 
 `tests/data/golden_monaco_modes.yaml` is the config of the three-mode golden (four variants; the comments say which lines to change). `tools/make_golden_summary.py` writes `tests/data/monaco_modes_summary.tsv` from those databases. `tools/make_golden.py` writes `tests/data/monaco_driving_edges.tsv` from such a database.
+`tools/compare_levels.py` compares `visualization.edge_levels` of a duckosm-rust file with roadstyle's result on
+the same edges, in duckOSM's virtual environment ([levels.md](levels.md), "The equality check"):
+
+```bash
+/home/kaveh/projects/duckOSM/.venv/bin/python tools/compare_levels.py out/monaco.duckdb
+```
+
 `tools/edge_id_reference.py` is the `edge_id` hash in plain Python. It compares itself with the
 installed DuckDB, and with every edge of a duckOSM database:
 
@@ -72,6 +79,10 @@ Build the two modules and their JavaScript bindings (Git ignores both folders):
   `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`. Without them,
   the page uses `pkg/`. duckdb-wasm (from cdn.jsdelivr.net), Nominatim and Overpass work with these headers.
   `?threads=N` in the address sets the number of threads (the default: the cores, at most 8).
+- `www/map/pkg/`: roadstyle's Rust module for the roads map. `build.sh` clones roadstyle into `target/roadstyle`
+  and builds the crate `roadstyle-wasm` of its Rust engine (`rust/`) at the commit `ROADSTYLE_COMMIT`. With
+  `ROADSTYLE_REPO=/home/kaveh/projects/roadstyle`, it clones the local copy. `duckosm-core` takes the same engine
+  (`roadstyle-rs`, a git dependency at the same commit) for the drawing levels; keep the two commits equal.
 
 Open the page (`index.html`, the plan is [browser.md](browser.md)). A browser does not load a module from
 a `file://` address, so use a local server. `serve.py` sends the two headers; `python3 -m http.server` does
@@ -81,17 +92,23 @@ not (then the page has one thread):
 python3 crates/duckosm-wasm/www/serve.py 8000
 ```
 
-Then go to `http://localhost:8000`. Select a boundary (make it with the boundary tool, `boundary.html`), a
-region PBF file that covers it (the tool names the smallest Geofabrik extract), the modes and an optional OSM
-fixes file, and click **Build**. The page can also get the data from the Overpass API, or take a PBF file that
-is already cut. The build runs in a Web Worker (`build_worker.js`), which reads the region file piece by piece. The page loads the tables into duckdb-wasm, so you
-can run SQL on them. It gives the Parquet files and `load.sql`, which makes a `.duckdb` file from them
-(`duckdb area.duckdb < load.sql`). The page loads duckdb-wasm from cdn.jsdelivr.net.
+`serve.py` also has the relay of the page ([relay.md](relay.md)): open `http://localhost:8000/?relay=relay`, and
+**Get** in step 3 downloads a Geofabrik extract into the browser.
+
+Then go to `http://localhost:8000`. The page is one app ([app.md](app.md)): choose an area on the map (a
+search, a drawing or a file), select a region PBF file that covers it (the page names the smallest Geofabrik
+extracts), the modes and an optional OSM fixes file, and click **Build**. The data can also come from the
+Overpass API, or from a PBF file that is already cut. The build runs in a Web Worker (`build_worker.js`), which
+reads the region file piece by piece. The page loads the tables into duckdb-wasm and shows the roads on the
+same map. You can run SQL on the tables, and download the Parquet files and `load.sql`, which makes a
+`.duckdb` file from them (`duckdb area.duckdb < load.sql`). The build side of the page is `app/duck.js`. The
+page loads MapLibre, terra-draw, polyclip-ts and duckdb-wasm from cdn.jsdelivr.net, and the map from
+OpenFreeMap.
 
 Run the same `.wasm` file in Node. The script writes all files and prints the time and the WebAssembly memory:
 
 ```bash
-node crates/duckosm-wasm/www/run_node.mjs tests/data/monaco.osm.pbf out-wasm driving,walking,cycling [fixes.yaml]
+node crates/duckosm-wasm/www/run_node.mjs tests/data/monaco.osm.pbf out-wasm driving,walking,cycling [fixes.yaml] [tags|solve|none]
 ```
 
 Checks:
@@ -108,12 +125,47 @@ The test writes its files to `target/tmp/duckosm-wasm-native/`. Compare them wit
 the page as JSON. The CLI writes zstd and the page writes snap, so compare `out-area` and `out-cli` by rows,
 not with `cmp`.
 
+Check the area steps of the page in headless Chromium (a file, two rectangles drawn with the mouse, a
+Nominatim search, and the Build button; `--no-search` skips the search):
+
+```bash
+python crates/duckosm-wasm/www/boundary_e2e.py
+```
+
 The boundary tool uses `www/geofabrik.json`, a small copy of Geofabrik's list of extracts (Geofabrik sends no
 CORS header). Make it again when Geofabrik changes its extracts:
 
 ```bash
 curl -o index-v1.json https://download.geofabrik.de/index-v1.json
 python tools/make_geofabrik_index.py index-v1.json crates/duckosm-wasm/www/geofabrik.json   # needs shapely
+```
+
+## Check the base-map layers
+
+The `raw.*` cut and the base-map layers (`features.*`) of [features.md](features.md). duckOSM's `monaco.duckdb`
+keeps its `raw.*` and is built with its OSM fixes, so `raw.*` and all 11 layers must be equal:
+
+```bash
+cargo test --release -p duckosm-core --test raw     # the raw cut equals osmium's smart cut (tests/data/monaco_smart.osm.pbf)
+./target/release/duckosm-rust tests/data/monaco_sample.osm.pbf --boundary tests/data/monaco.geojson -m driving,walking,cycling \
+    --fixes ../duckOSM/osm_overrides/osm_overrides.yaml --raw -f geoparquet -o out-raw
+python tools/compare_features.py out-raw --duckosm ../duckOSM/monaco.duckdb
+python crates/duckosm-wasm/www/e2e.py tests/data/monaco_sample.osm.pbf out-page --boundary tests/data/monaco.geojson \
+    --fixes ../duckOSM/osm_overrides/osm_overrides.yaml
+python tools/compare_features.py out-raw --page out-page     # the page's features_*.parquet against the native result
+```
+
+Another area against osmium (`osmium extract -s smart -p boundary.geojson region.osm.pbf -o cut.osm.pbf`):
+
+```bash
+RAW_CHECK="region.osm.pbf boundary.geojson cut.osm.pbf" cargo test --release -p duckosm-core --test raw -- --ignored
+```
+
+`crates/duckosm-build/sql/features.sql` is made from duckOSM's code. Make it again when duckOSM's layers change, then
+build the WebAssembly modules again (the module holds the text):
+
+```bash
+../duckOSM/.venv/bin/python tools/make_features_sql.py
 ```
 
 ## Check the OSM fixes

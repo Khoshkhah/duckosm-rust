@@ -3,14 +3,22 @@ and uses the WebAssembly module with threads (pkg-threads). `python3 -m http.ser
 then uses the module with one thread.
 
     python3 crates/duckosm-wasm/www/serve.py [port]
+
+It also has the relay of the page at /relay?url=... (the same rules as relay/worker.js, docs/relay.md), so the page
+can get a Geofabrik extract on this computer: open http://localhost:<port>/?relay=relay
 """
 import functools
 import http.server
 import pathlib
+import re
+import shutil
 import sys
 import threading
+import urllib.parse
+import urllib.request
 
 WWW = pathlib.Path(__file__).resolve().parent
+GEOFABRIK = re.compile(r"^https://download\.geofabrik\.de/[a-z0-9/_-]+-latest\.osm\.pbf$")
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -22,6 +30,28 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Cross-Origin-Opener-Policy", "same-origin")
             self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
         super().end_headers()
+
+    def do_GET(self):
+        if self.path.startswith("/relay?"):
+            return self.relay()
+        super().do_GET()
+
+    def relay(self):
+        """relay/worker.js on this computer: a Geofabrik .osm.pbf file, streamed (the page is on the same site, so no CORS)."""
+        url = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("url", [""])[0]
+        if not GEOFABRIK.match(url):
+            return self.send_error(400, "Only the .osm.pbf files of download.geofabrik.de")
+        req = urllib.request.Request(url, headers={"User-Agent": "duckosm-relay (+https://github.com/Khoshkhah/duckOSM)"})
+        with urllib.request.urlopen(req) as r:
+            self.send_response(200)
+            for k in ("Content-Type", "Content-Length", "Last-Modified", "ETag"):
+                if r.headers.get(k):
+                    self.send_header(k, r.headers[k])
+            self.end_headers()
+            try:
+                shutil.copyfileobj(r, self.wfile, 1 << 20)
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # the page stopped the download (Cancel)
 
     def log_message(self, *a):
         if not self.quiet:

@@ -4,9 +4,10 @@ use crate::boundary::Boundary;
 use crate::filter;
 use crate::geom::Pt;
 use crate::graph::{MemberType, Relation};
-use crate::model::{Tags, Way};
+use crate::model::{OtherTags, Tags, Way};
 use crate::network::Coords;
-use crate::util::FxHashSet;
+use crate::raw::{Raw, RawNode, RawTags, RawWay};
+use crate::util::{FxHashMap, FxHashSet};
 use osmpbf::{Blob, BlobDecode, ByteOffset, Element, PrimitiveBlock};
 pub use osmpbf::{BlobReader, ElementReader};
 use rayon::prelude::*;
@@ -72,10 +73,12 @@ pub fn restrictions_of<R: Read + Send>(reader: ElementReader<R>) -> Result<Vec<R
 
 /// A `type=restriction` relation (duckOSM: `map_extract(tags, 'type')[1] = 'restriction'`).
 fn restriction(r: &osmpbf::Relation) -> Option<Relation> {
-    if r.tags().find(|t| t.0 == "type").map(|t| t.1) != Some("restriction") {
-        return None;
-    }
-    Some(Relation {
+    (r.tags().find(|t| t.0 == "type").map(|t| t.1) == Some("restriction")).then(|| relation(r))
+}
+
+/// A relation with all its tags and members.
+fn relation(r: &osmpbf::Relation) -> Relation {
+    Relation {
         id: r.id(),
         tags: r
             .tags()
@@ -92,17 +95,29 @@ fn restriction(r: &osmpbf::Relation) -> Option<Relation> {
                 (m.member_id, t, m.role().unwrap_or("").to_string())
             })
             .collect(),
-    })
+    }
 }
 
-/// A block of nodes in a PBF file: where it starts, its smallest and largest node id, and whether it also has
-/// ways or relations.
-#[derive(Clone, Copy)]
-struct NodeBlock {
-    at: ByteOffset,
-    first: i64,
-    last: i64,
-    mixed: bool,
+fn pairs<'a>(tags: impl Iterator<Item = (&'a str, &'a str)>) -> RawTags {
+    tags.map(|(k, v)| (k.to_string(), v.to_string())).collect()
+}
+
+/// The tags of the nodes of a block that `wanted` takes, for the nodes that have tags.
+fn node_tags(block: &PrimitiveBlock, wanted: impl Fn(i64) -> bool) -> Vec<(i64, RawTags)> {
+    let mut v = Vec::new();
+    for g in block.groups() {
+        for n in g.dense_nodes() {
+            if wanted(n.id()) && n.tags().next().is_some() {
+                v.push((n.id(), pairs(n.tags())));
+            }
+        }
+        for n in g.nodes() {
+            if wanted(n.id()) && n.tags().next().is_some() {
+                v.push((n.id(), pairs(n.tags())));
+            }
+        }
+    }
+    v
 }
 
 /// The nodes of a block.
@@ -144,15 +159,73 @@ pub fn read_area<R: Read + Seek + Send>(
     open: impl Fn() -> Result<BlobReader<R>, String>,
     boundary: &Boundary,
 ) -> Result<(Vec<Way>, Coords, Vec<Relation>), String> {
-    cut(open, boundary, true)
+    let (w, c, r, _) = cut(open, boundary, true, false)?;
+    Ok((w, c, r))
 }
 
-/// [`read_area`]; `use_sort: false` reads the file as if it had no sort flag (for the test).
+/// [`read_area`], and also duckOSM's `raw.*` of the area as osmium's `smart` cut gives it (docs/features.md): all
+/// nodes inside with their tags, all ways with a node inside, the relations that have a member inside or a member
+/// way kept and their parent relations, and the member ways and nodes of the multipolygon relations among them.
+/// The ways get all their nodes. Pass 2 also keeps all relations and where each block of ways is; a pass between 2
+/// and 3 reads only the blocks of ways that hold a member way of a multipolygon. The network input is the same as
+/// from [`read_area`].
+pub fn read_area_raw<R: Read + Seek + Send>(
+    open: impl Fn() -> Result<BlobReader<R>, String>,
+    boundary: &Boundary,
+) -> Result<(Vec<Way>, Coords, Vec<Relation>, Raw), String> {
+    let (w, c, r, raw) = cut(open, boundary, true, true)?;
+    Ok((w, c, r, raw.unwrap_or_default()))
+}
+
+/// A block of the file: where it starts and the range of ids of its nodes (or of its ways).
+#[derive(Clone, Copy)]
+struct Range {
+    at: ByteOffset,
+    first: i64,
+    last: i64,
+}
+
+/// The blocks that hold one of the sorted `ids`.
+fn blocks_with(blocks: &[Range], ids: &[i64]) -> Vec<ByteOffset> {
+    blocks
+        .iter()
+        .filter(|b| {
+            let i = ids.partition_point(|&n| n < b.first);
+            i < ids.len() && ids[i] <= b.last
+        })
+        .map(|b| b.at)
+        .collect()
+}
+
+/// Decode the blocks at `wanted` on all threads, and `f` on each.
+fn each_block<R: Read + Seek + Send, T: Send>(
+    blobs: &mut BlobReader<R>,
+    wanted: &[ByteOffset],
+    f: impl Fn(&PrimitiveBlock) -> T + Sync + Send,
+) -> Result<Vec<T>, String> {
+    let mut out = Vec::new();
+    for part in wanted.chunks(2 * rayon::current_num_threads()) {
+        let b = part
+            .iter()
+            .map(|&at| blobs.blob_from_offset(at))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        let found = b
+            .into_par_iter()
+            .map(|blob| Ok(data(&blob)?.map(|block| f(&block))))
+            .collect::<Result<Vec<_>, String>>()?;
+        out.extend(found.into_iter().flatten());
+    }
+    Ok(out)
+}
+
+/// [`read_area`]; `use_sort: false` reads the file as if it had no sort flag (for the test); `raw`: also `raw.*`.
 fn cut<R: Read + Seek + Send>(
     open: impl Fn() -> Result<BlobReader<R>, String>,
     boundary: &Boundary,
     use_sort: bool,
-) -> Result<(Vec<Way>, Coords, Vec<Relation>), String> {
+    raw: bool,
+) -> Result<(Vec<Way>, Coords, Vec<Relation>, Option<Raw>), String> {
     let err = |e: osmpbf::Error| e.to_string();
     // pass 1
     let mut blobs = open()?;
@@ -167,7 +240,8 @@ fn cut<R: Read + Seek + Send>(
             },
             None => return Err("the PBF file is empty".into()),
         };
-    let (mut blocks, mut inside, mut ways_at) = (Vec::new(), Vec::new(), None);
+    let (mut blocks, mut inside, mut inside_tags, mut ways_at) =
+        (Vec::new(), Vec::new(), Vec::new(), None);
     'pass1: loop {
         let b = batch(&mut blobs)?;
         if b.is_empty() {
@@ -180,14 +254,14 @@ fn cut<R: Read + Seek + Send>(
                     return Ok(None);
                 };
                 let at = blob.offset().ok_or("the PBF reader gave no offset")?;
-                let mut nb = NodeBlock {
+                let mut nb = Range {
                     at,
                     first: i64::MAX,
                     last: i64::MIN,
-                    mixed: block
-                        .groups()
-                        .any(|g| g.ways().next().is_some() || g.relations().next().is_some()),
                 };
+                let mixed = block
+                    .groups()
+                    .any(|g| g.ways().next().is_some() || g.relations().next().is_some());
                 let mut pts = Vec::new();
                 each_node(&block, |id, p| {
                     nb.first = nb.first.min(id);
@@ -196,15 +270,22 @@ fn cut<R: Read + Seek + Send>(
                         pts.push((id, p));
                     }
                 });
-                Ok(Some((nb, pts)))
+                let tags = if raw && !pts.is_empty() {
+                    let here: FxHashSet<i64> = pts.iter().map(|n| n.0).collect();
+                    node_tags(&block, |id| here.contains(&id))
+                } else {
+                    Vec::new()
+                };
+                Ok(Some((nb, mixed, pts, tags)))
             })
             .collect::<Result<Vec<_>, _>>()?;
-        for (nb, mut pts) in found.into_iter().flatten() {
+        for (nb, mixed, mut pts, mut tags) in found.into_iter().flatten() {
             if nb.first <= nb.last {
-                blocks.push(nb);
+                blocks.push((nb, mixed));
                 inside.append(&mut pts);
+                inside_tags.append(&mut tags);
             }
-            if nb.mixed && sorted {
+            if mixed && sorted {
                 ways_at = Some(nb.at);
                 break 'pass1;
             }
@@ -212,12 +293,14 @@ fn cut<R: Read + Seek + Send>(
     }
     let ids: FxHashSet<i64> = inside.iter().map(|n| n.0).collect();
     // pass 2: from the first block of ways, or all blocks that are not only nodes
-    let only_nodes: FxHashSet<u64> = blocks.iter().filter(|b| !b.mixed).map(|b| b.at.0).collect();
+    let only_nodes: FxHashSet<u64> = blocks.iter().filter(|b| !b.1).map(|b| b.0.at.0).collect();
+    let blocks: Vec<Range> = blocks.into_iter().map(|b| b.0).collect();
     let mut blobs = open()?;
     if let Some(at) = ways_at {
         blobs.seek(at).map_err(err)?;
     }
     let (mut ways, mut rels) = (Vec::new(), Vec::new());
+    let (mut raw_ways, mut all_rels, mut way_blocks) = (Vec::new(), Vec::new(), Vec::new());
     loop {
         let b = batch(&mut blobs)?;
         if b.is_empty() {
@@ -226,69 +309,194 @@ fn cut<R: Read + Seek + Send>(
         let found = b
             .into_par_iter()
             .filter(|blob| blob.offset().is_none_or(|o| !only_nodes.contains(&o.0)))
-            .map(|blob| -> Result<(Vec<Way>, Vec<Relation>), String> {
-                let (mut w, mut r) = (Vec::new(), Vec::new());
+            .map(|blob| -> Result<_, String> {
+                let (mut w, mut r, mut rw, mut ar) =
+                    (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+                let mut wb = Range {
+                    at: blob.offset().unwrap_or(ByteOffset(0)),
+                    first: i64::MAX,
+                    last: i64::MIN,
+                };
                 if let Some(block) = data(&blob)? {
                     for g in block.groups() {
-                        w.extend(
-                            g.ways()
-                                .filter(|x| x.refs().any(|n| ids.contains(&n)))
-                                .filter_map(|x| way(&x)),
-                        );
-                        r.extend(g.relations().filter_map(|x| restriction(&x)));
+                        for x in g.ways() {
+                            wb.first = wb.first.min(x.id());
+                            wb.last = wb.last.max(x.id());
+                            if !x.refs().any(|n| ids.contains(&n)) {
+                                continue;
+                            }
+                            w.extend(way(&x));
+                            if raw {
+                                rw.push(raw_way(&x));
+                            }
+                        }
+                        for x in g.relations() {
+                            r.extend(restriction(&x));
+                            if raw {
+                                ar.push(relation(&x));
+                            }
+                        }
                     }
                 }
-                Ok((w, r))
+                Ok((w, r, rw, ar, wb))
             })
             .collect::<Result<Vec<_>, _>>()?;
-        for (mut w, mut r) in found {
+        for (mut w, mut r, mut rw, mut ar, wb) in found {
             ways.append(&mut w);
             rels.append(&mut r);
+            raw_ways.append(&mut rw);
+            all_rels.append(&mut ar);
+            if wb.first <= wb.last {
+                way_blocks.push(wb);
+            }
         }
     }
     ways.sort_by_key(|w| w.id);
     rels.sort_by_key(|r| r.id);
-    // pass 3: the nodes inside are known already (a new way of the OSM fixes can use one, as with the osmium cut)
-    let mut missing: Vec<i64> = ways
-        .iter()
-        .flat_map(|w| w.refs.iter().copied())
-        .filter(|n| !ids.contains(n))
-        .collect();
-    missing.sort_unstable();
-    missing.dedup();
-    let wanted: Vec<ByteOffset> = blocks
-        .iter()
-        .filter(|b| {
-            let i = missing.partition_point(|&n| n < b.first);
-            i < missing.len() && missing[i] <= b.last
-        })
-        .map(|b| b.at)
-        .collect();
-    let mut blobs = open()?;
-    let mut nodes = inside;
-    for part in wanted.chunks(2 * rayon::current_num_threads()) {
-        let b = part
-            .iter()
-            .map(|&at| blobs.blob_from_offset(at))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(err)?;
-        let found = b
-            .into_par_iter()
-            .map(|blob| -> Result<Vec<(i64, Pt)>, String> {
-                let mut v = Vec::new();
-                if let Some(block) = data(&blob)? {
-                    each_node(&block, |id, p| {
-                        if missing.binary_search(&id).is_ok() {
-                            v.push((id, p));
-                        }
-                    });
-                }
-                Ok(v)
+    // the network's nodes outside: the nodes inside are known already (a new way of the OSM fixes can use one, as
+    // with the osmium cut)
+    let outside = |refs: &mut dyn Iterator<Item = i64>| {
+        let mut v: Vec<i64> = refs.filter(|n| !ids.contains(n)).collect();
+        v.sort_unstable();
+        v.dedup();
+        v
+    };
+    let missing = outside(&mut ways.iter().flat_map(|w| w.refs.iter().copied()));
+    let mut raw_out = None;
+    let mut wanted_nodes = missing.clone();
+    if raw {
+        // the relations of the cut (osmium smart): a member inside or a member way kept, then their parents
+        let kept: FxHashSet<i64> = raw_ways.iter().map(|w| w.id).collect();
+        let direct = |r: &Relation| {
+            r.members.iter().any(|m| match m.1 {
+                MemberType::Node => ids.contains(&m.0),
+                MemberType::Way => kept.contains(&m.0),
+                MemberType::Relation => false,
             })
-            .collect::<Result<Vec<_>, _>>()?;
-        nodes.extend(found.into_iter().flatten());
+        };
+        let mut chosen: FxHashSet<i64> = all_rels
+            .iter()
+            .filter(|r| direct(r))
+            .map(|r| r.id)
+            .collect();
+        loop {
+            let parents: Vec<i64> = all_rels
+                .iter()
+                .filter(|r| !chosen.contains(&r.id))
+                .filter(|r| {
+                    r.members
+                        .iter()
+                        .any(|m| m.1 == MemberType::Relation && chosen.contains(&m.0))
+                })
+                .map(|r| r.id)
+                .collect();
+            if parents.is_empty() {
+                break;
+            }
+            chosen.extend(parents);
+        }
+        // the members of the multipolygons with a member inside or a member way kept
+        let (mut more_ways, mut more_nodes) = (Vec::new(), Vec::new());
+        for r in all_rels.iter().filter(|r| {
+            r.tags
+                .iter()
+                .any(|t| t.0 == "type" && t.1 == "multipolygon")
+                && direct(r)
+        }) {
+            for m in &r.members {
+                match m.1 {
+                    MemberType::Way if !kept.contains(&m.0) => more_ways.push(m.0),
+                    MemberType::Node if !ids.contains(&m.0) => more_nodes.push(m.0),
+                    _ => {}
+                }
+            }
+        }
+        all_rels.retain(|r| chosen.contains(&r.id));
+        all_rels.sort_by_key(|r| r.id);
+        more_ways.sort_unstable();
+        more_ways.dedup();
+        // the pass for the member ways: only the blocks of ways that hold one
+        let mut blobs = open()?;
+        let found = each_block(&mut blobs, &blocks_with(&way_blocks, &more_ways), |block| {
+            let mut v = Vec::new();
+            for g in block.groups() {
+                v.extend(
+                    g.ways()
+                        .filter(|x| more_ways.binary_search(&x.id()).is_ok())
+                        .map(|x| raw_way(&x)),
+                );
+            }
+            v
+        })?;
+        raw_ways.extend(found.into_iter().flatten());
+        raw_ways.sort_by_key(|w| w.id);
+        let mut all = outside(
+            &mut raw_ways
+                .iter()
+                .flat_map(|w| w.refs.iter().copied())
+                .chain(more_nodes),
+        );
+        // the network's ways are among the raw ways, so `all` has the nodes of `missing`
+        std::mem::swap(&mut wanted_nodes, &mut all);
+        let tags: FxHashMap<i64, RawTags> = inside_tags.into_iter().collect();
+        let mut nodes: Vec<RawNode> = inside
+            .iter()
+            .map(|&(id, p)| RawNode {
+                id,
+                lon: p.0,
+                lat: p.1,
+                tags: tags.get(&id).cloned().unwrap_or_default(),
+            })
+            .collect();
+        nodes.shrink_to_fit();
+        raw_out = Some(Raw {
+            nodes,
+            ways: raw_ways,
+            relations: all_rels,
+        });
     }
-    Ok((ways, Coords::new(nodes), rels))
+    // pass 3: the node blocks with a missing node
+    let mut blobs = open()?;
+    let found = each_block(&mut blobs, &blocks_with(&blocks, &wanted_nodes), |block| {
+        let (mut net, mut rn) = (Vec::new(), Vec::new());
+        each_node(block, |id, p| {
+            if missing.binary_search(&id).is_ok() {
+                net.push((id, p));
+            }
+            if raw && wanted_nodes.binary_search(&id).is_ok() {
+                rn.push(RawNode {
+                    id,
+                    lon: p.0,
+                    lat: p.1,
+                    tags: Vec::new(),
+                });
+            }
+        });
+        if raw && !rn.is_empty() {
+            let mut tags =
+                node_tags(block, |id| wanted_nodes.binary_search(&id).is_ok()).into_iter();
+            let mut next = tags.next();
+            // node_tags keeps the order of each_node: dense nodes, then nodes
+            for n in &mut rn {
+                if next.as_ref().is_some_and(|t| t.0 == n.id) {
+                    n.tags = next.take().unwrap().1;
+                    next = tags.next();
+                }
+            }
+        }
+        (net, rn)
+    })?;
+    let mut nodes = inside;
+    for (mut net, mut rn) in found {
+        nodes.append(&mut net);
+        if let Some(r) = raw_out.as_mut() {
+            r.nodes.append(&mut rn);
+        }
+    }
+    if let Some(r) = raw_out.as_mut() {
+        r.nodes.sort_by_key(|n| n.id);
+    }
+    Ok((ways, Coords::new(nodes), rels, raw_out))
 }
 
 /// [`read_area`] on a file.
@@ -302,6 +510,15 @@ pub fn read_area_path(
     )
 }
 
+/// A way with all its tags, for `raw.ways`.
+fn raw_way(w: &osmpbf::Way) -> RawWay {
+    RawWay {
+        id: w.id(),
+        tags: pairs(w.tags()),
+        refs: w.refs().collect(),
+    }
+}
+
 /// A highway way or ferry line that the reader keeps.
 fn way(w: &osmpbf::Way) -> Option<Way> {
     let tags = Tags::from_pairs(w.tags());
@@ -309,6 +526,7 @@ fn way(w: &osmpbf::Way) -> Option<Way> {
         id: w.id(),
         refs: w.refs().collect(),
         tags,
+        other: OtherTags::of(w.tags()),
     })
 }
 
@@ -369,8 +587,8 @@ mod tests {
             .unwrap();
         let path = data.join("monaco_sample.osm.pbf");
         let open = || BlobReader::from_path(&path).map_err(|e| e.to_string());
-        let (w1, c1, r1) = cut(open, &b, true).unwrap();
-        let (w2, c2, r2) = cut(open, &b, false).unwrap();
+        let (w1, c1, r1, _) = cut(open, &b, true, false).unwrap();
+        let (w2, c2, r2, _) = cut(open, &b, false, false).unwrap();
         let ways = |w: &[Way]| w.iter().map(|w| (w.id, w.refs.clone())).collect::<Vec<_>>();
         assert!(!w1.is_empty());
         assert_eq!(ways(&w1), ways(&w2));

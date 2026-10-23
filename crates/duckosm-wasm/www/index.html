@@ -4,303 +4,1342 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>duckOSM in the browser</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css" crossorigin>
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js" crossorigin></script>
+<script type="importmap">
+{ "imports": {
+  "terra-draw": "https://cdn.jsdelivr.net/npm/terra-draw@1.38.0/dist/terra-draw.modern.js",
+  "terra-draw-maplibre-gl-adapter": "https://cdn.jsdelivr.net/npm/terra-draw-maplibre-gl-adapter@1.5.0/dist/terra-draw-maplibre-gl-adapter.modern.js",
+  "polyclip-ts": "https://cdn.jsdelivr.net/npm/polyclip-ts@0.16.8/+esm"
+} }
+</script>
 <style>
-  :root { --bg: #fff; --fg: #1d1d1f; --muted: #6e6e73; --line: #d2d2d7; --accent: #0a66c2; --code: #f5f5f7; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #1c1c1e; --fg: #f2f2f7; --muted: #a1a1a6; --line: #3a3a3c; --accent: #4ea1ff; --code: #2c2c2e; }
+  :root {
+    --bg: #ffffff; --surface: #f6f7f9; --fg: #111827; --muted: #6b7280; --line: #e5e7eb;
+    --accent: #2563eb; --accent-fg: #ffffff; --accent-soft: #dbeafe; --warn: #b45309; --warn-soft: #fef3c7;
+    --error: #b91c1c; --shadow: 0 10px 30px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.08);
   }
-  body { font: 15px/1.5 system-ui, sans-serif; background: var(--bg); color: var(--fg); max-width: 60rem; margin: 2rem auto; padding: 0 1rem; }
-  h1 { font-size: 1.5rem; margin-bottom: 0.2rem; }
-  h2 { font-size: 1.1rem; margin-top: 2rem; }
-  p.note { color: var(--muted); margin-top: 0; }
-  fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 1rem 0; }
-  label { margin-right: 1rem; }
-  button { font: inherit; padding: 0.35rem 0.9rem; border-radius: 6px; border: 1px solid var(--line); background: var(--code); color: var(--fg); cursor: pointer; }
-  button:disabled { opacity: 0.5; cursor: default; }
-  textarea { width: 100%; box-sizing: border-box; font: 13px/1.4 ui-monospace, monospace; background: var(--code); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 0.5rem; }
-  pre { background: var(--code); padding: 0.6rem; border-radius: 6px; overflow-x: auto; font-size: 13px; }
-  table { border-collapse: collapse; font-size: 13px; display: block; overflow-x: auto; }
-  th, td { border: 1px solid var(--line); padding: 0.2rem 0.5rem; text-align: left; white-space: nowrap; }
+  /* the theme of the system, unless the user selected one (the button in the header sets data-theme) */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme=light]) {
+      --bg: #17181c; --surface: #22242a; --fg: #f3f4f6; --muted: #9ca3af; --line: #33363d;
+      --accent: #60a5fa; --accent-fg: #0b1220; --accent-soft: #1e3a5f; --warn: #fbbf24; --warn-soft: #3b2f12;
+      --error: #f87171; --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+  }
+  :root[data-theme=dark] {
+    --bg: #17181c; --surface: #22242a; --fg: #f3f4f6; --muted: #9ca3af; --line: #33363d;
+    --accent: #60a5fa; --accent-fg: #0b1220; --accent-soft: #1e3a5f; --warn: #fbbf24; --warn-soft: #3b2f12;
+    --error: #f87171; --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font: 14px/1.45 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--fg); background: var(--bg); }
+  #map { position: fixed; inset: 0; }
+  /* the map buttons under the zoom buttons: 3D and the base map (a list that opens to the left) */
+  .mapctl { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+  .mapctl > .maplibregl-ctrl-group { margin: 0; position: relative; }
+  .mapctl button { display: grid; place-items: center; font: 700 12px system-ui, sans-serif; color: #333; }
+  .mapctl button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+  .mapctl button[aria-pressed="true"], .mapctl button[aria-expanded="true"] { color: #fff; background-color: #2563eb !important; }
+  .basepop { position: absolute; top: 0; right: 38px; width: 180px; padding: 8px; display: grid; gap: 2px; border-radius: 8px;
+    background: var(--bg); color: var(--fg); box-shadow: 0 2px 10px rgb(0 0 0 / 20%); font-size: 12.5px; }
+  .basepop[hidden] { display: none; }
+  .basepop .h { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin: 2px 4px 4px; }
+  .basepop label { display: flex; align-items: center; gap: 8px; padding: 4px; border-radius: 6px; cursor: pointer; }
+  .basepop label:hover { background: var(--surface); }
+  .basepop .sw { width: 22px; height: 16px; border-radius: 3px; border: 1px solid var(--line); flex: none; }
+  .basepop hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; width: 100%; }
+  .basepop #ownbox[hidden], .basepop #ownsep[hidden] { display: none; }
+  #panel {
+    position: fixed; top: 0; left: 0; bottom: 0; width: 370px; z-index: 2; transition: transform 0.25s ease;
+    display: flex; flex-direction: column; background: var(--bg); border-right: 1px solid var(--line); box-shadow: 4px 0 18px rgba(15, 23, 42, 0.12);
+  }
+  body.collapsed #panel { transform: translateX(-100%); box-shadow: none; }
+  h2 .icon-btn { margin: -8px -6px -8px auto; text-transform: none; }
+  .icon-btn:disabled { visibility: hidden; }
+  .icon-btn { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 8px; background: none; color: var(--muted); flex: none; }
+  .icon-btn:hover { background: var(--surface); color: var(--fg); }
+  #open { position: fixed; top: 10px; left: 10px; z-index: 2; display: none; align-items: center; gap: 6px; height: 36px; padding: 0 12px 0 8px;
+          border: 0; border-radius: 9px; background: var(--bg); color: var(--fg); box-shadow: var(--shadow); font-weight: 500; }
+  body.collapsed #open { display: flex; }
+  .scroll { overflow-y: auto; padding: 0 12px 12px; flex: 1; }
+  header { display: flex; align-items: center; gap: 10px; padding: 14px 10px 12px 18px; }
+  header > div:nth-child(2) { flex: 1; min-width: 0; }
+  header .logo { width: 34px; height: 34px; border-radius: 9px; background: var(--accent); color: var(--accent-fg); display: grid; place-items: center; flex: none; }
+  header h1 { font-size: 16px; margin: 0; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); font-size: 12.5px; }
+  h2 { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 18px 0 10px; }
+  /* each of the three steps is a card on the gray background of the panel */
+  .scroll { background: var(--surface); border-top: 1px solid var(--line); }
+  .step { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-top: 12px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05); }
+  .step > h2:first-child { margin: 0 0 12px; color: var(--fg); }
+  /* the number of each step has the color of its line on the map: a match, the area, an extract */
+  .step h2 .n { background: var(--c); color: #fff; }
+  #step1-card { --c: #7c3aed; } #step2-card { --c: #2563eb; } #extracts-box { --c: #ea580c; }
+  h2 .n { width: 20px; height: 20px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 11px; }
+  svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
   a { color: var(--accent); }
-  #files a { display: inline-block; margin-right: 1rem; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: 9px;
+         border: 1px solid var(--line); background: var(--bg); font-weight: 500; }
+  .btn:hover:not(:disabled) { background: var(--surface); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+  .btn.primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+  .btn[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .segmented { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--surface); border-radius: 10px; padding: 3px; gap: 3px; }
+  .segmented [role=tab] { display: flex; align-items: center; justify-content: center; gap: 6px; height: 34px; border: 0; border-radius: 8px; background: none; color: var(--muted); font-weight: 500; }
+  .segmented [role=tab][aria-selected=true] { background: var(--bg); color: var(--fg); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+  [role=tabpanel] { padding-top: 12px; }
+
+  .field { position: relative; display: flex; gap: 6px; }
+  .field svg { position: absolute; left: 11px; top: 9px; color: var(--muted); }
+  input[type=search], input[type=text] { font: inherit; color: var(--fg); background: var(--bg); width: 100%; height: 36px; border: 1px solid var(--line); border-radius: 9px; padding: 0 10px; }
+  input[type=search] { padding-left: 36px; }
+  input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+  #found { margin-top: 10px; display: grid; gap: 4px; }
+  #found label { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+  #found label:hover, #found label:focus-within { border-color: var(--accent); background: var(--surface); }
+  #found label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+  #found label.point { cursor: default; opacity: 0.7; }
+  #found input { margin-top: 3px; accent-color: var(--accent); }
+  #found .t { font-weight: 600; }
+  #found label > span { min-width: 0; }
+  /* the rest of the address: at most two lines in the card; the whole address is in the title */
+  #found .d { color: var(--muted); font-size: 12px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+  .badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 99px; background: var(--surface); color: var(--muted); border: 1px solid var(--line); margin-left: 4px; font-weight: 500; }
+  .badge.no { color: var(--warn); border-color: var(--warn); background: none; }
+
+  .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+  /* the drawing tools: a card in the Draw tab */
+  .toolbox { background: var(--surface); border-radius: 10px; padding: 12px; }
+  .toolbox .cap { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+  .toolbox .cap + .shapes, .toolbox .cap + .edit { margin-bottom: 12px; }
+  .shapes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .shapes button { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); font-weight: 500; }
+  .shapes button span { flex: 1; text-align: left; }
+  .edit { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .edit button { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 2px 6px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); font-size: 12px; font-weight: 500; }
+  .toolbox button:hover:not(:disabled) { background: var(--surface); }
+  .toolbox button[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .toolbox button:disabled { opacity: 0.4; cursor: default; }
+  kbd { font: 600 10.5px ui-monospace, monospace; color: var(--muted); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; }
+  #hint { margin: 0; padding: 9px 11px; background: var(--bg); border-radius: 9px; font-size: 12.5px; color: var(--muted); }
+  body.collapsed .maplibregl-ctrl-top-left { top: 46px; }
+
+  #drop { display: grid; place-items: center; gap: 6px; text-align: center; padding: 26px 14px; border: 2px dashed var(--line); border-radius: 12px; color: var(--muted); cursor: pointer; }
+  #drop:hover, body.dragging #drop { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  #drop svg { width: 28px; height: 28px; }
+  #drop strong { color: var(--fg); }
+  #file { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+  .empty { padding: 18px 14px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; font-size: 13px; }
+  .stats { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 6px; margin-top: 10px; }
+  .stat { background: var(--surface); border-radius: 10px; padding: 8px 10px; }
+  .stat b { display: block; font-size: 17px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .stat span { font-size: 11.5px; color: var(--muted); }
+  .source { margin-top: 8px; font-size: 12.5px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .callout { display: flex; gap: 8px; margin-top: 10px; padding: 9px 11px; border-radius: 9px; background: var(--warn-soft); color: var(--warn); font-size: 12.5px; }
+  .error { color: var(--error); }
+
+  #extracts { display: grid; gap: 4px; }
+  #extracts label { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+  #extracts label:has(input:checked) { border-color: #ea580c; }
+  #extracts input { accent-color: #ea580c; }
+  #extracts .x { flex: 1; min-width: 0; }
+  #extracts .x span { display: block; font-size: 12px; color: var(--muted); }
+  #extracts a.dl { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; color: var(--muted); }
+  #extracts a.dl:hover { background: var(--surface); color: var(--accent); }
+  .btn.sm { height: 30px; padding: 0 10px; font-size: 12.5px; }
+  #extracts label { flex-wrap: wrap; }
+  /* a download: a line of its own under the extract, so the row keeps its width */
+  #extracts .prog { flex-basis: 100%; display: flex; align-items: center; gap: 8px; padding-left: 23px; }
+  #extracts .prog .bar { flex: 1; min-width: 40px; height: 6px; border-radius: 3px; background: var(--surface); overflow: hidden; }
+  #extracts .prog .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.15s; }
+  #extracts .got { font-size: 12px; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #kept { margin-top: 12px; display: grid; gap: 4px; }
+  #kept .k { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+  #kept .k span { flex: 1; min-width: 0; }
+
+  footer { display: grid; grid-template-columns: 1fr 1.5fr; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--line); background: var(--bg); }
+
+  /* steps 3 to 5: the data, the build, the result (docs/app.md) */
+  #step4-card { --c: #059669; } #step5-card { --c: #0f766e; } #step6-card { --c: #c026d3; }
+  .grid2 [hidden] { display: none; }
+  .pick { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 10px; cursor: pointer; margin-bottom: 10px; }
+  .pick:hover { border-color: var(--accent); color: var(--accent); }
+  .pick span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pick input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .checks { display: flex; gap: 14px; flex-wrap: wrap; }
+  .checks label { display: flex; gap: 6px; align-items: center; }
+  .checks input { accent-color: var(--accent); }
+  details { margin-top: 10px; } summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+  .progress { margin: 10px 0 0; padding: 9px 11px; border-radius: 9px; background: var(--surface); font-size: 12.5px; white-space: pre-wrap; }
+  .progress:empty { display: none; }
+  .steplog { width: 100%; margin-top: 6px; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .steplog th, .steplog td { padding: 3px 6px; border-bottom: 1px solid var(--line); }
+  .steplog th { text-align: right; color: var(--muted); font-weight: 500; }
+  .steplog th:first-child, .steplog td:first-child { text-align: left; }
+  .steplog td { text-align: right; white-space: nowrap; }
+  .steplog td:first-child { white-space: normal; }
+  .steplog tr.group td { padding-top: 9px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; border-bottom: 0; }
+  .steplog tr.total td { font-weight: 600; border-bottom: 0; }
+  /* the time cell: a bar for the share of the slowest step */
+  .steplog td.t { background: linear-gradient(to left, color-mix(in srgb, var(--c, #2563eb) 22%, transparent) var(--w), transparent var(--w)); }
+  .grid2 { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; }
+  select, textarea { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 9px; }
+  select { height: 34px; padding: 0 8px; }
+  textarea { width: 100%; padding: 8px 10px; font: 12.5px/1.4 ui-monospace, monospace; resize: vertical; }
+  #result { overflow-x: auto; margin-top: 8px; }
+  #result table { border-collapse: collapse; font-size: 12px; }
+  #result th, #result td { border: 1px solid var(--line); padding: 3px 6px; text-align: left; white-space: nowrap; }
+  /* one block for each table: its name, what it holds, and a link for each mode */
+  #files .tb { padding: 8px 0; border-top: 1px solid var(--line); font-size: 12.5px; }
+  #files .tb b { font-family: ui-monospace, monospace; font-size: 12px; }
+  #files .tb p { margin: 2px 0 4px; color: var(--muted); font-size: 11.5px; }
+  #files .tb .m { display: flex; flex-wrap: wrap; gap: 4px 14px; font-variant-numeric: tabular-nums; }
+  #files .tb .m .i { white-space: nowrap; }
+  #files .tb .m .i span { color: var(--muted); font-size: 11.5px; }
+  #files .layers { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px; margin-top: 6px; }
+  #files .layers a { display: flex; justify-content: space-between; gap: 8px; padding: 4px 8px; border-radius: 6px;
+    background: var(--surface); text-decoration: none; font-variant-numeric: tabular-nums; }
+  #files .layers a:hover { outline: 1px solid var(--line); }
+  #files .layers a span { color: var(--muted); font-size: 11.5px; }
+  .maplibregl-popup-content { color: #111827; font-size: 12.5px; }
+
+  #status { position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 3; background: var(--fg); color: var(--bg); padding: 7px 14px; border-radius: 99px; font-size: 13px; box-shadow: var(--shadow); }
+  #status:empty { display: none; }
+  body.picking #map canvas { cursor: crosshair; }
+
+  @media (min-width: 701px) {
+    .maplibregl-ctrl-top-left, .maplibregl-ctrl-bottom-left { left: 370px; transition: left 0.25s ease; }
+    body.collapsed .maplibregl-ctrl-top-left, body.collapsed .maplibregl-ctrl-bottom-left { left: 0; }
+    #status { left: calc(50% + 185px); }
+    body.collapsed #status { left: 50%; }
+  }
+  @media (max-width: 700px) {
+    #map { position: relative; height: 52vh; }
+    #panel { position: static; width: auto; box-shadow: none; border-right: 0; border-top: 1px solid var(--line); transition: none; }
+    body.collapsed #panel { transform: none; }
+    body.collapsed #panel > :not(header) { display: none; }
+    header p { display: none; }
+    body.collapsed #map { height: calc(100vh - 61px); }
+    body.collapsed #open { display: none; }
+    #collapse svg { transform: rotate(-90deg); }
+    body.collapsed #collapse svg { transform: rotate(90deg); }
+    .maplibregl-ctrl-scale { display: none; }
+    .scroll { overflow: visible; }
+    footer { position: sticky; bottom: 0; }
+    .btn, .segmented [role=tab] { height: 44px; }
+    .shapes button { height: 44px; }
+  }
 </style>
 </head>
 <body>
-<h1>duckOSM in the browser</h1>
-<p class="note">duckosm-rust builds duckOSM's tables in this tab, and DuckDB (duckdb-wasm) keeps them for SQL. No server of ours, no Python.
-The input is an area: a boundary and a name. Make the boundary with the <a href="boundary.html">boundary tool</a>. A PBF file does not leave your computer.</p>
+<svg style="display:none" aria-hidden="true">
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6"/></symbol>
+  <symbol id="i-select" viewBox="0 0 24 24"><path d="m4 4 7 17 2.5-7.5L21 11Z"/></symbol>
+  <symbol id="i-rect" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="13" rx="1"/></symbol>
+  <symbol id="i-poly" viewBox="0 0 24 24"><path d="m12 3 8.5 6.2-3.2 10.3H6.7L3.5 9.2Z"/></symbol>
+  <symbol id="i-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/></symbol>
+  <symbol id="i-free" viewBox="0 0 24 24"><path d="M3 15c2-5 5-8 7-5s1 7 4 7 4-6 7-9"/></symbol>
+  <symbol id="i-merge" viewBox="0 0 24 24"><rect x="3" y="3" width="11" height="11" rx="1"/><rect x="10" y="10" width="11" height="11" rx="1"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v12M7 11l5 5 5-5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20Z"/><path d="M12 10v4M12 17v.5"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/></symbol>
+  <symbol id="i-zoom" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5M11 8v6M8 11h6"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M4 9.3h16M4 14.7h16M9.3 4v16M14.7 4v16"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></symbol>
+</svg>
 
-<fieldset>
-  <legend>1. The area</legend>
-  <p><label>Boundary <input id="boundary" type="file" accept=".geojson,.json"></label>
-    <span class="note">(from the <a href="boundary.html">boundary tool</a> or <code>duckosm boundary</code>)</span></p>
-  <p><label>Name <input id="name" size="30"></label></p>
-  <pre id="area">No boundary yet.</pre>
-</fieldset>
+<div id="map" role="region" aria-label="Map of the area"></div>
+<div id="mapctl" class="maplibregl-ctrl mapctl">
+  <div class="maplibregl-ctrl-group"><button id="b3d" type="button" title="3D view" aria-label="3D view" aria-pressed="false">3D</button></div>
+  <div class="maplibregl-ctrl-group"><button id="bbase" type="button" title="Base map" aria-label="Base map" aria-expanded="false" aria-controls="basepop"><svg><use href="#i-grid"/></svg></button>
+    <div id="basepop" class="basepop" role="group" aria-label="Base map" hidden>
+      <div class="h">Base map</div>
+      <label><input type="radio" name="base" value=""><span class="sw" style="background:#f2efe9"></span>OpenFreeMap</label>
+      <label><input type="radio" name="base" value="esri_gray"><span class="sw" style="background:#e4e4e4"></span>Light gray</label>
+      <label><input type="radio" name="base" value="satellite"><span class="sw" style="background:linear-gradient(135deg,#3d5a3a,#7b8a5c 50%,#a09a7c)"></span>Satellite</label>
+      <label><input type="radio" name="base" value="blank"><span class="sw" style="background:var(--bg)"></span>Blank</label>
+      <hr id="ownsep" hidden>
+      <label id="ownbox" hidden><input type="checkbox" id="ownlayers" checked>duckOSM layers</label>
+    </div></div>
+</div>
 
-<fieldset>
-  <legend>2. The OpenStreetMap data</legend>
-  <p><label><input type="radio" name="source" value="region" checked> a region PBF file that covers the area (for example a Geofabrik extract)</label>
-    <input id="region" type="file" accept=".pbf"><br>
-    <span class="note">The page reads the file piece by piece and keeps the ways with a node inside the boundary, as osmium's <code>complete_ways</code>.</span></p>
-  <p><label><input type="radio" name="source" value="overpass"> the <a href="https://wiki.openstreetmap.org/wiki/Overpass_API">Overpass API</a></label>
-    <span class="note">(a city or smaller; the public servers are often full)</span></p>
-  <p><label><input type="radio" name="source" value="cut"> a PBF file already cut to the area (no boundary necessary)</label>
-    <input id="pbf" type="file" accept=".pbf"></p>
-  <p>Modes:
-    <label><input type="checkbox" name="mode" value="driving" checked> driving</label>
-    <label><input type="checkbox" name="mode" value="walking" checked> walking</label>
-    <label><input type="checkbox" name="mode" value="cycling" checked> cycling</label>
-  </p>
-  <p><label>OSM fixes file (optional, duckOSM <code>osm_overrides</code>) <input id="fixes" type="file" accept=".yaml,.yml"></label></p>
-  <button id="run">Build</button>
-</fieldset>
+<div id="status" role="status" aria-live="polite"></div>
 
-<pre id="status">Loading DuckDB…</pre>
+<button id="open" title="Open the panel" aria-label="Open the panel" aria-controls="panel"><svg style="transform:rotate(180deg)"><use href="#i-chevron"/></svg>duckOSM</button>
+<main id="panel">
+<header>
+  <div class="logo"><svg><use href="#i-poly"/></svg></div>
+  <div><h1>duckOSM in the browser</h1><p>Build the road network of an area in your browser</p></div>
+  <button id="theme" class="icon-btn" title="Light or dark theme" aria-label="Light or dark theme"><svg><use href="#i-sun"/></svg></button>
+  <button id="collapse" class="icon-btn" title="Collapse the panel" aria-label="Collapse the panel" aria-expanded="true" aria-controls="panel"><svg><use href="#i-chevron"/></svg></button>
+</header>
 
-<h2>2. SQL</h2>
-<textarea id="sql" rows="4">SELECT highway, count(*) AS edges, round(sum(length_m) / 1000, 1) AS km
+<div class="scroll">
+<section id="step1-card" class="step" aria-labelledby="step1">
+<h2 id="step1"><span class="n">1</span>Choose an area</h2>
+<div class="segmented" role="tablist" aria-label="The ways to make an area">
+  <button role="tab" id="tab-find" aria-controls="find" aria-selected="true"><svg><use href="#i-search"/></svg>Search</button>
+  <button role="tab" id="tab-draw" aria-controls="draw" aria-selected="false"><svg><use href="#i-pen"/></svg>Draw</button>
+  <button role="tab" id="tab-file" aria-controls="file-panel" aria-selected="false"><svg><use href="#i-file"/></svg>File</button>
+</div>
+
+<section id="find" role="tabpanel" aria-labelledby="tab-find">
+  <form id="search" class="field" role="search">
+    <svg><use href="#i-search"/></svg>
+    <input id="q" type="search" placeholder="A city, a region, a country" aria-label="Name of a place" autocomplete="off">
+    <button class="btn primary">Search</button>
+  </form>
+  <div class="row">
+    <button id="here" class="btn" aria-pressed="false"><svg><use href="#i-target"/></svg>What is here?</button>
+    <span class="small muted">Then click the map.</span>
+  </div>
+  <div id="found" role="radiogroup" aria-label="The matches"></div>
+  <p class="small muted">Search: <a href="https://photon.komoot.io">Photon</a> (komoot). Boundaries: <a href="https://nominatim.openstreetmap.org">Nominatim</a>. Data © OpenStreetMap contributors.</p>
+</section>
+
+<section id="draw" role="tabpanel" aria-labelledby="tab-draw" hidden>
+  <div class="toolbox" role="toolbar" aria-label="Drawing tools">
+    <p class="cap">Draw a shape</p>
+    <div class="shapes">
+      <button data-mode="rectangle" aria-pressed="false" aria-keyshortcuts="R"><svg><use href="#i-rect"/></svg><span>Rectangle</span><kbd>R</kbd></button>
+      <button data-mode="polygon" aria-pressed="false" aria-keyshortcuts="P"><svg><use href="#i-poly"/></svg><span>Polygon</span><kbd>P</kbd></button>
+      <button data-mode="circle" aria-pressed="false" aria-keyshortcuts="C"><svg><use href="#i-circle"/></svg><span>Circle</span><kbd>C</kbd></button>
+      <button data-mode="freehand" aria-pressed="false" aria-keyshortcuts="F"><svg><use href="#i-free"/></svg><span>Freehand</span><kbd>F</kbd></button>
+    </div>
+    <p class="cap">Change the shapes</p>
+    <div class="edit">
+      <button data-mode="select" aria-pressed="false" aria-keyshortcuts="S" title="Select, move and change a shape (S)"><svg><use href="#i-select"/></svg>Select</button>
+      <button id="merge" disabled title="Join the shapes that overlap into one shape" aria-label="Merge shapes"><svg><use href="#i-merge"/></svg>Merge</button>
+      <button id="delete" disabled title="Delete the selected shape (Delete)" aria-keyshortcuts="Delete"><svg><use href="#i-trash"/></svg>Delete</button>
+      <button id="clear" title="Delete all shapes"><svg><use href="#i-x"/></svg>Clear</button>
+    </div>
+    <p id="hint" aria-live="polite">Select a shape, then draw it on the map.</p>
+  </div>
+</section>
+
+<section id="file-panel" role="tabpanel" aria-labelledby="tab-file" hidden>
+  <label id="drop">
+    <svg><use href="#i-upload"/></svg>
+    <span><strong>Select a GeoJSON file</strong><br>or drag it onto the map</span>
+    <span class="small">Polygons in GeoJSON</span>
+    <input id="file" type="file" accept=".geojson,.json">
+  </label>
+</section>
+
+</section>
+
+<section id="step2-card" class="step" aria-labelledby="step2">
+<h2 id="step2"><span class="n">2</span>The area
+  <button id="zoom-area" class="icon-btn" disabled title="Zoom to the area" aria-label="Zoom to the area"><svg><use href="#i-zoom"/></svg></button></h2>
+<input id="name" type="text" aria-label="Name of the area" placeholder="Name">
+<div id="summary" aria-live="polite"><div class="empty">No area yet. Choose one in step 1.</div></div>
+</section>
+
+<section id="extracts-box" class="step" aria-labelledby="step3">
+  <h2 id="step3"><span class="n">3</span>The data</h2>
+  <div class="segmented" role="tablist" aria-label="Where the OpenStreetMap data comes from">
+    <button role="tab" id="tab-region" aria-controls="src-region" aria-selected="true" data-source="region">Region file</button>
+    <button role="tab" id="tab-overpass" aria-controls="src-overpass" aria-selected="false" data-source="overpass">Overpass</button>
+    <button role="tab" id="tab-cut" aria-controls="src-cut" aria-selected="false" data-source="cut">Cut file</button>
+  </div>
+  <section id="src-region" role="tabpanel" aria-labelledby="tab-region">
+    <label class="pick"><svg><use href="#i-upload"/></svg><span id="region-name">Select the region file (.osm.pbf)</span><input id="region" type="file" accept=".pbf"></label>
+    <p id="extracts-help" class="small muted" style="margin-top:0">The file must cover the area. These Geofabrik files cover it. Click a file to see it on the map.</p>
+    <div id="extracts" role="radiogroup" aria-label="Show an extract on the map"><p class="small muted">Choose an area first.</p></div>
+    <div id="kept" aria-live="polite"></div>
+  </section>
+  <section id="src-overpass" role="tabpanel" aria-labelledby="tab-overpass" hidden>
+    <p class="small muted" style="margin:0">Data from the <a href="https://wiki.openstreetmap.org/wiki/Overpass_API">Overpass API</a>. Use it for a city or a smaller area. The public servers are often busy.</p>
+  </section>
+  <section id="src-cut" role="tabpanel" aria-labelledby="tab-cut" hidden>
+    <label class="pick"><svg><use href="#i-upload"/></svg><span id="pbf-name">Select a cut .osm.pbf file</span><input id="pbf" type="file" accept=".pbf"></label>
+    <p class="small muted" style="margin:0">The page uses all of the file. The area gives only the name.</p>
+  </section>
+</section>
+
+<section id="step4-card" class="step" aria-labelledby="step4">
+  <h2 id="step4"><span class="n">4</span>Build</h2>
+  <div class="checks" role="group" aria-label="The modes">
+    <label><input type="checkbox" name="mode" value="driving" checked>Driving</label>
+    <label><input type="checkbox" name="mode" value="walking" checked>Walking</label>
+    <label><input type="checkbox" name="mode" value="cycling" checked>Cycling</label>
+  </div>
+  <div class="checks" style="margin-top:6px"><label><input type="checkbox" id="features" checked>Base map layers</label></div>
+  <p class="small muted" style="margin:4px 0 0">Water, land use, buildings, railways and more
+    (<a href="https://khoshkhah.github.io/duckOSM/reference/features/" target="_blank" rel="noopener">features tables</a>).
+    Needs a region file. The first build downloads 4.5 MB.</p>
+  <div class="grid2" style="margin-top:10px">
+    <label for="levels" class="small">Drawing order</label>
+    <select id="levels"><option value="tags">From the tags (fast)</option><option value="solve">Optimized (slower)</option></select>
+  </div>
+  <details><summary>Advanced: fixes to the map data</summary>
+    <p class="small muted" style="margin:8px 0">Your fixes for OpenStreetMap errors, for example a one-way street.
+      <a href="https://khoshkhah.github.io/duckOSM/guides/fix-osm-errors/" target="_blank" rel="noopener">File format</a>. Turn rules are not used.</p>
+    <label class="pick" style="margin:0"><svg><use href="#i-upload"/></svg><span id="fixes-name">Select a fixes file (.yaml)</span><input id="fixes" type="file" accept=".yaml,.yml"></label>
+  </details>
+  <p id="buildhint" class="small" style="margin:10px 0 0; color: var(--warn)" aria-live="polite"></p>
+  <p id="buildstatus" class="progress" aria-live="polite"></p>
+  <details id="steplog" open hidden><summary>Time and memory of each step</summary>
+    <table class="steplog"><thead><tr><th>Step</th><th>Time (s)</th><th>Memory (MiB)</th></tr></thead><tbody></tbody>
+      <tfoot><tr class="total"><td>Total</td><td></td><td></td></tr></tfoot></table>
+  </details>
+</section>
+
+<section id="step5-card" class="step" aria-labelledby="step5" hidden>
+  <h2 id="step5"><span class="n">5</span>The result</h2>
+  <h2 style="margin-top:4px">SQL</h2>
+  <textarea id="sql" rows="4" aria-label="SQL">SELECT highway, count(*) AS edges, round(sum(length_m) / 1000, 1) AS km
 FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
-<p><button id="query" disabled>Run the query</button></p>
-<div id="result"></div>
+  <div class="row" style="margin-top:6px"><button id="query" class="btn">Run</button></div>
+  <div id="result"></div>
+  <h2 style="margin-top:16px">Downloads</h2>
+  <div class="row" style="margin-top:0"><button id="zip" class="btn primary"><svg><use href="#i-download"/></svg>Download all (.zip)</button></div>
+  <p class="small muted">The zip has a folder with all tables as GeoParquet files, make_duckdb.sql (it makes one .duckdb file: the
+    README gives the command), the boundary and a README. One table at a time is below.
+    <a id="reference" target="_blank" rel="noopener">The columns of each table</a></p>
+  <div id="files"></div>
+</section>
 
-<h2>3. Download</h2>
-<p><button id="duckdb" disabled>Download load.sql</button> It makes a <code>.duckdb</code> file from the Parquet files below: <code>duckdb area.duckdb &lt; load.sql</code></p>
-<div id="files"></div>
+<section id="step6-card" class="step" aria-labelledby="step6">
+  <h2 id="step6"><span class="n">6</span>Visualization</h2>
+  <div class="grid2">
+    <label for="mapmode" class="small" id="mapmode-label" hidden>Network</label>
+    <select id="mapmode" hidden></select>
+  </div>
+  <div class="row" id="showrow" style="margin-top:10px" hidden><button id="show" class="btn primary">Show on map</button></div>
+  <p id="mapnote" class="progress" aria-live="polite"></p>
+</section>
+
+</div>
+
+<footer>
+  <button id="save" class="btn" disabled><svg><use href="#i-download"/></svg>GeoJSON</button>
+  <button id="run" class="btn primary" disabled>Build<svg><use href="#i-arrow"/></svg></button>
+</footer>
+</main>
 
 <script type="module">
-// duckdb-wasm with DuckDB 1.5: the GEOMETRY type of the tables is core from 1.5 (the version that the
-// geolibre-roadstyle spike tested, docs/browser.md).
-const DUCKDB = "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.33.1-dev57.0/+esm";
+import { TerraDraw, TerraDrawRectangleMode, TerraDrawPolygonMode, TerraDrawCircleMode, TerraDrawFreehandMode,
+         TerraDrawSelectMode, ValidateNotSelfIntersecting } from "terra-draw";
+import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
+import * as duck from "./app/duck.js";
+import * as regions from "./app/regions.js";
+
 const $ = (id) => document.getElementById(id);
-const log = (s) => ($("status").textContent = s);
-const t0 = performance.now();
-const since = () => ((performance.now() - t0) / 1000).toFixed(2) + " s";
-let db = null, conn = null, tables = [], areaName = "area";
+const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+const icon = (name) => `<svg><use href="#i-${name}"/></svg>`;
+const num = (x, d = 0) => x.toLocaleString("en", { maximumFractionDigits: d });
+let found = [], area = null, extracts = null, cover = [], statusTimer;
 
-const MACROS = `
-CREATE OR REPLACE MACRO edge_id_hash(osm_id, source, target) AS
-    (hash(osm_id::BIGINT, source::BIGINT, target::BIGINT) >> 1)::BIGINT;
-CREATE OR REPLACE MACRO edge_id_hash_v1(osm_id, source, target, is_reverse) AS
-    (hash(osm_id::BIGINT, source::BIGINT, target::BIGINT, is_reverse::BOOLEAN) >> 1)::BIGINT;`;
-
-async function startDuckDB() {
-  const duckdb = await import(DUCKDB);
-  const bundle = await duckdb.selectBundle(duckdb.getJsDelivrBundles());
-  const url = URL.createObjectURL(new Blob([`importScripts("${bundle.mainWorker}");`], { type: "text/javascript" }));
-  const d = new duckdb.AsyncDuckDB(new duckdb.VoidLogger(), new Worker(url));
-  await d.instantiate(bundle.mainModule, bundle.pthreadWorker);
-  URL.revokeObjectURL(url);
-  return d;
+// a short message on top of the map; it goes away after some seconds
+function status(text, ms = 4000) {
+  $("status").textContent = text;
+  clearTimeout(statusTimer);
+  if (ms) statusTimer = setTimeout(() => ($("status").textContent = ""), ms);
 }
 
-const duckReady = startDuckDB().then(async (d) => {
-  db = d;
-  conn = await db.connect();
-  window.timings = { duckdbStart: (performance.now() - t0) / 1000 };
-  log(`DuckDB is ready (${since()}). Select the area and the data, and click Build.`);
+// the list of Geofabrik's extracts (tools/make_geofabrik_index.py), loaded once
+const geofabrik = () => (extracts ??= fetch("geofabrik.json").then((r) => r.json()).then((d) => d.extracts));
+
+// the polygons of a geometry, as a list of polygons (each a list of rings)
+const polygons = (g) => (g?.type === "Polygon" ? [g.coordinates] : g?.type === "MultiPolygon" ? g.coordinates : []);
+const geometry = (polys) => (polys.length === 1 ? { type: "Polygon", coordinates: polys[0] } : { type: "MultiPolygon", coordinates: polys });
+
+// the area on the sphere (radius 6378137 m) of a ring in degrees
+const rad = (d) => (d * Math.PI) / 180;
+function ringArea(r) {
+  let a = 0;
+  for (let i = 0; i + 1 < r.length; i++) a += rad(r[i + 1][0] - r[i][0]) * (2 + Math.sin(rad(r[i][1])) + Math.sin(rad(r[i + 1][1])));
+  return Math.abs((a * 6378137 * 6378137) / 2);
+}
+const areaKm2 = (polys) => polys.reduce((s, p) => s + ringArea(p[0]) - p.slice(1).reduce((h, r) => h + ringArea(r), 0), 0) / 1e6;
+
+// the even-odd rule over all rings of all polygons
+function inside(polys, x, y) {
+  let c = false;
+  for (const p of polys) for (const r of p)
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++)
+      if (r[i][1] > y !== r[j][1] > y && x < ((r[j][0] - r[i][0]) * (y - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) c = !c;
+  return c;
+}
+
+function bbox(polys) {
+  const pts = polys.flatMap((p) => p[0]);
+  return [Math.min(...pts.map((p) => p[0])), Math.min(...pts.map((p) => p[1])), Math.max(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[1]))];
+}
+
+// the extracts that contain all points of the outer rings (at most 2000 of them), the smallest first. The
+// polygons of the list are about 1 km larger than the extracts, so an area at most 1 km outside can be shown.
+async function covering(polys) {
+  const pts = polys.flatMap((p) => p[0]);
+  const step = Math.ceil(pts.length / 2000);
+  const some = pts.filter((_, i) => i % step === 0);
+  const [w, s, e, n] = bbox([[some]]);
+  return (await geofabrik())
+    .filter((x) => x.bbox[0] <= w && x.bbox[1] <= s && x.bbox[2] >= e && x.bbox[3] >= n)
+    .filter((x) => some.every((p) => inside(x.polygon, p[0], p[1])))
+    .map((x) => ({ ...x, km2: areaKm2(x.polygon) }))
+    .sort((a, b) => a.km2 - b.km2);
+}
+
+// ---- the map ----
+const empty = { type: "FeatureCollection", features: [] };
+const map = new maplibregl.Map({ container: "map", style: "https://tiles.openfreemap.org/styles/liberty", center: [10, 50], zoom: 3 });
+map.addControl(new maplibregl.NavigationControl(), "top-right");
+map.addControl({ onAdd: () => $("mapctl"), onRemove: () => {} }, "top-right");   // 3D and the base map: under the zoom buttons
+// the tiles of the roads map: roadstyle's module makes each one when the map asks for it (app/duck.js tile())
+maplibregl.addProtocol("rs", async (params) => ({ data: await duck.tile(params.url) }));
+map.addControl(new maplibregl.ScaleControl(), "bottom-left");
+const loaded = new Promise((ok) => map.on("load", ok));
+// OpenFreeMap's layers (the style before the page adds its own), and which of them are roads
+const baseLayers = [];
+loaded.then(() => map.getStyle().layers.forEach((l) => baseLayers.push({ id: l.id, road: /^transportation/.test(l["source-layer"] ?? "") })));
+const setData = (src, data) => loaded.then(() => map.getSource(src).setData(data ?? empty));
+
+const blue = "#2563eb";
+const shape = { fillColor: blue, fillOpacity: 0.15, outlineColor: blue, outlineWidth: 2 };
+const validation = (f) => ValidateNotSelfIntersecting(f);
+// select: drag a shape to move it; drag a corner of a rectangle or a point of a circle to resize it; drag a
+// vertex of a polygon, or the midpoint of a side to add a vertex
+const edit = (coordinates) => ({ feature: { draggable: true, coordinates: { draggable: true, ...coordinates } } });
+const draw = new TerraDraw({
+  adapter: new TerraDrawMapLibreGLAdapter({ map }),
+  modes: [
+    new TerraDrawRectangleMode({ drawInteraction: "click-move-or-drag", styles: shape }),
+    new TerraDrawPolygonMode({ validation, styles: { ...shape, closingPointColor: blue, closingPointOutlineColor: "#ffffff" } }),
+    new TerraDrawCircleMode({ drawInteraction: "click-move-or-drag", segments: 64, styles: shape }),
+    new TerraDrawFreehandMode({ drawInteraction: "click-move-or-drag", validation, styles: shape }),
+    new TerraDrawSelectMode({
+      flags: {
+        rectangle: edit({ resizable: "opposite" }),
+        circle: edit({ resizable: "center-fixed" }),
+        polygon: edit({ midpoints: true, deletable: true }),
+        freehand: edit({ midpoints: true, deletable: true }),
+      },
+      styles: { selectedPolygonColor: blue, selectedPolygonFillOpacity: 0.25, selectedPolygonOutlineColor: blue, selectedPolygonOutlineWidth: 3,
+                selectionPointColor: "#ffffff", selectionPointOutlineColor: blue, selectionPointWidth: 5, selectionPointOutlineWidth: 2,
+                midPointColor: blue, midPointOutlineColor: "#ffffff", midPointWidth: 3 },
+    }),
+  ],
 });
-duckReady.catch((e) => log("DuckDB did not start: " + e));
 
-const worker = new Worker(new URL("./build_worker.js", import.meta.url), { type: "module" });
+loaded.then(() => {
+  map.addSource("area", { type: "geojson", data: empty });
+  map.addSource("preview", { type: "geojson", data: empty });
+  map.addSource("extract", { type: "geojson", data: empty });
+  // three line styles that differ in color and in pattern, each on a white casing so that it stands out from
+  // the borders of the base map: the area (blue, solid, filled), a match (purple, solid, light fill) and an
+  // extract (orange, dashed). A match and an extract show their name along the line.
+  const casing = (id, source, width) => map.addLayer({ id, type: "line", source, filter: ["!=", ["geometry-type"], "Point"],
+    paint: { "line-color": "#ffffff", "line-width": width, "line-opacity": 0.9 } });
+  const label = (id, source, color) => map.addLayer({ id, type: "symbol", source, filter: ["!=", ["geometry-type"], "Point"],
+    layout: { "symbol-placement": "line", "symbol-spacing": 300, "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 12, "text-offset": [0, -1] },
+    paint: { "text-color": color, "text-halo-color": "#ffffff", "text-halo-width": 2 } });
+  map.addLayer({ id: "area-fill", type: "fill", source: "area", paint: { "fill-color": blue, "fill-opacity": 0.18 } });
+  casing("area-casing", "area", 6);
+  map.addLayer({ id: "area-line", type: "line", source: "area", paint: { "line-color": blue, "line-width": 2.5 } });
+  casing("extract-casing", "extract", 6);
+  map.addLayer({ id: "extract-line", type: "line", source: "extract", paint: { "line-color": "#ea580c", "line-width": 3, "line-dasharray": [2, 1.5] } });
+  label("extract-label", "extract", "#c2410c");
+  map.addLayer({ id: "preview-fill", type: "fill", source: "preview", filter: ["!=", ["geometry-type"], "Point"], paint: { "fill-color": "#7c3aed", "fill-opacity": 0.15 } });
+  casing("preview-casing", "preview", 6);
+  map.addLayer({ id: "preview-line", type: "line", source: "preview", filter: ["!=", ["geometry-type"], "Point"], paint: { "line-color": "#7c3aed", "line-width": 2.5 } });
+  label("preview-label", "preview", "#6d28d9");
+  map.addLayer({ id: "preview-point", type: "circle", source: "preview", filter: ["==", ["geometry-type"], "Point"],
+                 paint: { "circle-radius": 8, "circle-color": "#7c3aed", "circle-stroke-color": "#fff", "circle-stroke-width": 2.5 } });
+  // a pin on the area when it is too small on the screen to see, for example when the map shows an extract
+  map.addSource("pin", { type: "geojson", data: empty });
+  map.addLayer({ id: "pin-halo", type: "circle", source: "pin", paint: { "circle-radius": 16, "circle-color": blue, "circle-opacity": 0.25 } });
+  map.addLayer({ id: "pin", type: "circle", source: "pin", paint: { "circle-radius": 7, "circle-color": blue, "circle-stroke-color": "#fff", "circle-stroke-width": 3 } });
+  map.on("zoomend", pin);
+  draw.start();
+  window.mapReady = true;
+});
 
-function buildInWorker(msg) {
-  return new Promise((resolve, reject) => {
-    worker.onmessage = ({ data }) => {
-      if (data.step) log(data.step + "…");
-      else if (data.error) reject(new Error(data.error));
-      else resolve(data);
-    };
-    worker.postMessage(msg, msg.pbf || msg.json ? [msg.pbf || msg.json] : []);
-  });
+function pin() {
+  if (!area) return setData("pin", null);
+  const [w, s, e, n] = bbox(area.polys), a = map.project([w, s]), b = map.project([e, n]);
+  const small = Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y)) < 24;
+  setData("pin", small ? { type: "Point", coordinates: [(w + e) / 2, (s + n) / 2] } : null);
 }
 
-// the tables of a file name: edges_driving.parquet -> schema driving, table edges
-const split = (name) => {
-  const base = name.replace(/\.parquet$/, "");
-  const mode = base.slice(base.lastIndexOf("_") + 1);
-  return { mode, table: base.slice(0, base.lastIndexOf("_")) };
+// zoom the map to a geometry of any type; with `ifHidden`, only when a part of it is out of the view
+const fitTo = (g, { ifHidden = false } = {}) => loaded.then(() => {
+  const c = g.coordinates.flat(Infinity), xs = c.filter((_, i) => i % 2 === 0), ys = c.filter((_, i) => i % 2 === 1);
+  const sw = [Math.min(...xs), Math.min(...ys)], ne = [Math.max(...xs), Math.max(...ys)], view = map.getBounds();
+  if (ifHidden && view.contains(sw) && view.contains(ne)) return;
+  map.fitBounds([sw, ne], { padding: { top: 60, bottom: 60, right: 60, left: innerWidth > 700 && !document.body.classList.contains("collapsed") ? 410 : 60 }, maxZoom: 15, duration: 600 });
+});
+const showExtract = (f) => { setData("extract", f); if (f) fitTo(f.geometry); };
+const zoomToArea = () => area && fitTo(geometry(area.polys));
+$("zoom-area").onclick = zoomToArea;
+
+// ---- the panel: the theme and the collapse; both kept in the storage of the browser ----
+const keep = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* no storage */ } };
+const kept = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const dark = () => (document.documentElement.dataset.theme ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark";
+function theme(t) {
+  if (t) document.documentElement.dataset.theme = t;
+  $("theme").querySelector("use").setAttribute("href", dark() ? "#i-sun" : "#i-moon");
+  $("theme").title = $("theme").ariaLabel = dark() ? "Light theme" : "Dark theme";
+}
+theme(kept("duckosm.theme"));
+$("theme").onclick = () => { const t = dark() ? "light" : "dark"; theme(t); keep("duckosm.theme", t); loaded.then(setBase); };   // the blank base map follows the theme
+function collapse(on) {
+  document.body.classList.toggle("collapsed", on);
+  $("panel").inert = on && innerWidth > 700;  // out of the view on a computer; on a phone the header stays
+  $("collapse").setAttribute("aria-expanded", !on);
+  $("collapse").title = $("collapse").ariaLabel = on ? "Open the panel" : "Collapse the panel";
+  keep("duckosm.panel", on ? "collapsed" : "open");
+}
+if (kept("duckosm.panel") === "collapsed") collapse(true);
+$("collapse").onclick = () => collapse(!document.body.classList.contains("collapsed"));
+$("open").onclick = () => { collapse(false); $("collapse").focus(); };
+
+// ---- the tabs ----
+const tabs = [...document.querySelectorAll("#step1-card [role=tab]")];
+for (const t of tabs) t.onclick = () => {
+  for (const u of tabs) { u.setAttribute("aria-selected", u === t); $(u.getAttribute("aria-controls")).hidden = u !== t; }
+  if (t.id !== "tab-find") picking(false);
+  // the drawing tools work only in the Draw tab
+  tool(t.id === "tab-draw" ? (draw.getSnapshot().length ? "select" : "rectangle") : null);
 };
 
-// the boundary: a duckOSM boundary file (a FeatureCollection with one Feature, or a Feature or a geometry)
-let boundary = null;
-
-function setBoundary(text, from) {
-  const g = JSON.parse(text);
-  const f = g.type === "FeatureCollection" ? g.features[0] : g.type === "Feature" ? g : { geometry: g, properties: {} };
-  const p = f.properties || {};
-  const outer = f.geometry.type === "Polygon" ? [f.geometry.coordinates[0]] : f.geometry.type === "MultiPolygon" ? f.geometry.coordinates.map((q) => q[0]) : null;
-  if (!outer) throw new Error("the geometry is not a Polygon or a MultiPolygon");
-  boundary = { text, outer };
-  $("name").value = p.name || "";
-  const links = (p.geofabrik || []).filter((x) => /^https:\/\//.test(x.pbf)).map((x) => `<a href="${x.pbf}">${x.name.replace(/</g, "&lt;")}</a>`).join(", ");
-  $("area").innerHTML = `${(p.name || "(no name)").replace(/</g, "&lt;")}${p.area_km2 ? `, ${p.area_km2} km²` : ""}, from ${from}.` +
-    (links ? `\nRegion files that cover it: ${links}` : "\nThe boundary tool names a region file that covers it.");
+// ---- the area ----
+function clearArea() {
+  area = null;
+  setData("area", null);
+  setData("pin", null);
+  $("zoom-area").disabled = true;
+  showExtract(null);
+  $("extracts").innerHTML = `<p class="small muted">Choose an area first.</p>`;
+  $("save").disabled = true;
+  canBuild();
+  $("summary").innerHTML = `<div class="empty">No area yet. Choose one in step 1.</div>`;
 }
 
-$("boundary").onchange = async () => {
-  try {
-    setBoundary(await $("boundary").files[0].text(), $("boundary").files[0].name);
-  } catch (e) {
-    $("area").textContent = "The boundary file is not usable: " + e.message;
+async function setArea(polys, props, { zoom = true } = {}) {
+  if (!polys.length) return clearArea();
+  if (props.source !== "drawn" && draw.enabled) draw.clear();
+  if (props.name) $("name").value = props.name;
+  area = { polys, props };
+  $("save").disabled = true;
+  canBuild();
+  // terra-draw shows the drawn shapes itself; a copy in the area layer stays behind when a shape moves
+  setData("area", props.source === "drawn" ? null : geometry(polys));
+  if (zoom) fitTo(geometry(polys));
+  $("zoom-area").disabled = false;
+  loaded.then(pin);
+  const km2 = Math.round(areaKm2(polys) * 100) / 100;
+  const vertices = polys.flat().reduce((s, r) => s + r.length - 1, 0);
+  $("summary").innerHTML =
+    `<div class="stats"><div class="stat"><b>${num(km2, 2)}</b><span>km²</span></div>` +
+    `<div class="stat"><b>${num(polys.length)}</b><span>polygon${polys.length > 1 ? "s" : ""}</span></div>` +
+    `<div class="stat"><b>${num(vertices)}</b><span>vertices</span></div></div>` +
+    `<div class="source">${icon(props.source === "drawn" ? "pen" : props.source.startsWith("Nominatim") ? "search" : "file")}` +
+    `<span>Source: ${esc(props.source === "drawn" ? "drawn on the map" : props.source.replace(/^Nominatim (\w+) (\d+)$/, "OpenStreetMap $1 $2 (Nominatim)"))}</span></div>` +
+    (km2 > 10000 ? `<div class="callout">${icon("alert")}<span>Large area. The build can take minutes and use more than 1 GB of memory.</span></div>` : "");
+  $("extracts").innerHTML = `<p class="small muted">Finding the extracts…</p>`;
+  const mine = area;
+  cover = (await covering(polys)).slice(0, 3);
+  if (area !== mine) return;
+  area.props = { ...props, area_km2: km2, geofabrik: cover.map((x) => ({ id: x.id, name: x.name, pbf: x.pbf })) };
+  showExtract(null);
+  shown = null;
+  renderExtracts();
+  // an extract that is kept in the browser and covers the area: the smallest one is the region file at once
+  const k = cover.map((x) => keptRegions.find((r) => r.id === x.id)).find(Boolean);
+  if (k && (!regionFile || regionKept)) useKept(k);
+  $("save").disabled = false;
+  canBuild();
+  window.areas = (window.areas ?? 0) + 1;  // for boundary_e2e.py
+}
+
+// a click on an extract shows it (the map zooms out to it); a second click hides it, and the map goes back to
+// the area
+let shown = null;
+$("extracts").onclick = (ev) => {
+  const r = ev.target.closest("input[name=extract]");
+  if (!r) return;
+  const i = Number(r.value);
+  if (i === shown) {
+    r.checked = false;
+    shown = null;
+    showExtract(null);
+    return zoomToArea();
   }
+  shown = i;
+  showExtract({ type: "Feature", properties: { name: `${cover[i].name} (Geofabrik)` }, geometry: geometry(cover[i].polygon) });
 };
 
-// a boundary from the boundary tool (the storage of this site)
-try {
-  const kept = localStorage.getItem("duckosm.boundary");
-  if (kept) setBoundary(kept, "the boundary tool");
-} catch (e) { /* no storage: select the file */ }
-
-// the data of the area from the Overpass API: the highway ways and ferry lines in the bounding box of each outer
-// ring, with all their nodes, and the type=restriction relations of these ways. duckosm-rust then keeps the ways
-// with a node inside the boundary, so the result is the same as the cut of a region file. A public server can be
-// busy, so the page tries the next one.
-const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
-                  "https://overpass.private.coffee/api/interpreter"];
-
-function overpassQuery(outer) {
-  const boxes = outer.map((r) => {
-    const xs = r.map((c) => c[0]), ys = r.map((c) => c[1]);
-    return `(${Math.min(...ys)},${Math.min(...xs)},${Math.max(...ys)},${Math.max(...xs)})`;
-  });
-  const ways = boxes.map((b) => `way["highway"]${b};way["route"="ferry"]${b};`).join("");
-  return `[out:json][timeout:600][maxsize:2147483648];(${ways})->.w;rel(bw.w)["type"="restriction"]->.r;(.w;.w >;.r;);out body qt;`;
+// ---- search: the names from Photon; the boundaries and "what is here" from Nominatim, at most 1 request each
+// second, the last 20 answers kept ----
+let queue = Promise.resolve(), last = 0;
+const cache = new Map();
+function nominatim(path, params) {
+  const url = `https://nominatim.openstreetmap.org/${path}?` + new URLSearchParams({ format: "geojson", polygon_geojson: "1", extratags: "1", ...params });
+  if (cache.has(url)) return cache.get(url);
+  const p = (queue = queue.catch(() => {}).then(async () => {
+    await new Promise((ok) => setTimeout(ok, Math.max(0, last + 1000 - Date.now())));
+    last = Date.now();
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`Nominatim answered ${r.status}`);
+    return (await r.json()).features ?? [];
+  }));
+  cache.set(url, p);
+  p.catch(() => cache.delete(url));
+  if (cache.size > 20) cache.delete(cache.keys().next().value);
+  return p;
 }
 
-async function overpass(outer, name) {
-  const query = overpassQuery(outer);
-  const failed = [];
-  for (const url of OVERPASS) {
-    const host = new URL(url).host;
-    log(`getting the data of ${name} from ${host}…`);
+function list(features) {
+  found = features;
+  $("found").innerHTML = found.map((f, i) => {
+    const p = f.properties, ok = p.photon || polygons(f.geometry).length > 0;
+    const [title, ...rest] = p.display_name.split(", ");
+    return `<label class="${ok ? "" : "point"}" data-i="${i}" title="${esc(p.display_name)}"><input type="radio" name="hit" value="${i}"${ok ? "" : " disabled"}>` +
+      `<span><span class="t">${esc(title)}</span><span class="badge">${esc(p.addresstype ?? p.type)}</span>` +
+      (ok ? "" : `<span class="badge no">a point: no boundary</span>`) +
+      `<span class="d">${esc(rest.join(", ") || `${p.osm_type} ${p.osm_id}`)}</span></span></label>`;
+  }).join("") || `<p class="small muted">No place found.</p>`;
+}
+
+// a Photon match as a Nominatim feature for list(). A relation or a way can have a boundary: its geometry is its box
+// (the preview), and a selection gets the boundary from Nominatim. A node is a point: list() shows it, disabled.
+function photon(f) {
+  const p = f.properties, e = p.extent;  // [west, north, east, south]
+  const above = [...new Set([p.city, p.county, p.state, p.country])].filter((x) => x && x !== p.name);
+  return { type: "Feature", geometry: e ? geometry([[[[e[0], e[3]], [e[2], e[3]], [e[2], e[1]], [e[0], e[1]], [e[0], e[3]]]]]) : f.geometry,
+           properties: { photon: p.osm_type !== "N", osm_type: { R: "relation", W: "way", N: "node" }[p.osm_type], osm_id: p.osm_id,
+                         name: p.name, display_name: [p.name, ...above].join(", "),
+                         addresstype: ["house", "other", "street"].includes(p.type) ? p.osm_value : p.type } };
+}
+
+const searching = () => ($("found").innerHTML = `<p class="small muted">Searching…</p>`);
+let typing, asking;
+async function search() {
+  clearTimeout(typing);
+  asking?.abort();
+  const q = $("q").value.trim();
+  if (q.length < 2) return ($("found").innerHTML = "");
+  const mine = (asking = new AbortController());
+  searching();
+  try {
+    const r = await fetch("https://photon.komoot.io/api/?" + new URLSearchParams({ q, limit: "10" }), { signal: mine.signal });
+    if (!r.ok) throw new Error(`Photon answered ${r.status}`);
+    list(((await r.json()).features ?? []).map(photon));
+  } catch (e) {
+    if (!mine.signal.aborted) $("found").innerHTML = `<p class="small error">The search failed: ${esc(e.message)}</p>`;
+  }
+}
+$("search").onsubmit = (ev) => { ev.preventDefault(); search(); };
+$("q").oninput = () => { clearTimeout(typing); typing = setTimeout(search, 300); };
+
+// what is here: the areas at 5 levels around the point that the user clicks
+function picking(on) {
+  $("here").setAttribute("aria-pressed", on);
+  document.body.classList.toggle("picking", on);
+  if (on) status("Click a point on the map.", 0); else if ($("status").textContent.startsWith("Click a point")) status("");
+}
+$("here").onclick = () => {
+  const on = $("here").getAttribute("aria-pressed") !== "true";
+  if (on) tool(null);
+  picking(on);
+};
+map.on("click", async (ev) => {
+  if ($("here").getAttribute("aria-pressed") !== "true") return;
+  picking(false);
+  const { lng: lon, lat } = ev.lngLat, got = [];
+  searching();
+  for (const zoom of [14, 10, 8, 5, 3]) {
     try {
-      const r = await fetch(url, { method: "POST", body: new URLSearchParams({ data: query }) });
-      if (r.ok) return { bytes: await r.arrayBuffer(), server: host };
-      failed.push(`${host}: ${r.status}`);
-    } catch (e) {
-      failed.push(`${host}: ${e.message}`);
-    }
+      for (const f of await nominatim("reverse", { lat: lat.toFixed(6), lon: lon.toFixed(6), zoom }))
+        if (!got.some((g) => g.properties.osm_id === f.properties.osm_id && g.properties.osm_type === f.properties.osm_type)) got.push(f);
+      list(got);
+    } catch (e) { $("found").insertAdjacentHTML("beforeend", `<p class="small error">${esc(e.message)}</p>`); }
   }
-  throw new Error(`no Overpass server answered (${failed.join("; ")}). The public servers are often full: ` +
-                  "try again later, or use a region file");
+});
+
+function preview(i) {
+  setData("preview", i == null ? null : { type: "Feature", properties: { name: found[i].properties.display_name.split(",")[0] }, geometry: found[i].geometry });
+  if (i != null) fitTo(found[i].geometry, { ifHidden: true });
 }
-
-$("run").onclick = async () => {
-  const source = document.querySelector("input[name=source]:checked").value;
-  const file = $(source === "cut" ? "pbf" : "region").files[0];
-  if (source !== "cut" && !boundary) return log("Select a boundary file, or make one with the boundary tool.");
-  if (source !== "overpass" && !file) return log("Select the PBF file.");
-  const name = $("name").value.trim() || "area";
-  const modes = [...document.querySelectorAll("input[name=mode]:checked")].map((c) => c.value).join(",");
-  if (!modes) return log("Choose at least one mode.");
-  $("run").disabled = $("query").disabled = $("duckdb").disabled = true;
-  $("files").replaceChildren();
-  $("result").replaceChildren();
-  try {
-    const start = performance.now();
-    const fixes = $("fixes").files[0] ? await $("fixes").files[0].text() : null;
-    let msg, download = null;
-    if (source === "region") {
-      // the worker reads the File piece by piece: no copy of the region file in memory
-      msg = { region: file, boundary: boundary.text, modes, fixes };
-    } else if (source === "cut") {
-      msg = { pbf: await file.arrayBuffer(), modes, fixes };
-    } else {
-      const d0 = performance.now();
-      const got = await overpass(boundary.outer, name);
-      download = { seconds: (performance.now() - d0) / 1000, bytes: got.bytes.byteLength, server: got.server };
-      msg = { json: got.bytes, boundary: boundary.text, modes, fixes };
-    }
-    // ?threads=N in the address: the size of the thread pool (the default: the cores, at most 8)
-    msg.threads = Number(new URLSearchParams(location.search).get("threads")) || undefined;
-    const out = await buildInWorker(msg);
-    const built = performance.now();
-    await duckReady;
-    log("loading the tables into DuckDB…");
-    tables = [];
-    for (const [name, bytes] of Object.entries(out.files)) {
-      const { mode, table } = split(name);
-      // registerFileBuffer moves the buffer into DuckDB's worker, so DuckDB gets a copy and the page keeps the
-      // file for its download link. ponytail: two copies of each file; read them back from DuckDB if memory matters.
-      await db.registerFileBuffer(name, bytes.slice());
-      await conn.query(`CREATE SCHEMA IF NOT EXISTS ${mode}`);
-      // the same SQL as the native .duckdb writer (crates/duckosm-duckdb)
-      const select = table === "nodes" ? "SELECT node_id, geometry AS geom" : "SELECT *";
-      await conn.query(`CREATE OR REPLACE TABLE ${mode}.${table} AS ${select} FROM read_parquet('${name}')`);
-      tables.push({ mode, table, name, bytes });
-    }
-    await conn.query(MACROS);
-    const ready = performance.now();
-    window.timings = Object.assign(window.timings || {}, {
-      wasmLoad: out.seconds.load, build: out.seconds.build,
-      tables: (ready - built) / 1000, clickToQuery: (ready - start) / 1000, memoryMiB: out.memoryMiB, threads: out.threads, download,
-    });
-    const got = download ? `OSM data from ${download.server}: ${(download.bytes / 2 ** 20).toFixed(1)} MB in ${download.seconds.toFixed(1)} s. ` : "";
-    areaName = name;
-    log(`${name}\n\n${out.summary}\n\n${got}build ${out.seconds.build.toFixed(2)} s (module load ${out.seconds.load.toFixed(2)} s), ` +
-        `tables into DuckDB ${((ready - built) / 1000).toFixed(2)} s, ready for SQL ${((ready - start) / 1000).toFixed(2)} s after the click, ` +
-        `${out.memoryMiB} MiB WebAssembly memory, ${out.threads} thread(s).`);
-    for (const t of tables) {
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(new Blob([t.bytes], { type: "application/vnd.apache.parquet" }));
-      a.download = t.name;
-      a.textContent = `${t.name} (${t.bytes.length.toLocaleString()} bytes)`;
-      $("files").append(a);
-    }
-    $("query").disabled = $("duckdb").disabled = false;
-  } catch (e) {
-    log("Error: " + e.message);
+const point = (ev) => { const l = ev.target.closest("label"); if (l) preview(Number(l.dataset.i)); };
+$("found").addEventListener("mouseover", point);
+$("found").addEventListener("focusin", point);
+$("found").onmouseleave = () => preview(null);
+$("found").onclick = (ev) => { const l = ev.target.closest("label.point"); if (l) fitTo(found[Number(l.dataset.i)].geometry); };
+let picked;
+$("found").onchange = async (ev) => {
+  let f = found[Number(ev.target.value)];
+  const mine = (picked = f);
+  if (f.properties.photon) {
+    status("Getting the boundary…", 0);
+    try { [f] = await nominatim("lookup", { osm_ids: `${f.properties.osm_type[0].toUpperCase()}${f.properties.osm_id}` }); }
+    catch (e) { return status(`The boundary failed: ${e.message}`); }
+    if (picked !== mine) return;
+    status("");
+    if (!f || !polygons(f.geometry).length) return status("Nominatim has no boundary for this place.");
   }
-  $("run").disabled = false;
+  const p = f.properties;
+  const level = Number(p.extratags?.admin_level);
+  preview(null);
+  setArea(polygons(f.geometry), { name: p.name || p.display_name.split(",")[0], osm_id: p.osm_type === "relation" ? p.osm_id : null,
+                                  admin_level: Number.isInteger(level) ? level : null, source: `Nominatim ${p.osm_type} ${p.osm_id}` });
 };
 
-const show = (v) => (v === null || v === undefined ? "NULL" : v instanceof Uint8Array ? `(${v.length} bytes)` : typeof v === "object" ? JSON.stringify(v, (k, x) => (typeof x === "bigint" ? x.toString() : x)) : String(v));
-
-$("query").onclick = async () => {
-  try {
-    const t = performance.now();
-    const res = await conn.query($("sql").value);
-    const cols = res.schema.fields.map((f) => f.name);
-    const rows = res.toArray().slice(0, 200);
-    const table = document.createElement("table");
-    table.innerHTML = "<tr>" + cols.map((c) => `<th>${c}</th>`).join("") + "</tr>";
-    for (const r of rows) {
-      const tr = document.createElement("tr");
-      for (const c of cols) {
-        const td = document.createElement("td");
-        td.textContent = show(r[c]);
-        tr.append(td);
-      }
-      table.append(tr);
-    }
-    const note = document.createElement("p");
-    note.className = "note";
-    note.textContent = `${res.numRows.toLocaleString()} rows in ${((performance.now() - t) / 1000).toFixed(3)} s` + (res.numRows > 200 ? " (the first 200 are shown)" : "");
-    $("result").replaceChildren(note, table);
-  } catch (e) {
-    $("result").textContent = "Error: " + e.message;
-  }
+// ---- draw ----
+let selected = null;
+const hints = {
+  select: "Click a shape to select it. Drag the shape to move it. Drag a point to change it.",
+  rectangle: "Drag from one corner to the opposite corner.",
+  polygon: "Click each corner. To close, click the first corner or push Enter. Escape stops.",
+  circle: "Drag from the center outward.",
+  freehand: "Drag around the area.",
 };
+const toolButtons = [...document.querySelectorAll("[data-mode]")];
+function tool(mode) {
+  for (const b of toolButtons) b.setAttribute("aria-pressed", b.dataset.mode === mode);
+  if (mode) { picking(false); $("hint").textContent = hints[mode]; }
+  if (draw.enabled) draw.setMode(mode ?? "static");
+}
+for (const b of toolButtons) b.onclick = () => tool(b.dataset.mode);
+addEventListener("keydown", (ev) => {
+  if ($("draw").hidden || ev.target.closest("input") || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  const mode = { s: "select", r: "rectangle", p: "polygon", c: "circle", f: "freehand" }[ev.key.toLowerCase()];
+  if (mode) tool(mode);
+});
 
-// duckdb-wasm (1.33.1-dev57.0) keeps a written .duckdb file locked after DETACH, so the page cannot give that
-// file. load.sql makes it from the Parquet files, with the SQL of the native .duckdb writer:
-// `duckdb <name>.duckdb < load.sql` in the folder of the files.
-$("duckdb").onclick = () => {
-  const file = areaName.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "area";
-  const lines = [`-- duckOSM tables of ${areaName.replace(/\n/g, " ")}, from the Parquet files of duckosm-rust in the browser.`,
-    `-- In the folder of the files: duckdb ${file}.duckdb < load.sql`];
-  for (const m of [...new Set(tables.map((t) => t.mode))]) lines.push(`CREATE SCHEMA IF NOT EXISTS ${m};`);
-  for (const t of tables) {
-    const select = t.table === "nodes" ? "SELECT node_id, geometry AS geom" : "SELECT *";
-    lines.push(`CREATE TABLE ${t.mode}.${t.table} AS ${select} FROM read_parquet('${t.name}');`);
+// the drawn shapes, merged where they overlap
+const shapeFeatures = () => draw.getSnapshot().filter((f) => f.geometry.type === "Polygon" && f.properties.mode !== "select");
+let merged = [];
+async function drawn() {
+  const shapes = shapeFeatures().map((f) => f.geometry.coordinates);
+  $("merge").disabled = true;
+  if (!shapes.length) return area?.props.source === "drawn" ? clearArea() : undefined;
+  const { union } = await import("polyclip-ts");
+  const polys = shapes.length > 1 ? union(...shapes) : shapes;
+  merged = polys;
+  $("merge").disabled = polys.length >= shapes.length;  // no shapes overlap
+  setArea(polys, { name: area?.props.source === "drawn" ? $("name").value : "drawn area", osm_id: null, admin_level: null, source: "drawn" }, { zoom: false });
+}
+draw.on("finish", (id, ctx) => {
+  drawn();
+  // a new shape is selected at once, so the user can move it or change it
+  if (ctx.action === "draw") setTimeout(() => { tool("select"); draw.selectFeature(id); });
+});
+draw.on("change", (ids, type) => {
+  if (type !== "delete") return;
+  if (ids.includes(selected)) { selected = null; $("delete").disabled = true; }  // the Delete key
+  drawn();
+});
+draw.on("select", (id) => { selected = id; $("delete").disabled = false; });
+draw.on("deselect", () => { selected = null; $("delete").disabled = true; });
+$("delete").onclick = () => { if (selected != null) { draw.removeFeatures([selected]); selected = null; $("delete").disabled = true; drawn(); } };
+// Merge shapes: the shapes on the map become the polygons of their merge, which the user can edit as polygons.
+// terra-draw accepts at most 9 decimals.
+$("merge").onclick = () => {
+  const old = shapeFeatures().map((f) => f.id);
+  const round = (c) => c.map((r) => r.map(([x, y]) => [+x.toFixed(9), +y.toFixed(9)]));
+  const got = draw.addFeatures(merged.map((c) => ({ type: "Feature", geometry: { type: "Polygon", coordinates: round(c) }, properties: { mode: "polygon" } })));
+  const bad = got.find((r) => !r.valid);
+  if (bad) {
+    draw.removeFeatures(got.filter((r) => r.valid).map((r) => r.id));
+    return status(`The shapes were not merged: ${bad.reason}`, 8000);
   }
-  lines.push(MACROS.trim());
+  draw.removeFeatures(old);
+  tool("select");
+  draw.selectFeature(got[0].id);
+};
+$("clear").onclick = () => { draw.clear(); drawn(); tool("rectangle"); };
+
+// ---- file ----
+function readGeoJSON(text, fileName) {
+  const g = JSON.parse(text);
+  const feats = g.type === "FeatureCollection" ? g.features : g.type === "Feature" ? [g] : [{ geometry: g, properties: {} }];
+  const polys = feats.flatMap((f) => polygons(f.geometry));
+  if (!polys.length) throw new Error("no Polygon or MultiPolygon in it");
+  const p = feats[0].properties || {};
+  return [polys, { name: p.name || fileName.replace(/\.(geo)?json$/, ""), osm_id: p.osm_id ?? null,
+                   admin_level: p.admin_level ?? null, source: p.source || `file ${fileName}` }];
+}
+async function openFile(file) {
+  try { await setArea(...readGeoJSON(await file.text(), file.name)); }
+  catch (e) { status(`The file is not usable: ${e.message}`, 8000); }
+}
+$("file").onchange = () => {
+  if ($("file").files[0]) openFile($("file").files[0]);
+  $("file").value = "";  // the same file can then be selected again
+};
+addEventListener("dragover", (ev) => { ev.preventDefault(); document.body.classList.add("dragging"); });
+addEventListener("dragleave", (ev) => ev.relatedTarget || document.body.classList.remove("dragging"));
+addEventListener("drop", (ev) => {
+  ev.preventDefault();
+  document.body.classList.remove("dragging");
+  if (ev.dataTransfer.files[0]) openFile(ev.dataTransfer.files[0]);
+});
+
+// ---- the output: the format of `duckosm boundary`, a FeatureCollection with one Feature ----
+const text = () => JSON.stringify({ type: "FeatureCollection", features: [
+  { type: "Feature", properties: { ...area.props, name: $("name").value.trim() || area.props.name }, geometry: geometry(area.polys) }] });
+
+$("save").onclick = () => {
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([lines.join("\n") + "\n"], { type: "text/plain" }));
-  a.download = "load.sql";
+  a.href = URL.createObjectURL(new Blob([text()], { type: "application/geo+json" }));
+  a.download = "boundary.geojson";
   a.click();
 };
+
+// ---- step 3: the data ----
+let source = "region", building = false;
+const dataTabs = [...document.querySelectorAll("#extracts-box [role=tab]")];
+for (const t of dataTabs) t.onclick = () => {
+  for (const u of dataTabs) { u.setAttribute("aria-selected", u === t); $(u.getAttribute("aria-controls")).hidden = u !== t; }
+  source = t.dataset.source;
+  canBuild();
+};
+// Build is on when the data is ready: a region file or Overpass need the area; a cut file needs only itself. When it is off, step 4
+// says what is missing.
+function canBuild() {
+  const missing = building ? "" : source === "cut" ? (!$("pbf").files[0] && "Select the cut file in step 3.")
+    : !area ? "Choose an area in step 1."
+    : area.props.area_km2 == null ? "Finding the extracts…"
+    : source === "region" && !regionFile && (regions.relay ? "Get a file in step 3, or select a region file." : "Select a region file in step 3.");
+  $("run").disabled = building || !!missing;
+  $("buildhint").textContent = missing || "";
+  $("run").title = missing || "Build the networks of the area";
+}
+for (const id of ["pbf", "fixes"]) $(id).onchange = () => {
+  const f = $(id).files[0];
+  if (f) $(`${id}-name`).textContent = `${f.name} (${mb(f.size)} MB)`;
+  canBuild();
+};
+$("region").onchange = () => {
+  const f = $("region").files[0];
+  if (f) { regionKept = null; setRegion(f, `${f.name} (${mb(f.size)} MB)`); }
+};
+
+// ---- step 3: a region file kept in the browser (app/regions.js, docs/relay.md): Get downloads an extract through the relay one time
+let regionFile = null, regionKept = null, keptRegions = [], getting = null;    // getting: {id, abort} during a download
+function mb(b) { return num(b / 2 ** 20, b < 10 * 2 ** 20 ? 1 : 0); }
+function setRegion(file, label) {
+  regionFile = file;
+  $("region-name").textContent = label;
+  canBuild();
+  renderExtracts();
+}
+function useKept(k) {
+  regionKept = k.id;
+  setRegion(k.file, `${k.name} (kept in this browser, ${mb(k.size)} MB)`);
+}
+const day = (d) => (d ? new Date(d).toISOString().slice(0, 10) : "");
+function renderExtracts() {
+  if (area?.props.area_km2 == null) return;   // "Choose an area" or "Finding the extracts" stays
+  if (regions.relay) $("extracts-help").firstChild.textContent = "The file must cover the area. " +
+    "Click Get to download one of these Geofabrik files. The page keeps it. Click a file to see it on the map.";
+  $("extracts").innerHTML = cover.length ? cover.map((x, i) => {
+    const k = keptRegions.find((r) => r.id === x.id), inUse = k && regionKept === k.id;
+    const prog = getting?.id === x.id ? `<span class="prog"><span class="bar"><i id="bar"></i></span><span class="got" id="got">0 %</span>` +
+      `<button class="btn sm" data-cancel>Cancel</button></span>` : "";
+    const what = getting?.id === x.id ? ""
+      : k ? `<button class="btn sm" data-use="${i}"${inUse ? " disabled" : ""}>${inUse ? "In use" : "Use"}</button>`
+      : regions.relay ? `<button class="btn sm" data-get="${i}"${getting ? " disabled" : ""}>Get</button>` : "";
+    return `<label><input type="radio" name="extract" value="${i}"${i === shown ? " checked" : ""} aria-label="Show ${esc(x.name)} on the map">` +
+      `<span class="x">${esc(x.name)}<span>${k ? `kept · ${mb(k.size)} MB · ${day(k.modified)}` : `${esc(x.id)} · ${num(Math.round(x.km2))} km²`}</span></span>${what}` +
+      `<a class="dl" href="${esc(x.pbf)}" title="Download ${esc(x.name)} (.osm.pbf) to this computer" aria-label="Download ${esc(x.name)}">${icon("download")}</a>${prog}</label>`;
+  }).join("") : `<p class="small muted">No Geofabrik file covers the area. Use the Overpass tab or the planet file.</p>`;
+}
+function renderKept() {
+  $("kept").innerHTML = keptRegions.length ? `<p class="small muted" style="margin:0">Kept in this browser:</p>` + keptRegions.map((k) =>
+    `<div class="k"><span>${esc(k.name)} · ${mb(k.size)} MB · ${day(k.modified)}</span>` +
+    `<button class="btn sm" data-del="${esc(k.id)}" title="Delete it from this browser">Delete</button></div>`).join("") : "";
+}
+async function refreshKept() {
+  try { keptRegions = await regions.kept(); } catch (e) { keptRegions = []; }   // no storage (for example a private window)
+  renderKept();
+  renderExtracts();
+}
+async function get(x) {
+  const abort = new AbortController();
+  getting = { id: x.id, abort };
+  renderExtracts();
+  let last = 0;
+  try {
+    const k = await regions.download(x, (got, total) => {
+      if (performance.now() - last < 150 || !$("got")) return;
+      last = performance.now();
+      $("got").textContent = total ? `${Math.floor((100 * got) / total)} % · ${mb(got)} of ${mb(total)} MB` : `${mb(got)} MB`;
+      if (total) $("bar").style.width = `${(100 * got) / total}%`;
+    }, abort.signal);
+    getting = null;
+    await refreshKept();
+    useKept(keptRegions.find((r) => r.id === k.id) ?? k);
+    status(`${x.name} is kept in this browser.`);
+  } catch (e) {
+    getting = null;
+    renderExtracts();
+    status(e.name === "AbortError" ? "The download stopped." : `The download failed: ${e.message}`, 10000);
+  }
+}
+$("extracts").addEventListener("click", (ev) => {
+  const b = ev.target.closest("button");
+  if (!b) return;
+  ev.preventDefault();
+  if (b.hasAttribute("data-cancel")) getting?.abort.abort();
+  else if (b.dataset.use) useKept(keptRegions.find((r) => r.id === cover[Number(b.dataset.use)].id));
+  else if (b.dataset.get) get(cover[Number(b.dataset.get)]);
+});
+$("kept").onclick = async (ev) => {
+  const id = ev.target.closest("button[data-del]")?.dataset.del;
+  if (!id) return;
+  await regions.remove(id);
+  if (regionKept === id) { regionKept = null; regionFile = null; $("region-name").textContent = "Select the region file (.osm.pbf)"; }
+  await refreshKept();
+  canBuild();
+};
+refreshKept();
+canBuild();
+
+// ---- step 4: build ----
+const progress = (text) => ($("buildstatus").textContent = text);
+// the log: a row for each step of the build, the tables and the map, under a heading for each part. The memory is that of
+// the part: the build module (its WebAssembly memory, which only grows), DuckDB (its buffers) or the map module.
+const STEP_GROUPS = { build: "Build (WebAssembly module)", page: "In the page", duckdb: "DuckDB", map: "Map (roadstyle module)" };
+function logSteps(rows, group, fresh) {
+  const body = $("steplog").querySelector("tbody");
+  if (fresh) body.textContent = "";
+  // a new map (another mode) replaces the rows of the last map
+  if (group === "map") for (const tr of [...body.rows]) if (tr.dataset.group === "map") tr.remove();
+  for (const r of rows) {
+    if (body.rows[body.rows.length - 1]?.dataset.group !== group) {
+      const h = body.insertRow();
+      h.className = "group";
+      h.dataset.group = group;
+      Object.assign(h.insertCell(), { colSpan: 3, textContent: STEP_GROUPS[group] });
+    }
+    const tr = body.insertRow();
+    tr.dataset.group = group;
+    tr.dataset.ms = r.ms;
+    tr.insertCell().textContent = r.step;
+    Object.assign(tr.insertCell(), { className: "t", textContent: num(r.ms / 1000, 2) });
+    tr.insertCell().textContent = r.mib == null ? "" : num(r.mib, 1);
+  }
+  const steps = [...body.rows].filter((tr) => tr.dataset.ms), slowest = Math.max(...steps.map((tr) => +tr.dataset.ms), 1);
+  for (const tr of steps) tr.cells[1].style.setProperty("--w", `${(100 * +tr.dataset.ms) / slowest}%`);
+  $("steplog").querySelector("tfoot td:nth-child(2)").textContent = num(steps.reduce((t, tr) => t + +tr.dataset.ms, 0) / 1000, 2);
+  $("steplog").hidden = !steps.length;
+}
+duck.duckReady.then((s) => (window.timings = { duckdbStart: s })).catch((e) => progress("DuckDB did not start: " + e.message));
+let areaName = "area", timezones = null;
+$("run").onclick = async () => {
+  const modes = [...document.querySelectorAll("input[name=mode]:checked")].map((c) => c.value).join(",");
+  if (!modes) return status("Select at least one mode.");
+  building = true;
+  canBuild();
+  $("step5-card").hidden = true;
+  $("steplog").hidden = true;
+  $("showrow").hidden = true;
+  $("mapnote").textContent = "";
+  removeRoads();
+  areaName = $("name").value.trim() || "area";
+  try {
+    const start = performance.now();
+    if (area) keep("duckosm.boundary", text());   // the area again after a reload
+    const fixes = $("fixes").files[0] ? await $("fixes").files[0].text() : null;
+    const threads = Number(new URLSearchParams(location.search).get("threads")) || undefined;  // ?threads=N: the size of the pool
+    const levels = $("levels").value;   // visualization.edge_levels: the tags rule or the solver (docs/levels.md)
+    let msg, download = null;
+    const feats = $("features").checked && source === "region";   // the base-map layers need the raw.* of a region file
+    // DuckDB loads its spatial extension during the build (the build worker does not use DuckDB); the tables wait for it
+    const spatial = feats ? duck.loadSpatial() : null;
+    if (source === "region") {
+      msg = { region: regionFile, boundary: text(), modes, fixes, levels, threads, raw: feats };   // the worker reads the File piece by piece
+    } else if (source === "cut") {
+      msg = { pbf: await $("pbf").files[0].arrayBuffer(), boundary: area ? text() : null, modes, fixes, levels, threads };
+    } else {
+      const d0 = performance.now();
+      const got = await duck.overpass(area.polys, (t) => progress(t + "…"));
+      download = { seconds: (performance.now() - d0) / 1000, bytes: got.bytes.byteLength, server: got.server };
+      msg = { json: got.bytes, boundary: text(), modes, fixes, levels, threads };
+    }
+    // the time zone of main.visualization_metadata: the entry of the area's smallest Geofabrik region in the time zone
+    // table (www/timezones.json, loaded one time, then from the cache of the browser)
+    const region = area?.props.geofabrik?.[0]?.id;
+    if (region) msg.tz = JSON.stringify((await (timezones ??= fetch("timezones.json").then((r) => r.json()))).regions[region] ?? null);
+    const b0 = performance.now();
+    const out = await duck.build(msg, (t) => progress(t + "…"));
+    logSteps(download ? [{ step: "download from " + download.server, ms: download.seconds * 1000 }] : [], "page", true);
+    logSteps(out.log, "build");
+    const b1 = performance.now();
+    logSteps([{ step: "send the files to the page", ms: b1 - b0 - out.seconds.load * 1000 - out.seconds.build * 1000 - out.log.at(-1).ms }], "page");
+    const duckMib = () => duck.memoryMiB().catch(() => null);
+    if (spatial) {
+      progress("loading DuckDB's spatial extension…");
+      await spatial;
+      logSteps([{ step: "wait for DuckDB's spatial extension", ms: performance.now() - b1 }], "page");
+    }
+    const built = performance.now();
+    progress("loading the tables into DuckDB…");
+    await duck.loadTables(out.files);
+    const loaded = performance.now();
+    logSteps([{ step: "load the tables", ms: loaded - built, mib: await duckMib() }], "duckdb");
+    let featuresSeconds = null;
+    if (out.featuresSql) {
+      progress("making the base-map layers…");
+      const f0 = performance.now();
+      await duck.loadFeatures(out.files, out.featuresSql);
+      featuresSeconds = (performance.now() - f0) / 1000;
+      logSteps([{ step: "make the base-map layers", ms: featuresSeconds * 1000, mib: await duckMib() }], "duckdb");
+    }
+    const ready = performance.now();
+    window.timings = Object.assign(window.timings || {}, {
+      wasmLoad: out.seconds.load, build: out.seconds.build, tables: (loaded - built) / 1000, clickToQuery: (ready - start) / 1000,
+      memoryMiB: out.memoryMiB, threads: out.threads, download, features: featuresSeconds,
+    });
+    const got = download ? `OSM data from ${download.server}: ${num(download.bytes / 2 ** 20, 1)} MB in ${num(download.seconds, 1)} s.\n` : "";
+    progress(`${out.summary}\n\n${got}Total ${num((ready - start) / 1000, 2)} s, from the click on Build until the tables are ` +
+             `in DuckDB and you can query them (the table below gives each step). Build module: ${out.memoryMiB} MiB, ` +
+             `${out.threads} thread(s).`);
+    files();
+    $("step5-card").hidden = false;
+    await visualization();
+  } catch (e) {
+    progress("Error: " + e.message);
+  }
+  building = false;
+  canBuild();
+};
+
+// ---- step 5: the roads on the map, in roadstyle's style (map/): its sources, images and layers with the prefix rs-, over the base
+// map and under the area line, the matches, the extracts and the drawn shapes (as GeoLibre's roadstyle plugin adds a style) ----
+let roadsRun = 0;
+const ROAD_KEYS = ["name", "edge_id", "osm_id", "highway", "edge_ref", "lanes", "bridge", "tunnel", "access"];   // the road popup
+// the roads of the base map (OpenFreeMap's transportation layers) go away while the duckOSM roads show, so the two do not compete
+let roadsShown = false;
+function removeRoads() {
+  if (!map.getStyle()) return;
+  roadsShown = false;
+  setBase();
+  for (const l of map.getStyle().layers) if (l.id.startsWith("rs-")) map.removeLayer(l.id);
+  for (const id of Object.keys(map.getStyle().sources)) if (id.startsWith("rs-")) map.removeSource(id);
+  if (map.getLayer("area-fill")) map.setLayoutProperty("area-fill", "visibility", "visible");
+}
+const addImages = (images) => Promise.all(Object.entries(images).map(([n, v]) => new Promise((done) => {
+  const o = typeof v === "string" ? { url: v } : v, img = new Image();
+  img.onload = () => { if (!map.hasImage(n)) map.addImage(n, img, { sdf: !!o.sdf, pixelRatio: o.pixelRatio || 1 }); done(); };
+  img.onerror = done;
+  img.src = o.url;
+})));
+async function showRoads() {
+  const run = ++roadsRun;
+  $("mapnote").textContent = "making the map…";
+  try {
+    const t0 = performance.now();
+    const r = await duck.roadsStyle($("mapmode").value, areaName, ROAD_KEYS);
+    if (run !== roadsRun) return;                       // another choice came in the meantime
+    await loaded;
+    removeRoads();
+    const own = r.style.metadata?.["roadstyle:images"] || {};
+    await addImages(Object.fromEntries(Object.entries(own).map(([n, v]) => ["rs-" + n, v])));
+    for (const [id, src] of Object.entries(r.style.sources)) map.addSource("rs-" + id, src);
+    for (const l of r.style.layers) {
+      let json = JSON.stringify(l);
+      for (const n of Object.keys(own)) json = json.replaceAll(`"${n}"`, `"rs-${n}"`);   // the image names in the layout
+      const layer = JSON.parse(json);
+      map.addLayer({ ...layer, id: "rs-" + l.id, source: "rs-" + l.source }, "area-fill");
+      if (layer.layout?.visibility === "none") offLayers.add("rs-" + l.id);
+    }
+    map.setLayoutProperty("area-fill", "visibility", "none");   // the fill would change the colors of the roads
+    roadsShown = true;
+    setBase();
+    // the first tiles: the map is drawn when it is idle (at most 60 s)
+    await Promise.race([new Promise((ok) => map.once("idle", ok)), new Promise((ok) => setTimeout(ok, 60000))]);
+    if (run !== roadsRun) return;
+    window.timings = Object.assign(window.timings || {}, { map: { roadsSql: r.roadsSeconds, style: r.styleSeconds,
+      total: (performance.now() - t0) / 1000, memoryMiB: r.memoryMiB } });
+    const total = (performance.now() - t0) / 1000;
+    logSteps([{ step: "the roads table (DuckDB)", ms: r.roadsSeconds * 1000 }, { step: "the style", ms: r.styleSeconds * 1000, mib: r.memoryMiB },
+      { step: "draw the map", ms: (total - r.roadsSeconds - r.styleSeconds) * 1000 }], "map");
+    $("mapnote").textContent = `${num(roadCount[$("mapmode").value] ?? 0)} roads, drawn in ${num(total, 1)} s (step 4 gives each ` +
+      `step). Click a road for its data.`;
+  } catch (e) {
+    if (run === roadsRun) $("mapnote").textContent = "The map failed: " + e.message;
+  }
+}
+// card 6 after a build: the networks of the build (no list for one), the duckOSM layers when the build made them, and the roads
+// on the map at once for a small area; a larger one waits for "Show on map" (MapLibre needs time and memory for it)
+const AUTO_DRAW = 20000;
+let roadCount = {};
+async function visualization() {
+  const modes = duck.MODES.filter((m) => duck.tables.some((t) => t.mode === m && t.table === "edges"));
+  const count = async (ms) => Number((await duck.query(`SELECT count(DISTINCT edge_id) AS n FROM (${ms.flatMap((m) => ["edges", "private_edges"]
+    .filter((t) => duck.tables.some((x) => x.mode === m && x.table === t)).map((t) => `SELECT edge_id FROM ${m}.${t}`)).join(" UNION ALL ")})`)).toArray()[0].n);
+  roadCount = { all: await count(modes) };
+  for (const m of modes) roadCount[m] = await count([m]);
+  const options = (modes.length > 1 ? ["all", ...modes] : modes).map((m) => `<option value="${m}">${m === "all" ? "All" : m[0].toUpperCase() + m.slice(1)}</option>`);
+  $("mapmode").innerHTML = options.join("");
+  $("mapmode").hidden = $("mapmode-label").hidden = modes.length < 2;
+  $("ownbox").hidden = $("ownsep").hidden = !duck.tables.some((t) => t.mode === "features");
+  $("showrow").hidden = false;
+  if (roadCount.all < AUTO_DRAW) showRoads();
+  else $("mapnote").textContent = `${num(roadCount.all)} roads: a large map. Click Show on map to draw it.`;
+}
+$("show").onclick = showRoads;
+$("mapmode").onchange = () => { if (roadsShown) showRoads(); };
+
+// the base map: OpenFreeMap, or a layer over it (under the roads): roadstyle's keyless raster map, or an empty background
+const BASEMAPS = {
+  esri_gray: { tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"],
+               attribution: "Tiles © Esri", maxzoom: 16 },
+  satellite: { tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+               attribution: "Imagery © Esri, Maxar, Earthstar Geographics", maxzoom: 19 },
+};
+// the map buttons: the base map (OpenFreeMap without its roads while the duckOSM roads show, Esri's light gray or satellite
+// tiles, or a blank background; all but OpenFreeMap hide all of its layers, also its labels and 3D buildings), the duckOSM
+// layers (the base-map layers of the build, the style's sources ov<i>, over any base map) and the 3D view.
+// The style alone shows the building footprints (and from which zoom). The 3D view adds their 3D version: the duckOSM
+// layers' own (roadstyle adds them hidden), and OpenFreeMap's, which is flat (height 0) when the 3D view is off.
+const view = { base: BASEMAPS[kept("duckosm.basemap")] || kept("duckosm.basemap") === "blank" ? kept("duckosm.basemap") : "",
+  threeD: false };
+const offLayers = new Set();   // the layers that roadstyle adds hidden (showRoads)
+const heights = {};            // the 3D heights of OpenFreeMap's buildings: [height, base] for each layer
+function setBase() {
+  if (map.getLayer("base-over")) map.removeLayer("base-over");
+  if (map.getSource("base-over")) map.removeSource("base-over");
+  const v = view.base, own = !$("ownbox").hidden && $("ownlayers").checked;
+  const show = (l, on) => map.setLayoutProperty(l.id, "visibility", on ? "visible" : "none");
+  const style = map.getStyle().layers;
+  for (const l of baseLayers) show(style.find((x) => x.id === l.id) ?? l, v === "" && !(roadsShown && l.road));
+  // one 3D layer: when the duckOSM layers have their 3D buildings, OpenFreeMap's stop in the 3D view at the zoom where ours start
+  const ours = own && style.find((l) => l.type === "fill-extrusion" && l.source?.startsWith("rs-ov"));
+  for (const l of style) if (l.type === "fill-extrusion" && !l.source?.startsWith("rs-")) {
+    heights[l.id] ??= [map.getPaintProperty(l.id, "fill-extrusion-height"), map.getPaintProperty(l.id, "fill-extrusion-base"), l.minzoom ?? 0, l.maxzoom ?? 24];
+    const [height, base, minzoom, maxzoom] = heights[l.id];
+    map.setPaintProperty(l.id, "fill-extrusion-height", view.threeD ? height : 0);
+    map.setPaintProperty(l.id, "fill-extrusion-base", view.threeD ? base : 0);
+    map.setLayerZoomRange(l.id, minzoom, ours && view.threeD ? Math.max(minzoom, ours.minzoom ?? 0) : maxzoom);
+  }
+  for (const l of style) if (l.source?.startsWith("rs-ov")) show(l, own && (!offLayers.has(l.id) || (l.type === "fill-extrusion" && view.threeD)));
+  const bottom = style[0].id;
+  if (v === "blank") map.addLayer({ id: "base-over", type: "background", paint: { "background-color": dark() ? "#17181c" : "#ffffff" } }, bottom);
+  else if (BASEMAPS[v]) {
+    map.addSource("base-over", { type: "raster", tileSize: 256, ...BASEMAPS[v] });
+    map.addLayer({ id: "base-over", type: "raster", source: "base-over" }, bottom);
+  }
+  for (const r of document.querySelectorAll("input[name=base]")) r.checked = r.value === v;
+  $("b3d").ariaPressed = String(view.threeD);
+}
+const popBase = (open) => { $("basepop").hidden = !open; $("bbase").ariaExpanded = String(open); };
+$("bbase").onclick = () => popBase($("basepop").hidden);
+document.addEventListener("click", (e) => { if (!$("basepop").hidden && !e.target.closest("#bbase, #basepop")) popBase(false); });
+for (const r of document.querySelectorAll("input[name=base]")) r.onchange = () => {
+  view.base = r.value;
+  keep("duckosm.basemap", r.value);
+  if (r.value === "satellite") $("ownlayers").checked = false;   // the duckOSM layers would cover the photo
+  loaded.then(setBase);
+};
+$("ownlayers").onchange = () => loaded.then(setBase);
+$("b3d").onclick = () => {
+  view.threeD = !view.threeD;
+  map.easeTo({ pitch: view.threeD ? 60 : 0, bearing: view.threeD ? map.getBearing() : 0, zoom: view.threeD ? Math.max(map.getZoom(), 15.5) : map.getZoom() });
+  loaded.then(setBase);
+};
+map.on("pitchend", () => { if ((map.getPitch() > 0) !== view.threeD) { view.threeD = map.getPitch() > 0; setBase(); } });
+loaded.then(setBase);
+
+// a click on a road shows its data, but not while the user draws or picks a point (the tiles carry these properties: ROAD_KEYS is
+// declared above showRoads)
+// The map draws the roads from roadstyle's pieces (rs-simple) and names (rs-slots); __rs_edge is the road's number, and the map worker
+// gives the road's properties.
+map.on("click", async (e) => {
+  if (!$("draw").hidden || $("here").getAttribute("aria-pressed") === "true") return;
+  const f = map.queryRenderedFeatures(e.point).find((x) => x.source.startsWith("rs-") && x.properties.__rs_edge != null && !x.source.startsWith("rs-ov"));
+  if (!f) return;
+  const p = (await duck.roadProps(f.properties.__rs_edge)) ?? {};
+  const rows = ROAD_KEYS.filter((k) => p[k] != null && p[k] !== "").map((k) => `<b>${k}</b> ${esc(p[k])}`);
+  new maplibregl.Popup().setLngLat(e.lngLat).setHTML(rows.join("<br>") || "(no data)").addTo(map);
+});
+window.duckMap = map;   // for e2e.py
+
+// SQL on the tables
+const cell = (v) => (v === null || v === undefined ? "NULL" : v instanceof Uint8Array ? `(${v.length} bytes)` : typeof v === "object"
+  ? JSON.stringify(v, (k, x) => (typeof x === "bigint" ? x.toString() : x)) : String(v));
+$("query").onclick = async () => {
+  try {
+    const t = performance.now(), res = await duck.query($("sql").value);
+    const cols = res.schema.fields.map((f) => f.name), rows = res.toArray().slice(0, 200);
+    const head = `<tr>${cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr>`;
+    const body = rows.map((r) => `<tr>${cols.map((c) => `<td>${esc(cell(r[c]))}</td>`).join("")}</tr>`).join("");
+    $("result").innerHTML = `<p class="small muted">${num(res.numRows)} rows in ${num((performance.now() - t) / 1000, 3)} s` +
+      `${res.numRows > 200 ? " (the first 200)" : ""}</p><table>${head}${body}</table>`;
+  } catch (e) {
+    $("result").innerHTML = `<p class="small error">${esc(e.message)}</p>`;
+  }
+};
+
+// the downloads: all files in one zip (with make_duckdb.sql), and each table: a row for each table (with what it holds), a column for each mode
+const size = (b) => (b < 2 ** 20 ? `${num(Math.max(1, b / 1024))} KB` : `${mb(b)} MB`);
+let urls = [];
+function files() {
+  urls.forEach(URL.revokeObjectURL);
+  urls = [];
+  const modes = [...new Set(duck.tables.map((t) => t.mode))].filter((m) => m !== "features");
+  const link = (t) => {
+    const u = URL.createObjectURL(new Blob([t.bytes], { type: "application/vnd.apache.parquet" }));
+    urls.push(u);
+    const label = t.mode === "features" ? t.table : t.mode;
+    return `<span class="i"><a href="${u}" download="${esc(t.name)}" title="${esc(t.name)}, ${size(t.bytes.length)}">${label}</a> <span>${num(t.rows)} rows</span></span>`;
+  };
+  const feats = duck.tables.filter((t) => t.mode === "features");
+  $("files").innerHTML = Object.entries(duck.TABLES).filter(([name]) => duck.tables.some((t) => t.table === name)).map(([name, what]) =>
+    `<div class="tb"><b>${name}</b><p>${esc(what)}</p><div class="m">` +
+    modes.map((m) => duck.tables.find((t) => t.table === name && t.mode === m)).filter(Boolean).map(link).join("") + "</div></div>").join("") +
+    (feats.length ? `<div class="tb"><b>features</b><p>The base-map layers (duckOSM features.*), one file each, with its number of rows. A click downloads the file. ` +
+      `The files have no tags column, as duckOSM's export. <a href="${duck.FEATURES_REFERENCE}" target="_blank" rel="noopener">The columns of each layer</a></p><div class="layers">` +
+      feats.map((t) => {
+        const u = URL.createObjectURL(new Blob([t.bytes], { type: "application/vnd.apache.parquet" }));
+        urls.push(u);
+        return `<a href="${u}" download="${esc(t.name)}" title="Download ${esc(t.name)}, ${size(t.bytes.length)}">${esc(t.table.replace(/_/g, " "))} <span>${num(t.rows)}</span></a>`;
+      }).join("") + "</div></div>" : "");
+}
+$("reference").href = duck.REFERENCE;
+$("zip").onclick = async () => {
+  try {
+    const { blob, name } = await duck.zipAll(areaName, area ? text() : null);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+  } catch (e) {
+    status("The zip failed: " + e.message, 8000);
+  }
+};
+
+// the last boundary (kept at each build), for example after a reload
+try {
+  const kept = localStorage.getItem("duckosm.boundary");
+  if (kept) setArea(...readGeoJSON(kept, "the last boundary"));
+} catch (e) { /* no storage, or not usable: start empty */ }
 </script>
 </body>
 </html>

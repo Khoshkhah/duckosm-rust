@@ -12,6 +12,7 @@
 use crate::Params;
 use duckosm_core::filter::Mode;
 use duckosm_core::fixes::{NewNode, NewWay, OsmFixes, TurnFix, WayFix};
+use duckosm_core::levels::Method;
 use duckosm_core::network::Options;
 use std::path::{Path, PathBuf};
 use yaml_rust2::{Yaml, YamlLoader};
@@ -236,7 +237,10 @@ pub fn read(path: &Path, pbf_is_cut: bool, strict: bool) -> Result<FromConfig, S
     let boundary_path = boundary.str("path")?.or(top.str("boundary_path")?);
     let has_boundary = boundary_path.is_some();
     // with a boundary, the program cuts the PBF to it (as osmium complete_ways), unless it is cut already
-    let cut_to = boundary_path.filter(|_| !pbf_is_cut).map(PathBuf::from);
+    let cut_to = boundary_path
+        .clone()
+        .filter(|_| !pbf_is_cut)
+        .map(PathBuf::from);
     if let Some(b) = cut_to.as_ref().filter(|b| !b.exists()) {
         return Err(format!("boundary file not found: {}", b.display()));
     }
@@ -279,12 +283,6 @@ pub fn read(path: &Path, pbf_is_cut: bool, strict: bool) -> Result<FromConfig, S
             "the H3 cells (from_cell, to_cell, lca_res, h3_cell)",
         ),
         ("build_features", true, "the base-map layers (features.*)"),
-        (
-            "levels",
-            true,
-            "the drawing order (visualization.edge_levels)",
-        ),
-        ("bus_routes", true, "the bus routes (bus.*)"),
         ("boundary_cells", false, "the boundary cells"),
     ] {
         if options.bool(key, default)? {
@@ -349,6 +347,14 @@ pub fn read(path: &Path, pbf_is_cut: bool, strict: bool) -> Result<FromConfig, S
         functional_types: options.bool("functional_types", true)?,
         build_graph,
         extract_restrictions: options.bool("extract_restrictions", true)?,
+        ways_tables: true,
+        bus_routes: options.bool("bus_routes", true)?,
+        // duckOSM: options.levels (on by default) solves the drawing order; off writes no table
+        levels: if options.bool("levels", true)? {
+            Method::Solve
+        } else {
+            Method::None
+        },
     };
     if opts.calculate_costs && !opts.process_speeds {
         return Err("config: options.calculate_costs needs options.process_speeds".into());
@@ -384,6 +390,8 @@ pub fn read(path: &Path, pbf_is_cut: bool, strict: bool) -> Result<FromConfig, S
         infer_sidewalks: options.bool("infer_separate_sidewalks", true)?,
         osm_fixes,
         boundary: cut_to,
+        // main.boundary and the metadata, also when the PBF is cut already (a missing file is an error there)
+        area_boundary: boundary_path.map(PathBuf::from).filter(|b| b.exists()),
         ..Params::default()
     };
     Ok(FromConfig {
@@ -540,6 +548,20 @@ pub fn parse_osm_fixes(text: &str, label: &str) -> Result<OsmFixes, String> {
             lanes_backward: opt_int("lanes_backward")?,
             layer: opt_int("layer")?,
             exclude_modes,
+            arrows: ["forward", "backward"]
+                .iter()
+                .filter_map(|d| {
+                    let v = s.get(&format!("turn_lanes_{d}"))?;
+                    let text = match v {
+                        Yaml::String(t) => t.clone(),
+                        Yaml::Integer(i) => i.to_string(),
+                        _ => {
+                            return Some(Err(err(format!("{what}.turn_lanes_{d} must be a text"))))
+                        }
+                    };
+                    Some(Ok((format!("turn:lanes:{d}"), text)))
+                })
+                .collect::<Result<_, String>>()?,
         });
     }
     for n in list("new_ways")? {
