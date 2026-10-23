@@ -56,6 +56,7 @@ const MODE_TABLES: &[&str] = &[
     "turn_permission",
     "turn_restrictions",
     "turn_path_restrictions",
+    "lane_profile",
 ];
 
 /// The SELECT of a table from its file, with duckOSM's names and types. The same rules are in the page

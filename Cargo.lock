@@ -659,6 +659,7 @@ dependencies = [
 name = "duckosm-build"
 version = "0.2.0"
 dependencies = [
+ "duckdb",
  "duckosm-core",
  "duckosm-duckdb",
  "duckosm-parquet",

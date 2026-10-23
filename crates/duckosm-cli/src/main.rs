@@ -195,7 +195,7 @@ fn run() -> Result<(), String> {
             m.turn_restrictions
         );
     }
-    if let Some(l) = &sum.levels {
+    for l in sum.levels.iter().chain(&sum.lanes) {
         eprintln!("{l}");
     }
     if cli.timing {

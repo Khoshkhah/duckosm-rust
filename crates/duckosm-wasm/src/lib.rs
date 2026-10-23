@@ -2,8 +2,8 @@
 //! chosen modes out, as GeoParquet bytes. The same steps and the same writer as the native build.
 
 use duckosm_build::{
-    config::parse_osm_fixes, parse_modes, write_area_tables, write_bus, write_levels, write_raw,
-    write_tables, Area, FEATURES_SQL,
+    config::parse_osm_fixes, parse_modes, write_area_tables, write_bus, write_lane_profile,
+    write_levels, write_raw, write_tables, Area, FEATURES_SQL,
 };
 use duckosm_core::boundary::Boundary;
 use duckosm_core::filter::Mode;
@@ -384,10 +384,12 @@ pub fn run<W: Write + Send>(
     let mut summary = Vec::new();
     let mut mode_nodes = Vec::new();
     let mut level_edges = LevelEdges::default();
+    let mut lane_edges = duckosm_core::lanes::LaneEdges::default();
     for mode in &modes {
         let net = build_network_with(&ways, &coords, *mode, &opts, &fixes, &relations)?;
         write_tables(&net, *mode, &opts, &ways, &mut file)?;
         fixes.set_arrows(&mut ways, &net.ways, *mode);
+        lane_edges.add(*mode, &net);
         if levels != Method::None {
             level_edges.add(*mode, false, &net.edges);
             level_edges.add(*mode, true, &net.private_edges);
@@ -431,6 +433,9 @@ pub fn run<W: Write + Send>(
         ));
     }
     if let Some(l) = write_levels(&level_edges, levels, built_at, &mut file)? {
+        summary.push(l);
+    }
+    if let Some(l) = write_lane_profile(&lane_edges, &ways, &fixes, &mut file)? {
         summary.push(l);
     }
     Ok(summary.join("\n"))
