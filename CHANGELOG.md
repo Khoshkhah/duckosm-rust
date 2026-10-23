@@ -18,6 +18,8 @@ The tables of duckOSM that 0.2.0 did not make, the browser page and its map.
 - The bus routes (`bus.routes`, `bus.route_edges`), equal to duckOSM on Monaco and Tartu.
 - The browser page: an area from a place name or a drawn boundary, the region file through the relay, the
   build, the data downloads, and a map of the roads as vector tiles that Rust makes.
+- The page: a "Download .duckdb" button. The file is equal to the file that the zip's `make_duckdb.sql` makes
+  (`tools/compare_duckdb.py`).
 
 ### Changed
 
@@ -30,6 +32,8 @@ The tables of duckOSM that 0.2.0 did not make, the browser page and its map.
 
 - A `.duckdb` build without costs (`calculate_costs=False`, CLI `--no-costs`) failed in the view `mm.edges`.
   Now, as in duckOSM, such a build has no `mm.*`.
+- The map: in the 3D view, OpenFreeMap's 3D buildings show over every base map when the duckOSM 3D buildings
+  do not show.
 
 ## 0.2.0 (2026-10-22)
 
