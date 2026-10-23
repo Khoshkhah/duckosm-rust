@@ -719,13 +719,13 @@ function list(features) {
     const [title, ...rest] = p.display_name.split(", ");
     return `<label class="${ok ? "" : "point"}" data-i="${i}" title="${esc(p.display_name)}"><input type="radio" name="hit" value="${i}"${ok ? "" : " disabled"}>` +
       `<span><span class="t">${esc(title)}</span><span class="badge">${esc(p.addresstype ?? p.type)}</span>` +
-      (ok ? "" : `<span class="badge no">a point: no boundary</span>`) +
+      (ok ? "" : `<span class="badge no">${f.geometry?.type === "Point" ? "a point: " : ""}no boundary</span>`) +
       `<span class="d">${esc(rest.join(", ") || `${p.osm_type} ${p.osm_id}`)}</span></span></label>`;
   }).join("") || `<p class="small muted">No place found.</p>`;
 }
 
 // a Photon match as a Nominatim feature for list(). A relation or a way can have a boundary: its geometry is its box
-// (the preview), and a selection gets the boundary from Nominatim. A node is a point: list() shows it, disabled.
+// until boundaries() gets the real one from Nominatim. A node is a point: list() shows it, disabled.
 function photon(f) {
   const p = f.properties, e = p.extent;  // [west, north, east, south]
   const above = [...new Set([p.city, p.county, p.state, p.country])].filter((x) => x && x !== p.name);
@@ -733,6 +733,27 @@ function photon(f) {
            properties: { photon: p.osm_type !== "N", osm_type: { R: "relation", W: "way", N: "node" }[p.osm_type], osm_id: p.osm_id,
                          name: p.name, display_name: [p.name, ...above].join(", "),
                          addresstype: ["house", "other", "street"].includes(p.type) ? p.osm_value : p.type } };
+}
+
+// the real boundaries of a Photon list at once (Kaveh: the boxes were "annoying"): one Nominatim lookup for all its relations
+// and ways (it takes up to 50 ids), through the queue of 1 request each second. Each place gets its boundary, or "no boundary"
+// when Nominatim has no polygon; the box stays when the lookup fails (a selection then asks again).
+async function boundaries(feats) {
+  const key = (p) => p.osm_type + p.osm_id;
+  const ids = feats.filter((f) => f.properties.photon).map((f) => f.properties.osm_type[0].toUpperCase() + f.properties.osm_id);
+  if (!ids.length) return;
+  let got;
+  try { got = await nominatim("lookup", { osm_ids: ids.join(",") }); } catch (e) { return; }
+  if (found !== feats) return;   // a newer list
+  const byId = new Map(got.map((g) => [key(g.properties), g]));
+  const real = feats.map((f) => {
+    const g = f.properties.photon && byId.get(key(f.properties));
+    return g ? { ...g, properties: { ...g.properties, display_name: f.properties.display_name, addresstype: f.properties.addresstype } } : f;
+  });
+  // the user already chose one: keep the list as it is on the screen, with the new boundaries behind it
+  if (document.querySelector("#found input:checked")) real.forEach((f, i) => (feats[i] = f));
+  else list(real);
+  if (previewed != null) preview(previewed);
 }
 
 const searching = () => ($("found").innerHTML = `<p class="small muted">Searching…</p>`);
@@ -747,7 +768,9 @@ async function search() {
   try {
     const r = await fetch("https://photon.komoot.io/api/?" + new URLSearchParams({ q, limit: "10" }), { signal: mine.signal });
     if (!r.ok) throw new Error(`Photon answered ${r.status}`);
-    list(((await r.json()).features ?? []).map(photon));
+    const feats = ((await r.json()).features ?? []).map(photon);
+    list(feats);
+    boundaries(feats);
   } catch (e) {
     if (!mine.signal.aborted) $("found").innerHTML = `<p class="small error">The search failed: ${esc(e.message)}</p>`;
   }
@@ -780,7 +803,9 @@ map.on("click", async (ev) => {
   }
 });
 
+let previewed = null;   // the place of the list under the mouse
 function preview(i) {
+  previewed = i;
   setData("preview", i == null ? null : { type: "Feature", properties: { name: found[i].properties.display_name.split(",")[0] }, geometry: found[i].geometry });
   if (i != null) fitTo(found[i].geometry, { ifHidden: true });
 }
