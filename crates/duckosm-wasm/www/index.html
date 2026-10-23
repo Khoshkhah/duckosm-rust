@@ -1230,13 +1230,14 @@ function setBase() {
   const show = (l, on) => map.setLayoutProperty(l.id, "visibility", on ? "visible" : "none");
   const style = map.getStyle().layers;
   for (const l of baseLayers) show(style.find((x) => x.id === l.id) ?? l, v === "" && !(roadsShown && l.road));
-  // one 3D layer: when the duckOSM layers have their 3D buildings, OpenFreeMap's are hidden in the 3D view
-  const ours = own && style.some((l) => l.type === "fill-extrusion" && l.source?.startsWith("rs-ov"));
+  // one 3D layer: when the duckOSM layers have their 3D buildings, OpenFreeMap's stop in the 3D view at the zoom where ours start
+  const ours = own && style.find((l) => l.type === "fill-extrusion" && l.source?.startsWith("rs-ov"));
   for (const l of style) if (l.type === "fill-extrusion" && !l.source?.startsWith("rs-")) {
-    heights[l.id] ??= [map.getPaintProperty(l.id, "fill-extrusion-height"), map.getPaintProperty(l.id, "fill-extrusion-base")];
-    map.setPaintProperty(l.id, "fill-extrusion-height", view.threeD ? heights[l.id][0] : 0);
-    map.setPaintProperty(l.id, "fill-extrusion-base", view.threeD ? heights[l.id][1] : 0);
-    if (ours && view.threeD) show(l, false);
+    heights[l.id] ??= [map.getPaintProperty(l.id, "fill-extrusion-height"), map.getPaintProperty(l.id, "fill-extrusion-base"), l.minzoom ?? 0, l.maxzoom ?? 24];
+    const [height, base, minzoom, maxzoom] = heights[l.id];
+    map.setPaintProperty(l.id, "fill-extrusion-height", view.threeD ? height : 0);
+    map.setPaintProperty(l.id, "fill-extrusion-base", view.threeD ? base : 0);
+    map.setLayerZoomRange(l.id, minzoom, ours && view.threeD ? Math.max(minzoom, ours.minzoom ?? 0) : maxzoom);
   }
   for (const l of style) if (l.source?.startsWith("rs-ov")) show(l, own && (!offLayers.has(l.id) || (l.type === "fill-extrusion" && view.threeD)));
   const bottom = style[0].id;

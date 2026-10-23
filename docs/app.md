@@ -113,7 +113,8 @@ Kaveh's layout of 2026-10-23: the data in card 5, the map in card 6.
     cover the photo. The page keeps the base map.
   - There is no buildings button: the style alone decides if the footprints show, and 3D only adds the 3D
     version (Kaveh's rule).
-- Only one 3D building layer shows: roadstyle's own when the duckOSM layers show, else OpenFreeMap's. Before, the
+- Only one 3D building layer shows: roadstyle's own when the duckOSM layers show (from the zoom of their buildings,
+  15; below it OpenFreeMap's), else OpenFreeMap's. Before, the
   two layers drew over each other at different heights. With 3D off, OpenFreeMap's 3D layer is flat (height 0), so
   that its footprints stay.
 - The height of a building is the OpenMapTiles rule, as OpenFreeMap's: `height`, else (`building:levels` +
