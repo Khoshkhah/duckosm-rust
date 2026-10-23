@@ -262,7 +262,7 @@
 <main id="panel">
 <header>
   <div class="logo"><svg><use href="#i-poly"/></svg></div>
-  <div><h1>duckOSM in the browser</h1><p>The road network of an area, built in this tab</p></div>
+  <div><h1>duckOSM in the browser</h1><p>Build the road network of an area in your browser</p></div>
   <button id="theme" class="icon-btn" title="Light or dark theme" aria-label="Light or dark theme"><svg><use href="#i-sun"/></svg></button>
   <button id="collapse" class="icon-btn" title="Collapse the panel" aria-label="Collapse the panel" aria-expanded="true" aria-controls="panel"><svg><use href="#i-chevron"/></svg></button>
 </header>
@@ -287,7 +287,7 @@
     <span class="small muted">Then click the map.</span>
   </div>
   <div id="found" role="radiogroup" aria-label="The matches"></div>
-  <p class="small muted">Search by <a href="https://photon.komoot.io">Photon</a> (komoot), boundaries by <a href="https://nominatim.openstreetmap.org">Nominatim</a>. Data © OpenStreetMap contributors.</p>
+  <p class="small muted">Search: <a href="https://photon.komoot.io">Photon</a> (komoot). Boundaries: <a href="https://nominatim.openstreetmap.org">Nominatim</a>. Data © OpenStreetMap contributors.</p>
 </section>
 
 <section id="draw" role="tabpanel" aria-labelledby="tab-draw" hidden>
@@ -306,7 +306,7 @@
       <button id="delete" disabled title="Delete the selected shape (Delete)" aria-keyshortcuts="Delete"><svg><use href="#i-trash"/></svg>Delete</button>
       <button id="clear" title="Delete all shapes"><svg><use href="#i-x"/></svg>Clear</button>
     </div>
-    <p id="hint" aria-live="polite">Select a shape. When it is complete, it is selected: drag it to move it, or drag a point to change it.</p>
+    <p id="hint" aria-live="polite">Select a shape, then draw it on the map.</p>
   </div>
 </section>
 
@@ -314,7 +314,7 @@
   <label id="drop">
     <svg><use href="#i-upload"/></svg>
     <span><strong>Select a GeoJSON file</strong><br>or drag it onto the map</span>
-    <span class="small">A FeatureCollection, a Feature, a Polygon or a MultiPolygon</span>
+    <span class="small">Polygons in GeoJSON</span>
     <input id="file" type="file" accept=".geojson,.json">
   </label>
 </section>
@@ -325,7 +325,7 @@
 <h2 id="step2"><span class="n">2</span>The area
   <button id="zoom-area" class="icon-btn" disabled title="Zoom to the area" aria-label="Zoom to the area"><svg><use href="#i-zoom"/></svg></button></h2>
 <input id="name" type="text" aria-label="Name of the area" placeholder="Name">
-<div id="summary" aria-live="polite"><div class="empty">No area yet. Search for a place, draw a shape, or select a file.</div></div>
+<div id="summary" aria-live="polite"><div class="empty">No area yet. Choose one in step 1.</div></div>
 </section>
 
 <section id="extracts-box" class="step" aria-labelledby="step3">
@@ -337,16 +337,16 @@
   </div>
   <section id="src-region" role="tabpanel" aria-labelledby="tab-region">
     <label class="pick"><svg><use href="#i-upload"/></svg><span id="region-name">Select the region file (.osm.pbf)</span><input id="region" type="file" accept=".pbf"></label>
-    <p id="extracts-help" class="small muted" style="margin-top:0">The file must cover the area; the page cuts it to the boundary while it reads it. The smallest Geofabrik extracts that cover the area are below. Click an extract to see it on the map, and again to hide it.</p>
-    <div id="extracts" role="radiogroup" aria-label="Show an extract on the map"><p class="small muted">Choose an area: the extracts that cover it show here.</p></div>
+    <p id="extracts-help" class="small muted" style="margin-top:0">The file must cover the area. These Geofabrik files cover it. Click a file to see it on the map.</p>
+    <div id="extracts" role="radiogroup" aria-label="Show an extract on the map"><p class="small muted">Choose an area first.</p></div>
     <div id="kept" aria-live="polite"></div>
   </section>
   <section id="src-overpass" role="tabpanel" aria-labelledby="tab-overpass" hidden>
-    <p class="small muted" style="margin:0">The data comes from the <a href="https://wiki.openstreetmap.org/wiki/Overpass_API">Overpass API</a>. Use it for a city or a smaller area: the public servers have limits and are often full.</p>
+    <p class="small muted" style="margin:0">Data from the <a href="https://wiki.openstreetmap.org/wiki/Overpass_API">Overpass API</a>. Use it for a city or a smaller area. The public servers are often busy.</p>
   </section>
   <section id="src-cut" role="tabpanel" aria-labelledby="tab-cut" hidden>
-    <label class="pick"><svg><use href="#i-upload"/></svg><span id="pbf-name">Select a .osm.pbf file that is already cut</span><input id="pbf" type="file" accept=".pbf"></label>
-    <p class="small muted" style="margin:0">The page uses all of the file; the boundary gives only the name.</p>
+    <label class="pick"><svg><use href="#i-upload"/></svg><span id="pbf-name">Select a cut .osm.pbf file</span><input id="pbf" type="file" accept=".pbf"></label>
+    <p class="small muted" style="margin:0">The page uses all of the file. The area gives only the name.</p>
   </section>
 </section>
 
@@ -358,17 +358,17 @@
     <label><input type="checkbox" name="mode" value="cycling" checked>Cycling</label>
   </div>
   <div class="checks" style="margin-top:6px"><label><input type="checkbox" id="features" checked>Base map layers</label></div>
-  <p class="small muted" style="margin:4px 0 0">Water, land use, buildings, railways and more, as duckOSM's
-    <a href="https://khoshkhah.github.io/duckOSM/reference/features/" target="_blank" rel="noopener">features tables</a>. Only with a region file.
-    The first time, the page downloads DuckDB's spatial extension (4.5 MB).</p>
+  <p class="small muted" style="margin:4px 0 0">Water, land use, buildings, railways and more
+    (<a href="https://khoshkhah.github.io/duckOSM/reference/features/" target="_blank" rel="noopener">features tables</a>).
+    Needs a region file. The first build downloads 4.5 MB.</p>
   <div class="grid2" style="margin-top:10px">
     <label for="levels" class="small">Drawing order</label>
-    <select id="levels"><option value="tags">from the tags (fast)</option><option value="solve">solved (roadstyle's optimization)</option></select>
+    <select id="levels"><option value="tags">From the tags (fast)</option><option value="solve">Optimized (slower)</option></select>
   </div>
-  <details><summary>Advanced: corrections to the map data</summary>
-    <p class="small muted" style="margin:8px 0">Optional: your fixes of OpenStreetMap errors, for example a one-way street.
-      <a href="https://khoshkhah.github.io/duckOSM/guides/fix-osm-errors/" target="_blank" rel="noopener">The file format</a> (turn rules are not used here).</p>
-    <label class="pick" style="margin:0"><svg><use href="#i-upload"/></svg><span id="fixes-name">Select a corrections file (.yaml)</span><input id="fixes" type="file" accept=".yaml,.yml"></label>
+  <details><summary>Advanced: fixes to the map data</summary>
+    <p class="small muted" style="margin:8px 0">Your fixes for OpenStreetMap errors, for example a one-way street.
+      <a href="https://khoshkhah.github.io/duckOSM/guides/fix-osm-errors/" target="_blank" rel="noopener">File format</a>. Turn rules are not used.</p>
+    <label class="pick" style="margin:0"><svg><use href="#i-upload"/></svg><span id="fixes-name">Select a fixes file (.yaml)</span><input id="fixes" type="file" accept=".yaml,.yml"></label>
   </details>
   <p id="buildhint" class="small" style="margin:10px 0 0; color: var(--warn)" aria-live="polite"></p>
   <p id="buildstatus" class="progress" aria-live="polite"></p>
@@ -611,10 +611,10 @@ function clearArea() {
   setData("pin", null);
   $("zoom-area").disabled = true;
   showExtract(null);
-  $("extracts").innerHTML = `<p class="small muted">Choose an area: the extracts that cover it show here.</p>`;
+  $("extracts").innerHTML = `<p class="small muted">Choose an area first.</p>`;
   $("save").disabled = true;
   canBuild();
-  $("summary").innerHTML = `<div class="empty">No area yet. Search for a place, draw a shape, or select a file.</div>`;
+  $("summary").innerHTML = `<div class="empty">No area yet. Choose one in step 1.</div>`;
 }
 
 async function setArea(polys, props, { zoom = true } = {}) {
@@ -637,7 +637,7 @@ async function setArea(polys, props, { zoom = true } = {}) {
     `<div class="stat"><b>${num(vertices)}</b><span>vertices</span></div></div>` +
     `<div class="source">${icon(props.source === "drawn" ? "pen" : props.source.startsWith("Nominatim") ? "search" : "file")}` +
     `<span>Source: ${esc(props.source === "drawn" ? "drawn on the map" : props.source.replace(/^Nominatim (\w+) (\d+)$/, "OpenStreetMap $1 $2 (Nominatim)"))}</span></div>` +
-    (km2 > 10000 ? `<div class="callout">${icon("alert")}<span>A large area. The cut can take minutes, and the build can need more than 1 GB of memory.</span></div>` : "");
+    (km2 > 10000 ? `<div class="callout">${icon("alert")}<span>Large area. The build can take minutes and use more than 1 GB of memory.</span></div>` : "");
   $("extracts").innerHTML = `<p class="small muted">Finding the extracts…</p>`;
   const mine = area;
   cover = (await covering(polys)).slice(0, 3);
@@ -703,13 +703,14 @@ function list(features) {
   }).join("") || `<p class="small muted">No place found.</p>`;
 }
 
-// a Photon match as a Nominatim feature for list(): only relations, because only a relation has a boundary. The
-// geometry is the box of the relation (the preview); a selection gets the boundary from Nominatim.
+// a Photon match as a Nominatim feature for list(). A relation or a way can have a boundary: its geometry is its box
+// (the preview), and a selection gets the boundary from Nominatim. A node is a point: list() shows it, disabled.
 function photon(f) {
   const p = f.properties, e = p.extent;  // [west, north, east, south]
   const above = [...new Set([p.city, p.county, p.state, p.country])].filter((x) => x && x !== p.name);
   return { type: "Feature", geometry: e ? geometry([[[[e[0], e[3]], [e[2], e[3]], [e[2], e[1]], [e[0], e[1]], [e[0], e[3]]]]]) : f.geometry,
-           properties: { photon: true, osm_type: "relation", osm_id: p.osm_id, name: p.name, display_name: [p.name, ...above].join(", "),
+           properties: { photon: p.osm_type !== "N", osm_type: { R: "relation", W: "way", N: "node" }[p.osm_type], osm_id: p.osm_id,
+                         name: p.name, display_name: [p.name, ...above].join(", "),
                          addresstype: ["house", "other", "street"].includes(p.type) ? p.osm_value : p.type } };
 }
 
@@ -723,9 +724,9 @@ async function search() {
   const mine = (asking = new AbortController());
   searching();
   try {
-    const r = await fetch("https://photon.komoot.io/api/?" + new URLSearchParams({ q, limit: "15" }), { signal: mine.signal });
+    const r = await fetch("https://photon.komoot.io/api/?" + new URLSearchParams({ q, limit: "10" }), { signal: mine.signal });
     if (!r.ok) throw new Error(`Photon answered ${r.status}`);
-    list(((await r.json()).features ?? []).filter((f) => f.properties.osm_type === "R").map(photon));
+    list(((await r.json()).features ?? []).map(photon));
   } catch (e) {
     if (!mine.signal.aborted) $("found").innerHTML = `<p class="small error">The search failed: ${esc(e.message)}</p>`;
   }
@@ -773,7 +774,7 @@ $("found").onchange = async (ev) => {
   const mine = (picked = f);
   if (f.properties.photon) {
     status("Getting the boundary…", 0);
-    try { [f] = await nominatim("lookup", { osm_ids: `R${f.properties.osm_id}` }); }
+    try { [f] = await nominatim("lookup", { osm_ids: `${f.properties.osm_type[0].toUpperCase()}${f.properties.osm_id}` }); }
     catch (e) { return status(`The boundary failed: ${e.message}`); }
     if (picked !== mine) return;
     status("");
@@ -789,11 +790,11 @@ $("found").onchange = async (ev) => {
 // ---- draw ----
 let selected = null;
 const hints = {
-  select: "Click a shape to select it. Drag it to move it. Drag a corner or a point to change it. Drag the empty map to move the map.",
-  rectangle: "Drag on the map from one corner to the other.",
-  polygon: "Click each vertex. Click the first vertex, or push Enter, to close the polygon. Escape stops.",
-  circle: "Drag on the map from the center outward.",
-  freehand: "Drag on the map around the area.",
+  select: "Click a shape to select it. Drag the shape to move it. Drag a point to change it.",
+  rectangle: "Drag from one corner to the opposite corner.",
+  polygon: "Click each corner. To close, click the first corner or push Enter. Escape stops.",
+  circle: "Drag from the center outward.",
+  freehand: "Drag around the area.",
 };
 const toolButtons = [...document.querySelectorAll("[data-mode]")];
 function tool(mode) {
@@ -902,8 +903,7 @@ function canBuild() {
   const missing = building ? "" : source === "cut" ? (!$("pbf").files[0] && "Select the cut file in step 3.")
     : !area ? "Choose an area in step 1."
     : area.props.area_km2 == null ? "Finding the extracts…"
-    : source === "region" && !regionFile && (regions.relay ? "Click Get at an extract in step 3, or select a region file."
-                                                             : "Select the region file in step 3. Download one of the extracts there first, if you do not have it.");
+    : source === "region" && !regionFile && (regions.relay ? "Get a file in step 3, or select a region file." : "Select a region file in step 3.");
   $("run").disabled = building || !!missing;
   $("buildhint").textContent = missing || "";
   $("run").title = missing || "Build the networks of the area";
@@ -934,8 +934,8 @@ function useKept(k) {
 const day = (d) => (d ? new Date(d).toISOString().slice(0, 10) : "");
 function renderExtracts() {
   if (area?.props.area_km2 == null) return;   // "Choose an area" or "Finding the extracts" stays
-  if (regions.relay) $("extracts-help").firstChild.textContent = "The file must cover the area; the page cuts it to the boundary while it reads it. " +
-    "Get one of the smallest Geofabrik extracts that cover it: the page keeps it in this browser. Click an extract to see it on the map, and again to hide it.";
+  if (regions.relay) $("extracts-help").firstChild.textContent = "The file must cover the area. " +
+    "Click Get to download one of these Geofabrik files. The page keeps it. Click a file to see it on the map.";
   $("extracts").innerHTML = cover.length ? cover.map((x, i) => {
     const k = keptRegions.find((r) => r.id === x.id), inUse = k && regionKept === k.id;
     const prog = getting?.id === x.id ? `<span class="prog"><span class="bar"><i id="bar"></i></span><span class="got" id="got">0 %</span>` +
@@ -946,7 +946,7 @@ function renderExtracts() {
     return `<label><input type="radio" name="extract" value="${i}"${i === shown ? " checked" : ""} aria-label="Show ${esc(x.name)} on the map">` +
       `<span class="x">${esc(x.name)}<span>${k ? `kept · ${mb(k.size)} MB · ${day(k.modified)}` : `${esc(x.id)} · ${num(Math.round(x.km2))} km²`}</span></span>${what}` +
       `<a class="dl" href="${esc(x.pbf)}" title="Download ${esc(x.name)} (.osm.pbf) to this computer" aria-label="Download ${esc(x.name)}">${icon("download")}</a>${prog}</label>`;
-  }).join("") : `<p class="small muted">No Geofabrik extract covers the area. Use the planet file, or the Overpass tab.</p>`;
+  }).join("") : `<p class="small muted">No Geofabrik file covers the area. Use the Overpass tab or the planet file.</p>`;
 }
 function renderKept() {
   $("kept").innerHTML = keptRegions.length ? `<p class="small muted" style="margin:0">Kept in this browser:</p>` + keptRegions.map((k) =>

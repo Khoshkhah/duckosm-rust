@@ -122,17 +122,17 @@ The area is one list of polygons. Each way below replaces the area, except drawi
 1. The user types a name. The tool searches 300 ms after the last key, or at once when the user pushes Enter
    or clicks **Search**. A new search cancels the search before it. A text of less than 2 characters clears
    the list.
-2. The tool asks Photon (`https://photon.komoot.io/api/`, `q`, `limit=15`). The list keeps only the relations
-   (`osm_type` R), because only a relation has a boundary. Nominatim `/search` gave too few matches: 1 for
-   "monaco", and for "stockholm" no Stockholms län. Photon gives Monaco and Monaco-Ville for "monaco", and
-   Stockholms län and Stockholms kommun for "stockholm".
+2. The tool asks Photon (`https://photon.komoot.io/api/`, `q`, `limit=10`). A relation or a way can have a
+   boundary. A node is a point: its line says "a point: no boundary", and the user cannot select it. Nominatim
+   `/search` gave too few matches: 1 for "monaco", and for "stockholm" no Stockholms län. Photon gives Monaco
+   and Monaco-Ville for "monaco", and Stockholms län and Stockholms kommun for "stockholm".
 3. The matches show as a list of cards. Each card has the name, the type (for example `country`, `county`,
    `city`, `district`), and the places above it (the city, the county, the state and the country).
 4. When the user points to a match, or moves to it with the arrow keys, the map shows the box of the match
    (`extent` from Photon) as a preview.
-5. When the user selects a match, the tool gets its boundary from Nominatim (`/lookup`, `osm_ids=R<id>`,
-   `format=geojson`, `polygon_geojson=1`, `extratags=1`), and the boundary becomes the area. The name,
-   `osm_id` and `admin_level` come from Nominatim.
+5. When the user selects a match, the tool gets its boundary from Nominatim (`/lookup`, `osm_ids=R<id>` or
+   `W<id>`, `format=geojson`, `polygon_geojson=1`, `extratags=1`), and the boundary becomes the area. The
+   name, `osm_id` and `admin_level` come from Nominatim.
 
 ### 2. Draw
 
@@ -190,7 +190,7 @@ The box goes away. The rectangle tool does the same work, and the user sees the 
 | Name | A text box. The user can change it. Its value goes into `name`. |
 | The area | In km², with 2 decimals. |
 | Polygons and vertices | For example "2 polygons, 140 vertices". |
-| A warning for a large area | Above 10,000 km² (decision 3). The text: "A large area. The cut can take minutes, and the build can need more than 1 GB of memory." |
+| A warning for a large area | Above 10,000 km² (decision 3). The text: "Large area. The build can take minutes and use more than 1 GB of memory." |
 | The source | For example "Nominatim relation 2179440", "drawn" or "file tartu.geojson". |
 | The region files | The 3 smallest Geofabrik extracts that cover the area, each with its size in km² and its download link. A radio button shows the outline of the extract on the map. |
 
