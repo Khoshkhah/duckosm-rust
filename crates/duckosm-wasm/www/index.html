@@ -327,6 +327,7 @@
       <a href="https://khoshkhah.github.io/duckOSM/guides/fix-osm-errors/" target="_blank" rel="noopener">The file format</a> (turn rules are not used here).</p>
     <label class="pick" style="margin:0"><svg><use href="#i-upload"/></svg><span id="fixes-name">Select a corrections file (.yaml)</span><input id="fixes" type="file" accept=".yaml,.yml"></label>
   </details>
+  <p id="buildhint" class="small" style="margin:10px 0 0; color: var(--warn)" aria-live="polite"></p>
   <p id="buildstatus" class="progress" aria-live="polite"></p>
 </section>
 
@@ -799,16 +800,23 @@ for (const t of dataTabs) t.onclick = () => {
   source = t.dataset.source;
   canBuild();
 };
-// Build is on when the data is ready: a region file or Overpass need the area; a cut file needs only itself
+// Build is on when the data is ready: a region file or Overpass need the area; a cut file needs only itself. When it is off, step 4
+// says what is missing.
 function canBuild() {
-  const ready = source === "cut" ? $("pbf").files[0] : area?.props.area_km2 != null && (source === "overpass" || $("region").files[0]);
-  $("run").disabled = building || !ready;
+  const missing = building ? "" : source === "cut" ? (!$("pbf").files[0] && "Select the cut file in step 3.")
+    : !area ? "Choose an area in step 1."
+    : area.props.area_km2 == null ? "Finding the extracts…"
+    : source === "region" && !$("region").files[0] && "Select the region file in step 3. Download one of the extracts there first, if you do not have it.";
+  $("run").disabled = building || !!missing;
+  $("buildhint").textContent = missing || "";
+  $("run").title = missing || "Build the networks of the area";
 }
 for (const id of ["region", "pbf", "fixes"]) $(id).onchange = () => {
   const f = $(id).files[0];
   if (f) $(`${id}-name`).textContent = `${f.name} (${num(f.size / 2 ** 20, 1)} MB)`;
   canBuild();
 };
+canBuild();
 
 // ---- step 4: build ----
 const progress = (text) => ($("buildstatus").textContent = text);
