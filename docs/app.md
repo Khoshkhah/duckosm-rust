@@ -63,7 +63,13 @@ The page keeps the selected file only in memory. After a reload, the user select
 - **Base map**: OpenFreeMap (the default), light gray (Esri), or none. The base map of the map stays
   OpenFreeMap; the other two are a layer over it, under the roads.
 - **SQL**: a text box, **Run**, and the result as a table (the first 200 rows) in the card.
-- **Downloads**: `load.sql` and the Parquet files.
+- **Downloads** (changed after Kaveh found that the files had no structure):
+  - **Download all (.zip)**: a folder named after the area, with the Parquet files (the names of duckOSM's
+    GeoParquet export, `<table>_<mode>.parquet`), `layers.json` (its list of the map layers, which the roadstyle
+    GeoLibre plugin opens), `load.sql`, `boundary.geojson` and a `README.txt` that says what each table holds.
+  - **load.sql** alone.
+  - One block for each table: its name, one sentence on what it holds, and a link for each mode with the number
+    of rows. A link goes to duckOSM's reference of the columns.
 
 ## The map
 

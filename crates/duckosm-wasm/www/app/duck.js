@@ -12,7 +12,21 @@ CREATE OR REPLACE MACRO edge_id_hash_v1(osm_id, source, target, is_reverse) AS
     (hash(osm_id::BIGINT, source::BIGINT, target::BIGINT, is_reverse::BOOLEAN) >> 1)::BIGINT;`;
 
 let db = null, conn = null;
-export let tables = [];   // {mode, table, name, bytes} of the last build
+export let tables = [];   // {mode, table, name, bytes, rows} of the last build
+
+// the tables of a mode, in the order of the downloads, with what each one holds (duckOSM docs/reference/database.md, docs/edge_graph.md)
+export const TABLES = {
+  edges: "The network of the mode: one row for each direction of a road, with its line, length, speed and cost.",
+  nodes: "The ends of the edges: the junctions and the dead ends.",
+  private_edges: "The roads that the mode may not use: private, bus only, or a pedestrian street for cars.",
+  edge_graph: "The legal turns: each pair of edges that can follow each other. Routing with turns uses it.",
+  turn_restrictions: "Driving: the OpenStreetMap turn restrictions at a node, as pairs of edges.",
+  turn_path_restrictions: "Driving: the turn restrictions through a via way, as paths of edges.",
+  turn_permission: "The turn rules that the graph cannot hold: a rule for some vehicles or with a condition.",
+  edge_id_map: "For each merged edge, the edges that it was made from.",
+};
+export const REFERENCE = "https://khoshkhah.github.io/duckOSM/reference/database/";
+const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "area";
 
 // DuckDB starts when the page opens, while the user makes the area
 const t0 = performance.now();
@@ -60,7 +74,8 @@ export async function loadTables(files) {
     await db.registerFileBuffer(name, bytes.slice());
     await conn.query(`CREATE SCHEMA IF NOT EXISTS ${mode}`);
     await conn.query(`CREATE OR REPLACE TABLE ${mode}.${table} AS ${select(table)} FROM read_parquet('${name}')`);
-    tables.push({ mode, table, name, bytes });
+    const rows = Number((await conn.query(`SELECT count(*) AS n FROM ${mode}.${table}`)).toArray()[0].n);
+    tables.push({ mode, table, name, bytes, rows });
   }
   await conn.query(MACROS);
 }
@@ -70,13 +85,33 @@ export const query = (sql) => conn.query(sql);
 // load.sql: it makes a .duckdb file from the Parquet files (duckdb-wasm 1.33.1-dev57.0 keeps a written .duckdb file locked after
 // DETACH, so the page cannot give that file)
 export function loadSql(areaName) {
-  const file = areaName.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "area";
+  const file = slug(areaName);
   const lines = [`-- duckOSM tables of ${areaName.replace(/\n/g, " ")}, from the Parquet files of duckosm-rust in the browser.`,
     `-- In the folder of the files: duckdb ${file}.duckdb < load.sql`];
   for (const m of new Set(tables.map((t) => t.mode))) lines.push(`CREATE SCHEMA IF NOT EXISTS ${m};`);
   for (const t of tables) lines.push(`CREATE TABLE ${t.mode}.${t.table} AS ${select(t.table)} FROM read_parquet('${t.name}');`);
   lines.push(MACROS.trim());
   return lines.join("\n") + "\n";
+}
+
+// all files of the build in one zip, in a folder named after the area: the Parquet files (the names of duckOSM's GeoParquet export),
+// layers.json (its list of the map layers, which the roadstyle GeoLibre plugin opens), load.sql, the boundary and a README. The Parquet
+// files are compressed already, so the zip only stores them.
+export async function zipAll(areaName, boundary) {
+  const { zipSync, strToU8 } = await import("https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js");
+  const dir = slug(areaName) + "/";
+  const layers = tables.filter((t) => t.table === "edges" || t.table === "nodes").map((t) => ({ file: t.name, kind: t.table, mode: t.mode, count: t.rows }));
+  const readme = [`duckOSM tables of ${areaName}, built by duckosm-rust in the browser.`, "",
+    "<table>_<mode>.parquet: GeoParquet files, one for each table and mode:",
+    ...Object.entries(TABLES).map(([t, d]) => `  ${t}: ${d}`), "",
+    "load.sql: makes one .duckdb file from them (duckdb <name>.duckdb < load.sql, in this folder).",
+    "layers.json: the list of the map layers, as duckOSM's GeoParquet export writes it.",
+    "boundary.geojson: the area, in the format of duckosm boundary.", "", `The columns of each table: ${REFERENCE}`, ""].join("\n");
+  const files = { [dir + "README.txt"]: strToU8(readme), [dir + "load.sql"]: strToU8(loadSql(areaName)),
+                  [dir + "layers.json"]: strToU8(JSON.stringify({ layers }, null, 1)) };
+  if (boundary) files[dir + "boundary.geojson"] = strToU8(boundary);
+  for (const t of tables) files[dir + t.name] = [t.bytes, { level: 0 }];
+  return { blob: new Blob([zipSync(files)], { type: "application/zip" }), name: slug(areaName) + ".zip" };
 }
 
 // the style of the roads map: duckdb-wasm writes roads.parquet (the drawing levels from the tags), and roadstyle's Rust module makes

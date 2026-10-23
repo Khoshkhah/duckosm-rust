@@ -15,6 +15,7 @@ import argparse
 import base64
 import json
 import pathlib
+import zipfile
 
 from playwright.sync_api import sync_playwright
 
@@ -73,6 +74,14 @@ with sync_playwright() as p:
     with page.expect_download(timeout=60_000) as d:
         page.click("#duckdb")
     d.value.save_as(out / "load.sql")
+    # the zip: a folder with the Parquet files, layers.json, load.sql, the boundary and a README
+    with page.expect_download(timeout=120_000) as d:
+        page.click("#zip")
+    d.value.save_as(out / "all.zip")
+    with zipfile.ZipFile(out / "all.zip") as z:
+        names = z.namelist()
+    parquet = [n for n in names if n.endswith(".parquet")]
+    print(f"zip: {len(parquet)} Parquet files and", sorted(n.split("/", 1)[1] for n in names if not n.endswith(".parquet")))
     # the bytes of each file through its blob link (Chromium stops many downloads in a row)
     files = page.evaluate("""async () => Promise.all([...document.querySelectorAll('#files a')].map(async (a) => {
         const b = new Blob([await (await fetch(a.href)).arrayBuffer()]);

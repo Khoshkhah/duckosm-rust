@@ -174,7 +174,13 @@
   #result { overflow-x: auto; margin-top: 8px; }
   #result table { border-collapse: collapse; font-size: 12px; }
   #result th, #result td { border: 1px solid var(--line); padding: 3px 6px; text-align: left; white-space: nowrap; }
-  #files { display: grid; gap: 3px; font-size: 12.5px; }
+  /* one block for each table: its name, what it holds, and a link for each mode */
+  #files .tb { padding: 8px 0; border-top: 1px solid var(--line); font-size: 12.5px; }
+  #files .tb b { font-family: ui-monospace, monospace; font-size: 12px; }
+  #files .tb p { margin: 2px 0 4px; color: var(--muted); font-size: 11.5px; }
+  #files .tb .m { display: flex; flex-wrap: wrap; gap: 4px 14px; font-variant-numeric: tabular-nums; }
+  #files .tb .m .i { white-space: nowrap; }
+  #files .tb .m .i span { color: var(--muted); font-size: 11.5px; }
   .maplibregl-popup-content { color: #111827; font-size: 12.5px; }
 
   #status { position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 3; background: var(--fg); color: var(--bg); padding: 7px 14px; border-radius: 99px; font-size: 13px; box-shadow: var(--shadow); }
@@ -357,9 +363,11 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
   <div class="row" style="margin-top:6px"><button id="query" class="btn">Run</button></div>
   <div id="result"></div>
   <h2 style="margin-top:16px">Downloads</h2>
-  <div class="row" style="margin-top:0"><button id="duckdb" class="btn"><svg><use href="#i-download"/></svg>load.sql</button>
-    <span class="small muted">It makes a .duckdb file from the Parquet files.</span></div>
-  <div id="files" style="margin-top:8px"></div>
+  <div class="row" style="margin-top:0"><button id="zip" class="btn primary"><svg><use href="#i-download"/></svg>Download all (.zip)</button>
+    <button id="duckdb" class="btn" title="It makes one .duckdb file from the Parquet files">load.sql</button></div>
+  <p class="small muted">The zip has a folder with all tables as GeoParquet files, load.sql (it makes a .duckdb file), the boundary and a README.
+    One table at a time is below. <a id="reference" target="_blank" rel="noopener">The columns of each table</a></p>
+  <div id="files"></div>
 </section>
 
 </div>
@@ -1057,11 +1065,34 @@ $("query").onclick = async () => {
   }
 };
 
-// the downloads: load.sql and the Parquet files
+// the downloads: all files in one zip, load.sql, and each table: a row for each table (with what it holds), a column for each mode
+const size = (b) => (b < 2 ** 20 ? `${num(Math.max(1, b / 1024))} KB` : `${mb(b)} MB`);
+let urls = [];
 function files() {
-  $("files").innerHTML = duck.tables.map((t) => `<a href="${URL.createObjectURL(new Blob([t.bytes], { type: "application/vnd.apache.parquet" }))}" ` +
-    `download="${esc(t.name)}">${esc(t.name)} <span class="muted">(${num(t.bytes.length / 1024)} KB)</span></a>`).join("");
+  urls.forEach(URL.revokeObjectURL);
+  urls = [];
+  const modes = [...new Set(duck.tables.map((t) => t.mode))];
+  const link = (t) => {
+    const u = URL.createObjectURL(new Blob([t.bytes], { type: "application/vnd.apache.parquet" }));
+    urls.push(u);
+    return `<span class="i"><a href="${u}" download="${esc(t.name)}" title="${esc(t.name)}, ${size(t.bytes.length)}">${t.mode}</a> <span>${num(t.rows)} rows</span></span>`;
+  };
+  $("files").innerHTML = Object.entries(duck.TABLES).filter(([name]) => duck.tables.some((t) => t.table === name)).map(([name, what]) =>
+    `<div class="tb"><b>${name}</b><p>${esc(what)}</p><div class="m">` +
+    modes.map((m) => duck.tables.find((t) => t.table === name && t.mode === m)).filter(Boolean).map(link).join("") + "</div></div>").join("");
 }
+$("reference").href = duck.REFERENCE;
+$("zip").onclick = async () => {
+  try {
+    const { blob, name } = await duck.zipAll(areaName, area ? text() : null);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+  } catch (e) {
+    status("The zip failed: " + e.message, 8000);
+  }
+};
 $("duckdb").onclick = () => {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([duck.loadSql(areaName)], { type: "text/plain" }));
