@@ -189,8 +189,8 @@ fn level(w: &Way) -> i32 {
     }
 }
 
-/// Find the roads that get `sidewalk=separate`, set the tag on them, and return how many.
-pub fn infer_separate_sidewalks(ways: &mut [Way], coords: &Coords) -> usize {
+/// Find the roads that get `sidewalk=separate`, set the tag on them, and return their way ids.
+pub fn infer_separate_sidewalks(ways: &mut [Way], coords: &Coords) -> Vec<i64> {
     // 1. The lines: car roads and sidewalk lines (nodes without coordinates leave the line).
     let mut raw: Vec<(usize, Vec<P>, u8)> = Vec::new(); // (index in ways, points, kind)
     for (wi, w) in ways.iter().enumerate() {
@@ -226,7 +226,7 @@ pub fn infer_separate_sidewalks(ways: &mut [Way], coords: &Coords) -> usize {
         }
     }
     if !raw.iter().any(|r| r.2 == 2) || !raw.iter().any(|r| r.2 == 1) {
-        return 0;
+        return Vec::new();
     }
     // the local frame: metres, from the mean latitude of the lines (the mean of the means)
     let lat0 = raw
@@ -384,9 +384,11 @@ pub fn infer_separate_sidewalks(ways: &mut [Way], coords: &Coords) -> usize {
     }
 
     // 3. Tag the roads. (lines[k] is made from raw[k])
-    let n = found.len();
+    let mut ids = Vec::with_capacity(found.len());
     for k in found {
-        ways[raw[k].0].tags.set("sidewalk", "separate");
+        let w = &mut ways[raw[k].0];
+        w.tags.set("sidewalk", "separate");
+        ids.push(w.id);
     }
-    n
+    ids
 }

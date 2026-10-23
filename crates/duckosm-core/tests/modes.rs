@@ -77,7 +77,7 @@ fn three_modes_equal_duckosm() {
             build_network(&cut_ways, &cut_coords, mode, &opts)
         } else if variant.ends_with("_sw") || variant.ends_with("_ft") {
             let mut w = ways.clone();
-            let n = infer_separate_sidewalks(&mut w, &coords);
+            let n = infer_separate_sidewalks(&mut w, &coords).len();
             assert_eq!(n, 46, "roads with sidewalk=separate");
             build_network(&w, &coords, mode, &opts)
         } else {

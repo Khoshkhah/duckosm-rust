@@ -191,7 +191,7 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
         Vec::new()
     };
     if p.infer_sidewalks && p.modes.contains(&Mode::Walking) {
-        sum.sidewalk_roads = sidewalks::infer_separate_sidewalks(&mut ways, &coords);
+        sum.sidewalk_roads = sidewalks::infer_separate_sidewalks(&mut ways, &coords).len();
         lap("sidewalk rule", &mut sum);
     }
     // the GeoParquet files are the input of the .duckdb writer, so they always go to a folder
