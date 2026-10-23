@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>duckOSM in the browser</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css" crossorigin>
+<!-- roadstyle's popup look (src/roadstyle/static/popup.css, copied by build.sh from roadstyle at ROADSTYLE_COMMIT) -->
+<link rel="stylesheet" href="map/roadstyle/popup.css">
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js" crossorigin></script>
 <script type="importmap">
 { "imports": {
@@ -16,19 +18,20 @@
 <style>
   :root {
     --bg: #ffffff; --surface: #f6f7f9; --fg: #111827; --muted: #6b7280; --line: #e5e7eb;
+    --blank: #efede8;   /* roadstyle's blank base map (basemaps.py "blank"); dark: its "blank_dark" */
     --accent: #2563eb; --accent-fg: #ffffff; --accent-soft: #dbeafe; --warn: #b45309; --warn-soft: #fef3c7;
     --error: #b91c1c; --shadow: 0 10px 30px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.08);
   }
   /* the theme of the system, unless the user selected one (the button in the header sets data-theme) */
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme=light]) {
-      --bg: #17181c; --surface: #22242a; --fg: #f3f4f6; --muted: #9ca3af; --line: #33363d;
+      --bg: #17181c; --surface: #22242a; --fg: #f3f4f6; --muted: #9ca3af; --line: #33363d; --blank: #14181d;
       --accent: #60a5fa; --accent-fg: #0b1220; --accent-soft: #1e3a5f; --warn: #fbbf24; --warn-soft: #3b2f12;
       --error: #f87171; --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
     }
   }
   :root[data-theme=dark] {
-    --bg: #17181c; --surface: #22242a; --fg: #f3f4f6; --muted: #9ca3af; --line: #33363d;
+    --bg: #17181c; --surface: #22242a; --fg: #f3f4f6; --muted: #9ca3af; --line: #33363d; --blank: #14181d;
     --accent: #60a5fa; --accent-fg: #0b1220; --accent-soft: #1e3a5f; --warn: #fbbf24; --warn-soft: #3b2f12;
     --error: #f87171; --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   }
@@ -215,7 +218,6 @@
     background: var(--surface); text-decoration: none; font-variant-numeric: tabular-nums; }
   #files .layers a:hover { outline: 1px solid var(--line); }
   #files .layers a span { color: var(--muted); font-size: 11.5px; }
-  .maplibregl-popup-content { color: #111827; font-size: 12.5px; }
 
   #status { position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 3; background: var(--fg); color: var(--bg); padding: 7px 14px; border-radius: 99px; font-size: 13px; box-shadow: var(--shadow); }
   #status:empty { display: none; }
@@ -281,7 +283,7 @@
       <label><input type="radio" name="base" value=""><span class="sw" style="background:#f2efe9"></span>OpenFreeMap</label>
       <label><input type="radio" name="base" value="esri_gray"><span class="sw" style="background:#e4e4e4"></span>Light gray</label>
       <label><input type="radio" name="base" value="satellite"><span class="sw" style="background:linear-gradient(135deg,#3d5a3a,#7b8a5c 50%,#a09a7c)"></span>Satellite</label>
-      <label><input type="radio" name="base" value="blank"><span class="sw" style="background:var(--bg)"></span>Blank</label>
+      <label><input type="radio" name="base" value="blank"><span class="sw" style="background:var(--blank)"></span>Blank</label>
       <hr id="ownsep" hidden>
       <label id="ownbox" hidden><input type="checkbox" id="ownlayers" checked>duckOSM layers</label>
     </div></div>
@@ -457,6 +459,7 @@ import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import * as duck from "./app/duck.js";
 import * as regions from "./app/regions.js";
 import { roadstyleWindows } from "./map/roadstyle_windows.js";
+import { POPUP, _rfields } from "./map/roadstyle/popup.js";   // roadstyle's popup text (static/popup.js, copied by build.sh)
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
@@ -1174,7 +1177,8 @@ $("run").onclick = async () => {
 // ---- step 5: the roads on the map, in roadstyle's style (map/): its sources, images and layers with the prefix rs-, over the base
 // map and under the area line, the matches, the extracts and the drawn shapes (as GeoLibre's roadstyle plugin adds a style) ----
 let roadsRun = 0;
-const ROAD_KEYS = ["name", "edge_id", "osm_id", "highway", "edge_ref", "lanes", "bridge", "tunnel", "access"];   // the road popup
+const ROAD_KEYS = ["name", "edge_id", "osm_id", "highway", "edge_ref", "lanes", "bridge", "tunnel", "access"];   // kept in the tiles
+let popupFields = null;   // the road popup's fields: the style's metadata roadstyle:interaction.popup (roadstyle's look)
 // the roads of the base map (OpenFreeMap's transportation layers) go away while the duckOSM roads show, so the two do not compete
 let roadsShown = false;
 function removeRoads() {
@@ -1197,6 +1201,7 @@ async function showRoads() {
   try {
     const t0 = performance.now();
     const r = await duck.roadsStyle($("mapmode").value, areaName, ROAD_KEYS);
+    popupFields = r.style.metadata?.["roadstyle:interaction"]?.popup ?? null;
     if (run !== roadsRun) return;                       // another choice came in the meantime
     await loaded;
     removeRoads();
@@ -1298,7 +1303,8 @@ function setBase() {
   }
   for (const l of style) if (l.source?.startsWith("rs-ov")) show(l, own && (!offLayers.has(l.id) || (l.type === "fill-extrusion" && view.threeD)));
   const bottom = style[0].id;
-  if (v === "blank") map.addLayer({ id: "base-over", type: "background", paint: { "background-color": dark() ? "#17181c" : "#ffffff" } }, bottom);
+  const blank = getComputedStyle(document.documentElement).getPropertyValue("--blank").trim();   // roadstyle's blank / blank_dark
+  if (v === "blank") map.addLayer({ id: "base-over", type: "background", paint: { "background-color": blank } }, bottom);
   else if (BASEMAPS[v]) {
     map.addSource("base-over", { type: "raster", tileSize: 256, ...BASEMAPS[v] });
     map.addLayer({ id: "base-over", type: "raster", source: "base-over" }, bottom);
@@ -1333,8 +1339,15 @@ map.on("click", async (e) => {
   const f = map.queryRenderedFeatures(e.point).find((x) => x.source.startsWith("rs-") && x.properties.__rs_edge != null && !x.source.startsWith("rs-ov"));
   if (!f) return;
   const p = (await duck.roadProps(f.properties.__rs_edge)) ?? {};
-  const rows = ROAD_KEYS.filter((k) => p[k] != null && p[k] !== "").map((k) => `<b>${k}</b> ${esc(p[k])}`);
-  new maplibregl.Popup().setLngLat(e.lngLat).setHTML(rows.join("<br>") || "(no data)").addTo(map);
+  // roadstyle's popup (popup.js, and _both and _sv of web_template.html at 2bccdcb): the name, the style's popup fields, both
+  // directions of a pair drawn as one line, and the Street View link; the values escaped (roadstyle's _rfields does not)
+  const safe = (q) => Object.fromEntries(Object.entries(q).map(([k, v]) => [k, typeof v === "string" ? esc(v) : v]));
+  const fields = (q) => _rfields(safe(q), popupFields);
+  const twin = p.__rs_edge2 != null ? (await duck.roadProps(p.__rs_edge2)) ?? {} : {};
+  const sec = (n, q) => '<div style="color:#777;margin-top:.3em">Direction ' + n + "</div>" + fields(q);
+  const html = Object.keys(twin).length ? (p.__rs_dup ? sec(1, twin) + sec(2, p) : sec(1, p) + sec(2, twin)) : fields(p);
+  const sv = '<div class="rs-sv" style="margin-top:4px"><a href="#" onclick="rsSetStreetView(true);return false">Street View</a></div>';
+  new maplibregl.Popup({ closeButton: true, maxWidth: POPUP.maxWidth }).setLngLat(e.lngLat).setHTML((html || "(no data)") + sv).addTo(map);
   // Street View and Google 3D (map/roadstyle_windows.js) need the road's whole line: DuckDB gives it by the edge_id
   rsWin.select((await duck.roadLine(p.edge_id).catch(() => null)) ?? [], e.lngLat, p, f.properties.__rs_edge);
 });

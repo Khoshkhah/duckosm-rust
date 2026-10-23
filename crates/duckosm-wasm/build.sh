@@ -28,5 +28,8 @@ git -C $R fetch -q origin 2>/dev/null || true
 git -C $R checkout -q $ROADSTYLE_COMMIT
 cargo build --release --target wasm32-unknown-unknown --manifest-path $R/rust/Cargo.toml -p roadstyle-wasm
 rm -rf crates/duckosm-wasm/www/map/pkg
+# roadstyle's popup look and text, the same files that roadstyle's pages use (src/roadstyle/static/)
+mkdir -p crates/duckosm-wasm/www/map/roadstyle
+cp $R/src/roadstyle/static/popup.css $R/src/roadstyle/static/popup.js crates/duckosm-wasm/www/map/roadstyle/
 wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/map/pkg \
   $R/rust/target/wasm32-unknown-unknown/release/roadstyle_wasm.wasm

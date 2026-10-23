@@ -107,7 +107,10 @@ Kaveh's layout of 2026-10-23: the data in card 5, the map in card 6.
   prefix. A layer with `text-font` gets a font of OpenFreeMap (Noto Sans).
 - When the roads show, the fill of the area goes away and only its line stays, so the fill does not change
   the colors of the roads.
-- A click on a road shows its data, but not while the user draws or uses **What is here?**. The map draws the roads
+- A click on a road shows its data, but not while the user draws or uses **What is here?**. The popup is roadstyle's: its look
+  (`popup.css`) and its text (`popup.js`: the name in bold, then the fields of the style's `roadstyle:interaction` popup
+  list), both directions of a pair drawn as one line, and a "Street View" link that opens the window. `build.sh` takes
+  the two files from roadstyle at `ROADSTYLE_COMMIT` into `www/map/roadstyle/` (not in git). The map draws the roads
   from roadstyle's pieces (`rs-simple`), and the road's properties come from the map worker by its number
   (`__rs_edge`). Before the tiles, the click looked for the source `rs-roads`, whose layers are hidden, and found
   nothing.
