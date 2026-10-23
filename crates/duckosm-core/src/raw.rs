@@ -121,6 +121,24 @@ impl Raw {
         self.ways.sort_by_key(|w| w.id);
     }
 
+    /// duckOSM's fixes for each mode write the arrows of the lanes (`turn_lanes_forward` / `_backward`) into
+    /// `raw.ways`, on a way that the mode has. ponytail: `in_network` is the network input (the highway ways and
+    /// ferry lines), not the road filter of each mode; a rule for a way that no mode keeps is rare.
+    pub fn set_arrows(&mut self, fixes: &OsmFixes, in_network: impl Fn(i64) -> bool) {
+        for r in fixes
+            .ways
+            .iter()
+            .filter(|r| !r.turn_lanes.is_empty() && in_network(r.osm_id))
+        {
+            if let Some(w) = self.way_mut(r.osm_id) {
+                set_tags(
+                    &mut w.tags,
+                    r.turn_lanes.iter().map(|(k, v)| (k.as_str(), v.as_str())),
+                );
+            }
+        }
+    }
+
     /// duckOSM's sidewalk rule writes `sidewalk=separate` and `duckosm:sidewalk=inferred` on the roads it finds.
     pub fn mark_sidewalks(&mut self, ids: &[i64]) {
         for &id in ids {

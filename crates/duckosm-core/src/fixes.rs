@@ -6,7 +6,7 @@
 //!   duckOSM `processors/osm_overrides.py`).
 //!
 //! The rules for the arrows of the lanes (`turn_lanes_*`) and `turn_restrictions` are not part of the
-//! network step. The reader keeps only highway ways and ferry lines, so a `tags` rule on another way
+//! network step (the arrows go only into `raw.ways`, `raw::Raw::set_arrows`). The reader keeps only highway ways and ferry lines, so a `tags` rule on another way
 //! has no effect here.
 
 use crate::filter::{Mode, ModeWay};
@@ -37,6 +37,9 @@ pub struct WayFix {
     pub layer: Option<i32>,
     /// Remove the way from the networks of these modes.
     pub exclude_modes: Vec<Mode>,
+    /// The arrows of the lanes: `turn:lanes:forward` / `turn:lanes:backward` and their value (`turn_lanes_forward` /
+    /// `turn_lanes_backward`). The network step does not read them; they go into `raw.ways`.
+    pub turn_lanes: Vec<(String, String)>,
 }
 
 /// A node of a new way: an OSM node, or a new node at (longitude, latitude).

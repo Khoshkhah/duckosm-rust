@@ -540,6 +540,16 @@ pub fn parse_osm_fixes(text: &str, label: &str) -> Result<OsmFixes, String> {
             lanes_backward: opt_int("lanes_backward")?,
             layer: opt_int("layer")?,
             exclude_modes,
+            turn_lanes: ["forward", "backward"]
+                .iter()
+                .filter_map(|d| {
+                    let v = s.get(&format!("turn_lanes_{d}"))?;
+                    Some(match v.as_str() {
+                        Some(t) => Ok((format!("turn:lanes:{d}"), t.to_string())),
+                        None => Err(err(format!("{what}.turn_lanes_{d} must be a text"))),
+                    })
+                })
+                .collect::<Result<_, _>>()?,
         });
     }
     for n in list("new_ways")? {

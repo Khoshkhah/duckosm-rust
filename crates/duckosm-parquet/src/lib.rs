@@ -1,16 +1,19 @@
 //! Write the edges and nodes of duckosm-core as GeoParquet (version 1.0, WKB geometry, EPSG:4326).
 
 use arrow_array::builder::{
-    BinaryBuilder, BooleanBuilder, Float32Builder, Int32Builder, Int64Builder, ListBuilder,
-    StringBuilder,
+    BinaryBuilder, BooleanBuilder, Float32Builder, Float64Builder, Int32Builder, Int64Builder,
+    ListBuilder, MapBuilder, StringBuilder,
 };
 use arrow_array::{ArrayRef, RecordBatch};
 use arrow_schema::{DataType, Field, Schema};
 use duckosm_core::filter::Mode;
 use duckosm_core::geom::Pt;
-use duckosm_core::graph::{GraphRow, TurnPath, TurnPermission, TurnRestriction};
+use duckosm_core::graph::{
+    GraphRow, MemberType, Relation, TurnPath, TurnPermission, TurnRestriction,
+};
 use duckosm_core::model::{Edge, MapRow, Node};
 use duckosm_core::network::Options;
+use duckosm_core::raw::{RawNode, RawTags, RawWay};
 use parquet::arrow::ArrowWriter;
 use parquet::basic::Compression;
 use parquet::file::metadata::KeyValue;
@@ -492,6 +495,118 @@ pub fn write_turn_path_restrictions_to<W: Write + Send>(
             i64s(c.iter().map(|r| r.from_edge)),
             Arc::new(via.finish()),
             i64s(c.iter().map(|r| r.to_edge)),
+        ]
+    })
+}
+
+/// Write rows as a plain Parquet file, one row group for each `ROW_GROUP` rows: `batch` makes the columns of a part.
+fn write_parts<W: Write + Send, T>(
+    out: W,
+    rows: &[T],
+    batch: impl Fn(&[T]) -> Vec<(&'static str, ArrayRef)>,
+) -> Result<(), String> {
+    let part = |c: &[T]| RecordBatch::try_from_iter(batch(c)).map_err(err);
+    let first = part(&rows[..rows.len().min(ROW_GROUP)])?;
+    let plain = WriterProperties::builder()
+        .set_compression(compression())
+        .set_max_row_group_row_count(Some(ROW_GROUP))
+        .build();
+    let mut w = ArrowWriter::try_new(out, first.schema(), Some(plain)).map_err(err)?;
+    w.write(&first).map_err(err)?;
+    for chunk in rows.chunks(ROW_GROUP).skip(1) {
+        w.write(&part(chunk)?).map_err(err)?;
+    }
+    w.close().map_err(err)?;
+    Ok(())
+}
+
+/// The tags as a DuckDB `MAP(VARCHAR, VARCHAR)`; no tags: NULL (as `ST_READOSM`).
+fn tags_column<'a>(rows: impl Iterator<Item = &'a RawTags>) -> ArrayRef {
+    let mut b = MapBuilder::new(None, StringBuilder::new(), StringBuilder::new());
+    for tags in rows {
+        for (k, v) in tags {
+            b.keys().append_value(k);
+            b.values().append_value(v);
+        }
+        b.append(!tags.is_empty())
+            .expect("the keys and the values have the same length");
+    }
+    Arc::new(b.finish())
+}
+
+/// `raw.nodes` of duckOSM: osm_id, lat, lon, tags.
+pub fn write_raw_nodes_to<W: Write + Send>(out: W, rows: &[RawNode]) -> Result<(), String> {
+    write_parts(out, rows, |c| {
+        let mut id = Int64Builder::with_capacity(c.len());
+        let (mut lat, mut lon) = (
+            Float64Builder::with_capacity(c.len()),
+            Float64Builder::with_capacity(c.len()),
+        );
+        for n in c {
+            id.append_value(n.id);
+            lat.append_value(n.lat);
+            lon.append_value(n.lon);
+        }
+        vec![
+            ("osm_id", Arc::new(id.finish()) as ArrayRef),
+            ("lat", Arc::new(lat.finish())),
+            ("lon", Arc::new(lon.finish())),
+            ("tags", tags_column(c.iter().map(|n| &n.tags))),
+        ]
+    })
+}
+
+/// `raw.ways` of duckOSM: osm_id, tags, refs. The ways with fewer than 2 nodes are not in it.
+pub fn write_raw_ways_to<W: Write + Send>(out: W, rows: &[RawWay]) -> Result<(), String> {
+    let rows: Vec<&RawWay> = rows.iter().filter(|w| w.refs.len() >= 2).collect();
+    write_parts(out, &rows, |c| {
+        let mut id = Int64Builder::with_capacity(c.len());
+        let mut refs = ListBuilder::new(Int64Builder::new());
+        for w in c {
+            id.append_value(w.id);
+            refs.values().append_slice(&w.refs);
+            refs.append(true);
+        }
+        vec![
+            ("osm_id", Arc::new(id.finish()) as ArrayRef),
+            ("tags", tags_column(c.iter().map(|w| &w.tags))),
+            ("refs", Arc::new(refs.finish())),
+        ]
+    })
+}
+
+/// `raw.relations` of duckOSM: osm_id, tags, refs, ref_roles, ref_types (`node`, `way` or `relation`; DuckDB
+/// casts the text to duckOSM's ENUM).
+pub fn write_raw_relations_to<W: Write + Send>(out: W, rows: &[Relation]) -> Result<(), String> {
+    write_parts(out, rows, |c| {
+        let mut id = Int64Builder::with_capacity(c.len());
+        let mut refs = ListBuilder::new(Int64Builder::new());
+        let mut roles = ListBuilder::new(StringBuilder::new());
+        let mut types = ListBuilder::new(StringBuilder::new());
+        for r in c {
+            id.append_value(r.id);
+            for (m, t, role) in &r.members {
+                refs.values().append_value(*m);
+                // no role: NULL, as ST_READOSM
+                roles
+                    .values()
+                    .append_option((!role.is_empty()).then_some(role));
+                types.values().append_value(match t {
+                    MemberType::Node => "node",
+                    MemberType::Way => "way",
+                    MemberType::Relation => "relation",
+                });
+            }
+            refs.append(true);
+            roles.append(true);
+            types.append(true);
+        }
+        vec![
+            ("osm_id", Arc::new(id.finish()) as ArrayRef),
+            ("tags", tags_column(c.iter().map(|r| &r.tags))),
+            ("refs", Arc::new(refs.finish())),
+            ("ref_roles", Arc::new(roles.finish())),
+            ("ref_types", Arc::new(types.finish())),
         ]
     })
 }

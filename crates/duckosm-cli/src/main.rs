@@ -73,6 +73,10 @@ struct Cli {
     /// A boundary (GeoJSON, as `duckosm boundary` writes it): the PBF is cut to it (as osmium complete_ways).
     #[arg(long, value_name = "FILE", conflicts_with = "config")]
     boundary: Option<PathBuf>,
+    /// With --boundary: also write duckOSM's raw.* of the area (raw_nodes.parquet, raw_ways.parquet,
+    /// raw_relations.parquet, as osmium's smart cut), the input of the base-map layers (docs/features.md).
+    #[arg(long, requires = "boundary")]
+    raw: bool,
     /// Print the time of each step.
     #[arg(long)]
     timing: bool,
@@ -132,6 +136,7 @@ fn run() -> Result<(), String> {
     }
     if cli.boundary.is_some() {
         p.boundary = cli.boundary.clone();
+        p.raw = cli.raw;
     }
     p.geoparquet = false;
     p.duckdb = false;
