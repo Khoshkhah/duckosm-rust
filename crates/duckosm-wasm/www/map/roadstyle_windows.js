@@ -142,7 +142,8 @@ if(_svWindow){
     '<button type="button" data-step="15" title="Forward 15 m along the road">\u25b6</button>'+
     '<button type="button" title="Close">\u2715</button></div>'+
     '<div class="rs-svw-msg">Click a road to see it in Street View.</div>'+
-    '<iframe title="Google Street View" allowfullscreen hidden></iframe><div class="rs-svw-pano" hidden></div>';
+    // duckosm-rust: credentialless, so the frame loads in a cross-origin isolated page (serve.py's COEP, for the threads)
+    '<iframe title="Google Street View" allowfullscreen credentialless hidden></iframe><div class="rs-svw-pano" hidden></div>';
   document.body.appendChild(w);
   const bar=w.firstChild, ttl=w.querySelector(".rs-svw-t"), msg=w.querySelector(".rs-svw-msg"),
         fr=w.querySelector("iframe"), pdiv=w.querySelector(".rs-svw-pano"), flip=w.querySelector(".rs-svw-mode");
