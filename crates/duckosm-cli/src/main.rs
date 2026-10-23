@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 /// duckosm-rust: build the road networks of duckOSM (driving, walking, cycling) from an .osm.pbf file.
 #[derive(Parser)]
-#[command(version)]
+#[command(name = "duckosm-rust", version)]
 struct Cli {
     /// The input .osm.pbf file (already cut to the area). Not with --config.
     #[arg(required_unless_present = "config", conflicts_with = "config")]
