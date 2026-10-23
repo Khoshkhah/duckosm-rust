@@ -1,5 +1,7 @@
 use clap::Parser;
-use duckosm_build::{build, config, parse_modes, NetworkMode, NetworkOptions, Params};
+use duckosm_build::{
+    build, config, parse_modes, LevelsMethod as Method, NetworkMode, NetworkOptions, Params,
+};
 use std::path::PathBuf;
 
 /// duckosm-rust: build the driving network of an .osm.pbf file (a spike).
@@ -76,6 +78,11 @@ struct Cli {
     /// A boundary (GeoJSON, as `duckosm boundary` writes it): the PBF is cut to it (as osmium complete_ways).
     #[arg(long, value_name = "FILE", conflicts_with = "config")]
     boundary: Option<PathBuf>,
+    /// The drawing order of the roads (visualization.edge_levels, docs/levels.md): tags (a rule on layer,
+    /// bridge and tunnel), solve (roadstyle's optimization) or none. Default: tags, or the config's
+    /// options.levels (on: solve).
+    #[arg(long, value_name = "METHOD")]
+    levels: Option<String>,
     /// Print the time of each step.
     #[arg(long)]
     timing: bool,
@@ -124,6 +131,7 @@ fn run() -> Result<(), String> {
             build_graph: !cli.no_graph,
             extract_restrictions: !cli.no_restrictions,
             ways_tables: !cli.no_ways_tables,
+            ..NetworkOptions::default()
         };
         (
             cli.pbf.clone().unwrap(),
@@ -131,6 +139,10 @@ fn run() -> Result<(), String> {
             p,
         )
     };
+    if let Some(m) = &cli.levels {
+        p.options.levels = Method::parse(m)
+            .ok_or_else(|| format!("--levels: '{m}' is not tags, solve or none"))?;
+    }
     if let Some(f) = &cli.fixes {
         p.osm_fixes = Some(f.clone());
     }
@@ -172,6 +184,9 @@ fn run() -> Result<(), String> {
             m.edge_graph,
             m.turn_restrictions
         );
+    }
+    if let Some(l) = &sum.levels {
+        eprintln!("{l}");
     }
     if cli.timing {
         for (what, secs) in &sum.steps {

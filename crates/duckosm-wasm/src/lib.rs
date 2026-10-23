@@ -1,10 +1,13 @@
 //! duckOSM in the browser (docs/browser.md): the bytes of a `.osm.pbf` file in, duckOSM's tables of the
 //! chosen modes out, as GeoParquet bytes. The same steps and the same writer as the native build.
 
-use duckosm_build::{config::parse_osm_fixes, parse_modes, write_area_tables, write_tables, Area};
+use duckosm_build::{
+    config::parse_osm_fixes, parse_modes, write_area_tables, write_levels, write_tables, Area,
+};
 use duckosm_core::boundary::Boundary;
 use duckosm_core::filter::Mode;
 use duckosm_core::fixes::OsmFixes;
+use duckosm_core::levels::{LevelEdges, Method};
 use duckosm_core::network::{build_network_with, Options};
 use duckosm_core::osmjson::OsmJson;
 use duckosm_core::pbf::BlobReader;
@@ -140,6 +143,7 @@ pub fn build_area(
     boundary: &str,
     modes: &str,
     fixes_yaml: Option<String>,
+    levels: Option<String>,
 ) -> Result<Output, JsError> {
     let text = boundary;
     let boundary = Boundary::parse(boundary).map_err(|e| JsError::new(&e))?;
@@ -147,7 +151,13 @@ pub fn build_area(
         let r: Box<dyn Source> = Box::new(BlobRead::new(region.clone())?);
         BlobReader::new_seekable(r).map_err(|e| e.to_string())
     };
-    js_build(Input::Area(&open, &boundary), modes, fixes_yaml, Some(text))
+    js_build(
+        Input::Area(&open, &boundary),
+        modes,
+        fixes_yaml,
+        Some(text),
+        levels,
+    )
 }
 
 /// The same as [`build_area`], with the bytes of the region file (for Node, which has no `FileReaderSync`).
@@ -157,6 +167,7 @@ pub fn build_area_bytes(
     boundary: &str,
     modes: &str,
     fixes_yaml: Option<String>,
+    levels: Option<String>,
 ) -> Result<Output, JsError> {
     let text = boundary;
     let boundary = Boundary::parse(boundary).map_err(|e| JsError::new(&e))?;
@@ -164,7 +175,13 @@ pub fn build_area_bytes(
         let r: Box<dyn Source> = Box::new(io::Cursor::new(region));
         BlobReader::new_seekable(r).map_err(|e| e.to_string())
     };
-    js_build(Input::Area(&open, &boundary), modes, fixes_yaml, Some(text))
+    js_build(
+        Input::Area(&open, &boundary),
+        modes,
+        fixes_yaml,
+        Some(text),
+        levels,
+    )
 }
 
 /// Build duckOSM's tables of `modes` (comma separated: driving, walking, cycling) from the bytes of a `.osm.pbf`
@@ -177,12 +194,14 @@ pub fn build(
     modes: &str,
     fixes_yaml: Option<String>,
     boundary: Option<String>,
+    levels: Option<String>,
 ) -> Result<Output, JsError> {
     js_build(
         Input::Pbf(pbf_bytes),
         modes,
         fixes_yaml,
         boundary.as_deref(),
+        levels,
     )
 }
 
@@ -195,6 +214,7 @@ pub fn build_osm_json(
     boundary: Option<String>,
     modes: &str,
     fixes_yaml: Option<String>,
+    levels: Option<String>,
 ) -> Result<Output, JsError> {
     let parsed = boundary
         .as_deref()
@@ -206,6 +226,7 @@ pub fn build_osm_json(
         modes,
         fixes_yaml,
         boundary.as_deref(),
+        levels,
     )
 }
 
@@ -214,7 +235,13 @@ fn js_build(
     modes: &str,
     fixes_yaml: Option<String>,
     boundary: Option<&str>,
+    levels: Option<String>,
 ) -> Result<Output, JsError> {
+    let levels = match levels.as_deref() {
+        None => Method::default(),
+        Some(m) => Method::parse(m)
+            .ok_or_else(|| JsError::new(&format!("levels: '{m}' is not tags, solve or none")))?,
+    };
     let files = Object::new();
     let built_at = (js_sys::Date::now() * 1000.0) as i64;
     let summary = run(
@@ -222,6 +249,7 @@ fn js_build(
         modes,
         fixes_yaml.as_deref(),
         boundary,
+        levels,
         built_at,
         |name| {
             let parts = Array::new();
@@ -244,11 +272,15 @@ pub fn run<W: Write + Send>(
     modes: &str,
     fixes_yaml: Option<&str>,
     boundary: Option<&str>,
+    levels: Method,
     built_at: i64,
     mut file: impl FnMut(&str) -> Result<W, String>,
 ) -> Result<String, String> {
     let modes = parse_modes(modes)?;
-    let opts = Options::default();
+    let opts = Options {
+        levels,
+        ..Options::default()
+    };
     let fixes = match fixes_yaml {
         Some(text) => parse_osm_fixes(text, "the OSM fixes file")?,
         None => OsmFixes::default(),
@@ -304,10 +336,15 @@ pub fn run<W: Write + Send>(
     }
     let mut summary = Vec::new();
     let mut mode_nodes = Vec::new();
+    let mut level_edges = LevelEdges::default();
     for mode in &modes {
         let net = build_network_with(&ways, &coords, *mode, &opts, &fixes, &relations)?;
         write_tables(&net, *mode, &opts, &ways, &mut file)?;
         fixes.set_arrows(&mut ways, &net.ways, *mode);
+        if levels != Method::None {
+            level_edges.add(*mode, false, &net.edges);
+            level_edges.add(*mode, true, &net.private_edges);
+        }
         summary.push(format!(
             "{}: {} edges, {} nodes, {} private edges, {} edge_graph rows, {} turn restrictions",
             mode.name(),
@@ -328,5 +365,8 @@ pub fn run<W: Write + Send>(
         built_at,
     };
     write_area_tables(&area, &mut file)?;
+    if let Some(l) = write_levels(&level_edges, levels, built_at, &mut file)? {
+        summary.push(l);
+    }
     Ok(summary.join("\n"))
 }

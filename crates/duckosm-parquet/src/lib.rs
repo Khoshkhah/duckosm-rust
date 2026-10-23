@@ -766,3 +766,72 @@ pub fn write_metadata_to<W: Write + Send>(out: W, m: &Metadata) -> Result<(), St
         ]
     })
 }
+
+/// Write `visualization.edge_levels` (docs/levels.md): the four numbers of each edge, and the heads and the caps.
+pub fn write_edge_levels_to<W: Write + Send>(
+    out: W,
+    rows: &[duckosm_core::levels::Row],
+) -> Result<(), String> {
+    let fields = vec![
+        field("edge_id", DataType::Int64),
+        field("casing_start", DataType::Int64),
+        field("casing_level", DataType::Int64),
+        field("casing_end", DataType::Int64),
+        field("fill_level", DataType::Int64),
+        field("head_start_m", DataType::Float64),
+        field("head_end_m", DataType::Float64),
+        field("cap_start", DataType::Utf8),
+        field("cap_end", DataType::Utf8),
+    ];
+    write_rows(out, fields, rows, |c| {
+        let f64s = |get: fn(&duckosm_core::levels::Row) -> Option<f64>| -> ArrayRef {
+            let mut b = Float64Builder::new();
+            c.iter().for_each(|r| b.append_option(get(r)));
+            Arc::new(b.finish())
+        };
+        vec![
+            i64s(c.iter().map(|r| r.edge_id)),
+            i64s(c.iter().map(|r| r.casing_start)),
+            i64s(c.iter().map(|r| r.casing_level)),
+            i64s(c.iter().map(|r| r.casing_end)),
+            i64s(c.iter().map(|r| r.fill_level)),
+            f64s(|r| r.head_start_m),
+            f64s(|r| r.head_end_m),
+            texts(c.iter().map(|r| r.cap_start)),
+            texts(c.iter().map(|r| r.cap_end)),
+        ]
+    })
+}
+
+/// The one row of `visualization.edge_levels_meta`: where the numbers come from (`source` is `tags` or `solve`; a
+/// level area of duckOSM writes `area` and its folder in `area`).
+pub struct LevelsMeta {
+    pub source: &'static str,
+    pub n_edges: i64,
+    pub edge_hash: String,
+    pub roadstyle_version: &'static str,
+    /// ISO 8601 text, as roadstyle writes it (`2026-10-22T00:20:45+00:00`).
+    pub created: String,
+}
+
+/// Write `visualization.edge_levels_meta`.
+pub fn write_edge_levels_meta_to<W: Write + Send>(out: W, m: &LevelsMeta) -> Result<(), String> {
+    let fields = vec![
+        field("source", DataType::Utf8),
+        field("area", DataType::Utf8),
+        field("n_edges", DataType::Int64),
+        field("edge_hash", DataType::Utf8),
+        field("roadstyle_version", DataType::Utf8),
+        field("created", DataType::Utf8),
+    ];
+    write_rows(out, fields, std::slice::from_ref(m), |c| {
+        vec![
+            texts(c.iter().map(|r| Some(r.source))),
+            texts(c.iter().map(|_| None)),
+            i64s(c.iter().map(|r| r.n_edges)),
+            texts(c.iter().map(|r| Some(r.edge_hash.as_str()))),
+            texts(c.iter().map(|r| Some(r.roadstyle_version))),
+            texts(c.iter().map(|r| Some(r.created.as_str()))),
+        ]
+    })
+}

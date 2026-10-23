@@ -1,6 +1,7 @@
 // A copy of geolibre-roadstyle's spike/worker/roads_sql.js (commit c6f9930, MIT, Kaveh), for the roads map of duckosm-rust's page. One
-// change: the option {levels: "tags"} (duckosm-rust has no level area): the drawing levels come from roadstyle's compute_levels(method="tags")
-// in SQL, not from visualization.edge_levels. Give this change to geolibre-roadstyle, then use its file again.
+// change: the option {levels: "tags"}: the drawing levels come from roadstyle's compute_levels(method="tags") in SQL, not from
+// visualization.edge_levels; and the stored levels can also come from duckosm-rust (edge_levels_meta.source "tags" or "solve", no level
+// area; docs/levels.md). Give these changes to geolibre-roadstyle, then use its file again.
 //
 // Step 1 of the full port (docs/design/rust-spike.md): the roads table that the Rust module reads, made by duckdb-wasm from a duckOSM file.
 // The SQL of mapstyle.map (_roads_union, load_roads), the checks of roadstyle's load_area_levels and the columns that render_map adds
@@ -29,7 +30,8 @@ async function roadsUnion(q, catalog) {
   ].join(" UNION ALL ");
 }
 
-// load_area_levels' checks: the stored levels are from a level area and were solved for these edges (their number and the hash of their ids)
+// load_area_levels' checks: the stored levels are from a level area (or from duckosm-rust: "tags", "solve") and were made for these edges
+// (their number and the hash of their ids)
 async function checkLevels(q) {
   let meta;
   try {
@@ -37,7 +39,7 @@ async function checkLevels(q) {
   } catch (e) {
     throw new Error("no visualization.edge_levels_meta in this file: make and solve its level area (duckosm levels)");
   }
-  if (!meta || meta.source !== "area") throw new Error("the stored levels are not from a level area: make and solve its level area again");
+  if (!meta || !["area", "tags", "solve"].includes(meta.source)) throw new Error("the stored levels are not from a level area: make and solve its level area again");
   const ids = (await q("SELECT eid FROM r ORDER BY eid")).map((r) => BigInt(r.eid));
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new BigInt64Array(ids).buffer));     // _hash: sha256 of the sorted int64 ids
   const hash = [...digest].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);

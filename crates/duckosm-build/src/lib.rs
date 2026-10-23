@@ -4,6 +4,7 @@
 use duckosm_core::boundary::Boundary;
 use duckosm_core::filter::Mode;
 use duckosm_core::fixes::OsmFixes;
+use duckosm_core::levels::LevelEdges;
 use duckosm_core::model::{Network, Way};
 use duckosm_core::network::{build_network_with, Options};
 use duckosm_core::{pbf, sidewalks};
@@ -14,9 +15,10 @@ use std::time::Instant;
 pub mod area;
 pub mod config;
 
-pub use area::{write_area_tables, Area};
+pub use area::{write_area_tables, write_levels, Area};
 
 pub use duckosm_core::filter::Mode as NetworkMode;
+pub use duckosm_core::levels::Method as LevelsMethod;
 pub use duckosm_core::network::Options as NetworkOptions;
 
 /// What to build and write.
@@ -85,6 +87,8 @@ pub struct Summary {
     pub steps: Vec<(String, f64)>,
     /// Roads that got `sidewalk=separate`.
     pub sidewalk_roads: usize,
+    /// A summary of the drawing levels, when they were made.
+    pub levels: Option<String>,
 }
 
 /// Write the tables of one mode, each to a writer from `file`, which gets the file name (for example
@@ -220,6 +224,7 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
     };
     std::fs::create_dir_all(&pq_dir).map_err(|e| e.to_string())?;
     let mut mode_nodes = Vec::new();
+    let mut level_edges = LevelEdges::default();
     for mode in &p.modes {
         let net = build_network_with(&ways, &coords, *mode, &p.options, &fixes, &relations)?;
         lap(&format!("build {}", mode.name()), &mut sum);
@@ -244,6 +249,10 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
         });
         // duckOSM: the arrows of the fixes go into the raw tags after this mode, so the next modes see them
         fixes.set_arrows(&mut ways, &net.ways, *mode);
+        if p.options.levels != LevelsMethod::None {
+            level_edges.add(*mode, false, &net.edges);
+            level_edges.add(*mode, true, &net.private_edges);
+        }
         mode_nodes.push((*mode, net.nodes));
     }
     let boundary = match p.area_boundary.as_ref().or(p.boundary.as_ref()) {
@@ -272,6 +281,15 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
         std::fs::File::create(&path).map_err(|e| e.to_string())
     })?;
     lap("write the area tables", &mut sum);
+    sum.levels = write_levels(&level_edges, p.options.levels, built_at, |name| {
+        let path = pq_dir.join(name);
+        sum.files
+            .push((name.trim_end_matches(".parquet").to_string(), path.clone()));
+        std::fs::File::create(&path).map_err(|e| e.to_string())
+    })?;
+    if sum.levels.is_some() {
+        lap("levels", &mut sum);
+    }
     if p.geoparquet {
         write_layers_json(&pq_dir, &sum)?;
         sum.files

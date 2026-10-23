@@ -24,6 +24,17 @@ pub fn write_database(db: &Path, parquet_dir: &Path, modes: &[&str]) -> Result<(
         &["global_junctions", "boundary", "visualization_metadata"],
     )?;
     write_schema(&con, parquet_dir, "mm", &["transfers"])?;
+    if parquet_dir
+        .join("edge_levels_visualization.parquet")
+        .exists()
+    {
+        write_schema(
+            &con,
+            parquet_dir,
+            "visualization",
+            &["edge_levels", "edge_levels_meta"],
+        )?;
+    }
     if parquet_dir.join("transfers_mm.parquet").exists() {
         con.execute_batch(&mm_edges(modes))
             .map_err(|e| e.to_string())?;

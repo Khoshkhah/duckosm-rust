@@ -45,6 +45,13 @@ python tools/compare_with_duckosm.py monaco_golden.duckdb out/monaco.duckdb [dri
 ```
 
 `tests/data/golden_monaco_modes.yaml` is the config of the three-mode golden (four variants; the comments say which lines to change). `tools/make_golden_summary.py` writes `tests/data/monaco_modes_summary.tsv` from those databases. `tools/make_golden.py` writes `tests/data/monaco_driving_edges.tsv` from such a database.
+`tools/compare_levels.py` compares `visualization.edge_levels` of a duckosm-rust file with roadstyle's result on
+the same edges, in duckOSM's virtual environment ([levels.md](levels.md), "The equality check"):
+
+```bash
+/home/kaveh/projects/duckOSM/.venv/bin/python tools/compare_levels.py out/monaco.duckdb
+```
+
 `tools/edge_id_reference.py` is the `edge_id` hash in plain Python. It compares itself with the
 installed DuckDB, and with every edge of a duckOSM database:
 
@@ -100,7 +107,7 @@ OpenFreeMap.
 Run the same `.wasm` file in Node. The script writes all files and prints the time and the WebAssembly memory:
 
 ```bash
-node crates/duckosm-wasm/www/run_node.mjs tests/data/monaco.osm.pbf out-wasm driving,walking,cycling [fixes.yaml]
+node crates/duckosm-wasm/www/run_node.mjs tests/data/monaco.osm.pbf out-wasm driving,walking,cycling [fixes.yaml] [tags|solve|none]
 ```
 
 Checks:

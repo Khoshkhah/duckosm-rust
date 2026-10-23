@@ -31,6 +31,8 @@ export const TABLES = {
   boundary: "The area: the boundary and its properties.",
   visualization_metadata: "One row: the center and zoom of the area for a map, its time zone, and the build time.",
   transfers: "The changes of mode (walk to car or bike, and back) at the nodes that the modes share.",
+  edge_levels: "The drawing order of each edge: a bridge over the road under it, a tunnel under the road over it.",
+  edge_levels_meta: "One row: how the drawing order was made (from the tags, or solved) and for which edges.",
 };
 export const REFERENCE = "https://khoshkhah.github.io/duckOSM/reference/database/";
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "area";
@@ -135,13 +137,15 @@ export async function zipAll(areaName, boundary) {
   return { blob: new Blob([zipSync(files)], { type: "application/zip" }), name: slug(areaName) + ".zip" };
 }
 
-// the style of the roads map: duckdb-wasm writes roads.parquet (the drawing levels from the tags), and roadstyle's Rust module makes
+// the style of the roads map: duckdb-wasm writes roads.parquet (the drawing levels of visualization.edge_levels, else from the tags),
+// and roadstyle's Rust module makes
 // the MapLibre style in a new worker (map/map_worker.js; a worker that ends gives its memory back)
 export async function roadsStyle(mode, name) {
   const t = performance.now();
   const q = async (sql) => (await conn.query(sql)).toArray().map((r) => r.toJSON());
   await db.dropFile("roads.parquet").catch(() => {});     // duckdb-wasm does not see a second COPY to a kept file name
-  await writeRoads(q, "memory", mode, { levels: "tags" });
+  const stored = tables.some((t) => t.mode === "visualization" && t.table === "edge_levels");
+  await writeRoads(q, "memory", mode, { levels: stored ? "stored" : "tags" });
   const roads = await db.copyFileToBuffer("roads.parquet");
   const roadsSeconds = (performance.now() - t) / 1000;
   const out = await new Promise((ok, fail) => {

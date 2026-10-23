@@ -27,11 +27,12 @@ onmessage = async ({ data }) => {
     const t1 = performance.now();
     postMessage({ step: "building the networks" });
     const fixes = data.fixes || undefined;
+    const levels = data.levels || undefined;   // "tags" (the default) or "solve"
     const res = data.region
-      ? build_area(data.region, data.boundary, data.modes, fixes)
+      ? build_area(data.region, data.boundary, data.modes, fixes, levels)
       : data.json
-        ? build_osm_json(new Uint8Array(data.json), data.boundary || undefined, data.modes, fixes)
-        : build(new Uint8Array(data.pbf), data.modes, fixes, data.boundary || undefined);
+        ? build_osm_json(new Uint8Array(data.json), data.boundary || undefined, data.modes, fixes, levels)
+        : build(new Uint8Array(data.pbf), data.modes, fixes, data.boundary || undefined, levels);
     const t2 = performance.now();
     // one buffer for each file: duckdb-wasm registers a file as one buffer
     const files = {};

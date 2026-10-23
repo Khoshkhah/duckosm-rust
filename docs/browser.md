@@ -218,7 +218,9 @@ style of roadstyle:
 1. duckdb-wasm writes `roads.parquet` from the tables. `www/map/roads_sql.js` is a copy of geolibre-roadstyle's
    `spike/worker/roads_sql.js` with one more option: `{levels: "tags"}`. The page has no level area, so the
    drawing levels come from roadstyle's `compute_levels(method="tags")`, written in SQL: from layer, bridge
-   and tunnel, and the levels of the roads at each end node.
+   and tunnel, and the levels of the roads at each end node. Since 2026-10-22 the build writes
+   `visualization.edge_levels` (the tags rule, or roadstyle's solver: [levels.md](levels.md)), and the map reads
+   that table.
 2. roadstyle's Rust module (geolibre-roadstyle `spike/rust`, commit `38cd2aa`, built by `build.sh` into
    `www/map/pkg/`) makes the complete MapLibre style in a worker (`www/map/map_worker.js`), with the look
    `www/map/look.json` ("google" colors). A new worker for each style gives the memory back.

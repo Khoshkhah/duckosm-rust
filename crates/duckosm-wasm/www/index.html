@@ -339,6 +339,10 @@
     <label><input type="checkbox" name="mode" value="walking" checked>Walking</label>
     <label><input type="checkbox" name="mode" value="cycling" checked>Cycling</label>
   </div>
+  <div class="grid2" style="margin-top:10px">
+    <label for="levels" class="small">Drawing order</label>
+    <select id="levels"><option value="tags">from the tags (fast)</option><option value="solve">solved (roadstyle's optimization)</option></select>
+  </div>
   <details><summary>Advanced: corrections to the map data</summary>
     <p class="small muted" style="margin:8px 0">Optional: your fixes of OpenStreetMap errors, for example a one-way street.
       <a href="https://khoshkhah.github.io/duckOSM/guides/fix-osm-errors/" target="_blank" rel="noopener">The file format</a> (turn rules are not used here).</p>
@@ -939,16 +943,17 @@ $("run").onclick = async () => {
     if (area) keep("duckosm.boundary", text());   // the area again after a reload
     const fixes = $("fixes").files[0] ? await $("fixes").files[0].text() : null;
     const threads = Number(new URLSearchParams(location.search).get("threads")) || undefined;  // ?threads=N: the size of the pool
+    const levels = $("levels").value;   // visualization.edge_levels: the tags rule or the solver (docs/levels.md)
     let msg, download = null;
     if (source === "region") {
-      msg = { region: regionFile, boundary: text(), modes, fixes, threads };   // the worker reads the File piece by piece
+      msg = { region: regionFile, boundary: text(), modes, fixes, levels, threads };   // the worker reads the File piece by piece
     } else if (source === "cut") {
-      msg = { pbf: await $("pbf").files[0].arrayBuffer(), boundary: area ? text() : null, modes, fixes, threads };
+      msg = { pbf: await $("pbf").files[0].arrayBuffer(), boundary: area ? text() : null, modes, fixes, levels, threads };
     } else {
       const d0 = performance.now();
       const got = await duck.overpass(area.polys, (t) => progress(t + "…"));
       download = { seconds: (performance.now() - d0) / 1000, bytes: got.bytes.byteLength, server: got.server };
-      msg = { json: got.bytes, boundary: text(), modes, fixes, threads };
+      msg = { json: got.bytes, boundary: text(), modes, fixes, levels, threads };
     }
     const out = await duck.build(msg, (t) => progress(t + "…"));
     const built = performance.now();

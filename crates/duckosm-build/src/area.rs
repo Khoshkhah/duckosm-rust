@@ -4,6 +4,7 @@
 
 use duckosm_core::filter::Mode;
 use duckosm_core::geom::Pt;
+use duckosm_core::levels::{self, LevelEdges, Method};
 use duckosm_core::model::{Node, Way};
 use duckosm_core::network::{self, Coords, Options};
 use duckosm_parquet::{self as pq, Metadata, Prop, Transfer};
@@ -221,4 +222,74 @@ fn transfers(nodes: &[(Mode, Vec<Node>)]) -> Vec<Transfer> {
         }
     }
     out
+}
+
+/// `visualization.edge_levels` and `edge_levels_meta` (docs/levels.md) from the edges of all modes, with the method
+/// of the options. `built_at` (microseconds since 1970, UTC) is the `created` time. Returns a summary line, or None
+/// when the method is `none`.
+pub fn write_levels<W: Write + Send>(
+    edges: &LevelEdges,
+    method: Method,
+    built_at: i64,
+    mut file: impl FnMut(&str) -> Result<W, String>,
+) -> Result<Option<String>, String> {
+    let Some(lv) = levels::compute(edges, method)? else {
+        return Ok(None);
+    };
+    pq::write_edge_levels_to(file("edge_levels_visualization.parquet")?, &lv.rows)?;
+    let meta = pq::LevelsMeta {
+        source: method.name(),
+        n_edges: lv.rows.len() as i64,
+        edge_hash: lv.edge_hash.clone(),
+        roadstyle_version: levels::ROADSTYLE_VERSION,
+        created: iso_time(built_at),
+    };
+    pq::write_edge_levels_meta_to(file("edge_levels_meta_visualization.parquet")?, &meta)?;
+    let mut line = format!(
+        "levels ({}): {} edges, {} roads",
+        method.name(),
+        lv.rows.len(),
+        lv.roads
+    );
+    if method == Method::Solve {
+        line += &format!(
+            ", {} stack pairs given up, {} order wishes not kept (best values of the stages: {:?})",
+            lv.given_up, lv.orders_not_kept, lv.stages
+        );
+    }
+    Ok(Some(line))
+}
+
+/// Microseconds since 1970 as roadstyle writes a time: `2026-10-22T00:20:45+00:00`.
+fn iso_time(micros: i64) -> String {
+    let secs = micros.div_euclid(1_000_000);
+    let (days, s) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));
+    // the civil date of a day number (Howard Hinnant's days_from_civil, inverted)
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!(
+        "{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}+00:00",
+        s / 3600,
+        s / 60 % 60,
+        s % 60
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn iso_time() {
+        assert_eq!(super::iso_time(0), "1970-01-01T00:00:00+00:00");
+        assert_eq!(
+            super::iso_time(1_792_628_445_000_000),
+            "2026-10-22T00:20:45+00:00"
+        );
+    }
 }

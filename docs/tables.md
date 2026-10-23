@@ -19,7 +19,7 @@ mode: `edges`, `nodes`, `private_edges`, `edge_graph`, `edge_id_map`, `turn_perm
 | 1 | `main.global_junctions` | The nodes where every mode cuts its ways. | 4,318 | Small: the build computes them. |
 | 1 | `main.visualization_metadata` | One row: the boundary, the center, the zoom, the time zone, the build time and version. | 1 | Small, except the time zone (see below). |
 | 1 | `mm.edges` (a view) and `mm.transfers` | Routing across modes: all edges with their mode, and the changes of mode at the nodes that walking shares with another mode. | view / 11,620 | Small to medium: SQL on the tables of the build. |
-| 2 | `visualization.edge_levels`, `edge_levels_meta` | The drawing order of the roads (bridges over roads). | 13,298 / 1 | Medium: duckOSM solves an optimization (OR-tools). The tags rule of the map (`www/map/roads_sql.js`) is simpler and gives other numbers. |
+| 2 | `visualization.edge_levels`, `edge_levels_meta` | The drawing order of the roads (bridges over roads). | 13,298 / 1 | Done: [levels.md](levels.md). The tags rule (the default) and roadstyle's solver (`--levels solve`). |
 | 2 | `driving.lane_profile` | Each lane of each driving edge and bus-only edge, left to right. | 3,176 | Medium: a port of duckOSM's lane rules (`docs/design/gmns_lane_profile.md`). |
 | 2 | `bus.routes`, `bus.route_edges` | The bus routes (OSM relations) as the driving edges they travel, in order. | 56 / 5,609 | Medium: the relations, and a walk along the edges (as the turn restrictions through a way). |
 | 3 | `raw.nodes`, `raw.ways`, `raw.relations` | The OSM data of the area as read from the PBF. | 34,326 / 5,715 / 336 | In the session "Base map features" (its approach A writes `raw.*`). |
@@ -35,8 +35,8 @@ They come from separate duckOSM tools or options.
 - **The time zone** (`visualization_metadata.timezone`): from the Rust crate `tzf-rs` (MIT; its data is ODbL),
   natively and in the browser. duckOSM uses Python's `timezonefinder`.
 - **The drawing levels**: the tags rule is the default, and a Rust port of roadstyle's solver (the real
-  optimization, as in Python duckOSM) is an option. The port runs in the session "Drawing levels"
-  (`docs/levels.md` there). `edge_levels_meta.source` says which one made the table.
+  optimization, as in Python duckOSM) is an option. Done: [levels.md](levels.md). `edge_levels_meta.source` says
+  which one made the table.
 - **The check**: each new table is compared with duckOSM's table, row for row, on Monaco and Tartu, as the
   network tables are.
 
@@ -45,7 +45,7 @@ They come from separate duckOSM tools or options.
 1. Group 1, in Rust (`duckosm-core`, `duckosm-build`), so the CLI, the Python package and the page get the same
    tables. One test against duckOSM's Monaco golden for each table. The page adds them to SQL, the zip and
    `load.sql`.
-2. Group 2: `lane_profile` and `bus`, then the levels table from the tags rule.
+2. Group 2: `lane_profile` and `bus`. The levels table is done ([levels.md](levels.md)).
 3. Group 3 stays in the session "Base map features". Its `raw.*` tables are also the input that group 2 can use
    for the bus relations.
 

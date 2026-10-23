@@ -12,6 +12,7 @@
 use crate::Params;
 use duckosm_core::filter::Mode;
 use duckosm_core::fixes::{NewNode, NewWay, OsmFixes, TurnFix, WayFix};
+use duckosm_core::levels::Method;
 use duckosm_core::network::Options;
 use std::path::{Path, PathBuf};
 use yaml_rust2::{Yaml, YamlLoader};
@@ -282,11 +283,6 @@ pub fn read(path: &Path, pbf_is_cut: bool, strict: bool) -> Result<FromConfig, S
             "the H3 cells (from_cell, to_cell, lca_res, h3_cell)",
         ),
         ("build_features", true, "the base-map layers (features.*)"),
-        (
-            "levels",
-            true,
-            "the drawing order (visualization.edge_levels)",
-        ),
         ("bus_routes", true, "the bus routes (bus.*)"),
         ("boundary_cells", false, "the boundary cells"),
     ] {
@@ -353,6 +349,12 @@ pub fn read(path: &Path, pbf_is_cut: bool, strict: bool) -> Result<FromConfig, S
         build_graph,
         extract_restrictions: options.bool("extract_restrictions", true)?,
         ways_tables: true,
+        // duckOSM: options.levels (on by default) solves the drawing order; off writes no table
+        levels: if options.bool("levels", true)? {
+            Method::Solve
+        } else {
+            Method::None
+        },
     };
     if opts.calculate_costs && !opts.process_speeds {
         return Err("config: options.calculate_costs needs options.process_speeds".into());
