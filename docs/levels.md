@@ -17,7 +17,9 @@ rule.
 - A test on Monaco (section "The finding") shows that each HiGHS stage is a linear program with a whole-number
   answer. Thus a minimum-cost flow can solve each stage. The Rust port is one algorithm in pure Rust, for all the
   cases: no OR-tools, no HiGHS, no WebAssembly build of a C++ solver.
-- The code is in `duckosm-core` (the module `levels`). The CLI, the Python package and the page all have it.
+- The code was in `duckosm-core` (the module `levels`). Since 2026-10-23 it is in roadstyle's own Rust engine
+  (`roadstyle_rs::levels`, roadstyle repository `rust/`), and `duckosm-core/src/levels.rs` only gives it duckosm's
+  edges. The CLI, the Python package and the page all have it.
 - Tartu (flow only): every row is equal to roadstyle's. Monaco (stages): the values of the stages are equal, and
   13,288 of 13,298 rows are equal. The other 10 edges have other numbers of the same quality.
 - Time of a solve, natively: Monaco 0.45 s (roadstyle 16.6 s), Tartu 4.1 s (roadstyle about 21 s). The tags rule
@@ -108,6 +110,10 @@ agree at each stage: 0, 46 and 7,382,499, with no fractional number.
 ## The Rust design
 
 ### Where it runs
+
+Since 2026-10-23 the files below are in roadstyle's repository (`rust/roadstyle-rs/src/levels/`), as one part of
+roadstyle's Rust engine; duckosm-rust takes them at a fixed commit (`roadstyle-rs` in `duckosm-core/Cargo.toml`).
+The rows did not change (Monaco and Tartu, every row).
 
 The module `crates/duckosm-core/src/levels/` (pure Rust; the one new dependency is `sha2`, for the hash of the
 meta row):

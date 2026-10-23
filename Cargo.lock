@@ -682,10 +682,10 @@ version = "0.2.0"
 dependencies = [
  "osmpbf",
  "rayon",
+ "roadstyle-rs",
  "rstar",
  "serde",
  "serde_json",
- "sha2",
 ]
 
 [[package]]
@@ -1582,6 +1582,21 @@ dependencies = [
  "libc",
  "untrusted",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "roadstyle-rs"
+version = "0.0.1"
+source = "git+https://github.com/Khoshkhah/roadstyle.git?rev=9175c7f#9175c7f0e22df14ed4966f52716a97c2e463f879"
+dependencies = [
+ "arrow-array 60.0.0",
+ "arrow-schema 60.0.0",
+ "bytes",
+ "indexmap",
+ "parquet",
+ "rstar",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

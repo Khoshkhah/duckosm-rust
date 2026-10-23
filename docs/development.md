@@ -79,9 +79,10 @@ Build the two modules and their JavaScript bindings (Git ignores both folders):
   `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`. Without them,
   the page uses `pkg/`. duckdb-wasm (from cdn.jsdelivr.net), Nominatim and Overpass work with these headers.
   `?threads=N` in the address sets the number of threads (the default: the cores, at most 8).
-- `www/map/pkg/`: roadstyle's Rust module for the roads map. `build.sh` clones geolibre-roadstyle into
-  `target/geolibre-roadstyle` and builds its `spike/rust` at the commit `ROADSTYLE_COMMIT`. With
-  `ROADSTYLE_REPO=/home/kaveh/projects/geolibre-roadstyle`, it clones the local copy.
+- `www/map/pkg/`: roadstyle's Rust module for the roads map. `build.sh` clones roadstyle into `target/roadstyle`
+  and builds the crate `roadstyle-wasm` of its Rust engine (`rust/`) at the commit `ROADSTYLE_COMMIT`. With
+  `ROADSTYLE_REPO=/home/kaveh/projects/roadstyle`, it clones the local copy. `duckosm-core` takes the same engine
+  (`roadstyle-rs`, a git dependency at the same commit) for the drawing levels; keep the two commits equal.
 
 Open the page (`index.html`, the plan is [browser.md](browser.md)). A browser does not load a module from
 a `file://` address, so use a local server. `serve.py` sends the two headers; `python3 -m http.server` does
