@@ -139,8 +139,9 @@ These are the changes, each in its own small commit, so they merge easily with t
   - `zipAll`: `features_<table>.parquet` (DuckDB writes them with `COPY`, as duckOSM's `_export_geoparquet`: every column except
     `tags`, because a nested column is not for GDAL), their entries in `layers.json` (`{"file", "kind": "features", "table",
     "count"}`), and one line in `README.txt`.
-- `map/features_sql.js`: a copy of geolibre-roadstyle's `spike/worker/features_sql.js` at `38cd2aa` (the commit of the module in
-  `map/pkg/`), as `map/roads_sql.js` is a copy of `roads_sql.js`.
+- `map/roadstyle/features_sql.js` and `map/roadstyle/roads_sql.js`: roadstyle's own files (`rust/roadstyle-wasm/js/`, their only
+  copy), which `build.sh` takes at `ROADSTYLE_COMMIT`, the commit of the map module. Until 2026-10-23 they were copies of
+  geolibre-roadstyle's in `map/`; `e2e.py` now checks that the served files equal roadstyle's.
 - `map/map_worker.js`: `makeStyle(roads, look, features, ...)`. The module at `38cd2aa` already makes the base-map layers from
   `features.parquet`, with the look in `map/look.json`, which already has the layers (`features.layers_yaml`).
 - The map: the base-map layers come in the same style as the roads, with sources `ov<i>`. They get the prefix `rs-` with the roads.

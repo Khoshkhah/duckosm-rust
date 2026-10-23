@@ -11,7 +11,7 @@ rule.
 ## The short version
 
 - There are two methods. `tags` is the default: roadstyle's `compute_levels(method="tags")`, the same rule as the
-  SQL `TAG_LEVELS` of the page (`www/map/roads_sql.js`), in Rust. `solve` is roadstyle's optimization.
+  SQL `TAG_LEVELS` of the page (roadstyle's `roads_sql.js`, `www/map/roadstyle/`), in Rust. `solve` is roadstyle's optimization.
 - roadstyle solves in two ways: a minimum-cost flow (OR-tools) when all the rules can hold, and HiGHS (a MILP in
   four stages) when some rules must be broken. Monaco needs the HiGHS way: 16 order wishes cannot hold.
 - A test on Monaco (section "The finding") shows that each HiGHS stage is a linear program with a whole-number

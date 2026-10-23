@@ -10,7 +10,7 @@
 #                     target/roadstyle (or ROADSTYLE_REPO, a local copy). duckosm-core uses the same commit for the levels.
 set -e
 NIGHTLY=nightly-2026-10-15
-ROADSTYLE_COMMIT=900b43e
+ROADSTYLE_COMMIT=337cf37
 ROADSTYLE_REPO=${ROADSTYLE_REPO:-https://github.com/Khoshkhah/roadstyle.git}
 cargo build --release --target wasm32-unknown-unknown -p duckosm-wasm
 wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/pkg target/wasm32-unknown-unknown/release/duckosm_wasm.wasm
@@ -28,9 +28,11 @@ git -C $R fetch -q origin 2>/dev/null || true
 git -C $R checkout -q $ROADSTYLE_COMMIT
 cargo build --release --target wasm32-unknown-unknown --manifest-path $R/rust/Cargo.toml -p roadstyle-wasm
 rm -rf crates/duckosm-wasm/www/map/pkg
-# roadstyle's popup look and text, the same files that roadstyle's pages use (src/roadstyle/static/)
+# roadstyle's files, as they are at ROADSTYLE_COMMIT (no copy in git; e2e.py checks that the served files equal them): the popup's
+# look and text (src/roadstyle/static/), and the SQL that makes the map module's input (rust/roadstyle-wasm/js/, its only copy)
 mkdir -p crates/duckosm-wasm/www/map/roadstyle
 cp $R/src/roadstyle/static/popup.css $R/src/roadstyle/static/popup.js crates/duckosm-wasm/www/map/roadstyle/
+cp $R/rust/roadstyle-wasm/js/roads_sql.js $R/rust/roadstyle-wasm/js/features_sql.js crates/duckosm-wasm/www/map/roadstyle/
 # roadstyle's Street View and Google 3D windows, taken from its page template with the page's changes (no copy in git)
 python3 crates/duckosm-wasm/roadstyle_windows.py $R/src/roadstyle/static/web_template.html crates/duckosm-wasm/www/map/roadstyle/windows.js
 wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/map/pkg \

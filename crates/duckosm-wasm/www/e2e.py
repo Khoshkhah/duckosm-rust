@@ -19,6 +19,8 @@ import argparse
 import base64
 import json
 import pathlib
+import re
+import subprocess
 import time
 import zipfile
 
@@ -52,6 +54,15 @@ with sync_playwright() as p:
     page.on("pageerror", lambda e: print("page error:", e))
     page.goto(url)
     page.wait_for_function("window.mapReady && window.timings && window.timings.duckdbStart", timeout=120_000)
+    # the files that build.sh takes from roadstyle are roadstyle's own at ROADSTYLE_COMMIT (no copy that can drift)
+    pin = re.search(r"^ROADSTYLE_COMMIT=(\w+)", (WWW.parent / "build.sh").read_text(), re.M).group(1)
+    clone = WWW.parents[2] / "target" / "roadstyle"
+    for served, source in [("popup.css", "src/roadstyle/static/popup.css"), ("popup.js", "src/roadstyle/static/popup.js"),
+                           ("roads_sql.js", "rust/roadstyle-wasm/js/roads_sql.js"), ("features_sql.js", "rust/roadstyle-wasm/js/features_sql.js")]:
+        want = subprocess.run(["git", "-C", str(clone), "show", f"{pin}:{source}"], capture_output=True, check=True).stdout
+        got = page.request.get(url.split("index.html")[0] + "map/roadstyle/" + served).body()
+        assert got == want, f"map/roadstyle/{served} is not roadstyle's {source} at {pin}: run build.sh"
+    print(f"roadstyle's files: the same as roadstyle {pin}")
     if args.boundary:
         page.set_input_files("#file", args.boundary)   # the File tab of step 1
         page.wait_for_function("window.areas >= 1", timeout=60_000)

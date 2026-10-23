@@ -1,7 +1,8 @@
 // The build side of the app (docs/app.md): duckdb-wasm, the build worker (../build_worker.js), the load of the tables, the style of
 // the roads map (../map/), SQL, load.sql, and the data of an area from the Overpass API. The page (../index.html) calls it.
-import { writeRoads } from "../map/roads_sql.js";
-import { writeFeatures } from "../map/features_sql.js";
+// roadstyle's SQL for the map module's input (rust/roadstyle-wasm/js/ at ROADSTYLE_COMMIT, copied by build.sh)
+import { writeRoads } from "../map/roadstyle/roads_sql.js";
+import { writeFeatures } from "../map/roadstyle/features_sql.js";
 
 // duckdb-wasm with DuckDB 1.5: the GEOMETRY type of the tables is core from 1.5 (the version that the geolibre-roadstyle spike tested)
 const DUCKDB = "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.33.1-dev57.0/+esm";
@@ -236,7 +237,7 @@ export async function roadsStyle(mode, name, keep = []) {
   const stored = tables.some((t) => t.mode === "visualization" && t.table === "edge_levels");
   await writeRoads(q, "memory", mode, { levels: stored ? "stored" : "tags" });
   const roads = await db.copyFileToBuffer("roads.parquet");
-  // the base-map layers, when the build made them: features.parquet, the rows of the look's layers (map/features_sql.js)
+  // the base-map layers, when the build made them: features.parquet, the rows of the look's layers (map/roadstyle/features_sql.js)
   let features;
   if (tables.some((t) => t.mode === "features")) {
     look ??= fetch(new URL("../map/look.json", import.meta.url)).then((r) => r.json());

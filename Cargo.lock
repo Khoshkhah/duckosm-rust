@@ -1587,7 +1587,7 @@ dependencies = [
 [[package]]
 name = "roadstyle-rs"
 version = "0.0.1"
-source = "git+https://github.com/Khoshkhah/roadstyle.git?rev=900b43e#900b43eb7a466bfe1c5e99f629edcee6ecd49014"
+source = "git+https://github.com/Khoshkhah/roadstyle.git?rev=337cf37#337cf3766f0aa466f8b4675b25d437c2c2fb1dc4"
 dependencies = [
  "arrow-array 60.0.0",
  "arrow-schema 60.0.0",
