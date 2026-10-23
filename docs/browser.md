@@ -239,7 +239,7 @@ style of roadstyle:
 The style held the roads as inline GeoJSON (Tartu: about 226 MB of text in the page).
 
 **Vector tiles (2026-10-23).** roadstyle's module (geolibre-roadstyle `wasm/`, commit `eea9f49`; since then roadstyle's
-own Rust engine, roadstyle repository `rust/`, commit `9175c7f`) now gives the style
+own Rust engine, roadstyle repository `rust/`, commit `fba3192`) now gives the style
 with vector-tile sources (`rs://<generation>/<source>/{z}/{x}/{y}`). The map worker stays, and it makes each tile
 when MapLibre asks for it (`maplibregl.addProtocol("rs", ...)` in `index.html`, `tile()` in `app/duck.js`). The
 layers, the colors and the road popup are the same; the screenshots of the two maps differ only at the edges of

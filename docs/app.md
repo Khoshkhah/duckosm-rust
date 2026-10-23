@@ -113,8 +113,16 @@ Kaveh's layout of 2026-10-23: the data in card 5, the map in card 6.
     cover the photo. The page keeps the base map.
   - There is no buildings button: the style alone decides if the footprints show, and 3D only adds the 3D
     version (Kaveh's rule).
-- Only one 3D building layer shows: OpenFreeMap's, or roadstyle's own over another base map. Before, the base-map
-  switch also turned on roadstyle's hidden 3D layer, and the two layers drew over each other.
+- Only one 3D building layer shows: roadstyle's own when the duckOSM layers show (from the zoom of their buildings,
+  15; below it OpenFreeMap's), else OpenFreeMap's. Before, the
+  two layers drew over each other at different heights. With 3D off, OpenFreeMap's 3D layer is flat (height 0), so
+  that its footprints stay.
+- The height of a building (roadstyle-rs, rule C of mapstyle's `docs/design/buildings_3d.md`): the higher of
+  `height` and (`building:levels` + `roof:levels`) × 3.66 m (as OpenMapTiles), or the one that is there, else the
+  height of its kind. The higher of the two keeps Tartu's buildings correct, where `height` is often an ETAK code.
+  Its base is `min_height`, else `building:min_level` × 3.66 m. On Monaco (2026-10-23), for the 490 buildings with these tags, the median
+  difference to OpenFreeMap went from 3.0 m to 0.36 m. A building with no tags has the height of its kind (9 m by
+  default); OpenFreeMap gives it 5 m.
 
 ## The code
 

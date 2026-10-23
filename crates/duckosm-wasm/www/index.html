@@ -1216,20 +1216,30 @@ const BASEMAPS = {
 };
 // the map buttons: the base map (OpenFreeMap without its roads while the duckOSM roads show, Esri's light gray or satellite
 // tiles, or a blank background; all but OpenFreeMap hide all of its layers, also its labels and 3D buildings), the duckOSM
-// layers (the base-map layers of the build, the style's sources ov<i>, over any base map), the buildings and the 3D view.
-// The 3D buildings are OpenFreeMap's; over another base map they are the duckOSM layers' own (roadstyle adds them hidden).
+// layers (the base-map layers of the build, the style's sources ov<i>, over any base map) and the 3D view.
+// The style alone shows the building footprints (and from which zoom). The 3D view adds their 3D version: the duckOSM
+// layers' own (roadstyle adds them hidden), and OpenFreeMap's, which is flat (height 0) when the 3D view is off.
 const view = { base: BASEMAPS[kept("duckosm.basemap")] || kept("duckosm.basemap") === "blank" ? kept("duckosm.basemap") : "",
-  buildings: true, threeD: false };
+  threeD: false };
 const offLayers = new Set();   // the layers that roadstyle adds hidden (showRoads)
-const isBuilding = (l) => /build/i.test(`${l.id} ${l["source-layer"] ?? ""} ${l.metadata?.["roadstyle:group"] ?? ""}`);
+const heights = {};            // the 3D heights of OpenFreeMap's buildings: [height, base] for each layer
 function setBase() {
   if (map.getLayer("base-over")) map.removeLayer("base-over");
   if (map.getSource("base-over")) map.removeSource("base-over");
   const v = view.base, own = !$("ownbox").hidden && $("ownlayers").checked;
-  const show = (l, on) => map.setLayoutProperty(l.id, "visibility", on && (view.buildings || !isBuilding(l)) ? "visible" : "none");
+  const show = (l, on) => map.setLayoutProperty(l.id, "visibility", on ? "visible" : "none");
   const style = map.getStyle().layers;
   for (const l of baseLayers) show(style.find((x) => x.id === l.id) ?? l, v === "" && !(roadsShown && l.road));
-  for (const l of style) if (l.source?.startsWith("rs-ov")) show(l, own && (!offLayers.has(l.id) || (l.type === "fill-extrusion" && view.threeD && v !== "")));
+  // one 3D layer: when the duckOSM layers have their 3D buildings, OpenFreeMap's stop in the 3D view at the zoom where ours start
+  const ours = own && style.find((l) => l.type === "fill-extrusion" && l.source?.startsWith("rs-ov"));
+  for (const l of style) if (l.type === "fill-extrusion" && !l.source?.startsWith("rs-")) {
+    heights[l.id] ??= [map.getPaintProperty(l.id, "fill-extrusion-height"), map.getPaintProperty(l.id, "fill-extrusion-base"), l.minzoom ?? 0, l.maxzoom ?? 24];
+    const [height, base, minzoom, maxzoom] = heights[l.id];
+    map.setPaintProperty(l.id, "fill-extrusion-height", view.threeD ? height : 0);
+    map.setPaintProperty(l.id, "fill-extrusion-base", view.threeD ? base : 0);
+    map.setLayerZoomRange(l.id, minzoom, ours && view.threeD ? Math.max(minzoom, ours.minzoom ?? 0) : maxzoom);
+  }
+  for (const l of style) if (l.source?.startsWith("rs-ov")) show(l, own && (!offLayers.has(l.id) || (l.type === "fill-extrusion" && view.threeD)));
   const bottom = style[0].id;
   if (v === "blank") map.addLayer({ id: "base-over", type: "background", paint: { "background-color": dark() ? "#17181c" : "#ffffff" } }, bottom);
   else if (BASEMAPS[v]) {
@@ -1251,7 +1261,6 @@ for (const r of document.querySelectorAll("input[name=base]")) r.onchange = () =
 $("ownlayers").onchange = () => loaded.then(setBase);
 $("b3d").onclick = () => {
   view.threeD = !view.threeD;
-  if (view.threeD) view.buildings = true;
   map.easeTo({ pitch: view.threeD ? 60 : 0, bearing: view.threeD ? map.getBearing() : 0, zoom: view.threeD ? Math.max(map.getZoom(), 15.5) : map.getZoom() });
   loaded.then(setBase);
 };
