@@ -315,7 +315,7 @@
     <span class="small muted">Then click the map.</span>
   </div>
   <div id="found" role="radiogroup" aria-label="The matches"></div>
-  <p class="small muted">Search by <a href="https://nominatim.openstreetmap.org">Nominatim</a>. Data © OpenStreetMap contributors.</p>
+  <p class="small muted">Search by <a href="https://photon.komoot.io">Photon</a> (komoot), boundaries by <a href="https://nominatim.openstreetmap.org">Nominatim</a>. Data © OpenStreetMap contributors.</p>
 </section>
 
 <section id="draw" role="tabpanel" aria-labelledby="tab-draw" hidden>
@@ -686,7 +686,8 @@ $("extracts").onclick = (ev) => {
   showExtract({ type: "Feature", properties: { name: `${cover[i].name} (Geofabrik)` }, geometry: geometry(cover[i].polygon) });
 };
 
-// ---- search: Nominatim, at most 1 request each second, the last 20 answers kept ----
+// ---- search: the names from Photon; the boundaries and "what is here" from Nominatim, at most 1 request each
+// second, the last 20 answers kept ----
 let queue = Promise.resolve(), last = 0;
 const cache = new Map();
 function nominatim(path, params) {
@@ -708,7 +709,7 @@ function nominatim(path, params) {
 function list(features) {
   found = features;
   $("found").innerHTML = found.map((f, i) => {
-    const p = f.properties, ok = polygons(f.geometry).length > 0;
+    const p = f.properties, ok = p.photon || polygons(f.geometry).length > 0;
     const [title, ...rest] = p.display_name.split(", ");
     return `<label class="${ok ? "" : "point"}" data-i="${i}" title="${esc(p.display_name)}"><input type="radio" name="hit" value="${i}"${ok ? "" : " disabled"}>` +
       `<span><span class="t">${esc(title)}</span><span class="badge">${esc(p.addresstype ?? p.type)}</span>` +
@@ -717,15 +718,35 @@ function list(features) {
   }).join("") || `<p class="small muted">No place found.</p>`;
 }
 
+// a Photon match as a Nominatim feature for list(): only relations, because only a relation has a boundary. The
+// geometry is the box of the relation (the preview); a selection gets the boundary from Nominatim.
+function photon(f) {
+  const p = f.properties, e = p.extent;  // [west, north, east, south]
+  const above = [...new Set([p.city, p.county, p.state, p.country])].filter((x) => x && x !== p.name);
+  return { type: "Feature", geometry: e ? geometry([[[[e[0], e[3]], [e[2], e[3]], [e[2], e[1]], [e[0], e[1]], [e[0], e[3]]]]]) : f.geometry,
+           properties: { photon: true, osm_type: "relation", osm_id: p.osm_id, name: p.name, display_name: [p.name, ...above].join(", "),
+                         addresstype: ["house", "other", "street"].includes(p.type) ? p.osm_value : p.type } };
+}
+
 const searching = () => ($("found").innerHTML = `<p class="small muted">Searching…</p>`);
-$("search").onsubmit = async (ev) => {
-  ev.preventDefault();
+let typing, asking;
+async function search() {
+  clearTimeout(typing);
+  asking?.abort();
   const q = $("q").value.trim();
-  if (!q) return;
+  if (q.length < 2) return ($("found").innerHTML = "");
+  const mine = (asking = new AbortController());
   searching();
-  try { list(await nominatim("search", { q, limit: "8" })); }
-  catch (e) { $("found").innerHTML = `<p class="small error">The search failed: ${esc(e.message)}</p>`; }
-};
+  try {
+    const r = await fetch("https://photon.komoot.io/api/?" + new URLSearchParams({ q, limit: "15" }), { signal: mine.signal });
+    if (!r.ok) throw new Error(`Photon answered ${r.status}`);
+    list(((await r.json()).features ?? []).filter((f) => f.properties.osm_type === "R").map(photon));
+  } catch (e) {
+    if (!mine.signal.aborted) $("found").innerHTML = `<p class="small error">The search failed: ${esc(e.message)}</p>`;
+  }
+}
+$("search").onsubmit = (ev) => { ev.preventDefault(); search(); };
+$("q").oninput = () => { clearTimeout(typing); typing = setTimeout(search, 300); };
 
 // what is here: the areas at 5 levels around the point that the user clicks
 function picking(on) {
@@ -761,8 +782,19 @@ $("found").addEventListener("mouseover", point);
 $("found").addEventListener("focusin", point);
 $("found").onmouseleave = () => preview(null);
 $("found").onclick = (ev) => { const l = ev.target.closest("label.point"); if (l) fitTo(found[Number(l.dataset.i)].geometry); };
-$("found").onchange = (ev) => {
-  const f = found[Number(ev.target.value)], p = f.properties;
+let picked;
+$("found").onchange = async (ev) => {
+  let f = found[Number(ev.target.value)];
+  const mine = (picked = f);
+  if (f.properties.photon) {
+    status("Getting the boundary…", 0);
+    try { [f] = await nominatim("lookup", { osm_ids: `R${f.properties.osm_id}` }); }
+    catch (e) { return status(`The boundary failed: ${e.message}`); }
+    if (picked !== mine) return;
+    status("");
+    if (!f || !polygons(f.geometry).length) return status("Nominatim has no boundary for this place.");
+  }
+  const p = f.properties;
   const level = Number(p.extratags?.admin_level);
   preview(null);
   setArea(polygons(f.geometry), { name: p.name || p.display_name.split(",")[0], osm_id: p.osm_type === "relation" ? p.osm_id : null,

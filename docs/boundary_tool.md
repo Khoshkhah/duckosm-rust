@@ -119,15 +119,20 @@ The area is one list of polygons. Each way below replaces the area, except drawi
 
 ### 1. Search: a name search
 
-1. The user types a name and pushes Enter or clicks **Search**. The tool does not search while the user types.
-2. The tool asks Nominatim (`/search`, `format=geojson`, `polygon_geojson=1`, `extratags=1`, `limit=8`).
-3. The matches show as a list of cards. Each card has the name, the type (for example `city`), and the rest of
-   the address.
-4. When the user points to a match, or moves to it with the arrow keys, the map shows it as a preview. A match
-   without a polygon (a point) shows as a marker, and its line says "a point: no boundary". The user cannot
-   select it.
-5. When the user selects a match, it becomes the area. The name, `osm_id` (a relation only) and `admin_level`
-   come from Nominatim.
+1. The user types a name. The tool searches 300 ms after the last key, or at once when the user pushes Enter
+   or clicks **Search**. A new search cancels the search before it. A text of less than 2 characters clears
+   the list.
+2. The tool asks Photon (`https://photon.komoot.io/api/`, `q`, `limit=15`). The list keeps only the relations
+   (`osm_type` R), because only a relation has a boundary. Nominatim `/search` gave too few matches: 1 for
+   "monaco", and for "stockholm" no Stockholms län. Photon gives Monaco and Monaco-Ville for "monaco", and
+   Stockholms län and Stockholms kommun for "stockholm".
+3. The matches show as a list of cards. Each card has the name, the type (for example `country`, `county`,
+   `city`, `district`), and the places above it (the city, the county, the state and the country).
+4. When the user points to a match, or moves to it with the arrow keys, the map shows the box of the match
+   (`extent` from Photon) as a preview.
+5. When the user selects a match, the tool gets its boundary from Nominatim (`/lookup`, `osm_ids=R<id>`,
+   `format=geojson`, `polygon_geojson=1`, `extratags=1`), and the boundary becomes the area. The name,
+   `osm_id` and `admin_level` come from Nominatim.
 
 ### 2. Draw
 
@@ -203,17 +208,20 @@ the area again after a return from `index.html`.
 
 ## The rules
 
-### Nominatim
+### Photon and Nominatim
+
+The search while the user types goes to Photon, the public server of komoot (<https://photon.komoot.io>). The
+Nominatim usage policy does not let a tool search while the user types.
 
 The tool obeys the usage policy of the public Nominatim server
 (<https://operations.osmfoundation.org/policies/nominatim/>):
 
 - At most 1 request each second. All requests go through one queue that waits 1 s between requests.
-- No search while the user types. A search starts only from Enter or **Search**.
+- Nominatim gets only a request for one boundary (a selected match) and the requests of **What is here?**.
 - The browser sends the address of the page in the `Referer` header, which identifies the application. The
   tool does not send an email address or other personal data.
-- The panel shows "Search: Nominatim, data © OpenStreetMap contributors".
-- The tool keeps the results of the last 20 searches, so the same search does not go to the server again.
+- The panel shows "Search by Photon (komoot), boundaries by Nominatim. Data © OpenStreetMap contributors."
+- The tool keeps the last 20 answers of Nominatim, so the same request does not go to the server again.
 
 ### The map tiles
 

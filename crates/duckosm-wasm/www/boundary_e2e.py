@@ -5,7 +5,7 @@ boundary` (docs/boundary_tool.md, docs/app.md). e2e.py tests the build.
     python crates/duckosm-wasm/www/boundary_e2e.py [--no-search]
 
 The page loads MapLibre, terra-draw and polyclip-ts from cdn.jsdelivr.net and the map from OpenFreeMap, so the
-computer needs the network. If Nominatim does not answer, the test skips the search and says so.
+computer needs the network. If Photon or Nominatim does not answer, the test skips the search and says so.
 """
 import argparse
 import json
@@ -20,7 +20,7 @@ MONACO = WWW.parents[2] / "tests/data/monaco.geojson"
 KEYS = {"name", "osm_id", "admin_level", "area_km2", "source", "geofabrik"}
 
 a = argparse.ArgumentParser()
-a.add_argument("--no-search", action="store_true", help="do not ask Nominatim")
+a.add_argument("--no-search", action="store_true", help="do not ask Photon and Nominatim")
 args = a.parse_args()
 
 server = start(0, quiet=True)
@@ -130,6 +130,11 @@ with sync_playwright() as p:
             hit.check()
             f = boundary(page, n + 1)
             print("search: ok,", f["properties"]["name"], f["properties"]["source"], f["properties"]["area_km2"], "km²")
+            assert "Monaco-Ville" in page.inner_text("#found")
+            # a search while the user types, with no Enter
+            page.fill("#q", "stockholm")
+            page.wait_for_function("document.getElementById('found').textContent.includes('Stockholms län')", timeout=30_000)
+            print("search as you type: ok")
         else:
             print("search: skipped,", page.inner_text("#found"))
 
