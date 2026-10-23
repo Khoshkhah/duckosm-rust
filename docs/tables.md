@@ -1,6 +1,7 @@
 # The tables that duckOSM makes and duckosm-rust does not make yet
 
-Status: plan, 2026-10-22. Kaveh: "there are many tables is missed yet. we should first try to create them".
+Status: group 1 done on 2026-10-22 (the result is at the end). Kaveh: "there are many tables is missed yet. we
+should first try to create them".
 
 The list comes from duckOSM's Monaco database (`/home/kaveh/projects/duckOSM/monaco.duckdb`, a build with the
 default options) and from duckOSM's reference `docs/reference/database.md`. duckosm-rust makes today, for each
@@ -29,15 +30,13 @@ edits of the drawing levels in duckOSM's level editor), `main.boundary_cells` an
 H3), `main.elevation_metadata` (elevation), `main.admin_boundaries` (the boundaries for `duckosm boundary`).
 They come from separate duckOSM tools or options.
 
-## Open points
+## Decisions (Kaveh, 2026-10-22)
 
-- **The time zone** (`visualization_metadata.timezone`): duckOSM finds it from the coordinates (Python
-  `timezonefinder`) and fails without it. The browser has no such lookup. Choices: a small Rust crate with the
-  time zone polygons (`tzf-rs`, a few MB more in the wasm module), or a JavaScript library in the page, or
-  NULL in the browser.
-- **The drawing levels**: the tags rule (fast, in the page today) or a port of duckOSM's solver (slow, and
-  OR-tools has no WebAssembly build). The tags rule is the realistic choice; `edge_levels_meta.source` then says
-  `tags`, so nobody takes it for a solved level area.
+- **The time zone** (`visualization_metadata.timezone`): from the Rust crate `tzf-rs` (MIT; its data is ODbL),
+  natively and in the browser. duckOSM uses Python's `timezonefinder`.
+- **The drawing levels**: the tags rule is the default, and a Rust port of roadstyle's solver (the real
+  optimization, as in Python duckOSM) is an option. The port runs in the session "Drawing levels"
+  (`docs/levels.md` there). `edge_levels_meta.source` says which one made the table.
 - **The check**: each new table is compared with duckOSM's table, row for row, on Monaco and Tartu, as the
   network tables are.
 
@@ -49,3 +48,39 @@ They come from separate duckOSM tools or options.
 2. Group 2: `lane_profile` and `bus`, then the levels table from the tags rule.
 3. Group 3 stays in the session "Base map features". Its `raw.*` tables are also the input that group 2 can use
    for the bus relations.
+
+## Result of group 1 (2026-10-22)
+
+Done, natively (CLI, Python package) and in the browser, with the same code (`duckosm-build`, `area.rs`):
+
+| Table | File | Monaco, against duckOSM's `monaco.duckdb` |
+|---|---|---|
+| `<mode>.ways` | `ways_<mode>.parquet` | equal: 1,196 / 3,188 / 2,986 rows |
+| `<mode>.way_nodes` | `way_nodes_<mode>.parquet` | equal: 8,407 / 16,841 / 17,135 rows |
+| `<mode>.virtual_nodes` | `virtual_nodes_<mode>.parquet` | equal: empty |
+| `main.global_junctions` | `global_junctions_main.parquet` | equal: 4,318 rows |
+| `main.boundary` | `boundary_main.parquet` | equal: the properties and the shape |
+| `main.visualization_metadata` | `visualization_metadata_main.parquet` | equal: the center, the zoom, the shape, `Europe/Monaco` |
+| `mm.transfers` | `transfers_mm.parquet` | equal: 11,620 rows |
+| `mm.edges` (a view) | in the `.duckdb` file and in `load.sql` | 4 of 25,641 rows differ: the known connector labels of `walking.edges` (item 3c of design.md) |
+
+What it needed:
+- The reader keeps the other OSM tags of each way too (`OtherTags`, one string for each way), because
+  `ways.tags` has all tags. The fixes set them (`Way::set_tag`), and the sidewalk rule adds
+  `duckosm:sidewalk=inferred`, as duckOSM.
+- duckOSM writes the lane arrows of the fixes (`turn_lanes_forward` / `_backward`) into the raw tags after each
+  mode, so the `ways` of the later modes show them and driving does not. The build does the same
+  (`OsmFixes::set_arrows`).
+- `built_at` is the build time (`Params::built_at` can fix it, for a build that is the same each time);
+  `duckosm_version` is `duckosm-rust <version>`.
+- `--no-ways-tables` (Python `ways_tables=False`) leaves out `ways` and `way_nodes` in a large area.
+
+Checks:
+- `python tools/compare_tables.py monaco.duckdb <out>/monaco.duckdb` after
+  `duckosm-rust --config config/sample_monaco.yaml --allow-skipped -o <out>` in the duckOSM folder.
+- `cargo test -p duckosm-wasm`: the browser build writes the same 33 files as the native build, byte for byte
+  (Monaco, an area and a fixes file).
+- The page (`e2e.py`): the same files as the native CLI, on every row (`built_at` apart). The zip has them all.
+- Tartu from the Estonia file, natively: 1.11 s with these tables, 0.99 s without; the same memory.
+- The WebAssembly module is 9.6 MB (3.7 MB with gzip), against 5.3 MB (1.0 MB) before: the time zone data.
+

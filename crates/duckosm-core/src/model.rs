@@ -160,6 +160,72 @@ pub struct Way {
     pub id: i64,
     pub refs: Vec<i64>,
     pub tags: Tags,
+    /// The tags that the network step does not read: only for the `ways` table, which has all tags.
+    pub other: OtherTags,
+}
+
+impl Way {
+    /// A way with all its tags: the ones that the network step reads in `tags`, the others in `other`.
+    pub fn new<'a>(
+        id: i64,
+        refs: Vec<i64>,
+        pairs: impl IntoIterator<Item = (&'a str, &'a str)> + Clone,
+    ) -> Way {
+        Way {
+            id,
+            refs,
+            tags: Tags::from_pairs(pairs.clone()),
+            other: OtherTags::of(pairs),
+        }
+    }
+
+    /// Set a tag, and replace an old value (the OSM fixes).
+    pub fn set_tag(&mut self, k: &str, v: &str) {
+        if Key::of(k).is_some() {
+            self.tags.set(k, v);
+        } else {
+            self.other.set(k, v);
+        }
+    }
+
+    /// All tags of the way: the `tags` column of duckOSM's `ways` table.
+    pub fn all_tags(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.tags.osm_pairs().chain(self.other.pairs())
+    }
+}
+
+/// The tags of a way that [`Tags`] does not keep, in one string: key, value, key, value, … separated by
+/// NUL (an OSM tag has no NUL). The first value of a key wins, as in [`Tags`].
+#[derive(Default, Clone, Debug)]
+pub struct OtherTags(Box<str>);
+
+impl OtherTags {
+    pub fn of<'a>(pairs: impl IntoIterator<Item = (&'a str, &'a str)>) -> OtherTags {
+        let mut s = String::new();
+        let mut seen: Vec<&str> = Vec::new();
+        for (k, v) in pairs {
+            if Key::of(k).is_none() && !seen.contains(&k) {
+                seen.push(k);
+                if !s.is_empty() {
+                    s.push('\0');
+                }
+                s.push_str(k);
+                s.push('\0');
+                s.push_str(v);
+            }
+        }
+        OtherTags(s.into_boxed_str())
+    }
+
+    pub fn pairs(&self) -> impl Iterator<Item = (&str, &str)> {
+        let mut it = self.0.split('\0').filter(|_| !self.0.is_empty());
+        std::iter::from_fn(move || Some((it.next()?, it.next()?)))
+    }
+
+    pub fn set(&mut self, k: &str, v: &str) {
+        let rest: Vec<(&str, &str)> = self.pairs().filter(|p| p.0 != k).collect();
+        *self = OtherTags::of(rest.into_iter().chain([(k, v)]));
+    }
 }
 
 /// The columns of an edge that come from its way and are the same on all its edges.
@@ -232,6 +298,9 @@ pub struct Network {
     /// The edge graph and the turn restrictions (`build_graph`, `extract_restrictions`).
     pub graph: crate::graph::Graph,
     pub stats: Stats,
+    /// The ways of the mode after the road filter and the fixes: the tables `ways` and `way_nodes`
+    /// (`Options::ways_tables`). A way that is one-way against its drawing has its nodes turned round.
+    pub ways: Vec<crate::filter::ModeWay>,
 }
 
 /// A row of `edge_id_map`: the piece `old_edge_id` is part of the merged edge `new_edge_id`.

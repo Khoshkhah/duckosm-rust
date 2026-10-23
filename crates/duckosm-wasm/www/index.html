@@ -943,7 +943,7 @@ $("run").onclick = async () => {
     if (source === "region") {
       msg = { region: regionFile, boundary: text(), modes, fixes, threads };   // the worker reads the File piece by piece
     } else if (source === "cut") {
-      msg = { pbf: await $("pbf").files[0].arrayBuffer(), modes, fixes, threads };
+      msg = { pbf: await $("pbf").files[0].arrayBuffer(), boundary: area ? text() : null, modes, fixes, threads };
     } else {
       const d0 = performance.now();
       const got = await duck.overpass(area.polys, (t) => progress(t + "…"));

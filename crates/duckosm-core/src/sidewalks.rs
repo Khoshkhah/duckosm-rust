@@ -386,7 +386,9 @@ pub fn infer_separate_sidewalks(ways: &mut [Way], coords: &Coords) -> usize {
     // 3. Tag the roads. (lines[k] is made from raw[k])
     let n = found.len();
     for k in found {
-        ways[raw[k].0].tags.set("sidewalk", "separate");
+        // duckOSM: map_concat(tags, MAP {'sidewalk': 'separate', 'duckosm:sidewalk': 'inferred'})
+        ways[raw[k].0].set_tag("sidewalk", "separate");
+        ways[raw[k].0].set_tag("duckosm:sidewalk", "inferred");
     }
     n
 }

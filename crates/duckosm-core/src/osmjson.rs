@@ -67,14 +67,9 @@ impl OsmJson {
                     }
                 }
                 "way" => {
-                    let tags =
-                        Tags::from_pairs(el.tags.iter().map(|(k, v)| (k.as_str(), v.as_str())));
-                    if filter::is_kept_by_reader(&tags) {
-                        ways.push(Way {
-                            id: el.id,
-                            refs: el.nodes,
-                            tags,
-                        });
+                    let pairs = el.tags.iter().map(|(k, v)| (k.as_str(), v.as_str()));
+                    if filter::is_kept_by_reader(&Tags::from_pairs(pairs.clone())) {
+                        ways.push(Way::new(el.id, el.nodes, pairs));
                     }
                 }
                 "relation" if el.tags.get("type").map(String::as_str) == Some("restriction") => {

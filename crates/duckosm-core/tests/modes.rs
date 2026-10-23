@@ -72,6 +72,7 @@ fn three_modes_equal_duckosm() {
             // the edge graph has its own golden test (graph.rs)
             build_graph: false,
             extract_restrictions: false,
+            ways_tables: false,
         };
         let net = if cf {
             build_network(&cut_ways, &cut_coords, mode, &opts)

@@ -1,7 +1,7 @@
 //! duckOSM in the browser (docs/browser.md): the bytes of a `.osm.pbf` file in, duckOSM's tables of the
 //! chosen modes out, as GeoParquet bytes. The same steps and the same writer as the native build.
 
-use duckosm_build::{config::parse_osm_fixes, parse_modes, write_tables};
+use duckosm_build::{config::parse_osm_fixes, parse_modes, write_area_tables, write_tables, Area};
 use duckosm_core::boundary::Boundary;
 use duckosm_core::filter::Mode;
 use duckosm_core::fixes::OsmFixes;
@@ -141,12 +141,13 @@ pub fn build_area(
     modes: &str,
     fixes_yaml: Option<String>,
 ) -> Result<Output, JsError> {
+    let text = boundary;
     let boundary = Boundary::parse(boundary).map_err(|e| JsError::new(&e))?;
     let open = || -> Result<BlobReader<Box<dyn Source>>, String> {
         let r: Box<dyn Source> = Box::new(BlobRead::new(region.clone())?);
         BlobReader::new_seekable(r).map_err(|e| e.to_string())
     };
-    js_build(Input::Area(&open, &boundary), modes, fixes_yaml)
+    js_build(Input::Area(&open, &boundary), modes, fixes_yaml, Some(text))
 }
 
 /// The same as [`build_area`], with the bytes of the region file (for Node, which has no `FileReaderSync`).
@@ -157,20 +158,32 @@ pub fn build_area_bytes(
     modes: &str,
     fixes_yaml: Option<String>,
 ) -> Result<Output, JsError> {
+    let text = boundary;
     let boundary = Boundary::parse(boundary).map_err(|e| JsError::new(&e))?;
     let open = || -> Result<BlobReader<Box<dyn Source + '_>>, String> {
         let r: Box<dyn Source> = Box::new(io::Cursor::new(region));
         BlobReader::new_seekable(r).map_err(|e| e.to_string())
     };
-    js_build(Input::Area(&open, &boundary), modes, fixes_yaml)
+    js_build(Input::Area(&open, &boundary), modes, fixes_yaml, Some(text))
 }
 
 /// Build duckOSM's tables of `modes` (comma separated: driving, walking, cycling) from the bytes of a `.osm.pbf`
 /// file, with the default options of the CLI. `fixes_yaml`: the text of an OSM fixes file (duckOSM
-/// `osm_overrides`), or nothing.
+/// `osm_overrides`), or nothing. `boundary`: the boundary of the area (GeoJSON), only for `main.boundary` and
+/// the metadata: the file is cut already.
 #[wasm_bindgen]
-pub fn build(pbf_bytes: &[u8], modes: &str, fixes_yaml: Option<String>) -> Result<Output, JsError> {
-    js_build(Input::Pbf(pbf_bytes), modes, fixes_yaml)
+pub fn build(
+    pbf_bytes: &[u8],
+    modes: &str,
+    fixes_yaml: Option<String>,
+    boundary: Option<String>,
+) -> Result<Output, JsError> {
+    js_build(
+        Input::Pbf(pbf_bytes),
+        modes,
+        fixes_yaml,
+        boundary.as_deref(),
+    )
 }
 
 /// The same as [`build`], from OSM JSON: the answer of the Overpass API to the query of the page (the highway
@@ -183,32 +196,55 @@ pub fn build_osm_json(
     modes: &str,
     fixes_yaml: Option<String>,
 ) -> Result<Output, JsError> {
-    let boundary = boundary
-        .map(|b| Boundary::parse(&b))
+    let parsed = boundary
+        .as_deref()
+        .map(Boundary::parse)
         .transpose()
         .map_err(|e| JsError::new(&e))?;
-    js_build(Input::OsmJson(json, boundary.as_ref()), modes, fixes_yaml)
+    js_build(
+        Input::OsmJson(json, parsed.as_ref()),
+        modes,
+        fixes_yaml,
+        boundary.as_deref(),
+    )
 }
 
-fn js_build(input: Input, modes: &str, fixes_yaml: Option<String>) -> Result<Output, JsError> {
+fn js_build(
+    input: Input,
+    modes: &str,
+    fixes_yaml: Option<String>,
+    boundary: Option<&str>,
+) -> Result<Output, JsError> {
     let files = Object::new();
-    let summary = run(input, modes, fixes_yaml.as_deref(), |name| {
-        let parts = Array::new();
-        Reflect::set(&files, &name.into(), &parts).map_err(|_| format!("cannot keep {name}"))?;
-        // the array is a JavaScript object: the writer and `files` share it
-        Ok(BufWriter::with_capacity(1 << 20, JsParts(parts)))
-    })
+    let built_at = (js_sys::Date::now() * 1000.0) as i64;
+    let summary = run(
+        input,
+        modes,
+        fixes_yaml.as_deref(),
+        boundary,
+        built_at,
+        |name| {
+            let parts = Array::new();
+            Reflect::set(&files, &name.into(), &parts)
+                .map_err(|_| format!("cannot keep {name}"))?;
+            // the array is a JavaScript object: the writer and `files` share it
+            Ok(BufWriter::with_capacity(1 << 20, JsParts(parts)))
+        },
+    )
     .map_err(|e| JsError::new(&e))?;
     Ok(Output { files, summary })
 }
 
 /// The steps of `duckosm_build::build` without files and without a clock (WebAssembly has neither): the OSM
 /// fixes, the relations for the turn restrictions, the sidewalk rule, then each mode, written with
-/// `write_tables` to a writer from `file`. Returns one summary line for each mode.
+/// `write_tables` to a writer from `file`, then the tables of the area (`write_area_tables`; `boundary` is the
+/// boundary file, `built_at` the time in microseconds). Returns one summary line for each mode.
 pub fn run<W: Write + Send>(
     input: Input,
     modes: &str,
     fixes_yaml: Option<&str>,
+    boundary: Option<&str>,
+    built_at: i64,
     mut file: impl FnMut(&str) -> Result<W, String>,
 ) -> Result<String, String> {
     let modes = parse_modes(modes)?;
@@ -267,9 +303,11 @@ pub fn run<W: Write + Send>(
         sidewalks::infer_separate_sidewalks(&mut ways, &coords);
     }
     let mut summary = Vec::new();
+    let mut mode_nodes = Vec::new();
     for mode in &modes {
         let net = build_network_with(&ways, &coords, *mode, &opts, &fixes, &relations)?;
-        write_tables(&net, *mode, &opts, &mut file)?;
+        write_tables(&net, *mode, &opts, &ways, &mut file)?;
+        fixes.set_arrows(&mut ways, &net.ways, *mode);
         summary.push(format!(
             "{}: {} edges, {} nodes, {} private edges, {} edge_graph rows, {} turn restrictions",
             mode.name(),
@@ -279,6 +317,16 @@ pub fn run<W: Write + Send>(
             net.graph.edge_graph.as_ref().map_or(0, Vec::len),
             net.graph.turn_restrictions.as_ref().map_or(0, Vec::len),
         ));
+        mode_nodes.push((*mode, net.nodes));
     }
+    let area = Area {
+        boundary,
+        ways: &ways,
+        coords: &coords,
+        nodes: &mode_nodes,
+        opts: &opts,
+        built_at,
+    };
+    write_area_tables(&area, &mut file)?;
     Ok(summary.join("\n"))
 }

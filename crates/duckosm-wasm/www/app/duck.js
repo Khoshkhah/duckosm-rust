@@ -24,6 +24,13 @@ export const TABLES = {
   turn_path_restrictions: "Driving: the turn restrictions through a via way, as paths of edges.",
   turn_permission: "The turn rules that the graph cannot hold: a rule for some vehicles or with a condition.",
   edge_id_map: "For each merged edge, the edges that it was made from.",
+  ways: "The OpenStreetMap ways that the mode kept, with all their tags and nodes.",
+  way_nodes: "The nodes of each way, in order.",
+  virtual_nodes: "Always empty, as in duckOSM: the virtual nodes are in nodes.",
+  global_junctions: "The nodes where all modes cut their roads, so an edge has the same id in each mode.",
+  boundary: "The area: the boundary and its properties.",
+  visualization_metadata: "One row: the center and zoom of the area for a map, its time zone, and the build time.",
+  transfers: "The changes of mode (walk to car or bike, and back) at the nodes that the modes share.",
 };
 export const REFERENCE = "https://khoshkhah.github.io/duckOSM/reference/database/";
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "area";
@@ -60,12 +67,23 @@ const split = (name) => {
   return { mode: base.slice(base.lastIndexOf("_") + 1), table: base.slice(0, base.lastIndexOf("_")) };
 };
 // the same SQL as the native .duckdb writer (crates/duckosm-duckdb)
-const select = (table) => (table === "nodes" ? "SELECT node_id, geometry AS geom" : "SELECT *");
+// the same rules as the native .duckdb writer (crates/duckosm-duckdb, select): duckOSM's names and types
+const select = (table) => ({
+  nodes: "SELECT node_id, geometry AS geom",
+  virtual_nodes: "SELECT node_id, geometry AS geom",
+  boundary: "SELECT * EXCLUDE (geometry), geometry AS geom",
+  visualization_metadata: "SELECT boundary_geojson::JSON AS boundary_geojson, center_lat, center_lon, initial_zoom, timezone, built_at, duckosm_version",
+}[table] ?? "SELECT *");
+const MODES = ["driving", "walking", "cycling"];
+// duckOSM's view mm.edges: the edges of all modes with a mode column, the modes in name order
+const mmEdges = (modes) => `CREATE OR REPLACE VIEW mm.edges AS ` + [...modes].sort().map((m) =>
+  `SELECT '${m}' AS mode, edge_id, source, target, cost_s, length_m, highway, name, geometry FROM ${m}.edges`).join(" UNION ALL ");
 
 // the files of a build into DuckDB, one schema for each mode; the old tables go away
 export async function loadTables(files) {
   await duckReady;
-  for (const m of new Set(tables.map((t) => t.mode))) await conn.query(`DROP SCHEMA IF EXISTS ${m} CASCADE`);
+  // the schemas of the last build go away; main cannot, so its tables do
+  for (const t of tables) await conn.query(t.mode === "main" ? `DROP TABLE IF EXISTS main.${t.table}` : `DROP SCHEMA IF EXISTS ${t.mode} CASCADE`);
   tables = [];
   for (const [name, bytes] of Object.entries(files)) {
     const { mode, table } = split(name);
@@ -77,6 +95,8 @@ export async function loadTables(files) {
     const rows = Number((await conn.query(`SELECT count(*) AS n FROM ${mode}.${table}`)).toArray()[0].n);
     tables.push({ mode, table, name, bytes, rows });
   }
+  const modes = MODES.filter((m) => tables.some((t) => t.mode === m && t.table === "edges"));
+  if (tables.some((t) => t.mode === "mm")) await conn.query(mmEdges(modes));
   await conn.query(MACROS);
 }
 
@@ -90,6 +110,7 @@ export function loadSql(areaName) {
     `-- In the folder of the files: duckdb ${file}.duckdb < load.sql`];
   for (const m of new Set(tables.map((t) => t.mode))) lines.push(`CREATE SCHEMA IF NOT EXISTS ${m};`);
   for (const t of tables) lines.push(`CREATE TABLE ${t.mode}.${t.table} AS ${select(t.table)} FROM read_parquet('${t.name}');`);
+  if (tables.some((t) => t.mode === "mm")) lines.push(mmEdges(MODES.filter((m) => tables.some((t) => t.mode === m))) + ";");
   lines.push(MACROS.trim());
   return lines.join("\n") + "\n";
 }

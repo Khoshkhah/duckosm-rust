@@ -23,6 +23,7 @@ fn browser_build_equals_native_build() {
         geoparquet: true,
         duckdb: false,
         osm_fixes: Some(fixes),
+        built_at: Some(0),
         ..Params::default()
     };
     build(&pbf, &native, &p).unwrap();
@@ -31,6 +32,8 @@ fn browser_build_equals_native_build() {
         duckosm_wasm::Input::Pbf(&std::fs::read(&pbf).unwrap()),
         "driving,walking,cycling",
         Some(FIXES),
+        None,
+        0,
         |name| {
             names.push(name.to_string());
             std::fs::File::create(wasm.join(name)).map_err(|e| e.to_string())
@@ -79,6 +82,7 @@ fn browser_area_build_equals_native_build() {
         geoparquet: true,
         duckdb: false,
         boundary: Some(geojson.clone()),
+        built_at: Some(0),
         ..Params::default()
     };
     build(&pbf, &native, &p).unwrap();
@@ -94,13 +98,17 @@ fn browser_area_build_equals_native_build() {
         duckosm_wasm::Input::Area(&open, &boundary),
         "driving,walking,cycling",
         None,
+        Some(&std::fs::read_to_string(&geojson).unwrap()),
+        0,
         |name| {
             names.push(name.to_string());
             std::fs::File::create(wasm.join(name)).map_err(|e| e.to_string())
         },
     )
     .unwrap();
-    assert_eq!(names.len(), 20);
+    // 3 modes x 10 files (edges, private_edges, nodes, virtual_nodes, ways, way_nodes, edge_id_map, edge_graph,
+    // turn_permission, and in driving the two turn restriction tables) + 4 area files
+    assert_eq!(names.len(), 3 * 9 + 2 + 4, "{names:?}");
     for n in &names {
         let (a, b) = (
             std::fs::read(native.join(n)).unwrap(),

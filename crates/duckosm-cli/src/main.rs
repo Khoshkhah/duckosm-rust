@@ -67,6 +67,9 @@ struct Cli {
     /// Do not build turn_restrictions and turn_path_restrictions (duckOSM option extract_restrictions: false).
     #[arg(long, conflicts_with = "config")]
     no_restrictions: bool,
+    /// Do not write ways and way_nodes (duckOSM writes them always; off saves memory in a large area).
+    #[arg(long)]
+    no_ways_tables: bool,
     /// A duckOSM OSM fixes file (YAML). With --config, it replaces the config's osm_overrides.
     #[arg(long, value_name = "FILE")]
     fixes: Option<PathBuf>,
@@ -120,6 +123,7 @@ fn run() -> Result<(), String> {
             functional_types: !cli.no_functional_types,
             build_graph: !cli.no_graph,
             extract_restrictions: !cli.no_restrictions,
+            ways_tables: !cli.no_ways_tables,
         };
         (
             cli.pbf.clone().unwrap(),
