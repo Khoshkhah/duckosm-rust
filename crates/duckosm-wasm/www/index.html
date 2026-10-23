@@ -413,9 +413,10 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
   <div class="row" style="margin-top:6px"><button id="query" class="btn">Run</button></div>
   <div id="result"></div>
   <h2 style="margin-top:16px">Downloads</h2>
-  <div class="row" style="margin-top:0"><button id="zip" class="btn primary"><svg><use href="#i-download"/></svg>Download all (.zip)</button></div>
-  <p class="small muted">The zip has a folder with all tables as GeoParquet files, make_duckdb.sql (it makes one .duckdb file: the
-    README gives the command), the boundary and a README. One table at a time is below.
+  <div class="row" style="margin-top:0"><button id="zip" class="btn primary"><svg><use href="#i-download"/></svg>Download all (.zip)</button>
+    <button id="duckdb" class="btn"><svg><use href="#i-download"/></svg>Download .duckdb</button></div>
+  <p class="small muted">The .duckdb file has all tables, as a duckOSM database. The zip has a folder with all tables as GeoParquet files,
+    make_duckdb.sql (it makes a .duckdb file from the GeoParquet files: the README gives the command), the boundary and a README. One table at a time is below.
     <a id="reference" target="_blank" rel="noopener">The columns of each table</a></p>
   <div id="files"></div>
 </section>
@@ -1332,6 +1333,17 @@ $("zip").onclick = async () => {
     a.click();
   } catch (e) {
     status("The zip failed: " + e.message, 8000);
+  }
+};
+$("duckdb").onclick = async () => {
+  try {
+    const { blob, name } = await duck.duckdbFile(areaName);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+  } catch (e) {
+    status("The .duckdb file failed: " + e.message + ". The zip has make_duckdb.sql, which makes the file.", 12000);
   }
 };
 
