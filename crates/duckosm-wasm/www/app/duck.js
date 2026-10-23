@@ -53,6 +53,9 @@ export const duckReady = (async () => {
   db = new duckdb.AsyncDuckDB(new duckdb.VoidLogger(), new Worker(url));
   await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
   URL.revokeObjectURL(url);
+  // Direct IO: DuckDB opens a .duckdb file past the page buffer of duckdb-wasm. That buffer keeps the write lock of the file after
+  // DETACH ("already locked exclusively"), and then the page cannot read the file for its download (duckdbFile).
+  await db.open({ path: ":memory:", useDirectIO: true });
   conn = await db.connect();
   // Each build registers its files under the same names (edges_driving.parquet, ...). DuckDB's external file cache keeps parts of
   // a file by its name, so a second build read old parts with the new file ("Snappy decompression failure").
@@ -155,8 +158,29 @@ export async function loadFeatures(files, sql) {
   }
 }
 
-// make_duckdb.sql: it makes a .duckdb file from the Parquet files (duckdb-wasm 1.33.1-dev57.0 keeps a written .duckdb file locked
-// after DETACH, so the page cannot give that file)
+// the .duckdb file of the tables of the build, as make_duckdb.sql makes it: the tables, mm.edges and the macros. DuckDB writes it
+// in its worker, and the page gets a copy of the bytes.
+export async function duckdbFile(areaName) {
+  const name = slug(areaName) + ".duckdb";
+  const drop = () => Promise.all([name, name + ".wal"].map((f) => db.dropFile(f).catch(() => {})));
+  await drop();
+  const c = await db.connect();     // USE goes to this connection only, not to the SQL box
+  try {
+    await c.query(`ATTACH '${name}' AS out; USE out`);
+    for (const m of new Set(tables.map((t) => t.mode))) await c.query(`CREATE SCHEMA IF NOT EXISTS ${m}`);
+    for (const t of tables) await c.query(`CREATE TABLE ${t.mode}.${t.table} AS FROM memory.${t.mode}.${t.table}`);
+    if (tables.some((t) => t.mode === "mm")) await c.query(mmEdges(MODES.filter((m) => tables.some((t) => t.mode === m))));
+    await c.query(MACROS);
+    await c.query("USE memory; DETACH out");
+    return { blob: new Blob([await db.copyFileToBuffer(name)], { type: "application/vnd.duckdb" }), name };
+  } finally {
+    await c.query("USE memory; DETACH DATABASE IF EXISTS out").catch(() => {});
+    await c.close();
+    await drop();
+  }
+}
+
+// make_duckdb.sql: it makes a .duckdb file from the Parquet files, for a browser where duckdbFile fails
 export function loadSql(areaName) {
   const file = slug(areaName);
   const lines = [`-- duckOSM tables of ${areaName.replace(/\n/g, " ")}, from the Parquet files of duckosm-rust in the browser.`,

@@ -77,6 +77,12 @@ Kaveh's layout of 2026-10-23: the data in card 5, the map in card 6.
     GeoLibre plugin opens), `make_duckdb.sql`, `boundary.geojson` and a `README.txt` that says what each table holds.
     `README.txt` gives the command that makes one `.duckdb` file: `duckdb <area>.duckdb < make_duckdb.sql`. (The
     file was `load.sql`, with its own button; the button is gone.)
+  - **Download .duckdb** (next to the zip): `<area>.duckdb`, a duckOSM database with all tables of the build,
+    `mm.edges` and the macros: the same file that `make_duckdb.sql` makes. The `features.*` tables also have
+    their `tags` column. DuckDB writes the file in the page (`duckdbFile()` in `app/duck.js`). It needs
+    DuckDB with direct IO, which the page sets when DuckDB starts (the cause:
+    [browser.md](browser.md), "The .duckdb download"). If the file fails, a message says that the zip has
+    `make_duckdb.sql`.
   - One block for each table: its name, one sentence on what it holds, and a link for each mode with the number
     of rows. A link goes to duckOSM's reference of the columns. With the base-map layers, one more block,
     `features`, has a tile for each layer (its name and number of rows; a click downloads it); the zip has them as
@@ -108,7 +114,7 @@ Kaveh's layout of 2026-10-23: the data in card 5, the map in card 6.
 - The buttons under the zoom buttons (Kaveh's design of 2026-10-23):
   - **3D** tilts the map to 60 degrees and shows the 3D buildings. A second click makes the map flat again.
   - **Base map** (the grid) opens a list: OpenFreeMap, Light gray (Esri), Satellite (Esri World Imagery) and
-    Blank. All except OpenFreeMap hide all of OpenFreeMap's layers, also its labels and 3D buildings. After a
+    Blank. All except OpenFreeMap hide all of OpenFreeMap's layers, also its labels (in the 3D view without the duckOSM 3D buildings, its 3D buildings stay). After a
     build with the base-map layers, the list also has **duckOSM layers**. Satellite turns them off, because they
     cover the photo. The page keeps the base map.
   - There is no buildings button: the style alone decides if the footprints show, and 3D only adds the 3D
