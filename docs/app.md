@@ -92,6 +92,15 @@ The page keeps the selected file only in memory. After a reload, the user select
 - When the roads show, the fill of the area goes away and only its line stays, so the fill does not change
   the colors of the roads.
 - A click on a road shows its data, but not while the user draws or uses **What is here?**.
+- The buttons under the zoom buttons (2026-10-23, Kaveh's design):
+  - **3D** tilts the map to 60 degrees and shows the 3D buildings. A second click makes the map flat again.
+  - **Buildings** shows or hides all buildings.
+  - **Base map** (the grid) opens a list: OpenFreeMap, Light gray (Esri), Satellite (Esri World Imagery) and
+    Blank. All except OpenFreeMap hide all of OpenFreeMap's layers, also its labels and 3D buildings. After a
+    build with the base-map layers, the list also has **duckOSM layers**. Satellite turns them off, because they
+    cover the photo. The page keeps the base map and the buildings choice.
+  - Only one 3D building layer shows: OpenFreeMap's, or roadstyle's own over another base map. Before, the
+    base-map switch also turned on roadstyle's hidden 3D layer, and the two layers drew over each other.
 
 ## The code
 
