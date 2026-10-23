@@ -1,6 +1,7 @@
 // The build side of the app (docs/app.md): duckdb-wasm, the build worker (../build_worker.js), the load of the tables, the style of
 // the roads map (../map/), SQL, load.sql, and the data of an area from the Overpass API. The page (../index.html) calls it.
 import { writeRoads } from "../map/roads_sql.js";
+import { writeFeatures } from "../map/features_sql.js";
 
 // duckdb-wasm with DuckDB 1.5: the GEOMETRY type of the tables is core from 1.5 (the version that the geolibre-roadstyle spike tested)
 const DUCKDB = "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.33.1-dev57.0/+esm";
@@ -26,6 +27,9 @@ export const TABLES = {
   edge_id_map: "For each merged edge, the edges that it was made from.",
 };
 export const REFERENCE = "https://khoshkhah.github.io/duckOSM/reference/database/";
+export const FEATURES_TEXT = "The base-map layers (duckOSM features.*): water, land use, buildings, streets and railways, sites, paved areas, " +
+  "public transport, points of interest, traffic signals and crossings, place names. The files have no tags column, as duckOSM's export.";
+export const FEATURES_REFERENCE = "https://khoshkhah.github.io/duckOSM/reference/features/";
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "area";
 
 // DuckDB starts when the page opens, while the user makes the area
@@ -61,26 +65,65 @@ const split = (name) => {
 };
 // the same SQL as the native .duckdb writer (crates/duckosm-duckdb)
 const select = (table) => (table === "nodes" ? "SELECT node_id, geometry AS geom" : "SELECT *");
+// The page reads the geometry as WKB and makes a GEOMETRY without a CRS, the type of duckOSM's tables: with DuckDB's spatial extension
+// loaded (the base-map layers), duckdb-wasm 1.33.1-dev57.0 (spatial 28db190) fails on each value of the type GEOMETRY('OGC:CRS84')
+// ("stoi: no conversion"), and a GeoParquet file gives that type. ('EPSG:4326' works; native DuckDB has no such error.)
+const GEOM = "ST_GeomFromWKB(geometry)";
+const selectWkb = (table) => (table === "nodes" ? `SELECT node_id, ${GEOM} AS geom`
+  : table === "edges" || table === "private_edges" ? `SELECT * REPLACE (${GEOM} AS geometry)` : "SELECT *");
 
 // the files of a build into DuckDB, one schema for each mode; the old tables go away
 export async function loadTables(files) {
   await duckReady;
   for (const m of new Set(tables.map((t) => t.mode))) await conn.query(`DROP SCHEMA IF EXISTS ${m} CASCADE`);
+  await conn.query("DROP SCHEMA IF EXISTS raw CASCADE; DROP TABLE IF EXISTS main.boundary; SET enable_geoparquet_conversion = false");
   tables = [];
   for (const [name, bytes] of Object.entries(files)) {
+    if (name.startsWith("raw_")) continue;     // loadFeatures reads them
     const { mode, table } = split(name);
     // registerFileBuffer moves the buffer into DuckDB's worker, so DuckDB gets a copy and the page keeps the file for its download.
     // ponytail: two copies of each file; read them back from DuckDB if memory matters.
     await db.registerFileBuffer(name, bytes.slice());
     await conn.query(`CREATE SCHEMA IF NOT EXISTS ${mode}`);
-    await conn.query(`CREATE OR REPLACE TABLE ${mode}.${table} AS ${select(table)} FROM read_parquet('${name}')`);
+    await conn.query(`CREATE OR REPLACE TABLE ${mode}.${table} AS ${selectWkb(table)} FROM read_parquet('${name}')`);
     const rows = Number((await conn.query(`SELECT count(*) AS n FROM ${mode}.${table}`)).toArray()[0].n);
     tables.push({ mode, table, name, bytes, rows });
   }
+  await conn.query("SET enable_geoparquet_conversion = true");
   await conn.query(MACROS);
 }
 
 export const query = (sql) => conn.query(sql);
+
+// the base-map layers (docs/features.md): DuckDB's spatial extension, loaded once (the first time, the browser downloads it, 4.5 MB)
+let spatial = null;
+export const loadSpatial = () => (spatial ??= duckReady.then(() => conn.query("INSTALL spatial; LOAD spatial")));
+
+// duckOSM's raw.* files of the build, then duckOSM's SQL of the layers (features.sql, from the wasm module) makes features.*; raw.* stays
+// for SQL, as in a duckOSM .duckdb file. main.boundary (the background of the map) comes from the boundary. Each features table also
+// becomes features_<table>.parquet, as duckOSM's GeoParquet export (every column but tags).
+export async function loadFeatures(files, sql, boundary) {
+  await loadSpatial();
+  for (const name of ["raw_nodes.parquet", "raw_ways.parquet", "raw_relations.parquet"]) await db.registerFileBuffer(name, files[name]);
+  await conn.query(sql);
+  for (const name of ["raw_nodes.parquet", "raw_ways.parquet", "raw_relations.parquet"]) await db.dropFile(name);
+  if (boundary) {
+    const lit = (v) => (v == null ? "NULL" : `'${String(v).replaceAll("'", "''")}'`);
+    const feats = JSON.parse(boundary).features ?? [];
+    await conn.query("CREATE OR REPLACE TABLE main.boundary AS " + feats.map((f) =>
+      `SELECT ${lit(f.properties?.name)} AS name, ST_GeomFromGeoJSON(${lit(JSON.stringify(f.geometry))}) AS geom`).join(" UNION ALL "));
+  }
+  const names = (await conn.query("SELECT table_name AS t FROM information_schema.tables WHERE table_catalog = 'memory' " +
+    "AND table_schema = 'features' ORDER BY 1")).toArray().map((r) => r.t);
+  for (const table of names) {
+    const name = `features_${table}.parquet`;
+    await db.dropFile(name).catch(() => {});     // duckdb-wasm does not see a second COPY to a kept file name
+    await conn.query(`COPY (SELECT * EXCLUDE (tags) FROM features.${table}) TO '${name}' (FORMAT parquet)`);
+    const bytes = await db.copyFileToBuffer(name);
+    const rows = Number((await conn.query(`SELECT count(*) AS n FROM features.${table}`)).toArray()[0].n);
+    tables.push({ mode: "features", table, name, bytes, rows });
+  }
+}
 
 // load.sql: it makes a .duckdb file from the Parquet files (duckdb-wasm 1.33.1-dev57.0 keeps a written .duckdb file locked after
 // DETACH, so the page cannot give that file)
@@ -100,10 +143,13 @@ export function loadSql(areaName) {
 export async function zipAll(areaName, boundary) {
   const { zipSync, strToU8 } = await import("https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js");
   const dir = slug(areaName) + "/";
-  const layers = tables.filter((t) => t.table === "edges" || t.table === "nodes").map((t) => ({ file: t.name, kind: t.table, mode: t.mode, count: t.rows }));
+  const layers = tables.filter((t) => t.mode !== "features" && (t.table === "edges" || t.table === "nodes"))
+    .map((t) => ({ file: t.name, kind: t.table, mode: t.mode, count: t.rows }))
+    .concat(tables.filter((t) => t.mode === "features").map((t) => ({ file: t.name, kind: "features", table: t.table, count: t.rows })));
   const readme = [`duckOSM tables of ${areaName}, built by duckosm-rust in the browser.`, "",
     "<table>_<mode>.parquet: GeoParquet files, one for each table and mode:",
     ...Object.entries(TABLES).map(([t, d]) => `  ${t}: ${d}`), "",
+    ...(tables.some((t) => t.mode === "features") ? [`features_<table>.parquet: ${FEATURES_TEXT}`, `  The layers and their columns: ${FEATURES_REFERENCE}`, ""] : []),
     "load.sql: makes one .duckdb file from them (duckdb <name>.duckdb < load.sql, in this folder).",
     "layers.json: the list of the map layers, as duckOSM's GeoParquet export writes it.",
     "boundary.geojson: the area, in the format of duckosm boundary.", "", `The columns of each table: ${REFERENCE}`, ""].join("\n");
@@ -114,20 +160,29 @@ export async function zipAll(areaName, boundary) {
   return { blob: new Blob([zipSync(files)], { type: "application/zip" }), name: slug(areaName) + ".zip" };
 }
 
-// the style of the roads map: duckdb-wasm writes roads.parquet (the drawing levels from the tags), and roadstyle's Rust module makes
-// the MapLibre style in a new worker (map/map_worker.js; a worker that ends gives its memory back)
+// the style of the roads map: duckdb-wasm writes roads.parquet (the drawing levels from the tags) and, with the base-map layers,
+// features.parquet; roadstyle's Rust module makes the MapLibre style in a new worker (map/map_worker.js; a worker that ends gives its
+// memory back)
+let look = null;
 export async function roadsStyle(mode, name) {
   const t = performance.now();
   const q = async (sql) => (await conn.query(sql)).toArray().map((r) => r.toJSON());
   await db.dropFile("roads.parquet").catch(() => {});     // duckdb-wasm does not see a second COPY to a kept file name
   await writeRoads(q, "memory", mode, { levels: "tags" });
   const roads = await db.copyFileToBuffer("roads.parquet");
+  // the base-map layers, when the build made them: features.parquet, the rows of the look's layers (map/features_sql.js)
+  let features;
+  if (tables.some((t) => t.mode === "features")) {
+    look ??= fetch(new URL("../map/look.json", import.meta.url)).then((r) => r.json());
+    await db.dropFile("features.parquet").catch(() => {});
+    if (await writeFeatures(q, "memory", (await look).features.layers_yaml.layers)) features = await db.copyFileToBuffer("features.parquet");
+  }
   const roadsSeconds = (performance.now() - t) / 1000;
   const out = await new Promise((ok, fail) => {
     const w = new Worker(new URL("../map/map_worker.js", import.meta.url), { type: "module" });
     w.onmessage = ({ data }) => { w.terminate(); data.error ? fail(new Error(data.error)) : ok(data); };
     w.onerror = (e) => { w.terminate(); fail(new Error(e.message || "the map worker failed")); };
-    w.postMessage({ roads, name }, [roads.buffer]);
+    w.postMessage({ roads, features, name }, [roads.buffer, ...(features ? [features.buffer] : [])]);
   });
   return { style: JSON.parse(out.style), roadsSeconds, styleSeconds: out.seconds, memoryMiB: out.memoryMiB };
 }
