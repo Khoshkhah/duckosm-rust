@@ -66,22 +66,36 @@ The page keeps the selected file only in memory. After a reload, the user select
   the WebAssembly memory of the build module (it only grows, so it is the largest size until then), DuckDB's
   buffers (`duckdb_memory()`) or the memory of the map module.
 
-### Step 5: the result
+### Step 5: the result (the data)
 
-- **Roads of**: all modes, or one mode. The roads show on the map in roadstyle's style (`map/`), as in step
-  M1 of [browser.md](browser.md).
-- **Base map**: OpenFreeMap (the default), light gray (Esri), or none. The base map of the map stays
-  OpenFreeMap; the other two are a layer over it, under the roads. After a build with the base-map layers, a fourth
-  option is the default: **duckOSM layers**, the layers of the build inside the area ([features.md](features.md)).
+Kaveh's layout of 2026-10-23: the data in card 5, the map in card 6.
+
 - **SQL**: a text box, **Run**, and the result as a table (the first 200 rows) in the card.
 - **Downloads** (changed after Kaveh found that the files had no structure):
   - **Download all (.zip)**: a folder named after the area, with the Parquet files (the names of duckOSM's
     GeoParquet export, `<table>_<mode>.parquet`), `layers.json` (its list of the map layers, which the roadstyle
-    GeoLibre plugin opens), `load.sql`, `boundary.geojson` and a `README.txt` that says what each table holds.
-  - **load.sql** alone.
+    GeoLibre plugin opens), `make_duckdb.sql`, `boundary.geojson` and a `README.txt` that says what each table holds.
+    `README.txt` gives the command that makes one `.duckdb` file: `duckdb <area>.duckdb < make_duckdb.sql`. (The
+    file was `load.sql`, with its own button; the button is gone.)
   - One block for each table: its name, one sentence on what it holds, and a link for each mode with the number
     of rows. A link goes to duckOSM's reference of the columns. With the base-map layers, one more block,
-    `features`, has a link for each layer; the zip has them as `features_<table>.parquet`, in `layers.json` too.
+    `features`, has a tile for each layer (its name and number of rows; a click downloads it); the zip has them as
+    `features_<table>.parquet`, in `layers.json` too.
+
+### Step 6: visualization
+
+- **Network**: All, Driving, Walking, Cycling: only the modes of the build, and no list for a build with one mode.
+  (It was "Roads of" in step 5; Kaveh did not understand the name.) A change draws the map again when it shows.
+- **Base map**: OpenFreeMap (the default), Satellite (Esri World Imagery), Gray (Esri) or Blank. All except
+  OpenFreeMap hide all of OpenFreeMap's layers, also its labels and 3D buildings.
+- **Layers**: **3D** (the map tilts to 60 degrees and shows the 3D buildings), **Buildings**, and after a build with
+  the base-map layers **duckOSM layers** ([features.md](features.md)). Satellite turns the duckOSM layers off, because
+  they cover the photo. The page keeps the base map and the buildings choice.
+- **Show on map** draws the roads of the network. After a build, the page draws them at once only for a small area
+  (fewer than 20,000 roads: Monaco has 13,298). A larger area waits for the click (Tartu: 64,828 roads).
+- One line under it: the number of roads and the time of the last drawing. The table in step 4 has each step.
+- These choices were buttons on the map for one commit (3D, buildings, a base-map list). Now the map has only the
+  zoom buttons.
 
 ## The map
 
@@ -96,15 +110,8 @@ The page keeps the selected file only in memory. After a reload, the user select
   from roadstyle's pieces (`rs-simple`), and the road's properties come from the map worker by its number
   (`__rs_edge`). Before the tiles, the click looked for the source `rs-roads`, whose layers are hidden, and found
   nothing.
-- The buttons under the zoom buttons (2026-10-23, Kaveh's design):
-  - **3D** tilts the map to 60 degrees and shows the 3D buildings. A second click makes the map flat again.
-  - **Buildings** shows or hides all buildings.
-  - **Base map** (the grid) opens a list: OpenFreeMap, Light gray (Esri), Satellite (Esri World Imagery) and
-    Blank. All except OpenFreeMap hide all of OpenFreeMap's layers, also its labels and 3D buildings. After a
-    build with the base-map layers, the list also has **duckOSM layers**. Satellite turns them off, because they
-    cover the photo. The page keeps the base map and the buildings choice.
-  - Only one 3D building layer shows: OpenFreeMap's, or roadstyle's own over another base map. Before, the
-    base-map switch also turned on roadstyle's hidden 3D layer, and the two layers drew over each other.
+- Only one 3D building layer shows: OpenFreeMap's, or roadstyle's own over another base map. Before, the base-map
+  switch also turned on roadstyle's hidden 3D layer, and the two layers drew over each other.
 
 ## The code
 

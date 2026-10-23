@@ -1,5 +1,6 @@
 """The page in headless Chromium (Playwright): build an area, run a query, show the roads map (a picture in
-map.png), and download the Parquet files and load.sql. Prints the times of the page as JSON (docs/browser.md, steps B3 and B4).
+map.png; a large area waits for "Show on map", which the test clicks), and download the zip and the Parquet files. The
+out folder gets make_duckdb.sql from the zip. Prints the times of the page as JSON (docs/browser.md, steps B3 and B4).
 
     python crates/duckosm-wasm/www/e2e.py <file.osm.pbf> <out folder> [--boundary area.geojson] [--modes driving,walking,cycling] [--fixes file.yaml]
         [--no-features]
@@ -77,15 +78,13 @@ with sync_playwright() as p:
     page.click("#query")
     page.wait_for_selector("#result table, #result .error", timeout=60_000)
     print("query:", page.inner_text("#result p"))
-    with page.expect_download(timeout=60_000) as d:
-        page.click("#duckdb")
-    d.value.save_as(out / "load.sql")
-    # the zip: a folder with the Parquet files, layers.json, load.sql, the boundary and a README
+    # the zip: a folder with the Parquet files, layers.json, make_duckdb.sql, the boundary and a README
     with page.expect_download(timeout=120_000) as d:
         page.click("#zip")
     d.value.save_as(out / "all.zip")
     with zipfile.ZipFile(out / "all.zip") as z:
         names = z.namelist()
+        (out / "make_duckdb.sql").write_bytes(next(z.read(n) for n in names if n.endswith("/make_duckdb.sql")))
     parquet = [n for n in names if n.endswith(".parquet")]
     print(f"zip: {len(parquet)} Parquet files and", sorted(n.split("/", 1)[1] for n in names if not n.endswith(".parquet")))
     # the bytes of each file through its blob link (Chromium stops many downloads in a row)
@@ -96,8 +95,11 @@ with sync_playwright() as p:
     }))""")
     for name, data in files:
         (out / name).write_bytes(base64.b64decode(data))
-    # the roads map (map/): its note, and a picture of it
-    page.wait_for_function("/layers:|failed/.test(document.getElementById('mapnote').textContent)", timeout=600_000)
+    # the roads map (map/, card 6): its note, and a picture of it
+    page.wait_for_function("/drawn|failed|Show on map/.test(document.getElementById('mapnote').textContent)", timeout=600_000)
+    if "Show on map" in page.inner_text("#mapnote"):
+        page.click("#show")
+        page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent)", timeout=600_000)
     print("map:", page.inner_text("#mapnote"))
     page.wait_for_function("window.duckMap && window.duckMap.loaded()", timeout=600_000)   # the tiles are cut and drawn
     print("map view:", page.evaluate("(() => { const m = window.duckMap; return {center: m.getCenter(), zoom: m.getZoom()}; })()"))

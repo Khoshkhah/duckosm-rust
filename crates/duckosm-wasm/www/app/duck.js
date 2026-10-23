@@ -86,7 +86,7 @@ const select = (table) => ({
   boundary: "SELECT * EXCLUDE (geometry), geometry AS geom",
   visualization_metadata: "SELECT boundary_geojson::JSON AS boundary_geojson, center_lat, center_lon, initial_zoom, timezone, built_at, duckosm_version",
 }[table] ?? "SELECT *");
-const MODES = ["driving", "walking", "cycling"];
+export const MODES = ["driving", "walking", "cycling"];
 // duckOSM's view mm.edges: the edges of all modes with a mode column, the modes in name order
 const mmEdges = (modes) => `CREATE OR REPLACE VIEW mm.edges AS ` + [...modes].sort().map((m) =>
   `SELECT '${m}' AS mode, edge_id, source, target, cost_s, length_m, highway, name, geometry FROM ${m}.edges`).join(" UNION ALL ");
@@ -155,12 +155,12 @@ export async function loadFeatures(files, sql) {
   }
 }
 
-// load.sql: it makes a .duckdb file from the Parquet files (duckdb-wasm 1.33.1-dev57.0 keeps a written .duckdb file locked after
-// DETACH, so the page cannot give that file)
+// make_duckdb.sql: it makes a .duckdb file from the Parquet files (duckdb-wasm 1.33.1-dev57.0 keeps a written .duckdb file locked
+// after DETACH, so the page cannot give that file)
 export function loadSql(areaName) {
   const file = slug(areaName);
   const lines = [`-- duckOSM tables of ${areaName.replace(/\n/g, " ")}, from the Parquet files of duckosm-rust in the browser.`,
-    `-- In the folder of the files: duckdb ${file}.duckdb < load.sql`];
+    `-- In the folder of the files: duckdb ${file}.duckdb < make_duckdb.sql`];
   for (const m of new Set(tables.map((t) => t.mode))) lines.push(`CREATE SCHEMA IF NOT EXISTS ${m};`);
   for (const t of tables) lines.push(`CREATE TABLE ${t.mode}.${t.table} AS ${select(t.table)} FROM read_parquet('${t.name}');`);
   if (tables.some((t) => t.mode === "mm")) lines.push(mmEdges(MODES.filter((m) => tables.some((t) => t.mode === m))) + ";");
@@ -169,7 +169,7 @@ export function loadSql(areaName) {
 }
 
 // all files of the build in one zip, in a folder named after the area: the Parquet files (the names of duckOSM's GeoParquet export),
-// layers.json (its list of the map layers, which the roadstyle GeoLibre plugin opens), load.sql, the boundary and a README. The Parquet
+// layers.json (its list of the map layers, which the roadstyle GeoLibre plugin opens), make_duckdb.sql, the boundary and a README. The Parquet
 // files are compressed already, so the zip only stores them.
 export async function zipAll(areaName, boundary) {
   const { zipSync, strToU8 } = await import("https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js");
@@ -181,10 +181,11 @@ export async function zipAll(areaName, boundary) {
     "<table>_<mode>.parquet: GeoParquet files, one for each table and mode:",
     ...Object.entries(TABLES).map(([t, d]) => `  ${t}: ${d}`), "",
     ...(tables.some((t) => t.mode === "features") ? [`features_<table>.parquet: ${FEATURES_TEXT}`, `  The layers and their columns: ${FEATURES_REFERENCE}`, ""] : []),
-    "load.sql: makes one .duckdb file from them (duckdb <name>.duckdb < load.sql, in this folder).",
+    "make_duckdb.sql: makes one .duckdb file from them. In this folder, run:",
+    `  duckdb ${slug(areaName)}.duckdb < make_duckdb.sql`,
     "layers.json: the list of the map layers, as duckOSM's GeoParquet export writes it.",
     "boundary.geojson: the area, in the format of duckosm boundary.", "", `The columns of each table: ${REFERENCE}`, ""].join("\n");
-  const files = { [dir + "README.txt"]: strToU8(readme), [dir + "load.sql"]: strToU8(loadSql(areaName)),
+  const files = { [dir + "README.txt"]: strToU8(readme), [dir + "make_duckdb.sql"]: strToU8(loadSql(areaName)),
                   [dir + "layers.json"]: strToU8(JSON.stringify({ layers }, null, 1)) };
   if (boundary) files[dir + "boundary.geojson"] = strToU8(boundary);
   for (const t of tables) files[dir + t.name] = [t.bytes, { level: 0 }];

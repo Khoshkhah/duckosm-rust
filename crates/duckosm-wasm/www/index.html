@@ -36,21 +36,6 @@
   html, body { height: 100%; margin: 0; }
   body { font: 14px/1.45 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--fg); background: var(--bg); }
   #map { position: fixed; inset: 0; }
-  /* the map buttons under the zoom buttons: 3D, buildings, base map (a list that opens to the left) */
-  .mapctl { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
-  .mapctl > .maplibregl-ctrl-group { margin: 0; position: relative; }
-  .mapctl button { display: grid; place-items: center; font: 700 12px system-ui, sans-serif; color: #333; }
-  .mapctl button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; }
-  .mapctl button[aria-pressed="true"], .mapctl button[aria-expanded="true"] { color: #fff; background-color: #2563eb !important; }
-  .basepop { position: absolute; top: 0; right: 38px; width: 180px; padding: 8px; display: grid; gap: 2px; border-radius: 8px;
-    background: var(--bg); color: var(--fg); box-shadow: 0 2px 10px rgb(0 0 0 / 20%); font-size: 12.5px; }
-  .basepop[hidden] { display: none; }
-  .basepop .h { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin: 2px 4px 4px; }
-  .basepop label { display: flex; align-items: center; gap: 8px; padding: 4px; border-radius: 6px; cursor: pointer; }
-  .basepop label:hover { background: var(--surface); }
-  .basepop .sw { width: 22px; height: 16px; border-radius: 3px; border: 1px solid var(--line); flex: none; }
-  .basepop hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; width: 100%; }
-  .basepop #ownbox[hidden], .basepop #ownsep[hidden] { display: none; }
   #panel {
     position: fixed; top: 0; left: 0; bottom: 0; width: 370px; z-index: 2; transition: transform 0.25s ease;
     display: flex; flex-direction: column; background: var(--bg); border-right: 1px solid var(--line); box-shadow: 4px 0 18px rgba(15, 23, 42, 0.12);
@@ -171,7 +156,8 @@
   footer { display: grid; grid-template-columns: 1fr 1.5fr; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--line); background: var(--bg); }
 
   /* steps 3 to 5: the data, the build, the result (docs/app.md) */
-  #step4-card { --c: #059669; } #step5-card { --c: #0f766e; }
+  #step4-card { --c: #059669; } #step5-card { --c: #0f766e; } #step6-card { --c: #c026d3; }
+  .grid2 [hidden] { display: none; }
   .pick { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 10px; cursor: pointer; margin-bottom: 10px; }
   .pick:hover { border-color: var(--accent); color: var(--accent); }
   .pick span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -269,20 +255,6 @@
 </svg>
 
 <div id="map" role="region" aria-label="Map of the area"></div>
-<div id="mapctl" class="maplibregl-ctrl mapctl">
-  <div class="maplibregl-ctrl-group"><button id="b3d" type="button" title="3D view" aria-label="3D view" aria-pressed="false">3D</button></div>
-  <div class="maplibregl-ctrl-group"><button id="bbld" type="button" title="Buildings" aria-label="Buildings" aria-pressed="true"><svg><use href="#i-building"/></svg></button></div>
-  <div class="maplibregl-ctrl-group"><button id="bbase" type="button" title="Base map" aria-label="Base map" aria-expanded="false" aria-controls="basepop"><svg><use href="#i-grid"/></svg></button>
-    <div id="basepop" class="basepop" role="group" aria-label="Base map" hidden>
-      <div class="h">Base map</div>
-      <label><input type="radio" name="base" value=""><span class="sw" style="background:#f2efe9"></span>OpenFreeMap</label>
-      <label><input type="radio" name="base" value="esri_gray"><span class="sw" style="background:#e4e4e4"></span>Light gray</label>
-      <label><input type="radio" name="base" value="satellite"><span class="sw" style="background:linear-gradient(135deg,#3d5a3a,#7b8a5c 50%,#a09a7c)"></span>Satellite</label>
-      <label><input type="radio" name="base" value="blank"><span class="sw" style="background:var(--bg)"></span>Blank</label>
-      <hr id="ownsep" hidden>
-      <label id="ownbox" hidden><input type="checkbox" id="ownlayers" checked>duckOSM layers</label>
-    </div></div>
-</div>
 
 <div id="status" role="status" aria-live="polite"></div>
 
@@ -408,22 +380,34 @@
 
 <section id="step5-card" class="step" aria-labelledby="step5" hidden>
   <h2 id="step5"><span class="n">5</span>The result</h2>
-  <div class="grid2">
-    <label for="mapmode" class="small">Roads of</label>
-    <select id="mapmode"><option value="all">all modes</option><option value="driving">driving</option><option value="walking">walking</option><option value="cycling">cycling</option></select>
-  </div>
-  <p id="mapnote" class="progress" aria-live="polite"></p>
-  <h2 style="margin-top:16px">SQL</h2>
+  <h2 style="margin-top:4px">SQL</h2>
   <textarea id="sql" rows="4" aria-label="SQL">SELECT highway, count(*) AS edges, round(sum(length_m) / 1000, 1) AS km
 FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
   <div class="row" style="margin-top:6px"><button id="query" class="btn">Run</button></div>
   <div id="result"></div>
   <h2 style="margin-top:16px">Downloads</h2>
-  <div class="row" style="margin-top:0"><button id="zip" class="btn primary"><svg><use href="#i-download"/></svg>Download all (.zip)</button>
-    <button id="duckdb" class="btn" title="It makes one .duckdb file from the Parquet files">load.sql</button></div>
-  <p class="small muted">The zip has a folder with all tables as GeoParquet files, load.sql (it makes a .duckdb file), the boundary and a README.
-    One table at a time is below. <a id="reference" target="_blank" rel="noopener">The columns of each table</a></p>
+  <div class="row" style="margin-top:0"><button id="zip" class="btn primary"><svg><use href="#i-download"/></svg>Download all (.zip)</button></div>
+  <p class="small muted">The zip has a folder with all tables as GeoParquet files, make_duckdb.sql (it makes one .duckdb file: the
+    README gives the command), the boundary and a README. One table at a time is below.
+    <a id="reference" target="_blank" rel="noopener">The columns of each table</a></p>
   <div id="files"></div>
+</section>
+
+<section id="step6-card" class="step" aria-labelledby="step6">
+  <h2 id="step6"><span class="n">6</span>Visualization</h2>
+  <div class="grid2">
+    <label for="mapmode" class="small" id="mapmode-label" hidden>Network</label>
+    <select id="mapmode" hidden></select>
+    <label for="basemap" class="small">Base map</label>
+    <select id="basemap"><option value="">OpenFreeMap</option><option value="satellite">Satellite</option><option value="esri_gray">Gray</option><option value="blank">Blank</option></select>
+  </div>
+  <div class="checks" role="group" aria-label="Layers" style="margin-top:8px">
+    <label><input type="checkbox" id="lay3d">3D</label>
+    <label><input type="checkbox" id="laybld" checked>Buildings</label>
+    <label id="ownbox" hidden><input type="checkbox" id="ownlayers" checked>duckOSM layers</label>
+  </div>
+  <div class="row" id="showrow" style="margin-top:10px" hidden><button id="show" class="btn primary">Show on map</button></div>
+  <p id="mapnote" class="progress" aria-live="polite"></p>
 </section>
 
 </div>
@@ -504,7 +488,6 @@ const map = new maplibregl.Map({ container: "map", style: "https://tiles.openfre
 map.addControl(new maplibregl.NavigationControl(), "top-right");
 // the tiles of the roads map: roadstyle's module makes each one when the map asks for it (app/duck.js tile())
 maplibregl.addProtocol("rs", async (params) => ({ data: await duck.tile(params.url) }));
-map.addControl({ onAdd: () => $("mapctl"), onRemove: () => {} }, "top-right");   // 3D, buildings, base map: under the zoom buttons
 map.addControl(new maplibregl.ScaleControl(), "bottom-left");
 const loaded = new Promise((ok) => map.on("load", ok));
 // OpenFreeMap's layers (the style before the page adds its own), and which of them are roads
@@ -1054,6 +1037,8 @@ $("run").onclick = async () => {
   canBuild();
   $("step5-card").hidden = true;
   $("steplog").hidden = true;
+  $("showrow").hidden = true;
+  $("mapnote").textContent = "";
   removeRoads();
   areaName = $("name").value.trim() || "area";
   try {
@@ -1115,10 +1100,8 @@ $("run").onclick = async () => {
              `in DuckDB and you can query them (the table below gives each step). Build module: ${out.memoryMiB} MiB, ` +
              `${out.threads} thread(s).`);
     files();
-    // the base map from the layers of the build, when there are layers
-    $("ownbox").hidden = $("ownsep").hidden = !duck.tables.some((t) => t.mode === "features");
     $("step5-card").hidden = false;
-    showRoads();
+    await visualization();
   } catch (e) {
     progress("Error: " + e.message);
   }
@@ -1176,13 +1159,32 @@ async function showRoads() {
     const total = (performance.now() - t0) / 1000;
     logSteps([{ step: "the roads table (DuckDB)", ms: r.roadsSeconds * 1000 }, { step: "the style", ms: r.styleSeconds * 1000, mib: r.memoryMiB },
       { step: "draw the map", ms: (total - r.roadsSeconds - r.styleSeconds) * 1000 }], "map");
-    $("mapnote").textContent = `${r.style.layers.length} layers: roads table ${num(r.roadsSeconds, 2)} s, style ${num(r.styleSeconds, 2)} s ` +
-      `(${r.memoryMiB} MiB), map ${num((performance.now() - t0) / 1000, 2)} s. Click a road for its data.`;
+    $("mapnote").textContent = `${num(roadCount[$("mapmode").value] ?? 0)} roads, drawn in ${num(total, 1)} s (step 4 gives each ` +
+      `step). Click a road for its data.`;
   } catch (e) {
     if (run === roadsRun) $("mapnote").textContent = "The map failed: " + e.message;
   }
 }
-$("mapmode").onchange = showRoads;
+// card 6 after a build: the networks of the build (no list for one), the duckOSM layers when the build made them, and the roads
+// on the map at once for a small area; a larger one waits for "Show on map" (MapLibre needs time and memory for it)
+const AUTO_DRAW = 20000;
+let roadCount = {};
+async function visualization() {
+  const modes = duck.MODES.filter((m) => duck.tables.some((t) => t.mode === m && t.table === "edges"));
+  const count = async (ms) => Number((await duck.query(`SELECT count(DISTINCT edge_id) AS n FROM (${ms.flatMap((m) => ["edges", "private_edges"]
+    .filter((t) => duck.tables.some((x) => x.mode === m && x.table === t)).map((t) => `SELECT edge_id FROM ${m}.${t}`)).join(" UNION ALL ")})`)).toArray()[0].n);
+  roadCount = { all: await count(modes) };
+  for (const m of modes) roadCount[m] = await count([m]);
+  const options = (modes.length > 1 ? ["all", ...modes] : modes).map((m) => `<option value="${m}">${m === "all" ? "All" : m[0].toUpperCase() + m.slice(1)}</option>`);
+  $("mapmode").innerHTML = options.join("");
+  $("mapmode").hidden = $("mapmode-label").hidden = modes.length < 2;
+  $("ownbox").hidden = !duck.tables.some((t) => t.mode === "features");
+  $("showrow").hidden = false;
+  if (roadCount.all < AUTO_DRAW) showRoads();
+  else $("mapnote").textContent = `${num(roadCount.all)} roads: a large map. Click Show on map to draw it.`;
+}
+$("show").onclick = showRoads;
+$("mapmode").onchange = () => { if (roadsShown) showRoads(); };
 
 // the base map: OpenFreeMap, or a layer over it (under the roads): roadstyle's keyless raster map, or an empty background
 const BASEMAPS = {
@@ -1191,7 +1193,7 @@ const BASEMAPS = {
   satellite: { tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
                attribution: "Imagery © Esri, Maxar, Earthstar Geographics", maxzoom: 19 },
 };
-// the map buttons: the base map (OpenFreeMap without its roads while the duckOSM roads show, Esri's light gray or satellite
+// card 6: the base map (OpenFreeMap without its roads while the duckOSM roads show, Esri's light gray or satellite
 // tiles, or a blank background; all but OpenFreeMap hide all of its layers, also its labels and 3D buildings), the duckOSM
 // layers (the base-map layers of the build, the style's sources ov<i>, over any base map), the buildings and the 3D view.
 // The 3D buildings are OpenFreeMap's; over another base map they are the duckOSM layers' own (roadstyle adds them hidden).
@@ -1213,23 +1215,20 @@ function setBase() {
     map.addSource("base-over", { type: "raster", tileSize: 256, ...BASEMAPS[v] });
     map.addLayer({ id: "base-over", type: "raster", source: "base-over" }, bottom);
   }
-  for (const r of document.querySelectorAll("input[name=base]")) r.checked = r.value === v;
-  $("bbld").ariaPressed = String(view.buildings);
-  $("b3d").ariaPressed = String(view.threeD);
+  $("basemap").value = v;
+  $("laybld").checked = view.buildings;
+  $("lay3d").checked = view.threeD;
 }
-const popBase = (open) => { $("basepop").hidden = !open; $("bbase").ariaExpanded = String(open); };
-$("bbase").onclick = () => popBase($("basepop").hidden);
-document.addEventListener("click", (e) => { if (!$("basepop").hidden && !e.target.closest("#bbase, #basepop")) popBase(false); });
-for (const r of document.querySelectorAll("input[name=base]")) r.onchange = () => {
-  view.base = r.value;
-  keep("duckosm.basemap", r.value);
-  if (r.value === "satellite") $("ownlayers").checked = false;   // the duckOSM layers would cover the photo
+$("basemap").onchange = () => {
+  view.base = $("basemap").value;
+  keep("duckosm.basemap", view.base);
+  if (view.base === "satellite") $("ownlayers").checked = false;   // the duckOSM layers would cover the photo
   loaded.then(setBase);
 };
 $("ownlayers").onchange = () => loaded.then(setBase);
-$("bbld").onclick = () => { view.buildings = !view.buildings; keep("duckosm.buildings", view.buildings ? "1" : "0"); loaded.then(setBase); };
-$("b3d").onclick = () => {
-  view.threeD = !view.threeD;
+$("laybld").onchange = () => { view.buildings = $("laybld").checked; keep("duckosm.buildings", view.buildings ? "1" : "0"); loaded.then(setBase); };
+$("lay3d").onchange = () => {
+  view.threeD = $("lay3d").checked;
   if (view.threeD) view.buildings = true;
   map.easeTo({ pitch: view.threeD ? 60 : 0, bearing: view.threeD ? map.getBearing() : 0, zoom: view.threeD ? Math.max(map.getZoom(), 15.5) : map.getZoom() });
   loaded.then(setBase);
@@ -1267,7 +1266,7 @@ $("query").onclick = async () => {
   }
 };
 
-// the downloads: all files in one zip, load.sql, and each table: a row for each table (with what it holds), a column for each mode
+// the downloads: all files in one zip (with make_duckdb.sql), and each table: a row for each table (with what it holds), a column for each mode
 const size = (b) => (b < 2 ** 20 ? `${num(Math.max(1, b / 1024))} KB` : `${mb(b)} MB`);
 let urls = [];
 function files() {
@@ -1303,12 +1302,6 @@ $("zip").onclick = async () => {
   } catch (e) {
     status("The zip failed: " + e.message, 8000);
   }
-};
-$("duckdb").onclick = () => {
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([duck.loadSql(areaName)], { type: "text/plain" }));
-  a.download = "load.sql";
-  a.click();
 };
 
 // the last boundary (kept at each build), for example after a reload
