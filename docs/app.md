@@ -155,6 +155,21 @@ Kaveh's layout of 2026-10-23: the data in card 5, the map in card 6.
   difference to OpenFreeMap went from 3.0 m to 0.36 m. A building with no tags has the height of its kind (9 m by
   default); OpenFreeMap gives it 5 m.
 
+## The Google Maps key (plan for publishing)
+
+Street View's Linked mode and Google 3D need a Google Maps JavaScript API key. Kaveh has two keys (2026-10-23):
+
+- **Local work (localhost):** the environment variable `GOOGLE_MAPS_KEY` of his shell. The page does not read it: the
+  user enters the key once (the key button in the Street View window, or card 6), and the page keeps it in this
+  browser (`localStorage`). The headless tests read it from the environment only for the test, and never write it to
+  a file, a log or a screenshot.
+- **The published page (later, GitHub Pages):** the repository secret `GOOGLE_MAPS_KEY`, as roadstyle does for its
+  manual's live maps (roadstyle `.github/workflows/docs.yml`, step "Build the live maps"). The plan: the Pages workflow
+  reads the secret into the environment, stops when it is empty, and writes it into the page that it deploys (for
+  example as the default of the key field); the key is never in git. A key in a deployed page is visible to its
+  readers, so it must be limited to the site's address (for example `https://khoshkhah.github.io/*`) and to the Maps
+  JavaScript API (roadstyle `docs/guides/google-key.md`). Not set up yet.
+
 ## The code
 
 - `index.html`: the page (the boundary tool's HTML and CSS, and the new steps).
