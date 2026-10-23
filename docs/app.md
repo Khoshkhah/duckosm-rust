@@ -111,7 +111,8 @@ Kaveh's layout of 2026-10-23: the data in card 5, the map in card 6.
   from roadstyle's pieces (`rs-simple`), and the road's properties come from the map worker by its number
   (`__rs_edge`). Before the tiles, the click looked for the source `rs-roads`, whose layers are hidden, and found
   nothing.
-- The buttons under the zoom buttons (Kaveh's design of 2026-10-23):
+- The buttons under the zoom buttons (Kaveh's design of 2026-10-23, from roadstyle's map: the same icons, sizes and
+  spacing): 3D, the 3D buildings switch, Street View, Google 3D (only with a key), and the base map (▦) last:
   - **3D** tilts the map to 60 degrees and shows the 3D buildings. A second click makes the map flat again.
   - **Base map** (the grid) opens a list: OpenFreeMap, Light gray (Esri), Satellite (Esri World Imagery) and
     Blank. All except OpenFreeMap hide all of OpenFreeMap's layers, also its labels (in the 3D view without the duckOSM 3D buildings, its 3D buildings stay). After a
