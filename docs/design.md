@@ -294,7 +294,10 @@ Rule: a skipped test is not a pass.
    `tools/make_golden_summary.py`). With `global_junctions` on, Monaco has no mergeable chain (duckOSM
    gives 0 rows in `edge_id_map`), so the variants with it off give the real test of the merge: 114, 265
    and 291 chains in driving, walking and cycling, and 361, 1,124 and 1,159 rows in `edge_id_map`.
-3c. **Connector direction.** The dangling-path connector finds the same connectors, the same `edge_id` values, the
+3c. **Connector direction (closed on 2026-10-23).** duckOSM `123910c` takes the dangling ends in the order of the
+   node id and uses `min(highway)`, as duckosm-rust does. On Monaco with the connector on, the two programs are now
+   equal on every edge row in the three modes. The text below describes the difference before that change.
+   The dangling-path connector finds the same connectors, the same `edge_id` values, the
    same nodes and the same component filter result as duckOSM (24 test cases). One thing is not equal, and it
    cannot be: when two dangling ends face each other, the pair is one connector, and the end that is processed
    first decides which edge is "forward" (`is_reverse`, `edge_ref`) and, if the two ends are different path
