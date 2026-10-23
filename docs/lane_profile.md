@@ -1,6 +1,7 @@
 # Design: the lane profile in Rust
 
-Status: design, 2026-10-22. Kaveh must review it before the implementation starts.
+Status: done, 2026-10-22 (the result is in "The result" at the end). Kaveh approved the design and the two
+answers below ("yes. go ahead").
 
 This document is about the table `driving.lane_profile`, group 2 of [tables.md](tables.md). It ports duckOSM's
 lane rules (`src/duckosm/processors/lane_profile.py`, 164 lines, and `_inherit_lanes` in `gmns.py`) to Rust.
@@ -128,7 +129,23 @@ build are sorted by id, so a binary search finds the way of an edge.
 - **A new way of the fixes.** If a fixes rule adds a way, duckOSM's `raw.ways` can lack it, and then the way has
   no tags. Monaco shows whether this case occurs.
 
-## Questions for Kaveh
+## Decisions (Kaveh, 2026-10-22)
 
-1. Is the place of the code (one module in `duckosm-core`, called by the build after all modes) correct?
-2. duckOSM has no option to turn the table off. I add none. Is that correct?
+1. The code is one module in `duckosm-core`, and the build calls it after all modes. It must run after all
+   modes: the arrows of the fixes get into the tags in the mode loop, and `bus,bike` needs the cycling network.
+2. There is no option to turn the table off, as in duckOSM. The table is small (about one row for each edge).
+
+## The result (2026-10-22)
+
+- Monaco: `cargo test -p duckosm-build --test lanes` passes. All 3,176 rows are equal to duckOSM's.
+- Tartu (the Estonia file cut to `data/boundaries/tartu.geojson`, three modes, no merge, duckOSM's fixes file):
+  `tools/compare_tables.py` gives `ok driving.lane_profile: 30075 rows` against a build of duckOSM at commit
+  `2044c4f`. The rule for the lane count gives `inherited` to 2 edges in each area.
+- The page (`e2e.py` on Monaco with the boundary and the fixes file): "lane profile: 3176 lanes". Its
+  `lane_profile_driving.parquet` has the same 3,176 rows as duckOSM's table. The file is in the zip, with its
+  line in `README.txt` and in `load.sql`.
+- `cargo test --workspace` passes. The browser build writes `lane_profile_driving.parquet` byte for byte as the
+  native build does.
+- None of the three "points where the port can differ" occurred in Monaco or Tartu.
+- Time (`--timing`, natively): the lane profile of Tartu takes 0.13 s, with the file written. The whole build
+  takes 12.2 s with `--levels tags`.
