@@ -96,7 +96,9 @@
   #found label.point { cursor: default; opacity: 0.7; }
   #found input { margin-top: 3px; accent-color: var(--accent); }
   #found .t { font-weight: 600; }
-  #found .d { color: var(--muted); font-size: 12px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 270px; }
+  #found label > span { min-width: 0; }
+  /* the rest of the address: at most two lines in the card; the whole address is in the title */
+  #found .d { color: var(--muted); font-size: 12px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
   .badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 99px; background: var(--surface); color: var(--muted); border: 1px solid var(--line); margin-left: 4px; font-weight: 500; }
   .badge.no { color: var(--warn); border-color: var(--warn); background: none; }
 
@@ -190,7 +192,6 @@
     footer { position: sticky; bottom: 0; }
     .btn, .segmented [role=tab] { height: 44px; }
     .shapes button { height: 44px; }
-    #found .d { max-width: 70vw; }
   }
 </style>
 </head>
@@ -630,7 +631,7 @@ function list(features) {
   $("found").innerHTML = found.map((f, i) => {
     const p = f.properties, ok = polygons(f.geometry).length > 0;
     const [title, ...rest] = p.display_name.split(", ");
-    return `<label class="${ok ? "" : "point"}" data-i="${i}"><input type="radio" name="hit" value="${i}"${ok ? "" : " disabled"}>` +
+    return `<label class="${ok ? "" : "point"}" data-i="${i}" title="${esc(p.display_name)}"><input type="radio" name="hit" value="${i}"${ok ? "" : " disabled"}>` +
       `<span><span class="t">${esc(title)}</span><span class="badge">${esc(p.addresstype ?? p.type)}</span>` +
       (ok ? "" : `<span class="badge no">a point: no boundary</span>`) +
       `<span class="d">${esc(rest.join(", ") || `${p.osm_type} ${p.osm_id}`)}</span></span></label>`;
