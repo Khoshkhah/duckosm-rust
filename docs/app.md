@@ -50,7 +50,8 @@ The page keeps the selected file only in memory. After a reload, the user select
 
 ### Step 4: build
 
-- The modes (three check boxes) and, under **Options**, the OSM fixes file (duckOSM `osm_overrides`).
+- The modes (three check boxes) and, under **Advanced: corrections to the map data**, the OSM fixes file
+  (duckOSM `osm_overrides`), with one sentence that tells what it is (Kaveh found the first label unclear).
 - **Build** (in the footer) starts the build in the Web Worker (`build_worker.js`, with threads when the page
   is cross-origin isolated). The card shows the progress, then the summary and the times, as the old page.
 - A new build replaces the result of the last build.
