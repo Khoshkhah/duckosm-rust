@@ -132,7 +132,7 @@ fn summary_dict<'py>(py: Python<'py>, sum: &Summary) -> PyResult<Bound<'py, PyDi
         steps.set_item(k, v)?;
     }
     res.set_item("seconds", steps)?;
-    res.set_item("sidewalk_roads", sum.sidewalk_roads)?;
+    res.set_item("sidewalk_roads", sum.sidewalk_roads.unwrap_or(0))?;
     Ok(res)
 }
 

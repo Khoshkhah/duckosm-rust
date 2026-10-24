@@ -1,7 +1,5 @@
 use clap::Parser;
-use duckosm_build::{
-    build, config, parse_modes, LevelsMethod as Method, NetworkMode, NetworkOptions, Params,
-};
+use duckosm_build::{build, config, parse_modes, LevelsMethod as Method, NetworkOptions, Params};
 use std::path::PathBuf;
 
 /// duckosm-rust: build the road networks of duckOSM (driving, walking, cycling) from an .osm.pbf file.
@@ -175,27 +173,7 @@ fn run() -> Result<(), String> {
         }
     }
     let sum = build(&pbf, &out, &p)?;
-    if p.infer_sidewalks && p.modes.contains(&NetworkMode::Walking) {
-        eprintln!(
-            "sidewalk rule: {} roads get sidewalk=separate",
-            sum.sidewalk_roads
-        );
-    }
-    for m in &sum.modes {
-        eprintln!(
-            "{}: {} edges, {} nodes, {} private edges, {} connectors, {} edge_id_map rows, {} OSM fixes, {} edge_graph rows, {} turn restrictions",
-            m.mode.name(),
-            m.edges,
-            m.nodes,
-            m.private_edges,
-            m.connectors,
-            m.edge_id_map,
-            m.osm_fixes,
-            m.edge_graph,
-            m.turn_restrictions
-        );
-    }
-    for l in sum.levels.iter().chain(&sum.lanes) {
+    for l in sum.lines() {
         eprintln!("{l}");
     }
     if cli.timing {

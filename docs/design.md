@@ -26,7 +26,7 @@ the map.
 
 The CLI and the wheel write a `.duckdb` file by default, with the same tables as duckOSM. They also
 write GeoParquet. This needs DuckDB inside the program (section 3). The WebAssembly package has no
-DuckDB and writes GeoParquet only.
+DuckDB and writes GeoParquet. The page loads these files into duckdb-wasm and can give a `.duckdb` file from them.
 
 **Non-goals.**
 
@@ -131,7 +131,7 @@ is cut) is not planned, because the target (a region or a small country, section
 | CLI | `clap` 4 | The usual choice. |
 | Python binding | `pyo3` 0.30 with `maturin` 1.15, `abi3` wheel | One wheel for each system works for all Python 3.9+ versions. The GIL is released during a build. |
 | WebAssembly | `wasm-bindgen` | M4. |
-| Parallel work | `rayon`, through `osmpbf` | In WebAssembly, `rayon` uses the current thread (section 7). |
+| Parallel work | `rayon`, through `osmpbf` | In the WebAssembly module without threads, `rayon` uses the current thread. The module with threads gives `rayon` a pool of Web Workers (section 7). |
 | Hash | Own module, no dependency | About 25 lines. See section 5. |
 
 Versions come from crates.io on 2026-10-21.
@@ -139,7 +139,8 @@ Versions come from crates.io on 2026-10-21.
 ### Output
 
 The CLI and the wheel write both formats by default. `--format geoparquet` or `--format duckdb`
-chooses one. The WebAssembly build has no `duckdb` feature and writes GeoParquet only.
+chooses one. The WebAssembly build has no `duckdb` feature and writes GeoParquet. The page makes the DuckDB
+tables from these files in duckdb-wasm.
 
 **GeoParquet.** For each mode the Rust core writes files with the same names as
 `duckosm export-gis -f geoparquet`: `edges_<mode>.parquet`, `nodes_<mode>.parquet` and
@@ -383,9 +384,10 @@ the first measurement.
 
 **WebAssembly.** One tab has at most 4 GB of address space, so the target is a city or a small
 region. Since 2026-10-22, the browser is the main goal ([browser.md](browser.md)). The crate
-`duckosm-wasm` has one function, `build(pbf_bytes, modes, fixes_yaml)`. It uses the default options
-of the CLI and returns all files of the chosen modes, with the edge graph and the turn restrictions,
-written by `duckosm_build::write_tables` (the native build uses the same function). The page
+`duckosm-wasm` has four build functions: `build` (the bytes of a PBF file that is cut to the area),
+`build_area` and `build_area_bytes` (a region PBF and a boundary, cut while it is read) and `build_osm_json`
+(the answer of the Overpass API). They use the default options of the CLI and return all files of the
+chosen modes. All four call `duckosm_build::run`, the function that the native build also calls. The page
 `crates/duckosm-wasm/www/index.html` builds in a Web Worker, loads the tables into duckdb-wasm for SQL,
 and gives the files. [development.md](development.md) tells how to build and test it.
 
@@ -395,11 +397,14 @@ and gives the files. [development.md](development.md) tells how to build and tes
   `write_edge_id_map_to`). In WebAssembly, the writer sends the bytes to JavaScript in parts of
   1 MB, so the output files are not in the WebAssembly memory. Each file is an array of
   `Uint8Array` parts, and `new Blob(parts)` gives the file.
-- `build` runs the same steps as `duckosm_build::build`: the OSM fixes (`parse_osm_fixes`, from the
-  text), the relations, the sidewalk rule, then each mode with `write_tables`. It cannot call `build`
-  itself, because `build` uses files and a clock (`Instant::now` panics in `wasm32-unknown-unknown`).
-- `osmpbf` uses `rayon`. In WebAssembly, `rayon` cannot start threads, so it does all the work on
-  the current thread. It does not panic.
+- `duckosm_build::run` has all steps of the build and uses no file system. It gets the input (`Input`: a
+  path, the bytes of a PBF file, OSM JSON, or a region PBF and a boundary), the OSM fixes, and a function
+  that gives a writer for each file name. `duckosm_build::build` gives files in a folder. `duckosm-wasm`
+  gives JavaScript arrays. The caller also gives the clock of `StepLog`, because `Instant::now` and
+  `SystemTime::now` panic in `wasm32-unknown-unknown`.
+- `osmpbf` uses `rayon`. In the module without threads (`pkg/`), `rayon` cannot start threads, so it does
+  all the work on the current thread. It does not panic. The module with threads (`pkg-threads/`) gives
+  `rayon` a pool of Web Workers ([development.md](development.md), "WebAssembly").
 - `parquet` uses Snappy. The `zstd` feature needs a C compiler for WebAssembly (`clang`), so it
   is off.
 - The `.duckdb` writer has no WebAssembly build.

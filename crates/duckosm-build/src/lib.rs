@@ -1,18 +1,19 @@
-//! The whole build, shared by the CLI and the Python module: read a PBF, build the networks of the modes,
-//! write GeoParquet and/or a `.duckdb` file.
+//! The whole build, shared by the CLI, the Python module and the browser (duckosm-wasm): read a PBF, build the
+//! networks of the modes, write GeoParquet and/or a `.duckdb` file.
 
 use duckosm_core::boundary::Boundary;
 use duckosm_core::filter::Mode;
 use duckosm_core::fixes::OsmFixes;
+use duckosm_core::graph::Relation;
 use duckosm_core::lanes::LaneEdges;
 use duckosm_core::levels::LevelEdges;
 use duckosm_core::model::{Network, Way};
-use duckosm_core::network::{build_network_with, Options};
+use duckosm_core::network::{build_network_with, Coords, Options};
+use duckosm_core::osmjson::OsmJson;
 use duckosm_core::raw::Raw;
 use duckosm_core::{pbf, sidewalks};
-use std::io::Write;
+use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
-use std::time::Instant;
 
 pub mod area;
 pub mod config;
@@ -49,6 +50,9 @@ pub struct Params {
     /// The build time in `main.visualization_metadata` (microseconds since 1970, UTC). None: now. A fixed
     /// value makes the output the same on each run.
     pub built_at: Option<i64>,
+    /// The entry of the area's Geofabrik region in the page's time zone table (`www/timezones.json`, JSON text):
+    /// the browser build has no world map of the zones. None: the map of `tzf-rs` (the cargo feature `tzf`).
+    pub timezone_entry: Option<String>,
 }
 
 impl Default for Params {
@@ -65,6 +69,7 @@ impl Default for Params {
             raw: false,
             area_boundary: None,
             built_at: None,
+            timezone_entry: None,
         }
     }
 }
@@ -91,12 +96,48 @@ pub struct Summary {
     pub files: Vec<(String, PathBuf)>,
     /// The time of each step in seconds.
     pub steps: Vec<(String, f64)>,
-    /// Roads that got `sidewalk=separate`.
-    pub sidewalk_roads: usize,
+    /// Roads that got `sidewalk=separate`, when the sidewalk rule ran.
+    pub sidewalk_roads: Option<usize>,
+    /// The number of bus routes, when they were made.
+    pub bus_routes: Option<usize>,
+    /// The rows of `raw.nodes`, `raw.ways` and `raw.relations`, when they were written.
+    pub raw: Option<(usize, usize, usize)>,
     /// A summary of the drawing levels, when they were made.
     pub levels: Option<String>,
     /// A summary of the lane profile, when the driving mode was built.
     pub lanes: Option<String>,
+}
+
+impl Summary {
+    /// The result as lines of text: the CLI prints them and the page shows them.
+    pub fn lines(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        if let Some(n) = self.sidewalk_roads {
+            out.push(format!("sidewalk rule: {n} roads get sidewalk=separate"));
+        }
+        for m in &self.modes {
+            out.push(format!(
+                "{}: {} edges, {} nodes, {} private edges, {} connectors, {} edge_id_map rows, {} OSM fixes, {} edge_graph rows, {} turn restrictions",
+                m.mode.name(),
+                m.edges,
+                m.nodes,
+                m.private_edges,
+                m.connectors,
+                m.edge_id_map,
+                m.osm_fixes,
+                m.edge_graph,
+                m.turn_restrictions
+            ));
+        }
+        if let Some(n) = self.bus_routes {
+            out.push(format!("bus: {n} routes"));
+        }
+        if let Some((n, w, r)) = self.raw {
+            out.push(format!("raw: {n} nodes, {w} ways, {r} relations"));
+        }
+        out.extend(self.levels.iter().chain(&self.lanes).cloned());
+        out
+    }
 }
 
 /// Write the tables of one mode, each to a writer from `file`, which gets the file name (for example
@@ -197,101 +238,183 @@ pub fn parse_modes(s: &str) -> Result<Vec<Mode>, String> {
         .collect()
 }
 
-pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String> {
-    if p.duckdb && !cfg!(feature = "duckdb") {
-        return Err("this build has no DuckDB output (cargo feature 'duckdb' is off)".into());
+/// A file that the cut can read and seek in.
+pub trait Source: Read + Seek + Send {}
+impl<T: Read + Seek + Send> Source for T {}
+
+/// A new reader of a PBF file for each pass of the cut.
+pub type Open<'a> = &'a dyn Fn() -> Result<pbf::BlobReader<Box<dyn Source + 'a>>, String>;
+
+/// The input of [`run`]: a `.osm.pbf` file (its path, or its bytes in WebAssembly), OSM JSON (the output of the
+/// Overpass API; with a boundary, only the ways with a node inside are kept), or a region PBF and a boundary (the
+/// PBF is cut to the boundary, as osmium's `complete_ways` does).
+#[derive(Clone, Copy)]
+pub enum Input<'a> {
+    Path(&'a Path),
+    Pbf(&'a [u8]),
+    OsmJson(&'a [u8], Option<&'a Boundary>),
+    Area(Open<'a>, &'a Boundary),
+}
+
+/// The time and the memory of each step of [`run`]. The caller gives the clock: WebAssembly has no clock in std.
+pub struct StepLog {
+    clock: fn() -> f64,
+    memory: fn() -> f64,
+    last: f64,
+    /// The name of each step, its milliseconds, and the memory in MiB after it (0 when not known).
+    pub rows: Vec<(String, f64, f64)>,
+}
+
+impl StepLog {
+    /// `clock` gives milliseconds, `memory` the memory in MiB.
+    pub fn new(clock: fn() -> f64, memory: fn() -> f64) -> StepLog {
+        StepLog {
+            clock,
+            memory,
+            last: clock(),
+            rows: Vec::new(),
+        }
     }
-    if !p.geoparquet && !p.duckdb {
-        return Err("no output format: use geoparquet, duckdb or both".into());
+
+    /// The system clock and no memory (not in WebAssembly).
+    pub fn system() -> StepLog {
+        StepLog::new(
+            || {
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0.0, |d| d.as_secs_f64() * 1000.0)
+            },
+            || 0.0,
+        )
     }
-    std::fs::create_dir_all(out).map_err(|e| e.to_string())?;
-    let mut sum = Summary::default();
-    let mut t = Instant::now();
-    let mut lap = |what: &str, sum: &mut Summary| {
-        sum.steps
-            .push((what.to_string(), t.elapsed().as_secs_f64()));
-        t = Instant::now();
-    };
-    let fixes = match &p.osm_fixes {
-        Some(f) => config::read_osm_fixes(f)?,
-        None => OsmFixes::default(),
-    };
-    if p.raw && p.boundary.is_none() {
+
+    /// The end of a step: its time since the step before, and the memory now.
+    pub fn step(&mut self, name: &str) {
+        let t = (self.clock)();
+        self.rows
+            .push((name.to_string(), t - self.last, (self.memory)()));
+        self.last = t;
+    }
+
+    /// The steps as JSON (the names are plain text, with no quotes).
+    pub fn json(&self) -> String {
+        let rows: Vec<String> = self
+            .rows
+            .iter()
+            .map(|(s, ms, mib)| format!(r#"{{"step":"{s}","ms":{ms:.1},"mib":{mib:.1}}}"#))
+            .collect();
+        format!("[{}]", rows.join(","))
+    }
+}
+
+/// Read a PBF file in passes: the ways, the OSM fixes on them, the coordinates of their nodes, and the turn
+/// restrictions when `relations` is true.
+fn read_pbf(
+    ways: impl FnOnce() -> Result<Vec<Way>, String>,
+    coords: impl FnOnce(&[Way]) -> Result<Coords, String>,
+    restrictions: impl FnOnce() -> Result<Vec<Relation>, String>,
+    relations: bool,
+    fixes: &OsmFixes,
+    log: &mut StepLog,
+) -> Result<(Vec<Way>, Coords, Vec<Relation>), String> {
+    let mut ways = ways()?;
+    log.step("read ways");
+    // duckOSM: the fixes on the raw ways come before any step reads them
+    fixes.apply_to_ways(&mut ways)?;
+    let coords = coords(&ways)?;
+    log.step("read nodes");
+    let mut rels = Vec::new();
+    if relations {
+        rels = restrictions()?;
+        log.step("read restrictions");
+    }
+    Ok((ways, coords, rels))
+}
+
+/// The whole build without a file system, for the native build and the browser build (duckosm-wasm): read the
+/// input with the OSM fixes, the sidewalk rule, each mode (written with [`write_tables`]), the bus routes, `raw.*`,
+/// the area tables (`boundary` is the boundary file, GeoJSON text), the drawing levels and the lane profile. Each
+/// file goes to a writer from `file`, which gets the file name. `log` gets the end of each step.
+pub fn run<W: Write + Send>(
+    input: Input,
+    fixes: &OsmFixes,
+    boundary: Option<&str>,
+    p: &Params,
+    log: &mut StepLog,
+    mut file: impl FnMut(&str) -> Result<W, String>,
+) -> Result<Summary, String> {
+    let opts = &p.options;
+    let driving = p.modes.contains(&Mode::Driving);
+    let need_relations = opts.extract_restrictions && driving;
+    // the bus routes need the route relations and the member ways of the raw cut (docs/bus.md)
+    let bus = opts.bus_routes && driving;
+    if p.raw && !matches!(input, Input::Area(..)) {
         return Err("raw.* (the base-map layers) needs a boundary".into());
     }
     let mut raw = None;
-    // the bus routes need the route relations and the member ways of the raw cut, so a boundary
-    let bus = p.options.bus_routes && p.modes.contains(&Mode::Driving);
-    if bus && p.boundary.is_none() {
-        eprintln!("no bus tables: the build has no area outline (--boundary)");
-    }
-    let (mut ways, mut coords, area_relations) = match &p.boundary {
+    let (mut ways, mut coords, relations) = match input {
+        Input::Path(path) => read_pbf(
+            || pbf::read_ways(path),
+            |w| pbf::read_coords(path, w),
+            || pbf::read_restrictions(path),
+            need_relations,
+            fixes,
+            log,
+        )?,
+        Input::Pbf(bytes) => read_pbf(
+            || pbf::read_ways_bytes(bytes),
+            |w| pbf::read_coords_bytes(bytes, w),
+            || pbf::read_restrictions_bytes(bytes),
+            need_relations,
+            fixes,
+            log,
+        )?,
         // duckOSM with a boundary: cut the PBF (osmium complete_ways, or smart for raw.*), then the fixes on the raw ways
-        Some(path) => {
-            let text =
-                std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-            let boundary = Boundary::parse(&text)?;
+        Input::Area(open, boundary) => {
             let (mut ways, coords, relations) = if p.raw || bus {
-                let open = || pbf::BlobReader::from_path(pbf_path).map_err(|e| e.to_string());
-                let (w, c, r, mut rw) = pbf::read_area_raw(open, &boundary)?;
-                rw.apply_fixes(&fixes);
+                let (w, c, r, mut rw) = pbf::read_area_raw(open, boundary)?;
+                rw.apply_fixes(fixes);
                 raw = Some(rw);
                 (w, c, r)
             } else {
-                pbf::read_area_path(pbf_path, &boundary)?
+                pbf::read_area(open, boundary)?
             };
-            lap("cut to the boundary", &mut sum);
+            log.step("cut to the boundary");
             fixes.apply_to_ways(&mut ways)?;
-            (ways, coords, Some(relations))
+            (ways, coords, relations)
         }
-        None => {
-            let mut ways = pbf::read_ways(pbf_path)?;
-            lap("read ways", &mut sum);
-            // duckOSM: the fixes on the raw ways come before any step reads them
+        Input::OsmJson(bytes, boundary) => {
+            let mut data = OsmJson::read(bytes)?;
+            if let Some(b) = boundary {
+                data.cut(b);
+            }
+            let mut ways = std::mem::take(&mut data.ways);
             fixes.apply_to_ways(&mut ways)?;
-            let coords = pbf::read_coords(pbf_path, &ways)?;
-            lap("read nodes", &mut sum);
-            (ways, coords, None)
+            let coords = data.coords(&ways);
+            log.step("read the file");
+            (ways, coords, data.relations)
         }
     };
-    fixes.add_new_nodes(&mut ways, &mut coords);
-    let relations = if p.options.extract_restrictions && p.modes.contains(&Mode::Driving) {
-        match area_relations {
-            Some(r) => r,
-            None => {
-                let r = pbf::read_restrictions(pbf_path)?;
-                lap("read restrictions", &mut sum);
-                r
-            }
-        }
+    let relations = if need_relations {
+        relations
     } else {
         Vec::new()
     };
+    fixes.add_new_nodes(&mut ways, &mut coords);
+    let mut sum = Summary::default();
     if p.infer_sidewalks && p.modes.contains(&Mode::Walking) {
-        sum.sidewalk_roads = sidewalks::infer_separate_sidewalks(&mut ways, &coords);
-        lap("sidewalk rule", &mut sum);
+        sum.sidewalk_roads = Some(sidewalks::infer_separate_sidewalks(&mut ways, &coords));
+        log.step("sidewalk rule");
     }
-    // the GeoParquet files are the input of the .duckdb writer, so they always go to a folder
-    let pq_dir = if p.geoparquet {
-        out.to_path_buf()
-    } else {
-        std::env::temp_dir().join(format!("duckosm-{}", std::process::id()))
-    };
-    std::fs::create_dir_all(&pq_dir).map_err(|e| e.to_string())?;
     let mut mode_nodes = Vec::new();
     let mut level_edges = LevelEdges::default();
     let mut lane_edges = LaneEdges::default();
     for mode in &p.modes {
-        let net = build_network_with(&ways, &coords, *mode, &p.options, &fixes, &relations)?;
-        lap(&format!("build {}", mode.name()), &mut sum);
         let n = mode.name();
-        write_tables(&net, *mode, &p.options, &ways, |name| {
-            let path = pq_dir.join(name);
-            sum.files
-                .push((name.trim_end_matches(".parquet").to_string(), path.clone()));
-            std::fs::File::create(&path).map_err(|e| e.to_string())
-        })?;
-        lap(&format!("write geoparquet {n}"), &mut sum);
+        let net = build_network_with(&ways, &coords, *mode, opts, fixes, &relations)?;
+        log.step(&format!("build {n}"));
+        write_tables(&net, *mode, opts, &ways, &mut file)?;
+        log.step(&format!("write geoparquet {n}"));
         sum.modes.push(ModeSummary {
             mode: *mode,
             edges: net.edges.len(),
@@ -306,79 +429,115 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
         // duckOSM: the arrows of the fixes go into the raw tags after this mode, so the next modes see them
         fixes.set_arrows(&mut ways, &net.ways, *mode);
         lane_edges.add(*mode, &net);
-        if p.options.levels != LevelsMethod::None {
+        if opts.levels != LevelsMethod::None {
             level_edges.add(*mode, false, &net.edges);
             level_edges.add(*mode, true, &net.private_edges);
         }
-        if *mode == Mode::Driving && bus {
-            if let Some(r) = raw.as_ref() {
-                write_bus(r, &net, |name| {
-                    let path = pq_dir.join(name);
-                    sum.files
-                        .push((name.trim_end_matches(".parquet").to_string(), path.clone()));
-                    std::fs::File::create(&path).map_err(|e| e.to_string())
-                })?;
-                lap("bus routes", &mut sum);
-            }
+        if let Some(r) = raw.as_ref().filter(|_| *mode == Mode::Driving && bus) {
+            sum.bus_routes = Some(write_bus(r, &net, &mut file)?);
+            log.step("bus routes");
         }
         mode_nodes.push((*mode, net.nodes));
     }
     if let Some(r) = raw.as_mut().filter(|_| p.raw) {
         // the tags that the steps set on the network's ways (the sidewalk rule, the arrows of the fixes)
         r.sync_tags(&ways);
-        write_raw(r, |name| {
-            let path = out.join(name);
-            sum.files
-                .push((name.trim_end_matches(".parquet").to_string(), path.clone()));
-            std::fs::File::create(&path).map_err(|e| e.to_string())
-        })?;
-        lap("write raw", &mut sum);
+        write_raw(r, &mut file)?;
+        sum.raw = Some((r.nodes.len(), r.ways.len(), r.relations.len()));
+        log.step("write raw");
     }
-    let boundary = match p.area_boundary.as_ref().or(p.boundary.as_ref()) {
-        Some(path) => {
-            Some(std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?)
-        }
-        None => None,
-    };
     let built_at = p.built_at.unwrap_or_else(|| {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_micros() as i64)
     });
     let area = Area {
-        boundary: boundary.as_deref(),
+        boundary,
         ways: &ways,
         coords: &coords,
         nodes: &mode_nodes,
-        opts: &p.options,
+        opts,
         built_at,
-        timezone_entry: None,
+        timezone_entry: p.timezone_entry.as_deref(),
     };
-    write_area_tables(&area, |name| {
-        let path = pq_dir.join(name);
-        sum.files
-            .push((name.trim_end_matches(".parquet").to_string(), path.clone()));
-        std::fs::File::create(&path).map_err(|e| e.to_string())
-    })?;
-    lap("write the area tables", &mut sum);
-    sum.levels = write_levels(&level_edges, p.options.levels, built_at, |name| {
-        let path = pq_dir.join(name);
-        sum.files
-            .push((name.trim_end_matches(".parquet").to_string(), path.clone()));
-        std::fs::File::create(&path).map_err(|e| e.to_string())
-    })?;
+    write_area_tables(&area, &mut file)?;
+    log.step("write the area tables");
+    sum.levels = write_levels(&level_edges, opts.levels, built_at, &mut file)?;
     if sum.levels.is_some() {
-        lap("levels", &mut sum);
+        log.step("levels");
     }
-    sum.lanes = write_lane_profile(&lane_edges, &ways, &fixes, |name| {
-        let path = pq_dir.join(name);
-        sum.files
-            .push((name.trim_end_matches(".parquet").to_string(), path.clone()));
-        std::fs::File::create(&path).map_err(|e| e.to_string())
-    })?;
+    sum.lanes = write_lane_profile(&lane_edges, &ways, fixes, &mut file)?;
     if sum.lanes.is_some() {
-        lap("lane profile", &mut sum);
+        log.step("lane profile");
     }
+    Ok(sum)
+}
+
+/// Build from the PBF file `pbf_path` (cut to `p.boundary` when there is one) and write the files into `out`.
+pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String> {
+    if p.duckdb && !cfg!(feature = "duckdb") {
+        return Err("this build has no DuckDB output (cargo feature 'duckdb' is off)".into());
+    }
+    if !p.geoparquet && !p.duckdb {
+        return Err("no output format: use geoparquet, duckdb or both".into());
+    }
+    std::fs::create_dir_all(out).map_err(|e| e.to_string())?;
+    let mut log = StepLog::system();
+    let fixes = match &p.osm_fixes {
+        Some(f) => config::read_osm_fixes(f)?,
+        None => OsmFixes::default(),
+    };
+    let read = |path: &PathBuf| {
+        std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))
+    };
+    let cut = match &p.boundary {
+        Some(path) => Some(Boundary::parse(&read(path)?)?),
+        None => None,
+    };
+    if p.options.bus_routes && p.modes.contains(&Mode::Driving) && cut.is_none() {
+        eprintln!("no bus tables: the build has no area outline (--boundary)");
+    }
+    let area_boundary = match p.area_boundary.as_ref().or(p.boundary.as_ref()) {
+        Some(path) => Some(read(path)?),
+        None => None,
+    };
+    let open = || -> Result<pbf::BlobReader<Box<dyn Source>>, String> {
+        let f =
+            std::fs::File::open(pbf_path).map_err(|e| format!("{}: {e}", pbf_path.display()))?;
+        let r: Box<dyn Source> = Box::new(std::io::BufReader::new(f));
+        pbf::BlobReader::new_seekable(r).map_err(|e| e.to_string())
+    };
+    let input = match &cut {
+        Some(b) => Input::Area(&open, b),
+        None => Input::Path(pbf_path),
+    };
+    // the GeoParquet files are the input of the .duckdb writer, so they always go to a folder
+    let pq_dir = if p.geoparquet {
+        out.to_path_buf()
+    } else {
+        std::env::temp_dir().join(format!("duckosm-{}", std::process::id()))
+    };
+    std::fs::create_dir_all(&pq_dir).map_err(|e| e.to_string())?;
+    let mut files = Vec::new();
+    let mut sum = run(
+        input,
+        &fixes,
+        area_boundary.as_deref(),
+        p,
+        &mut log,
+        |name| {
+            // raw.* is not in the .duckdb file, so it goes to the output folder
+            let path = if name.starts_with("raw_") {
+                out
+            } else {
+                &pq_dir
+            }
+            .join(name);
+            files.push((name.trim_end_matches(".parquet").to_string(), path.clone()));
+            std::fs::File::create(&path).map_err(|e| e.to_string())
+        },
+    )?;
+    sum.files = files;
     if p.geoparquet {
         write_layers_json(&pq_dir, &sum)?;
         sum.files
@@ -390,11 +549,16 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
         let db = out.join(format!("{}.duckdb", p.name));
         duckosm_duckdb::write_database(&db, &pq_dir, &names)?;
         sum.files.push(("duckdb".to_string(), db));
-        lap("write duckdb", &mut sum);
+        log.step("write duckdb");
     }
     if !p.geoparquet {
         let _ = std::fs::remove_dir_all(&pq_dir);
         sum.files.retain(|(k, _)| k == "duckdb");
     }
+    sum.steps = log
+        .rows
+        .iter()
+        .map(|(s, ms, _)| (s.clone(), ms / 1000.0))
+        .collect();
     Ok(sum)
 }

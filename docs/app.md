@@ -60,7 +60,7 @@ The page keeps the selected file only in memory. After a reload, the user select
 - **Time and memory of each step**: a table under the progress (open; a click closes it), with one row for each
   step and its time and memory. The line above it gives the total: from the click on Build until the tables are in
   DuckDB. The Rust build records its steps (`run()` in
-  `duckosm-wasm/src/lib.rs`: the read of the file, the sidewalk rule, the network and the files of each mode, the bus
+  `duckosm-build/src/lib.rs`: the read of the file, the sidewalk rule, the network and the files of each mode, the bus
   routes, the area tables, the raw files, the drawing levels, the lane profile). The page adds its own steps (the
   download, the module load, the transfer of the files, DuckDB's tables and base-map layers, the map). The memory is
   the WebAssembly memory of the build module (it only grows, so it is the largest size until then), DuckDB's
