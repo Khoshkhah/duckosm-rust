@@ -64,14 +64,19 @@ export const duckReady = (async () => {
   return (performance.now() - t0) / 1000;
 })();
 
-// the build in a Web Worker; onStep(text) gets its steps
-const worker = new Worker(new URL("../build_worker.js", import.meta.url), { type: "module" });
+// the build in a Web Worker; onStep(text) gets its steps. After an error, a new worker: a panic or an out-of-memory
+// error stops the WebAssembly module of the worker, and the module cannot build again.
+const newWorker = () => new Worker(new URL("../build_worker.js", import.meta.url), { type: "module" });
+let worker = newWorker();
 export function build(msg, onStep) {
   return new Promise((resolve, reject) => {
     worker.onmessage = ({ data }) => {
       if (data.step) onStep(data.step);
-      else if (data.error) reject(new Error(data.error));
-      else resolve(data);
+      else if (data.error) {
+        worker.terminate();
+        worker = newWorker();
+        reject(new Error(data.error));
+      } else resolve(data);
     };
     worker.postMessage(msg, msg.pbf || msg.json ? [msg.pbf || msg.json] : []);
   });

@@ -22,6 +22,19 @@ static ALLOC: alloc::Cached = alloc::Cached;
 pub use wasm_bindgen_rayon::init_thread_pool;
 use web_sys::{Blob, FileReaderSync};
 
+/// A panic stops the module with only "RuntimeError: unreachable". The hook keeps the panic message in
+/// `globalThis.duckosmPanic`, so the build worker can show it.
+#[wasm_bindgen(start)]
+fn keep_panic_message() {
+    std::panic::set_hook(Box::new(|info| {
+        let _ = Reflect::set(
+            &js_sys::global(),
+            &"duckosmPanic".into(),
+            &info.to_string().into(),
+        );
+    }));
+}
+
 /// The result of [`build`]. `files` maps each file name (for example `edges_driving.parquet`) to an array
 /// of `Uint8Array` parts: `new Blob(files[name])` gives the file.
 #[wasm_bindgen(getter_with_clone)]
