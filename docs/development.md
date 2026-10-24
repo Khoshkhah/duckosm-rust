@@ -79,6 +79,8 @@ Build the two modules and their JavaScript bindings (Git ignores both folders):
   `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`. Without them,
   the page uses `pkg/`. duckdb-wasm (from cdn.jsdelivr.net), Nominatim and Overpass work with these headers.
   `?threads=N` in the address sets the number of threads (the default: the cores, at most 8).
+  GitHub Pages cannot send the two headers: there, `www/coi-serviceworker.js` (one `<script>` line in
+  `index.html`) adds them in the browser and loads the page again. The first load has one thread.
 - `www/map/pkg/`: roadstyle's Rust module for the roads map. `build.sh` clones roadstyle into `target/roadstyle`
   and builds the crate `roadstyle-wasm` of its Rust engine (`rust/`) at the commit `ROADSTYLE_COMMIT`. With
   `ROADSTYLE_REPO=/home/kaveh/projects/roadstyle`, it clones the local copy. `duckosm-core` takes the same engine

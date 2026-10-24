@@ -1,0 +1,72 @@
+# The browser page on GitHub Pages: https://khoshkhah.github.io/duckosm-rust/ (README.md, "the browser page").
+# The job builds the WebAssembly modules with crates/duckosm-wasm/build.sh (the module with threads needs nightly
+# Rust, as in ci.yml), puts the Google Maps key of the repository secret GOOGLE_MAPS_KEY into the deployed copy of
+# the page, and deploys crates/duckosm-wasm/www/. The key is never in git. The site is public, so the key must be
+# limited to https://khoshkhah.github.io/* and to the Maps JavaScript API (roadstyle docs/guides/google-key.md).
+# Pages cannot send the COOP and COEP headers: www/coi-serviceworker.js adds them in the browser.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# one deploy at a time; a deploy that runs is not cancelled
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Nightly Rust for the WebAssembly module with threads
+        run: rustup toolchain install nightly-2026-10-15 --profile minimal --component rust-src --target wasm32-unknown-unknown
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@0.2.129
+      - name: Build the WebAssembly modules and copy roadstyle's dashboard
+        # a roadstyle folder from the cache can be incomplete: start from none
+        run: |
+          rm -rf target/roadstyle
+          ./crates/duckosm-wasm/build.sh
+      - name: Put the Google Maps key into the deployed page
+        env:
+          GOOGLE_MAPS_KEY: ${{ secrets.GOOGLE_MAPS_KEY }}
+        run: |
+          set -e
+          if [ -z "$GOOGLE_MAPS_KEY" ]; then
+            echo "::notice::The repository secret GOOGLE_MAPS_KEY is not set: the page asks the user for a key (card 6)."
+            exit 0
+          fi
+          echo "::add-mask::$GOOGLE_MAPS_KEY"
+          f=crates/duckosm-wasm/www/index.html
+          # the two places that read the key from the browser's storage: the site's key is their default
+          test "$(grep -c 'localStorage.getItem("duckosm.googleKey") || ""' $f)" = 1
+          test "$(grep -c 'kept("duckosm.googleKey") ?? ""' $f)" = 1
+          sed -i "s#localStorage.getItem(\"duckosm.googleKey\") || \"\"#localStorage.getItem(\"duckosm.googleKey\") || \"$GOOGLE_MAPS_KEY\"#; s#kept(\"duckosm.googleKey\") ?? \"\"#kept(\"duckosm.googleKey\") ?? \"$GOOGLE_MAPS_KEY\"#" $f
+          test "$(grep -c "$GOOGLE_MAPS_KEY" $f)" = 2
+          echo "The page has the key."
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: crates/duckosm-wasm/www
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-22.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v5

@@ -61,6 +61,8 @@ dr.edge_id_hash(osm_id, source, target)
 python3 crates/duckosm-wasm/www/serve.py 8000
 ```
 
+The page is online at <https://khoshkhah.github.io/duckosm-rust/> (GitHub Pages, `.github/workflows/pages.yml`).
+
 In the browser, a city or a region fits: Estonia (121 MB PBF) uses 710 MiB, and Kentucky (148 MB)
 uses 2,053 MiB of the 4 GB limit. Section 7 of the design has the numbers.
 

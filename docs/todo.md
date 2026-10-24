@@ -36,5 +36,7 @@ gzip; [tables.md](tables.md)). Kaveh chose it on 2026-10-23. Two other ways, for
 
 ## Publishing
 
-- The public page repository (`Khoshkhah/duckosm-web`, GitHub Pages) and the push of `browser-b4` to `main`,
-  after Kaveh's test of the page. The relay allows `https://khoshkhah.github.io` ([relay.md](relay.md)).
+- Done: the page is on GitHub Pages at <https://khoshkhah.github.io/duckosm-rust/>, from this repository
+  (`.github/workflows/pages.yml`, on each push to `main`). A page repository `duckosm-web` is not necessary: the
+  repository is public since 2026-10-24. The relay allows `https://khoshkhah.github.io` ([relay.md](relay.md)).
+- The repository secret `GOOGLE_MAPS_KEY` (Kaveh adds it): without it, the page asks the user for a key.
