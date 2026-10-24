@@ -229,13 +229,26 @@ fn write_layers_json(dir: &Path, sum: &Summary) -> Result<(), String> {
     std::fs::write(dir.join("layers.json"), json).map_err(|e| e.to_string())
 }
 
-pub fn parse_modes(s: &str) -> Result<Vec<Mode>, String> {
-    s.split(',')
-        .map(|m| {
-            Mode::parse(m.trim())
-                .ok_or_else(|| format!("unknown mode '{m}' (use driving, walking or cycling)"))
-        })
-        .collect()
+impl Params {
+    /// Set the output formats from their names: `duckdb`, `geoparquet`. Without a call, the formats are both, or
+    /// geoparquet when the cargo feature `duckdb` is off.
+    pub fn set_formats<S: AsRef<str>>(&mut self, formats: &[S]) -> Result<(), String> {
+        self.geoparquet = false;
+        self.duckdb = false;
+        for f in formats {
+            match f.as_ref().trim() {
+                "duckdb" => self.duckdb = true,
+                "geoparquet" => self.geoparquet = true,
+                f => return Err(format!("unknown format '{f}' (use duckdb or geoparquet)")),
+            }
+        }
+        Ok(())
+    }
+}
+
+/// The method of the drawing levels from its name: tags, solve or none.
+pub fn parse_levels(name: &str) -> Result<LevelsMethod, String> {
+    LevelsMethod::parse(name).ok_or_else(|| format!("levels: '{name}' is not tags, solve or none"))
 }
 
 /// A file that the cut can read and seek in.

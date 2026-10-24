@@ -1,5 +1,5 @@
 use clap::Parser;
-use duckosm_build::{build, config, parse_modes, LevelsMethod as Method, NetworkOptions, Params};
+use duckosm_build::{build, config, parse_levels, NetworkMode, NetworkOptions, Params};
 use std::path::PathBuf;
 
 /// duckosm-rust: build the road networks of duckOSM (driving, walking, cycling) from an .osm.pbf file.
@@ -103,11 +103,6 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let cli = Cli::parse();
-    let default_format = if cfg!(feature = "duckdb") {
-        "duckdb,geoparquet"
-    } else {
-        "geoparquet"
-    };
     let (pbf, out, mut p) = if let Some(cfg) = &cli.config {
         let c = config::read(cfg, cli.pbf_is_cut, !cli.allow_skipped)?;
         for s in &c.skipped {
@@ -122,7 +117,7 @@ fn run() -> Result<(), String> {
             name: cli.name.clone(),
             ..Params::default()
         };
-        p.modes = parse_modes(&cli.modes)?;
+        p.modes = NetworkMode::parse_all(&cli.modes.split(',').collect::<Vec<_>>())?;
         p.infer_sidewalks = !cli.no_sidewalk_inference;
         p.options = NetworkOptions {
             keep_largest_component: !cli.no_component_filter,
@@ -147,8 +142,7 @@ fn run() -> Result<(), String> {
         )
     };
     if let Some(m) = &cli.levels {
-        p.options.levels = Method::parse(m)
-            .ok_or_else(|| format!("--levels: '{m}' is not tags, solve or none"))?;
+        p.options.levels = parse_levels(m)?;
     }
     if let Some(f) = &cli.fixes {
         p.osm_fixes = Some(f.clone());
@@ -157,20 +151,8 @@ fn run() -> Result<(), String> {
         p.boundary = cli.boundary.clone();
         p.raw = cli.raw;
     }
-    p.geoparquet = false;
-    p.duckdb = false;
-    for f in cli
-        .format
-        .as_deref()
-        .unwrap_or(default_format)
-        .split(',')
-        .map(str::trim)
-    {
-        match f {
-            "duckdb" => p.duckdb = true,
-            "geoparquet" => p.geoparquet = true,
-            _ => return Err(format!("unknown format '{f}' (use duckdb or geoparquet)")),
-        }
+    if let Some(f) = &cli.format {
+        p.set_formats(&f.split(',').collect::<Vec<_>>())?;
     }
     let sum = build(&pbf, &out, &p)?;
     for l in sum.lines() {

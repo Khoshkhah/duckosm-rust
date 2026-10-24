@@ -8,8 +8,7 @@
 //! ```
 
 use duckosm_build::{
-    build as run_build, config, LevelsMethod as Method, NetworkMode, NetworkOptions, Params,
-    Summary,
+    build as run_build, config, parse_levels, NetworkMode, NetworkOptions, Params, Summary,
 };
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
@@ -60,24 +59,7 @@ fn build<'py>(
         ..Params::default()
     };
     p.modes = NetworkMode::parse_all(&modes).map_err(PyValueError::new_err)?;
-    let default = if cfg!(feature = "duckdb") {
-        vec!["duckdb".to_string(), "geoparquet".to_string()]
-    } else {
-        vec!["geoparquet".to_string()]
-    };
-    p.geoparquet = false;
-    p.duckdb = false;
-    for f in formats.unwrap_or(default) {
-        match f.as_str() {
-            "duckdb" => p.duckdb = true,
-            "geoparquet" => p.geoparquet = true,
-            _ => {
-                return Err(PyValueError::new_err(format!(
-                    "unknown format '{f}' (use 'duckdb' or 'geoparquet')"
-                )))
-            }
-        }
-    }
+    set_formats(&mut p, formats)?;
     p.infer_sidewalks = infer_separate_sidewalks;
     p.osm_fixes = osm_overrides;
     p.boundary = boundary;
@@ -89,15 +71,14 @@ fn build<'py>(
         connect_paths: connectivity_rescue,
         snap_m: connect_snap_m,
         process_speeds,
-        calculate_costs,
+        // the costs need the speeds, as in the CLI
+        calculate_costs: process_speeds && calculate_costs,
         functional_types,
         build_graph,
         extract_restrictions,
         ways_tables,
         bus_routes,
-        levels: Method::parse(&levels).ok_or_else(|| {
-            PyValueError::new_err(format!("levels: '{levels}' is not tags, solve or none"))
-        })?,
+        levels: parse_levels(&levels).map_err(PyValueError::new_err)?,
     };
     // the build runs without the GIL, so other Python threads go on
     let sum = py
@@ -165,25 +146,10 @@ fn build_from_config<'py>(
 }
 
 fn set_formats(p: &mut Params, formats: Option<Vec<String>>) -> PyResult<()> {
-    let default = if cfg!(feature = "duckdb") {
-        vec!["duckdb".to_string(), "geoparquet".to_string()]
-    } else {
-        vec!["geoparquet".to_string()]
-    };
-    p.geoparquet = false;
-    p.duckdb = false;
-    for f in formats.unwrap_or(default) {
-        match f.as_str() {
-            "duckdb" => p.duckdb = true,
-            "geoparquet" => p.geoparquet = true,
-            _ => {
-                return Err(PyValueError::new_err(format!(
-                    "unknown format '{f}' (use 'duckdb' or 'geoparquet')"
-                )))
-            }
-        }
+    match formats {
+        Some(f) => p.set_formats(&f).map_err(PyValueError::new_err),
+        None => Ok(()),
     }
-    Ok(())
 }
 
 /// The stable edge id of duckOSM: `(hash(osm_id, source, target) >> 1)` with the DuckDB hash.

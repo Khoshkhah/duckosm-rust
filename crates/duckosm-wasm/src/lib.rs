@@ -2,10 +2,10 @@
 //! chosen modes out, as GeoParquet bytes. The steps are `duckosm_build::run`, as in the native build.
 
 use duckosm_build::{
-    config::parse_osm_fixes, parse_modes, run, Input, Params, Source, StepLog, FEATURES_SQL,
+    config::parse_osm_fixes, parse_levels, run, Input, Params, Source, StepLog, FEATURES_SQL,
 };
 use duckosm_core::boundary::Boundary;
-use duckosm_core::levels::Method;
+use duckosm_core::filter::Mode;
 use duckosm_core::pbf::BlobReader;
 use js_sys::{Array, Object, Reflect, Uint8Array};
 use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
@@ -273,15 +273,14 @@ fn js_build(
 ) -> Result<Output, JsError> {
     let e = |e: String| JsError::new(&e);
     let mut p = Params {
-        modes: parse_modes(modes).map_err(e)?,
+        modes: Mode::parse_all(&modes.split(',').collect::<Vec<_>>()).map_err(e)?,
         raw,
         built_at: Some((js_sys::Date::now() * 1000.0) as i64),
         timezone_entry: TIMEZONE_ENTRY.with(|e| e.borrow().clone()),
         ..Params::default()
     };
     if let Some(m) = levels.as_deref() {
-        p.options.levels = Method::parse(m)
-            .ok_or_else(|| JsError::new(&format!("levels: '{m}' is not tags, solve or none")))?;
+        p.options.levels = parse_levels(m).map_err(e)?;
     }
     let fixes = match fixes_yaml {
         Some(text) => parse_osm_fixes(&text, "the OSM fixes file").map_err(e)?,
