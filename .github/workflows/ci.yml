@@ -26,10 +26,9 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
-      - name: Tests of the core (hash vectors, geometry, golden files for 3 modes)
-        run: cargo test --release -p duckosm-core
-      - name: The hash agrees with the bundled DuckDB
-        run: cargo test --release -p duckosm-duckdb
+      # one invocation compiles DuckDB one time
+      - name: Tests of the core, the DuckDB hash and the build (golden files, config, lane profile, levels)
+        run: cargo test --release -p duckosm-core -p duckosm-duckdb -p duckosm-build
       - name: The WebAssembly module builds, and its byte functions give the files of the path functions
         run: |
           cargo build --release -p duckosm-wasm --target wasm32-unknown-unknown
@@ -41,6 +40,16 @@ jobs:
           tool: wasm-bindgen@0.2.129
       - name: Both WebAssembly modules of the page build (one thread, and threads)
         run: ./crates/duckosm-wasm/build.sh
+      # The test of duckosm-wasm wrote the native files and fixes.yaml to target/tmp. The metadata and the levels
+      # metadata hold the build time and the time zone, so they are not compared.
+      - name: The WebAssembly module in Node writes the files of the native build (Monaco)
+        run: |
+          node crates/duckosm-wasm/www/run_node.mjs tests/data/monaco.osm.pbf out-node driving,walking,cycling target/tmp/fixes.yaml
+          test $(ls out-node | wc -l) = $(ls target/tmp/duckosm-wasm-native | wc -l)
+          for f in out-node/*; do
+            case ${f##*/} in visualization_metadata_main.parquet|edge_levels_meta_visualization.parquet) continue;; esac
+            cmp $f target/tmp/duckosm-wasm-native/${f##*/}
+          done
 
   # The wheels take about 40 minutes on 5 systems, so they build only for a tag (a release) or by hand.
   wheels:

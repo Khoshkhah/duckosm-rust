@@ -212,8 +212,10 @@ python3 -m venv /tmp/t && /tmp/t/bin/pip install wheels/duckosm_rust-*.whl duckd
 ## Wheels for other systems
 
 `.github/workflows/ci.yml` builds the wheel on 5 targets (Linux x86_64 and aarch64 with manylinux 2_28, macOS
-x86_64 and arm64, Windows x64), plus the sdist, runs `tests/test_wheel.py` on each wheel, runs the Rust tests and
-the WebAssembly build with the test of `duckosm-wasm`. It runs on each push to `main` of
+x86_64 and arm64, Windows x64), plus the sdist, runs `tests/test_wheel.py` on each wheel, runs the Rust tests of
+`duckosm-core`, `duckosm-duckdb`, `duckosm-build` and `duckosm-wasm`, and builds the WebAssembly modules. Then it
+runs the module in Node on Monaco (`run_node.mjs`) and compares each file with `cmp` to the native file of the
+`duckosm-wasm` test. The metadata files hold the build time, so it does not compare them. It runs on each push to `main` of
 [Khoshkhah/duckosm-rust](https://github.com/Khoshkhah/duckosm-rust) (private) and on each pull request. The
 results are on the Actions page of the repository. It does not publish.
 
