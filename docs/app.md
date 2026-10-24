@@ -36,6 +36,14 @@ the user makes the area, builds it, and sees the roads on the same map, with no 
 +----------------------------+
 ```
 
+### The cards fold
+
+Kaveh (2026-10-24): "the result card is not well designed and take many space and its not collapsable". Each
+numbered card (1 to 7) folds: a click on its heading, or on the chevron at the right of the heading (a button that the
+keyboard can reach, with `aria-expanded`), hides the card's body. The heading stays. The page keeps the fold of each
+card in this browser (`duckosm.card.<n>`), so a fold stays after a reload. All cards are open at first. When a step
+becomes active, the page opens its card: card 4 at the click on **Build**, cards 5, 6 and 7 after a build.
+
 ### Step 3: the data
 
 Three tabs, as the three sources of the old page:
@@ -68,10 +76,15 @@ The page keeps the selected file only in memory. After a reload, the user select
 
 ### Step 5: the result (the data)
 
-Kaveh's layout of 2026-10-23: the data in card 5, the map in card 6.
+Kaveh's layout of 2026-10-23: the data in card 5, the map in card 6. Since 2026-10-24 the card is short: one line
+with the edges and nodes of each mode and the time of the build (card 4 keeps the full text), then two folded sections
+and the two download buttons between them. With three modes, the line takes three lines of the panel.
 
-- **SQL**: a text box, **Run**, and the result as a table (the first 200 rows) in the card.
-- **Downloads** (changed after Kaveh found that the files had no structure):
+- **SQL** (folded at first): a text box, **Run**, and the result as a table (the first 200 rows) in the card.
+- **Download all (.zip)** and **Download .duckdb** show on one row at all times.
+- **Downloads: each table** (folded at first): two sentences on the two files, the link to the columns of each table,
+  and one block for each table.
+- The downloads (changed after Kaveh found that the files had no structure):
   - **Download all (.zip)**: a folder named after the area, with the Parquet files (the names of duckOSM's
     GeoParquet export, `<table>_<mode>.parquet`), `layers.json` (its list of the map layers, which the roadstyle
     GeoLibre plugin opens), `make_duckdb.sql`, `boundary.geojson` and a `README.txt` that says what each table holds.

@@ -27,6 +27,7 @@ url = f"http://127.0.0.1:{server.server_address[1]}/index.html"
 
 def sql(page, text):
     """The rows of a query in the page's DuckDB, through the SQL box of card 5 (the first column of each row)."""
+    page.evaluate("document.getElementById('sql-box').open = true")   # the SQL box of card 5 is folded
     page.fill("#sql", text)
     page.click("#query")
     page.wait_for_function("document.querySelector('#result table, #result .error')", timeout=60_000)
@@ -55,6 +56,13 @@ with sync_playwright() as p:
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent)", timeout=600_000)
     assert "drawn" in page.inner_text("#mapnote"), page.inner_text("#mapnote")
     assert page.is_visible("#step7-card"), "card 7 shows after a build with levels"
+    # a card folds with a click on its heading, the page keeps the fold, and a second click opens it
+    page.click("#step6")
+    assert page.evaluate("document.getElementById('step6-card').classList.contains('folded')") and not page.is_visible("#show")
+    assert page.evaluate("localStorage.getItem('duckosm.card.6')") == "1"
+    assert page.get_attribute("#step6 .fold", "aria-expanded") == "false"
+    page.click("#step6 .fold")
+    assert page.is_visible("#show") and page.evaluate("localStorage.getItem('duckosm.card.6')") == "0"
     edges = int(sql(page, "SELECT count(*) FROM visualization.edge_levels")[0])
     before = sql(page, "SELECT count(*) FROM visualization.edge_levels WHERE head_end_m = 7 OR head_start_m = 7")[0]
 

@@ -86,6 +86,23 @@
   .step > h2:first-child { margin: 0 0 12px; color: var(--fg); }
   /* the number of each step has the color of its line on the map: a match, the area, an extract */
   .step h2 .n { background: var(--c); color: #fff; }
+  /* each card folds (a click on its heading or on the chevron); a folded card keeps only its heading */
+  .step > h2:first-child { cursor: pointer; }
+  .step .fold { display: grid; place-items: center; width: 28px; height: 28px; margin: -6px -6px -6px auto; border: 0; border-radius: 8px;
+                background: none; color: var(--muted); flex: none; }
+  .step .icon-btn + .fold { margin-left: 0; }
+  .step .fold:hover { background: var(--surface); color: var(--fg); }
+  .step .fold svg { transform: rotate(-90deg); transition: transform 0.15s ease; }
+  .step.folded .fold svg { transform: rotate(180deg); }
+  .step.folded > :not(h2:first-child) { display: none !important; }
+  .step.folded > h2:first-child { margin-bottom: 0; }
+  /* card 5: one line of the build, the folded SQL and table downloads, the two downloads on one row */
+  .step .line { margin: 0; }
+  .step h3 { display: inline; margin: 0; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .step details > summary:has(h3) { color: var(--muted); }
+  .dl { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+  .dl .btn { padding: 0 8px; font-size: 12.5px; white-space: nowrap; }
+  #sql-box .row { margin-top: 6px; }
   #step1-card { --c: #7c3aed; } #step2-card { --c: #2563eb; } #extracts-box { --c: #ea580c; }
   h2 .n { width: 20px; height: 20px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 11px; }
   /* the panel's icons; not the map's and the floating windows' own SVGs (roadstyle's Street View marker and icons) */
@@ -426,18 +443,19 @@
 
 <section id="step5-card" class="step" aria-labelledby="step5" hidden>
   <h2 id="step5"><span class="n">5</span>The result</h2>
-  <h2 style="margin-top:4px">SQL</h2>
-  <textarea id="sql" rows="4" aria-label="SQL">SELECT highway, count(*) AS edges, round(sum(length_m) / 1000, 1) AS km
+  <p id="resultline" class="small muted line"></p>
+  <details id="sql-box"><summary><h3>SQL</h3></summary>
+    <textarea id="sql" rows="4" aria-label="SQL">SELECT highway, count(*) AS edges, round(sum(length_m) / 1000, 1) AS km
 FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
-  <div class="row" style="margin-top:6px"><button id="query" class="btn">Run</button></div>
-  <div id="result"></div>
-  <h2 style="margin-top:16px">Downloads</h2>
-  <div class="row" style="margin-top:0"><button id="zip" class="btn primary"><svg><use href="#i-download"/></svg>Download all (.zip)</button>
-    <button id="duckdb" class="btn"><svg><use href="#i-download"/></svg>Download .duckdb</button></div>
-  <p class="small muted">The .duckdb file has all tables, as a duckOSM database. The zip has a folder with all tables as GeoParquet files,
-    make_duckdb.sql (it makes a .duckdb file from the GeoParquet files: the README gives the command), the boundary and a README. One table at a time is below.
-    <a id="reference" target="_blank" rel="noopener">The columns of each table</a></p>
-  <div id="files"></div>
+    <div class="row"><button id="query" class="btn">Run</button></div>
+    <div id="result"></div>
+  </details>
+  <div class="dl"><button id="zip" class="btn primary">Download all (.zip)</button><button id="duckdb" class="btn">Download .duckdb</button></div>
+  <details id="files-box"><summary><h3>Downloads: each table</h3></summary>
+    <p class="small muted">The .duckdb file is a duckOSM database with all tables. The zip has the tables as GeoParquet files, with
+      make_duckdb.sql, the boundary and a README. <a id="reference" target="_blank" rel="noopener">The columns of each table</a></p>
+    <div id="files"></div>
+  </details>
 </section>
 
 <section id="step6-card" class="step" aria-labelledby="step6">
@@ -1142,6 +1160,7 @@ $("run").onclick = async () => {
   if (!modes) return status("Select at least one mode.");
   building = true;
   canBuild();
+  unfold("step4-card");                           // the progress of the build shows there
   $("step5-card").hidden = true;
   $("steplog").hidden = true;
   $("showrow").hidden = true;
@@ -1209,7 +1228,10 @@ $("run").onclick = async () => {
              `in DuckDB and you can query them (the table below gives each step). Build module: ${out.memoryMiB} MiB, ` +
              `${out.threads} thread(s).`);
     files();
+    const counts = [...out.summary.matchAll(/^(\w+): (\d+) edges, (\d+) nodes/gm)].map((m) => `${m[1]} ${num(+m[2])} / ${num(+m[3])}`);
+    $("resultline").textContent = `${counts.join(" · ")} (edges / nodes), built in ${num((ready - start) / 1000, 1)} s`;
     $("step5-card").hidden = false;
+    unfold("step5-card");
     await visualization();
   } catch (e) {
     progress("Error: " + e.message);
@@ -1294,6 +1316,8 @@ async function visualization() {
   $("ownbox").hidden = $("ownsep").hidden = !duck.tables.some((t) => t.mode === "features");
   $("showrow").hidden = false;
   $("step7-card").hidden = !duck.tables.some((t) => t.mode === "visualization" && t.table === "edge_levels");
+  unfold("step6-card");
+  if (!$("step7-card").hidden) unfold("step7-card");
   $("editnote").textContent = "";
   if (roadCount.all < AUTO_DRAW) showRoads();
   else $("mapnote").textContent = `${num(roadCount.all)} roads: a large map. Click Show on map to draw it.`;
@@ -1374,6 +1398,27 @@ $("bbld").onclick = () => { view.buildings = !view.buildings; keep("duckosm.buil
 loaded.then(setBase);
 
 window.duckMap = map;   // for e2e.py
+
+// ---- each numbered card folds: a click on its heading or on its chevron (a button, with aria-expanded). The page keeps the fold of each
+// card (duckosm.card.<n>); a card opens again when its step becomes active (unfold). ----
+const cards = [...document.querySelectorAll("section.step")];
+const cardN = (c) => c.querySelector("h2 .n").textContent;
+function fold(c, folded) {
+  c.classList.toggle("folded", folded);
+  c.querySelector(".fold").setAttribute("aria-expanded", String(!folded));
+  keep(`duckosm.card.${cardN(c)}`, folded ? "1" : "0");
+}
+function unfold(id) { fold($(id), false); }
+for (const c of cards) {
+  const h = c.querySelector("h2"), b = document.createElement("button");
+  b.className = "fold";
+  b.innerHTML = icon("chevron");
+  b.setAttribute("aria-label", `Fold or open: ${h.textContent.trim().slice(1)}`);
+  b.setAttribute("aria-controls", c.id);
+  h.append(b);
+  h.onclick = (e) => { if (!e.target.closest("button:not(.fold), a, input")) fold(c, !c.classList.contains("folded")); };
+  fold(c, kept(`duckosm.card.${cardN(c)}`) === "1");
+}
 
 // ---- card 7: roadstyle's level editor on the page's map (docs/app.md). The page makes the level area from the tables (makeArea) and keeps
 // it in this browser (browserStore, one for each area name); the editor uses the page's dashboard and draws its roads with its prefix rs-.
