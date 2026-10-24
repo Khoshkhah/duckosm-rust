@@ -58,12 +58,23 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             super().log_message(*a)
 
 
-def start(port, isolated=True, quiet=False):
-    """Start the server in a thread; port 0 takes a free port (server.server_address[1])."""
+def start(port, isolated=True, quiet=False, directory=WWW):
+    """Start the server in a thread; port 0 takes a free port (server.server_address[1]). directory: the page's folder (a
+    copy with versions, version_refs.py, for a test of the deployed page)."""
     h = type("H", (Handler,), {"isolated": isolated, "quiet": quiet})
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", port), functools.partial(h, directory=str(WWW)))
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", port), functools.partial(h, directory=str(directory)))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server
+
+
+def unversioned_requests(page, directory):
+    """For the headless tests: a list that gets each request of the page (and its workers) for a .js, .wasm, .json or .css
+    file of the site with no ?v=, when `directory` has versions (version_refs.py). Without versions it stays empty."""
+    left = []
+    if "?v=" in (pathlib.Path(directory) / "index.html").read_text():
+        site = re.compile(r"^http://127\.0\.0\.1:\d+/[^?]*\.(js|wasm|json|css)(\?|$)")
+        page.on("request", lambda r: site.match(r.url) and "v=" not in urllib.parse.urlsplit(r.url).query and left.append(r.url))
+    return left
 
 
 if __name__ == "__main__":

@@ -2,23 +2,26 @@
 editor, make one edit through its API (window.lvApi, as the panel does), Apply, and check the tables, the .duckdb download and the map.
 The out folder gets editor.png (the editor open) and page.duckdb.
 
-    python crates/duckosm-wasm/www/editor_e2e.py [out folder]
+    python crates/duckosm-wasm/www/editor_e2e.py [out folder] [page folder]
 
-It uses tests/data/monaco_sample.osm.pbf and tests/data/monaco.geojson. Build the page first (docs/development.md, "WebAssembly").
+The page folder is this one by default; a copy with versions (version_refs.py, as the deploy makes it) also checks that
+each request of the page for a file of the site has the version. It uses tests/data/monaco_sample.osm.pbf and tests/data/monaco.geojson. Build the page first (docs/development.md, "WebAssembly").
 The page loads duckdb-wasm and MapLibre from cdn.jsdelivr.net, so the computer needs the network.
 """
 import pathlib
 import sys
+import time
 
 import duckdb
 from playwright.sync_api import sync_playwright
 
-from serve import start
+from serve import WWW, start, unversioned_requests
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 out = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else "out-editor")
 out.mkdir(parents=True, exist_ok=True)
-server = start(0, quiet=True)
+www = sys.argv[2] if len(sys.argv) > 2 else WWW
+server = start(0, quiet=True, directory=www)
 url = f"http://127.0.0.1:{server.server_address[1]}/index.html"
 
 
@@ -39,6 +42,7 @@ with sync_playwright() as p:
     page = browser.new_page(accept_downloads=True, viewport={"width": 1400, "height": 850})
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
+    unversioned = unversioned_requests(page, www)
     page.on("console", lambda m: m.type == "error" and print("console:", m.text))
     page.goto(url)
     page.wait_for_function("window.mapReady && window.timings && window.timings.duckdbStart", timeout=120_000)
@@ -55,9 +59,11 @@ with sync_playwright() as p:
     before = sql(page, "SELECT count(*) FROM visualization.edge_levels WHERE head_end_m = 7 OR head_start_m = 7")[0]
 
     # open the editor: the level area from the tables, the editor's roads on the page's map (tiles lv://), its panel on the right
+    t = time.time()
     page.click("#edit-open")
     page.wait_for_function("window.levelEditorOpen || /failed/.test(document.getElementById('editnote').textContent)", timeout=300_000)
     assert page.evaluate("!!window.levelEditorOpen"), page.inner_text("#editnote")
+    print(f"open: {time.time() - t:.2f} s from the click until the editor is open")
     made = page.evaluate("window.editorArea")
     print("editor:", page.inner_text("#editnote"))
     assert made["roads"] > 6000 and made["pairs"] > 0, made      # Monaco: 6,830 roads (13,298 edges)
@@ -138,6 +144,7 @@ with sync_playwright() as p:
     assert page.evaluate("window.duckMap.getStyle().layers.some((l) => l.source === 'rs-roads' && l['source-layer'] === 'simple')"), "the roads"
     assert sql(page, "SELECT count(*) FROM visualization.edge_levels WHERE head_end_m = 7 OR head_start_m = 7")[0] == after
     assert not errors, errors
+    assert not unversioned, f"requests with no version: {unversioned}"
     print("close: no change; no page errors")
     browser.close()
 server.shutdown()

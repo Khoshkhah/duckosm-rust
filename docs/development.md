@@ -83,8 +83,9 @@ Build the two modules and their JavaScript bindings (Git ignores both folders):
   `index.html`) adds them in the browser and loads the page again. The first load has one thread.
 - `www/map/pkg/`: roadstyle's Rust module for the roads map. `build.sh` fetches the commit `ROADSTYLE_COMMIT` (a full SHA)
   of roadstyle into `target/roadstyle` and builds the crate `roadstyle-wasm` of its Rust engine (`rust/`). With
-  `ROADSTYLE_REPO=/home/kaveh/projects/roadstyle`, it fetches from the local copy. `duckosm-core` takes the same engine
-  (`roadstyle-rs`, a git dependency at the same commit) for the drawing levels; keep the two commits equal.
+  `ROADSTYLE_REPO=/home/kaveh/projects/roadstyle`, it fetches from the local copy. `duckosm-core` takes roadstyle's
+  engine for the drawing levels from an older commit (`roadstyle-rs` at `aba5884`, a git dependency): the newer commits
+  have the levels in the crate `roadstyle-levels`, with another API ([levels.md](levels.md)).
 
 Open the page (`index.html`, the plan is [browser.md](browser.md)). A browser does not load a module from
 a `file://` address, so use a local server. `serve.py` sends the two headers; `python3 -m http.server` does
@@ -126,6 +127,38 @@ The test writes its files to `target/tmp/duckosm-wasm-native/`. Compare them wit
 `run_node.mjs` or `e2e.py` (built with the same fixes text as the test). `e2e.py` also prints the times of
 the page as JSON. The CLI writes zstd and the page writes snap, so compare `out-area` and `out-cli` by rows,
 not with `cmp`.
+
+Check the level editor of the page (card 7) in headless Chromium: open, one edit, Apply, the tables and the `.duckdb`
+download, Close. It writes `editor.png` and `editor-dark.png` and prints the time to open the editor:
+
+```bash
+python crates/duckosm-wasm/www/editor_e2e.py out-editor
+```
+
+### The deployed page: a version on each file
+
+GitHub Pages sends `cache-control: max-age=600`. After a deploy, a browser can thus get the new `index.html` with an
+old `app/duck.js` from its cache, and the page fails (for example "duck.roadstyle is not a function"). The workflow
+`pages.yml` therefore runs `www/version_refs.py` on the deployed copy: it adds `?v=<the commit's short SHA>` to each
+relative reference of a `.js`, `.wasm`, `.css`, `.json` or `.html` file in the `.js` and `.html` files (the imports,
+`new URL(...)` of the workers and the wasm files, `fetch(...)`, and `src=` / `href=`). A new deploy thus gives new
+addresses, and the browser cannot use an old file. Addresses on other sites (MapLibre, duckdb-wasm) do not change. The
+script then makes sure that no relative reference of these types is left without a version, else it stops the job.
+The service worker gets a version too: a new deploy installs it again, and the page loads one time more.
+
+Test it on a copy, never on `www/` itself (the script changes the files in place):
+
+```bash
+mkdir -p /tmp/www-v && cp -r crates/duckosm-wasm/www/. /tmp/www-v/
+python3 crates/duckosm-wasm/www/version_refs.py /tmp/www-v test123        # prints the number of references with a version
+python crates/duckosm-wasm/www/e2e.py tests/data/monaco_sample.osm.pbf out-area --boundary tests/data/monaco.geojson --www /tmp/www-v
+python crates/duckosm-wasm/www/editor_e2e.py out-editor /tmp/www-v
+```
+
+With a folder that has versions, both tests also record each request of the page and its workers. A request for a
+`.js`, `.wasm`, `.json` or `.css` file of the site with no `?v=` stops the test. Add `--one-thread` to `e2e.py` to
+serve the copy with no COOP and COEP headers, as GitHub Pages does: the service worker then adds them, and the build
+has more than one thread.
 
 Check the area steps of the page in headless Chromium (a file, two rectangles drawn with the mouse, a
 Nominatim search, and the Build button; `--no-search` skips the search):

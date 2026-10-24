@@ -235,6 +235,12 @@ Street View's Linked mode and Google 3D need a Google Maps JavaScript API key. K
 - `e2e.py` uses the new page: the boundary goes in through the File tab. `boundary_e2e.py` opens `index.html`
   and checks that **Build** is on after an area and a region file.
 
+The deployed page has a version on each of its own files (2026-10-24). GitHub Pages lets a browser keep a file for
+10 minutes, so after a deploy Kaveh got the new `index.html` with the old `app/duck.js` ("duck.roadstyle is not a
+function"). At each deploy, `www/version_refs.py` adds `?v=<commit>` to every relative reference of a `.js`, `.wasm`,
+`.css`, `.json` or `.html` file, so the files of one deploy always go together ([development.md](development.md), "The
+deployed page: a version on each file").
+
 ## Later: the relay
 
 A region file can come into the page without a manual download: [relay.md](relay.md).

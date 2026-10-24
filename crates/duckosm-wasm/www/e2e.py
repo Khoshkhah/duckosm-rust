@@ -4,7 +4,7 @@ out folder gets make_duckdb.sql from the zip, and page.duckdb (the button "Downl
 the page as JSON (docs/browser.md, steps B3 and B4).
 
     python crates/duckosm-wasm/www/e2e.py <file.osm.pbf> <out folder> [--boundary area.geojson] [--modes driving,walking,cycling] [--fixes file.yaml]
-        [--no-features]
+        [--no-features] [--www folder]
 
 With --boundary, the PBF file is a region file and the page cuts it to the boundary; without, the file is
 already cut. With --boundary and the PBF file "overpass", the data comes from the Overpass API. With --boundary
@@ -12,7 +12,8 @@ and the PBF file "relay", the page gets the smallest extract through the relay o
 keeps it in the browser. With a region file, the page also makes the base-map layers (docs/features.md), unless
 --no-features: the out folder gets their features_<table>.parquet files (tools/compare_features.py --page checks them).
 
-Build the page first (docs/development.md, "WebAssembly"). The page loads duckdb-wasm from cdn.jsdelivr.net, so
+--www serves another folder: a copy with versions (version_refs.py, as the deploy makes it); then each request of the
+page for a file of the site must have the version. Build the page first (docs/development.md, "WebAssembly"). The page loads duckdb-wasm from cdn.jsdelivr.net, so
 the computer needs the network.
 """
 import argparse
@@ -26,7 +27,7 @@ import zipfile
 
 from playwright.sync_api import sync_playwright
 
-from serve import start
+from serve import start, unversioned_requests
 
 WWW = pathlib.Path(__file__).resolve().parent
 
@@ -40,11 +41,12 @@ a.add_argument("--no-features", action="store_true", help="the box 'Base map lay
 a.add_argument("--levels", choices=["tags", "solve"], default="tags", help="the drawing order (docs/levels.md)")
 a.add_argument("--one-thread", action="store_true", help="serve the page without the COOP and COEP headers")
 a.add_argument("--threads", type=int, help="the size of the thread pool (default: the cores, at most 8)")
+a.add_argument("--www", default=str(WWW), help="the page's folder (default: this one)")
 args = a.parse_args()
 out = pathlib.Path(args.out)
 out.mkdir(parents=True, exist_ok=True)
 
-server = start(0, isolated=not args.one_thread, quiet=True)
+server = start(0, isolated=not args.one_thread, quiet=True, directory=args.www)
 params = [f"threads={args.threads}"] * bool(args.threads) + ["relay=relay"] * (args.pbf == "relay")
 url = f"http://127.0.0.1:{server.server_address[1]}/index.html" + ("?" + "&".join(params) if params else "")
 
@@ -52,6 +54,7 @@ with sync_playwright() as p:
     browser = p.chromium.launch()
     page = browser.new_page(accept_downloads=True)
     page.on("pageerror", lambda e: print("page error:", e))
+    unversioned = unversioned_requests(page, args.www)
     page.goto(url)
     page.wait_for_function("window.mapReady && window.timings && window.timings.duckdbStart", timeout=120_000)
     # the files that build.sh takes from roadstyle are roadstyle's own at ROADSTYLE_COMMIT (no copy that can drift)
@@ -65,6 +68,7 @@ with sync_playwright() as p:
                            *[(f.removeprefix("src/roadstyle/static/"), f) for f in dashboard]]:
         want = subprocess.run(["git", "-C", str(clone), "show", f"{pin}:{source}"], capture_output=True, check=True).stdout
         got = page.request.get(url.split("index.html")[0] + "map/roadstyle/" + served).body()
+        got = re.sub(rb"\?v=[\w.-]+", b"", got)      # a copy with versions (--www): the file without them
         assert got == want, f"map/roadstyle/{served} is not roadstyle's {source} at {pin}: run build.sh"
     print(f"roadstyle's files: the same as roadstyle {pin}")
     if args.boundary:
@@ -129,5 +133,6 @@ with sync_playwright() as p:
     print("map view:", page.evaluate("(() => { const m = window.duckMap; return {center: m.getCenter(), zoom: m.getZoom()}; })()"))
     page.screenshot(path=str(out / "map.png"))
     print(json.dumps(page.evaluate("window.timings")))
+    assert not unversioned, f"requests with no version: {unversioned}"
     browser.close()
 server.shutdown()

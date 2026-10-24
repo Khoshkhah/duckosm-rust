@@ -57,6 +57,9 @@ jobs:
           sed -i "s#localStorage.getItem(\"duckosm.googleKey\") || \"\"#localStorage.getItem(\"duckosm.googleKey\") || \"$GOOGLE_MAPS_KEY\"#; s#kept(\"duckosm.googleKey\") ?? \"\"#kept(\"duckosm.googleKey\") ?? \"$GOOGLE_MAPS_KEY\"#" $f
           test "$(grep -c "$GOOGLE_MAPS_KEY" $f)" = 2
           echo "The page has the key."
+      - name: Put the version on the page's own file references
+        # Pages sends max-age=600: without a version, a browser can get the new index.html with an old app/duck.js
+        run: python3 crates/duckosm-wasm/www/version_refs.py crates/duckosm-wasm/www "${GITHUB_SHA::7}"
       - uses: actions/upload-pages-artifact@v5
         with:
           path: crates/duckosm-wasm/www
