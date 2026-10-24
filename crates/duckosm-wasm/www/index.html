@@ -182,7 +182,10 @@
   footer { display: grid; grid-template-columns: 1fr 1.5fr; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--line); background: var(--bg); }
 
   /* steps 3 to 5: the data, the build, the result (docs/app.md) */
-  #step4-card { --c: #059669; } #step5-card { --c: #0f766e; } #step6-card { --c: #c026d3; }
+  #step4-card { --c: #059669; } #step5-card { --c: #0f766e; } #step6-card { --c: #c026d3; } #step7-card { --c: #4f46e5; }
+  #step7-card [hidden] { display: none; }
+  /* the level editor's panel (roadstyle's level_editor.html): the page's rules for header and .row are not for it */
+  #lv header { display: block; } #lv .row { margin-top: 0; }
   .grid2 [hidden] { display: none; }
   .pick { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 10px; cursor: pointer; margin-bottom: 10px; }
   .pick:hover { border-color: var(--accent); color: var(--accent); }
@@ -454,7 +457,22 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
   </details>
 </section>
 
+<section id="step7-card" class="step" aria-labelledby="step7" hidden>
+  <h2 id="step7"><span class="n">7</span>Edit levels</h2>
+  <p class="small muted" style="margin:0">Change the drawing order of the roads by hand with roadstyle's level editor: which road goes
+    over which one, where two roads join, the heads and the line ends. The editor opens on the map, with its panel on the right.
+    Your edits stay in this browser for this area.
+    <a href="https://khoshkhah.github.io/roadstyle/guides/levels/" target="_blank" rel="noopener">How to use the editor</a></p>
+  <div class="row"><button id="edit-open" class="btn primary">Edit levels</button>
+    <button id="edit-apply" class="btn primary" hidden>Apply</button><button id="edit-close" class="btn" hidden>Close</button></div>
+  <div class="row" id="edit-dl" hidden><button class="btn" data-dl="edits.csv"><svg><use href="#i-download"/></svg>edits.csv</button>
+    <button class="btn" data-dl="levels.csv"><svg><use href="#i-download"/></svg>levels.csv</button></div>
+  <p id="editnote" class="progress" aria-live="polite"></p>
+</section>
+
 </div>
+
+<div id="lvhost"></div>   <!-- the level editor's panel (card 7) -->
 
 <footer>
   <button id="save" class="btn" disabled><svg><use href="#i-download"/></svg>GeoJSON</button>
@@ -1128,6 +1146,8 @@ $("run").onclick = async () => {
   $("steplog").hidden = true;
   $("showrow").hidden = true;
   $("mapnote").textContent = "";
+  closeEditor();
+  $("step7-card").hidden = true;
   removeRoads();
   areaName = $("name").value.trim() || "area";
   try {
@@ -1240,7 +1260,7 @@ async function showRoads() {
       if (layer.layout?.visibility === "none") offLayers.add("rs-" + l.id);
     }
     map.setLayoutProperty("area-fill", "visibility", "none");   // the fill would change the colors of the roads
-    window.RS_SIDE = r.roadTable;   // the road fields (the popup)
+    window.RS_SIDE = r.roadTable;   // the road fields (the popup); the level editor puts its own here while it is open
     rs.setStyle(r.style);   // the dashboard reads the new roads style (its layers and metadata)
     roadsShown = true;
     setBase();
@@ -1273,6 +1293,8 @@ async function visualization() {
   $("mapmode").hidden = $("mapmode-label").hidden = modes.length < 2;
   $("ownbox").hidden = $("ownsep").hidden = !duck.tables.some((t) => t.mode === "features");
   $("showrow").hidden = false;
+  $("step7-card").hidden = !duck.tables.some((t) => t.mode === "visualization" && t.table === "edge_levels");
+  $("editnote").textContent = "";
   if (roadCount.all < AUTO_DRAW) showRoads();
   else $("mapnote").textContent = `${num(roadCount.all)} roads: a large map. Click Show on map to draw it.`;
 }
@@ -1352,6 +1374,86 @@ $("bbld").onclick = () => { view.buildings = !view.buildings; keep("duckosm.buil
 loaded.then(setBase);
 
 window.duckMap = map;   // for e2e.py
+
+// ---- card 7: roadstyle's level editor on the page's map (docs/app.md). The page makes the level area from the tables (makeArea) and keeps
+// it in this browser (browserStore, one for each area name); the editor uses the page's dashboard and draws its roads with its prefix rs-,
+// and solves in the page. The page's roads and its base-map layers are one tile source (rs-roads), and the editor's roads need that name:
+// so the page takes all its rs- layers off first, and draws them again at Close. Apply first writes the editor's levels.csv into the
+// tables (visualization.edge_levels). ----
+let editor = null, editorStore = null;
+const editNote = (t) => { $("editnote").textContent = t; };
+function editing(on) {
+  $("edit-open").hidden = on;
+  $("edit-apply").hidden = $("edit-close").hidden = $("edit-dl").hidden = !on;
+  $("edit-open").disabled = false;
+}
+// the editor goes away (destroy: its panel, its roads and its listeners); the page's roads come back when draw is true
+function closeEditor(draw = false) {
+  if (!editor) return;
+  window.rsDeselect?.();                          // the selection's glow is on the editor's roads
+  editor.destroy();
+  editor = window.levelEditorOpen = null;
+  editing(false);
+  map.resize();
+  if (draw) showRoads();
+}
+$("edit-open").onclick = async () => {
+  $("edit-open").disabled = true;
+  try {
+    editNote("making the level area…");
+    const t0 = performance.now();
+    const [pkg, { levelEditor, browserStore }] = await Promise.all([duck.roadstyle(), import("./map/roadstyle/dashboard/editor/level_editor.js")]);
+    const a = pkg.makeArea(await duck.levelEdges(), JSON.stringify({ id_col: "edge_id" }));
+    const made = `${num(a.roadCount)} roads, ${num(a.pairCount)} pairs` + (a.warnings.length ? `. Warnings: ${a.warnings.join("; ")}` : "");
+    const store = browserStore("duckosm:" + areaName, areaName);
+    await store.save("roads.parquet", a.roads);
+    await store.save("pairs.csv", a.pairs);
+    if (!(await store.load("edits.csv"))) await store.save("edits.csv", a.edits);   // the edits of an earlier session of this area stay
+    window.editorArea = { roads: a.roadCount, pairs: a.pairCount, warnings: a.warnings };   // for editor_e2e.py
+    a.free();
+    editNote(`${made}. Solving…`);
+    await loaded;
+    roadsRun++;                                   // a drawing of the page's roads that is still running stops
+    window.rsDeselect?.();
+    document.querySelectorAll(".maplibregl-popup").forEach((p) => p.remove());
+    for (const l of map.getStyle().layers) if (l.id.startsWith("rs-")) map.removeLayer(l.id);
+    for (const id of Object.keys(map.getStyle().sources)) if (id.startsWith("rs-")) map.removeSource(id);
+    rs.setStyle(null);                            // no roads of the page: destroy gives the dashboard no style of them back
+    editor = await levelEditor({ map, container: $("lvhost"), pkg, store, dashboard: rs, prefix: "rs-" });
+    editorStore = store;
+    window.levelEditorOpen = editor;              // for editor_e2e.py
+    editor.addEventListener("solved", () => editNote(`${made}. Solved again: Apply puts the new drawing order into the tables.`));
+    editing(true);
+    editNote(`${made}, solved in ${num((performance.now() - t0) / 1000, 1)} s. Click a road on the map to start. Apply puts the drawing ` +
+      "order into the tables and the downloads; Close goes back with no change.");
+  } catch (e) {
+    // the editor did not start: its panel goes, and the page's roads are drawn again
+    $("lvhost").replaceChildren();
+    document.body.classList.remove("lv-open");
+    editing(false);
+    showRoads();
+    editNote("The level editor failed: " + e.message);
+  }
+};
+$("edit-close").onclick = () => { closeEditor(true); editNote("Closed. The tables have not changed."); };
+$("edit-apply").onclick = async () => {
+  $("edit-apply").disabled = true;
+  try {
+    editNote("writing the drawing order into the tables…");
+    const text = async (n) => (await editorStore.load(n))?.body ?? "";
+    const inputs = { "edits.csv": await text("edits.csv"), "heads.csv": await text("heads.csv"), "caps.csv": await text("caps.csv") };
+    await duck.saveLevels(await text("levels.csv"), inputs, "this browser: " + areaName);
+    files();                                      // the download links of the new files
+    closeEditor(true);
+    const n = (f) => Math.max(0, inputs[f].trim().split("\n").length - 1);
+    editNote(`Applied: visualization.edge_levels has the edited drawing order (your ${num(n("edits.csv"))} rules, ${num(n("heads.csv"))} ` +
+      `heads and ${num(n("caps.csv"))} line ends), also in the downloads. The map draws it.`);
+  } catch (e) {
+    editNote("Apply failed: " + e.message);
+  }
+  $("edit-apply").disabled = false;
+};
+for (const b of document.querySelectorAll("#edit-dl [data-dl]")) b.onclick = () => editor?.download(b.dataset.dl);
 
 // SQL on the tables
 const cell = (v) => (v === null || v === undefined ? "NULL" : v instanceof Uint8Array ? `(${v.length} bytes)` : typeof v === "object"
