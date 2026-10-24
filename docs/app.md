@@ -122,22 +122,26 @@ The card shows after a build that has `visualization.edge_levels` (each build of
    edges are the same. The user's own files go into `level_edits`, `level_heads` and `level_caps`, as roadstyle's
    `save_area_levels` writes them (duckOSM's `duckosm levels` reads them back). The Parquet files, the zip and the
    `.duckdb` download then have the new tables. The editor closes, and the map draws the roads in the new order.
-4. **Close** removes the editor (`destroy()`) and draws the page's roads again. Without Apply, the tables do not change.
+4. **Close** removes the editor (`destroy()`), which puts the page's road layers back. Without Apply, the tables do not
+   change.
 5. While the editor is open, the card has two downloads: `edits.csv` and `levels.csv` (`editor.download`).
 
 How the editor shares the map:
 
 - A page has one roadstyle dashboard, because its state is in the module. Thus the editor uses the page's dashboard and
   its prefix `rs-`. It does not make a second dashboard.
-- The page's roads and its base-map layers (the duckOSM layers) are in one tile source, `rs-roads`, and the editor's roads
-  need the same name. Thus the page removes all its `rs-` layers and sources before the editor opens, and gives the
-  dashboard an empty style. While the editor is open, the duckOSM base-map layers do not show. OpenFreeMap stays.
+- The page's roads and its base-map layers (the duckOSM layers) are in one tile source, `rs-roads`. The editor takes off
+  only the page's road layers (it finds them by their source and source layer) and keeps them to put back. Its own
+  sources have their own names (`rs-lv-roads`), so the duckOSM base-map layers and OpenFreeMap stay while the editor is
+  open. (Until roadstyle `8208486`, the editor needed the name `rs-roads`, and the base-map layers went away.)
 - The editor's tiles come from the protocol `lv://`, from roadstyle's module in the main thread (not in the map worker).
+- The panel follows the page's theme (the theme button and the system's theme): its colors are variables, with a dark set
+  for `:root[data-theme=dark]` and for the system's dark theme.
 
 Limits:
 
 - One editor at a time. A new build closes it.
-- The editor's panel has a light theme only, and it covers the right side of the map (400 px).
+- The editor's panel covers the right side of the map (400 px). It is not in the page's side panel.
 - The store is for each area name. If a different area gets the same name, the old edits can name roads that the new
   area does not have.
 - A build of the page has no `level_edits`, `level_heads` or `level_caps` tables. Thus the editor starts from the store
@@ -149,7 +153,8 @@ Limits:
 
 The check: `editor_e2e.py` (headless Chromium, Monaco through the File tab). It opens the editor, makes one edit with
 `window.lvApi` (an end head of 7 m) and applies it. Then it checks the tables in the page and in the `.duckdb` download, a
-map of one mode, and Close. It writes `editor.png`.
+map of one mode, the duckOSM base-map layers while the editor is open, and Close. It writes `editor.png` and
+`editor-dark.png` (the dark theme).
 
 ## The map
 

@@ -1377,9 +1377,9 @@ window.duckMap = map;   // for e2e.py
 
 // ---- card 7: roadstyle's level editor on the page's map (docs/app.md). The page makes the level area from the tables (makeArea) and keeps
 // it in this browser (browserStore, one for each area name); the editor uses the page's dashboard and draws its roads with its prefix rs-,
-// and solves in the page. The page's roads and its base-map layers are one tile source (rs-roads), and the editor's roads need that name:
-// so the page takes all its rs- layers off first, and draws them again at Close. Apply first writes the editor's levels.csv into the
-// tables (visualization.edge_levels). ----
+// and solves in the page. The editor takes only the page's road layers off (the duckOSM base-map layers of the same tile source stay),
+// and Close (destroy) puts them back. Apply first writes the editor's levels.csv into the tables (visualization.edge_levels), and then the
+// page draws its roads again. ----
 let editor = null, editorStore = null;
 const editNote = (t) => { $("editnote").textContent = t; };
 function editing(on) {
@@ -1416,9 +1416,6 @@ $("edit-open").onclick = async () => {
     roadsRun++;                                   // a drawing of the page's roads that is still running stops
     window.rsDeselect?.();
     document.querySelectorAll(".maplibregl-popup").forEach((p) => p.remove());
-    for (const l of map.getStyle().layers) if (l.id.startsWith("rs-")) map.removeLayer(l.id);
-    for (const id of Object.keys(map.getStyle().sources)) if (id.startsWith("rs-")) map.removeSource(id);
-    rs.setStyle(null);                            // no roads of the page: destroy gives the dashboard no style of them back
     editor = await levelEditor({ map, container: $("lvhost"), pkg, store, dashboard: rs, prefix: "rs-" });
     editorStore = store;
     window.levelEditorOpen = editor;              // for editor_e2e.py
@@ -1435,7 +1432,7 @@ $("edit-open").onclick = async () => {
     editNote("The level editor failed: " + e.message);
   }
 };
-$("edit-close").onclick = () => { closeEditor(true); editNote("Closed. The tables have not changed."); };
+$("edit-close").onclick = () => { closeEditor(); editNote("Closed. The tables have not changed."); };
 $("edit-apply").onclick = async () => {
   $("edit-apply").disabled = true;
   try {
@@ -1446,8 +1443,8 @@ $("edit-apply").onclick = async () => {
     files();                                      // the download links of the new files
     closeEditor(true);
     const n = (f) => Math.max(0, inputs[f].trim().split("\n").length - 1);
-    editNote(`Applied: visualization.edge_levels has the edited drawing order (your ${num(n("edits.csv"))} rules, ${num(n("heads.csv"))} ` +
-      `heads and ${num(n("caps.csv"))} line ends), also in the downloads. The map draws it.`);
+    editNote(`Applied: visualization.edge_levels has the edited drawing order (your rules: ${num(n("edits.csv"))}, heads: ` +
+      `${num(n("heads.csv"))}, line ends: ${num(n("caps.csv"))}), also in the downloads. The map draws it.`);
   } catch (e) {
     editNote("Apply failed: " + e.message);
   }

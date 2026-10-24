@@ -61,13 +61,25 @@ with sync_playwright() as p:
     made = page.evaluate("window.editorArea")
     print("editor:", page.inner_text("#editnote"))
     assert made["roads"] > 6000 and made["pairs"] > 0, made      # Monaco: 6,830 roads (13,298 edges)
-    tiles = page.evaluate("window.duckMap.getStyle().sources['rs-roads'].tiles[0]")
+    tiles = page.evaluate("window.duckMap.getStyle().sources['rs-lv-roads'].tiles[0]")
     assert tiles.startswith("lv://"), tiles
-    assert page.evaluate("window.duckMap.getStyle().layers.some((l) => l.id.startsWith('rs-') && l.source === 'rs-roads')")
+    assert page.evaluate("window.duckMap.getStyle().layers.some((l) => l.source === 'rs-lv-roads')"), "the editor's roads"
+    # the duckOSM base-map layers stay with the page's tile source rs-roads; only the page's road layers go
+    page_layers = page.evaluate("""window.duckMap.getStyle().layers.filter((l) => l.source === 'rs-roads')
+        .map((l) => [l['source-layer'], (l.layout || {}).visibility || 'visible'])""")
+    assert page_layers and all(sl.startswith("ov") for sl, _ in page_layers), page_layers
+    assert any(v == "visible" for _, v in page_layers), "a duckOSM base-map layer shows"
+    print(f"base map: {len(page_layers)} duckOSM layers stay while the editor is open")
     assert page.is_visible("#lv"), "the editor's panel"
     page.evaluate("window.rsSelect(200)")          # a road picked, as a click on it does: the panel shows its card
     page.wait_for_function("window.duckMap.loaded()", timeout=120_000)
     page.screenshot(path=str(out / "editor.png"))
+    # the dark theme of the page's button (data-theme): the panel follows it
+    page.evaluate("document.documentElement.dataset.theme = 'dark'")
+    page.wait_for_timeout(500)
+    assert page.evaluate("getComputedStyle(document.getElementById('lv')).backgroundColor") != "rgb(246, 247, 249)", "the dark panel"
+    page.screenshot(path=str(out / "editor-dark.png"))
+    page.evaluate("document.documentElement.dataset.theme = 'light'")
 
     # one edit: the end head of a long road 7 m long, as the panel's API does it; the editor solves again and sends "solved"
     page.evaluate("window.solvedEvents = 0; window.levelEditorOpen.addEventListener('solved', () => window.solvedEvents++)")
@@ -119,8 +131,11 @@ with sync_playwright() as p:
     page.click("#edit-open")
     page.wait_for_function("window.levelEditorOpen", timeout=300_000)
     assert page.evaluate("r => window.lvApi('/api/edits').then(() => localStorage.getItem('lv:duckosm:Monaco:heads.csv'))", road).count(road) == 1
-    page.click("#edit-close")
-    page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && window.duckMap.loaded()", timeout=300_000)
+    page.click("#edit-close")                       # destroy puts the page's road layers back: no new drawing
+    page.wait_for_function("window.duckMap.loaded()", timeout=300_000)
+    assert page.evaluate("window.duckMap.getStyle().sources['rs-roads'].tiles[0]").startswith("rs://")
+    assert not page.evaluate("Object.keys(window.duckMap.getStyle().sources).some((id) => id.startsWith('rs-lv-'))")
+    assert page.evaluate("window.duckMap.getStyle().layers.some((l) => l.source === 'rs-roads' && l['source-layer'] === 'simple')"), "the roads"
     assert sql(page, "SELECT count(*) FROM visualization.edge_levels WHERE head_end_m = 7 OR head_start_m = 7")[0] == after
     assert not errors, errors
     print("close: no change; no page errors")
