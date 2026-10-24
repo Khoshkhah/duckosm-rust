@@ -40,12 +40,6 @@ pub struct Options {
     /// Keep the ways of the mode for the tables `ways` and `way_nodes` (duckOSM writes them always). Off saves
     /// the memory of their node lists in a large area.
     pub ways_tables: bool,
-    /// Make `bus.routes` and `bus.route_edges` (duckOSM `options.bus_routes`, on by default; docs/bus.md). They need
-    /// the driving mode and a boundary (the raw cut has the route relations).
-    pub bus_routes: bool,
-    /// The drawing order of the roads, `visualization.edge_levels` (docs/levels.md): the tags rule (the
-    /// default), roadstyle's solver, or no table.
-    pub levels: crate::levels::Method,
 }
 
 impl Default for Options {
@@ -63,8 +57,6 @@ impl Default for Options {
             build_graph: true,
             extract_restrictions: true,
             ways_tables: true,
-            bus_routes: true,
-            levels: crate::levels::Method::Tags,
         }
     }
 }
@@ -682,7 +674,7 @@ fn prune_nodes(nodes: &mut Vec<Node>, edges: &[Edge]) {
 fn keep_largest(edges: &mut Vec<Edge>) {
     let mut id: FxHashMap<i64, usize> = FxHashMap::default();
     let mut parent: Vec<usize> = Vec::new();
-    fn find(p: &mut Vec<usize>, mut x: usize) -> usize {
+    fn find(p: &mut [usize], mut x: usize) -> usize {
         while p[x] != x {
             p[x] = p[p[x]];
             x = p[x];
@@ -992,7 +984,7 @@ fn connect_paths(
                 continue;
             }
             let dist = ((n.lon - d.lon) * 111320.0 * coslat).hypot((n.lat - d.lat) * 111320.0);
-            if best.map_or(true, |b| (dist, c.data) < b) {
+            if best.is_none_or(|b| (dist, c.data) < b) {
                 best = Some((dist, c.data));
             }
         }

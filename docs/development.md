@@ -83,8 +83,9 @@ Build the two modules and their JavaScript bindings (Git ignores both folders):
   `index.html`) adds them in the browser and loads the page again. The first load has one thread.
 - `www/map/pkg/`: roadstyle's Rust module for the roads map. `build.sh` fetches the commit `ROADSTYLE_COMMIT` (a full SHA)
   of roadstyle into `target/roadstyle` and builds the crate `roadstyle-wasm` of its Rust engine (`rust/`). With
-  `ROADSTYLE_REPO=/home/kaveh/projects/roadstyle`, it fetches from the local copy. `duckosm-core` takes the same engine
-  (`roadstyle-rs`, a git dependency at the same commit) for the drawing levels; keep the two commits equal.
+  `ROADSTYLE_REPO=/home/kaveh/projects/roadstyle`, it fetches from the local copy. `duckosm-build` and `duckosm-parquet`
+  take the same engine (`roadstyle-rs`, a git dependency at the same commit) for the drawing levels; keep the commits
+  equal.
 
 Open the page (`index.html`, the plan is [browser.md](browser.md)). A browser does not load a module from
 a `file://` address, so use a local server. `serve.py` sends the two headers; `python3 -m http.server` does

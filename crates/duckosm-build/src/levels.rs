@@ -3,8 +3,8 @@
 //! with the defaults of duckOSM's `duckosm levels` and no edits). The rules and the solver are in roadstyle's own Rust
 //! engine (`roadstyle_rs::levels`, roadstyle repository `rust/`); this module gives it duckosm's edges.
 
-use crate::filter::Mode;
-use crate::model::Edge;
+use duckosm_core::filter::Mode;
+use duckosm_core::model::Edge;
 pub use roadstyle_rs::levels::{Levels, Method, Row, ROADSTYLE_VERSION};
 
 /// The edges of all modes, `edges` and `private_edges` (duckOSM's `load_roads`). An edge in several tables has the

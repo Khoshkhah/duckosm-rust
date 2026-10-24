@@ -6,23 +6,24 @@ use duckosm_core::filter::Mode;
 use duckosm_core::fixes::OsmFixes;
 use duckosm_core::graph::Relation;
 use duckosm_core::lanes::LaneEdges;
-use duckosm_core::levels::LevelEdges;
 use duckosm_core::model::{Network, Way};
 use duckosm_core::network::{build_network_with, Coords, Options};
 use duckosm_core::osmjson::OsmJson;
 use duckosm_core::raw::Raw;
 use duckosm_core::{pbf, sidewalks};
+use levels::LevelEdges;
 use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
 pub mod area;
 pub mod config;
+pub mod levels;
 
 pub use area::{write_area_tables, write_lane_profile, write_levels, Area};
 
 pub use duckosm_core::filter::Mode as NetworkMode;
-pub use duckosm_core::levels::Method as LevelsMethod;
 pub use duckosm_core::network::Options as NetworkOptions;
+pub use levels::Method as LevelsMethod;
 
 /// What to build and write.
 #[derive(Clone, Debug)]
@@ -35,6 +36,12 @@ pub struct Params {
     /// The name of the area: the file is `<out>/<name>.duckdb`.
     pub name: String,
     pub options: Options,
+    /// Make `bus.routes` and `bus.route_edges` (duckOSM `options.bus_routes`, on by default; docs/bus.md). They need
+    /// the driving mode and a boundary (the raw cut has the route relations).
+    pub bus_routes: bool,
+    /// The drawing order of the roads, `visualization.edge_levels` (docs/levels.md): the tags rule (the
+    /// default), roadstyle's solver, or no table.
+    pub levels: LevelsMethod,
     /// Run the sidewalk rule when the walking mode is built (duckOSM `infer_separate_sidewalks`).
     pub infer_sidewalks: bool,
     /// A duckOSM OSM fixes file (duckOSM `osm_overrides`).
@@ -63,6 +70,8 @@ impl Default for Params {
             duckdb: cfg!(feature = "duckdb"),
             name: "area".to_string(),
             options: Options::default(),
+            bus_routes: true,
+            levels: LevelsMethod::Tags,
             infer_sidewalks: true,
             osm_fixes: None,
             boundary: None,
@@ -360,7 +369,7 @@ pub fn run<W: Write + Send>(
     let driving = p.modes.contains(&Mode::Driving);
     let need_relations = opts.extract_restrictions && driving;
     // the bus routes need the route relations and the member ways of the raw cut (docs/bus.md)
-    let bus = opts.bus_routes && driving;
+    let bus = p.bus_routes && driving;
     if p.raw && !matches!(input, Input::Area(..)) {
         return Err("raw.* (the base-map layers) needs a boundary".into());
     }
@@ -442,7 +451,7 @@ pub fn run<W: Write + Send>(
         // duckOSM: the arrows of the fixes go into the raw tags after this mode, so the next modes see them
         fixes.set_arrows(&mut ways, &net.ways, *mode);
         lane_edges.add(*mode, &net);
-        if opts.levels != LevelsMethod::None {
+        if p.levels != LevelsMethod::None {
             level_edges.add(*mode, false, &net.edges);
             level_edges.add(*mode, true, &net.private_edges);
         }
@@ -475,7 +484,7 @@ pub fn run<W: Write + Send>(
     };
     write_area_tables(&area, &mut file)?;
     log.step("write the area tables");
-    sum.levels = write_levels(&level_edges, opts.levels, built_at, &mut file)?;
+    sum.levels = write_levels(&level_edges, p.levels, built_at, &mut file)?;
     if sum.levels.is_some() {
         log.step("levels");
     }
@@ -507,7 +516,7 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
         Some(path) => Some(Boundary::parse(&read(path)?)?),
         None => None,
     };
-    if p.options.bus_routes && p.modes.contains(&Mode::Driving) && cut.is_none() {
+    if p.bus_routes && p.modes.contains(&Mode::Driving) && cut.is_none() {
         eprintln!("no bus tables: the build has no area outline (--boundary)");
     }
     let area_boundary = match p.area_boundary.as_ref().or(p.boundary.as_ref()) {

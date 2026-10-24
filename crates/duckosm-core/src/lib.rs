@@ -8,7 +8,6 @@ pub mod geom;
 pub mod graph;
 pub mod hash;
 pub mod lanes;
-pub mod levels;
 pub mod model;
 pub mod network;
 pub mod osmjson;

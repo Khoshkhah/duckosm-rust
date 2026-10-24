@@ -293,7 +293,7 @@ fn js_build(
         ..Params::default()
     };
     if let Some(m) = levels.as_deref() {
-        p.options.levels = parse_levels(m).map_err(e)?;
+        p.levels = parse_levels(m).map_err(e)?;
     }
     let fixes = match fixes_yaml {
         Some(text) => parse_osm_fixes(&text, "the OSM fixes file").map_err(e)?,

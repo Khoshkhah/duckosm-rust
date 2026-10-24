@@ -130,7 +130,7 @@ fn is(o: Option<&str>, v: &str) -> bool {
     o == Some(v)
 }
 fn is_in(o: Option<&str>, vs: &[&str]) -> bool {
-    o.map_or(false, |x| vs.contains(&x))
+    o.is_some_and(|x| vs.contains(&x))
 }
 /// `x IN (...)`: NULL when x is NULL.
 fn tin(o: Option<&str>, vs: &[&str]) -> Tri {
@@ -164,7 +164,7 @@ pub fn ped_ok(t: &Tags) -> bool {
         return false;
     }
     let mv = first(&[t.motorcar(), t.motor_vehicle()]);
-    mv.map_or(false, |x| YES.contains(&x))
+    mv.is_some_and(|x| YES.contains(&x))
         || is_in(t.access(), &["delivery", "destination", "agricultural"])
 }
 
@@ -257,6 +257,8 @@ fn access_of(t: &Tags, mode: Mode, dismount: bool) -> Option<String> {
 }
 
 /// Travel direction: 1 one-way as drawn, -1 one-way against the drawing, 0 two-way (`_direction_expression`).
+// the branches follow the CASE of duckOSM's SQL, so two of them give the same value
+#[allow(clippy::if_same_then_else)]
 fn direction(t: &Tags, mode: Mode, dismount: bool) -> i32 {
     match mode {
         Mode::Walking => {

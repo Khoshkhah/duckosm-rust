@@ -9,10 +9,10 @@
 //! - A key that only tunes duckOSM's DuckDB (memory, threads, batches) has no effect here. It is in the
 //!   list `ignored`.
 
+use crate::levels::Method;
 use crate::Params;
 use duckosm_core::filter::Mode;
 use duckosm_core::fixes::{NewNode, NewWay, OsmFixes, TurnFix, WayFix};
-use duckosm_core::levels::Method;
 use duckosm_core::network::Options;
 use std::path::{Path, PathBuf};
 use yaml_rust2::{Yaml, YamlLoader};
@@ -348,13 +348,6 @@ pub fn read(path: &Path, pbf_is_cut: bool, strict: bool) -> Result<FromConfig, S
         build_graph,
         extract_restrictions: options.bool("extract_restrictions", true)?,
         ways_tables: true,
-        bus_routes: options.bool("bus_routes", true)?,
-        // duckOSM: options.levels (on by default) solves the drawing order; off writes no table
-        levels: if options.bool("levels", true)? {
-            Method::Solve
-        } else {
-            Method::None
-        },
     };
     if opts.calculate_costs && !opts.process_speeds {
         return Err("config: options.calculate_costs needs options.process_speeds".into());
@@ -387,6 +380,13 @@ pub fn read(path: &Path, pbf_is_cut: bool, strict: bool) -> Result<FromConfig, S
         modes,
         name,
         options: opts,
+        bus_routes: options.bool("bus_routes", true)?,
+        // duckOSM: options.levels (on by default) solves the drawing order; off writes no table
+        levels: if options.bool("levels", true)? {
+            Method::Solve
+        } else {
+            Method::None
+        },
         infer_sidewalks: options.bool("infer_separate_sidewalks", true)?,
         osm_fixes,
         boundary: cut_to,

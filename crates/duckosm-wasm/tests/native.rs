@@ -109,7 +109,7 @@ fn browser_area_build_equals_native_build() {
         built_at: Some(0),
         ..Params::default()
     };
-    p.options.levels = duckosm_core::levels::Method::Solve;
+    p.levels = duckosm_build::LevelsMethod::Solve;
     build(&pbf, &native, &p).unwrap();
 
     let boundary = Boundary::parse(&std::fs::read_to_string(&geojson).unwrap()).unwrap();
@@ -126,7 +126,7 @@ fn browser_area_build_equals_native_build() {
         timezone_entry: Some(monaco_timezone()),
         ..Params::default()
     };
-    browser.options.levels = duckosm_core::levels::Method::Solve;
+    browser.levels = duckosm_build::LevelsMethod::Solve;
     let fixes = parse_osm_fixes(FIXES_AREA, "the OSM fixes file").unwrap();
     run(
         Input::Area(&open, &boundary),

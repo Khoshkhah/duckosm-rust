@@ -77,9 +77,9 @@ fn build<'py>(
         build_graph,
         extract_restrictions,
         ways_tables,
-        bus_routes,
-        levels: parse_levels(&levels).map_err(PyValueError::new_err)?,
     };
+    p.bus_routes = bus_routes;
+    p.levels = parse_levels(&levels).map_err(PyValueError::new_err)?;
     // the build runs without the GIL, so other Python threads go on
     let sum = py
         .detach(|| run_build(&pbf, &out, &p))

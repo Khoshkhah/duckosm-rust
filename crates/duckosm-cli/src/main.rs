@@ -119,6 +119,7 @@ fn run() -> Result<(), String> {
         };
         p.modes = NetworkMode::parse_all(&cli.modes.split(',').collect::<Vec<_>>())?;
         p.infer_sidewalks = !cli.no_sidewalk_inference;
+        p.bus_routes = !cli.no_bus_routes;
         p.options = NetworkOptions {
             keep_largest_component: !cli.no_component_filter,
             cycling_dismount: !cli.no_cycling_dismount,
@@ -132,8 +133,6 @@ fn run() -> Result<(), String> {
             build_graph: !cli.no_graph,
             extract_restrictions: !cli.no_restrictions,
             ways_tables: !cli.no_ways_tables,
-            bus_routes: !cli.no_bus_routes,
-            ..NetworkOptions::default()
         };
         (
             cli.pbf.clone().unwrap(),
@@ -142,7 +141,7 @@ fn run() -> Result<(), String> {
         )
     };
     if let Some(m) = &cli.levels {
-        p.options.levels = parse_levels(m)?;
+        p.levels = parse_levels(m)?;
     }
     if let Some(f) = &cli.fixes {
         p.osm_fixes = Some(f.clone());
