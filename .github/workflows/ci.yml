@@ -27,8 +27,8 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       # one invocation compiles DuckDB one time
-      - name: Tests of the core, the DuckDB hash and the build (golden files, config, lane profile, levels)
-        run: cargo test --release -p duckosm-core -p duckosm-duckdb -p duckosm-build
+      - name: Tests of the core, the DuckDB hash, the Parquet writer and the build (golden files, config, lane profile, levels)
+        run: cargo test --release -p duckosm-core -p duckosm-duckdb -p duckosm-parquet -p duckosm-build
       - name: The WebAssembly module builds, and its byte functions give the files of the path functions
         run: |
           cargo build --release -p duckosm-wasm --target wasm32-unknown-unknown

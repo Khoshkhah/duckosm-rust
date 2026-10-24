@@ -798,13 +798,15 @@ pub fn write_metadata_to<W: Write + Send>(out: W, m: &Metadata) -> Result<(), St
     })
 }
 
-/// Write rows as a plain Parquet file, one row group for each `ROW_GROUP` rows: `batch` makes the columns of a part.
+/// Write rows as a plain Parquet file, one row group for each `ROW_GROUP` rows: `batch` makes the columns of a part,
+/// each with its name and whether it can hold NULL. The writer keeps the schema of the first part, so the flag must
+/// not come from the data of a part.
 fn write_parts<W: Write + Send, T>(
     out: W,
     rows: &[T],
-    batch: impl Fn(&[T]) -> Vec<(&'static str, ArrayRef)>,
+    batch: impl Fn(&[T]) -> Vec<(&'static str, ArrayRef, bool)>,
 ) -> Result<(), String> {
-    let part = |c: &[T]| RecordBatch::try_from_iter(batch(c)).map_err(err);
+    let part = |c: &[T]| RecordBatch::try_from_iter_with_nullable(batch(c)).map_err(err);
     let first = part(&rows[..rows.len().min(ROW_GROUP)])?;
     let plain = WriterProperties::builder()
         .set_compression(compression())
@@ -847,10 +849,10 @@ pub fn write_raw_nodes_to<W: Write + Send>(out: W, rows: &[RawNode]) -> Result<(
             lon.append_value(n.lon);
         }
         vec![
-            ("osm_id", Arc::new(id.finish()) as ArrayRef),
-            ("lat", Arc::new(lat.finish())),
-            ("lon", Arc::new(lon.finish())),
-            ("tags", tags_column(c.iter().map(|n| &n.tags))),
+            ("osm_id", Arc::new(id.finish()) as ArrayRef, false),
+            ("lat", Arc::new(lat.finish()), false),
+            ("lon", Arc::new(lon.finish()), false),
+            ("tags", tags_column(c.iter().map(|n| &n.tags)), true),
         ]
     })
 }
@@ -884,10 +886,10 @@ pub fn write_raw_ways_to<W: Write + Send>(
             line.append_option((pts.len() >= 2).then(|| line_wkb(&pts)));
         }
         vec![
-            ("osm_id", Arc::new(id.finish()) as ArrayRef),
-            ("tags", tags_column(c.iter().map(|w| &w.tags))),
-            ("refs", Arc::new(refs.finish())),
-            ("line", Arc::new(line.finish())),
+            ("osm_id", Arc::new(id.finish()) as ArrayRef, false),
+            ("tags", tags_column(c.iter().map(|w| &w.tags)), true),
+            ("refs", Arc::new(refs.finish()), false),
+            ("line", Arc::new(line.finish()), true),
         ]
     })
 }
@@ -919,11 +921,11 @@ pub fn write_raw_relations_to<W: Write + Send>(out: W, rows: &[Relation]) -> Res
             types.append(true);
         }
         vec![
-            ("osm_id", Arc::new(id.finish()) as ArrayRef),
-            ("tags", tags_column(c.iter().map(|r| &r.tags))),
-            ("refs", Arc::new(refs.finish())),
-            ("ref_roles", Arc::new(roles.finish())),
-            ("ref_types", Arc::new(types.finish())),
+            ("osm_id", Arc::new(id.finish()) as ArrayRef, false),
+            ("tags", tags_column(c.iter().map(|r| &r.tags)), true),
+            ("refs", Arc::new(refs.finish()), false),
+            ("ref_roles", Arc::new(roles.finish()), false),
+            ("ref_types", Arc::new(types.finish()), false),
         ]
     })
 }
@@ -1057,4 +1059,37 @@ pub fn write_route_edges_to<W: Write + Send>(out: W, rows: &[RouteEdge]) -> Resu
             bools(c.iter().map(|r| r.bus_lane)),
         ]
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+
+    /// A NULL only in the second part (row 65,537) must fit the schema of the first part.
+    #[test]
+    fn null_after_the_first_part() {
+        let tag = vec![("highway".to_string(), "crossing".to_string())];
+        let mut rows: Vec<RawNode> = (0..=ROW_GROUP as i64)
+            .map(|id| RawNode {
+                id,
+                lon: 0.0,
+                lat: 0.0,
+                tags: tag.clone(),
+            })
+            .collect();
+        rows.last_mut().unwrap().tags.clear();
+        let path =
+            std::env::temp_dir().join(format!("duckosm-null-{}.parquet", std::process::id()));
+        write_raw_nodes_to(std::fs::File::create(&path).unwrap(), &rows).unwrap();
+        let reader = ParquetRecordBatchReaderBuilder::try_new(std::fs::File::open(&path).unwrap())
+            .unwrap()
+            .build()
+            .unwrap();
+        let nulls: usize = reader
+            .map(|b| b.unwrap().column_by_name("tags").unwrap().null_count())
+            .sum();
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(nulls, 1);
+    }
 }
