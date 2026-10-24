@@ -184,20 +184,31 @@ against it (complementary slackness). This is a proof that the flow is the best.
 | `roadstyle_version` | the roadstyle version that the port follows (0.24.2) | the same |
 | `created` | the time of the build | the same |
 
-The page's check (`checkLevels` in `roads_sql.js`) now also accepts `tags` and `solve`. roadstyle's level editor
-(`load_area_levels`) accepts `area` only. To edit the levels of a Rust build, run `duckosm levels` on the file: it
-makes a level area and replaces the two tables.
+The page's check (since roadstyle `fdc3d23`: `levels_keyword` in roadstyle-io's `duckosm.rs`) accepts `area`, `tags`
+and `solve`. roadstyle's Python level editor (`load_area_levels`) accepts `area` only. To edit the levels of a Rust build:
+
+- in the page, card 7 **Edit levels** ([app.md](app.md), "Step 7: edit the levels"): roadstyle's level editor solves in
+  the page, and **Apply** replaces the two tables (`source` = `area`) and writes `level_edits`, `level_heads` and
+  `level_caps`;
+- natively, run `duckosm levels` on the file: it makes a level area and replaces the two tables.
 
 ### Not in the port
 
-These parts of roadstyle are for the level editor or are off in duckOSM. Each one can come later, when a user
-needs it:
+These parts of roadstyle are off in duckOSM, or only roadstyle's level editor has them. Each one can come later in the
+Rust build, when a user needs it:
 
-- the edits, heads and caps of the editor (`level_edits`, `level_heads`, `level_caps`);
+- the edits, heads and caps (`level_edits`, `level_heads`, `level_caps`) in a build. The page's editor (card 7) now
+  makes them and solves with them, with roadstyle's own solver (roadstyle-wasm), but `duckosm-rust` does not read them in
+  a build;
 - `auto_ends` (heads and caps from the geometry; duckOSM uses the fixed 5 m and the round caps);
 - `near_rules`, `band_col` and an `order` other than `priority`;
-- the local solve of the editor (`solve_local`, `fixed`);
+- the local solve of the editor (`solve_local`, `fixed`): the page's editor has it, the build does not need it;
 - the time limit: the flow has no time limit, because it always ends.
+
+The levels of `duckosm-core` come from roadstyle `aba5884` (`crates/duckosm-core/Cargo.toml`). The page's map and editor
+use roadstyle `fdc3d23` (`build.sh`). At `fdc3d23` the levels are the crate `roadstyle-levels`, with another API and
+another `ROADSTYLE_VERSION`. A move of `duckosm-core` to it changes the code and the meta row, and needs a new check
+against the golden files.
 
 ## The equality check
 

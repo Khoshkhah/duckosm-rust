@@ -29,6 +29,15 @@ gzip; [tables.md](tables.md)). Kaveh chose it on 2026-10-23. Two other ways, for
   (about 20 MB the first time, the same sea as duckOSM), or make the sea from the coastline ways of the region file
   (no download, but no sea for Monaco, whose file has no coastline) ([features.md](features.md)).
 
+- **The level editor (card 7)**: done in part (2026-10-24, [app.md](app.md), "Step 7: edit the levels"). Still to do:
+  - The duckOSM base-map layers do not show while the editor is open: the page's roads and the base map are one tile
+    source. Two ways: the engine makes two sources, or roadstyle's editor takes a source name of its own.
+  - A dark theme for the editor's panel, and its place in the page's side panel (now on the right of the map).
+  - The editor solves in the main thread: a large area (Tartu) can stop the page for some seconds. A Web Worker, as the
+    map worker, can solve it.
+  - The page does not know the version of roadstyle's module, so `edge_levels_meta.roadstyle_version` keeps the build's.
+  - `duckosm-core` takes its levels from roadstyle `aba5884`; the map and the editor from `fdc3d23` ([levels.md](levels.md)).
+
 ## The tables
 
 - **Group 2** ([tables.md](tables.md)) is done: `driving.lane_profile` ([lane_profile.md](lane_profile.md)) and the

@@ -3,6 +3,18 @@
 All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There is no PyPI package yet
 (design.md, open question 2).
 
+## Not released
+
+### Added
+
+- The browser page: card 7 **Edit levels**, roadstyle's level editor on the map (docs/app.md, "Step 7: edit the
+  levels"). **Apply** writes the edited drawing order into `visualization.edge_levels` and the downloads.
+
+### Changed
+
+- The page uses roadstyle `fdc3d23` for its map (the style, the tiles, the dashboard, the SQL files). The levels of
+  `duckosm-core` stay at roadstyle `aba5884`.
+
 ## 0.3.0 (2026-10-23)
 
 The tables of duckOSM that 0.2.0 did not make, the browser page and its map.

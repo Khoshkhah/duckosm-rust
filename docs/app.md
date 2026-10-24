@@ -98,6 +98,59 @@ Kaveh's layout of 2026-10-23: the data in card 5, the map in card 6.
 - The base map and the layers are buttons on the map (see "The map"). For one commit they were in this card; Kaveh
   wants them on the map ("it has a good design").
 
+### Step 7: edit the levels
+
+Kaveh's words (2026-10-24): "Add editing dashboard to duckosm rust github io dashboard". The card **Edit levels** puts
+roadstyle's level editor on the page's map. The drawing order (`visualization.edge_levels`, [levels.md](levels.md)) comes
+from the tags or from the solver. With the editor, the user changes it by hand: which road goes over which road, where two
+roads join, the length of the heads and the shape of the line ends. Everything runs in the page: GitHub Pages has no server.
+
+The card shows after a build that has `visualization.edge_levels` (each build of the page has it). The flow:
+
+1. **Edit levels.** The page runs roadstyle's query `level_edges` in DuckDB (`duckosmPlan`: the edges of duckOSM's
+   `load_roads`, one row for each `edge_id` of all modes) and writes `edges.parquet`. roadstyle's `makeArea` makes the
+   level area from it (`roads.parquet`, `pairs.csv` and an empty `edits.csv`). The page keeps the area in this browser
+   (`browserStore("duckosm:<area name>")`: the text files in `localStorage`, `roads.parquet` in the private file system
+   of the site). If the store already has `edits.csv` for this area name, the page keeps it: the edits of an earlier
+   session show again. The card gives the number of roads and pairs and the warnings of `makeArea`.
+2. The editor (`levelEditor({map, container, pkg, store, dashboard: rs, prefix: "rs-"})`) solves the area and draws its
+   roads on the page's map, with the page's dashboard. Its panel (roadstyle's `level_editor.html`) is on the right of the
+   map. A click on a road picks it. The panel has the cards with the ends and the heads, and the tabs Edit, History and
+   Issues (roadstyle's guide `docs/guides/levels.md`, "Fix it by hand"). The page solves each change again.
+3. **Apply** writes the editor's `levels.csv` into `visualization.edge_levels`. `edge_levels_meta` gets `source = 'area'`,
+   `area = 'this browser: <area name>'` and a new `created` time. `n_edges` and `edge_hash` do not change, because the
+   edges are the same. The user's own files go into `level_edits`, `level_heads` and `level_caps`, as roadstyle's
+   `save_area_levels` writes them (duckOSM's `duckosm levels` reads them back). The Parquet files, the zip and the
+   `.duckdb` download then have the new tables. The editor closes, and the map draws the roads in the new order.
+4. **Close** removes the editor (`destroy()`) and draws the page's roads again. Without Apply, the tables do not change.
+5. While the editor is open, the card has two downloads: `edits.csv` and `levels.csv` (`editor.download`).
+
+How the editor shares the map:
+
+- A page has one roadstyle dashboard, because its state is in the module. Thus the editor uses the page's dashboard and
+  its prefix `rs-`. It does not make a second dashboard.
+- The page's roads and its base-map layers (the duckOSM layers) are in one tile source, `rs-roads`, and the editor's roads
+  need the same name. Thus the page removes all its `rs-` layers and sources before the editor opens, and gives the
+  dashboard an empty style. While the editor is open, the duckOSM base-map layers do not show. OpenFreeMap stays.
+- The editor's tiles come from the protocol `lv://`, from roadstyle's module in the main thread (not in the map worker).
+
+Limits:
+
+- One editor at a time. A new build closes it.
+- The editor's panel has a light theme only, and it covers the right side of the map (400 px).
+- The store is for each area name. If a different area gets the same name, the old edits can name roads that the new
+  area does not have.
+- A build of the page has no `level_edits`, `level_heads` or `level_caps` tables. Thus the editor starts from the store
+  only, not from the tables of a file.
+- The editor solves in the main thread. Monaco takes 2 to 5 s to open (6,830 roads, 21,476 pairs). A larger area was not
+  tested.
+- `edge_levels_meta.roadstyle_version` keeps the value of the build: the page does not know the version of roadstyle's
+  module.
+
+The check: `editor_e2e.py` (headless Chromium, Monaco through the File tab). It opens the editor, makes one edit with
+`window.lvApi` (an end head of 7 m) and applies it. Then it checks the tables in the page and in the `.duckdb` download, a
+map of one mode, and Close. It writes `editor.png`.
+
 ## The map
 
 - The roads of roadstyle's style go onto the same map: their sources and layers are added with the prefix
@@ -111,10 +164,12 @@ Kaveh's layout of 2026-10-23: the data in card 5, the map in card 6.
   its marker, Google 3D, the road popup, the hover tooltip, the purple glow of the selected road, and the legend of a
   `color_by`. It is roadstyle's one module `src/roadstyle/static/dashboard/`, which `build.sh` takes at
   `ROADSTYLE_COMMIT` into `www/map/roadstyle/dashboard/` (not in git; `e2e.py` checks that the served files are
-  roadstyle's). The page calls `rsDashboard(map, {prefix: "rs-", tiles: true, simple: "roads-simple", engine: {props}})`
+  roadstyle's). The page calls `rsDashboard(map, {prefix: "rs-", tiles: true, simple: "roads-simple"})`
   once, before the roads; after each build or network change, `showRoads` adds the roads style's sources and layers
   with the prefix (the one vector source `rs-roads`, with `promoteId: {simple: "__rs_edge"}` for the glow) and gives the
-  style to `rs.setStyle`. A click asks the map worker for the road's properties (`engine.props`). The page removes the
+  style to `rs.setStyle`. The map worker sends the road table (the fields of each road) with the style, and the page
+  puts it in `window.RS_SIDE`, where the dashboard reads the fields of a clicked road. (Until roadstyle `aba5884`, the
+  dashboard asked the map worker for each road with `engine.props`; roadstyle removed that option.) The page removes the
   popup and the selection while the user draws or uses **What is here?**. The legend sits beside the panel.
 - The buttons under the zoom buttons (Kaveh's design of 2026-10-23, from roadstyle's map: the same icons, sizes and
   spacing): 3D, the 3D buildings switch, Street View, Google 3D (only with a key), and the base map (▦) last:
@@ -170,7 +225,8 @@ Street View's Linked mode and Google 3D need a Google Maps JavaScript API key. K
 - `index.html`: the page (the boundary tool's HTML and CSS, and the new steps).
 - `app/duck.js`: a new module with the build side of the old page: duckdb-wasm, the build worker, the load of
   the tables, the roads style, SQL, `load.sql`. The page calls it.
-- `build_worker.js`, `map/` and `serve.py` do not change.
+- `build_worker.js` and `serve.py` do not change. `map/map_worker.js` makes the style and the road table.
+- Card 7 is in `index.html`. `app/duck.js` has `levelEdges` (the edges of the level area) and `saveLevels` (Apply).
 - `e2e.py` uses the new page: the boundary goes in through the File tab. `boundary_e2e.py` opens `index.html`
   and checks that **Build** is on after an area and a region file.
 
