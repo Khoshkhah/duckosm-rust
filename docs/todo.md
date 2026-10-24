@@ -35,7 +35,7 @@ gzip; [tables.md](tables.md)). Kaveh chose it on 2026-10-23. Two other ways, for
   - The editor solves in the main thread: a large area (Tartu) can stop the page for some seconds. A Web Worker, as the
     map worker, can solve it.
   - The page does not know the version of roadstyle's module, so `edge_levels_meta.roadstyle_version` keeps the build's.
-  - `duckosm-core` takes its levels from roadstyle `aba5884`; the map and the editor from `8208486` ([levels.md](levels.md)).
+  - `duckosm-core` takes its levels from roadstyle `aba5884`; the map and the editor from `1832d90` ([levels.md](levels.md)).
 
 ## The tables
 
