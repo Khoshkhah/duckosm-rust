@@ -113,7 +113,7 @@ The card shows after a build that has `visualization.edge_levels` (each build of
    (`browserStore("duckosm:<area name>")`: the text files in `localStorage`, `roads.parquet` in the private file system
    of the site). If the store already has `edits.csv` for this area name, the page keeps it: the edits of an earlier
    session show again. The card gives the number of roads and pairs and the warnings of `makeArea`.
-2. The editor (`levelEditor({map, container, pkg, store, dashboard: rs, prefix: "rs-"})`) solves the area and draws its
+2. The editor (`levelEditor({map, container, pkgUrl, store, dashboard: rs, prefix: "rs-"})`) solves the area and draws its
    roads on the page's map, with the page's dashboard. Its panel (roadstyle's `level_editor.html`) is on the right of the
    map. A click on a road picks it. The panel has the cards with the ends and the heads, and the tabs Edit, History and
    Issues (roadstyle's guide `docs/guides/levels.md`, "Fix it by hand"). The page solves each change again.
@@ -134,7 +134,8 @@ How the editor shares the map:
   only the page's road layers (it finds them by their source and source layer) and keeps them to put back. Its own
   sources have their own names (`rs-lv-roads`), so the duckOSM base-map layers and OpenFreeMap stay while the editor is
   open. (Until roadstyle `8208486`, the editor needed the name `rs-roads`, and the base-map layers went away.)
-- The editor's tiles come from the protocol `lv://`, from roadstyle's module in the main thread (not in the map worker).
+- The editor's tiles come from the protocol `lv://`, from roadstyle's module in the editor's own worker (`pkgUrl`: the URL of
+  `map/pkg/roadstyle_wasm.js`), not in the map worker.
 - The panel follows the page's theme (the theme button and the system's theme): its colors are variables, with a dark set
   for `:root[data-theme=dark]` and for the system's dark theme.
 
@@ -146,8 +147,11 @@ Limits:
   area does not have.
 - A build of the page has no `level_edits`, `level_heads` or `level_caps` tables. Thus the editor starts from the store
   only, not from the tables of a file.
-- The editor solves in the main thread. Monaco takes 2 to 5 s to open (6,830 roads, 21,476 pairs). A larger area was not
-  tested.
+- Monaco takes 2.2 to 2.9 s to open (6,830 roads, 21,476 pairs). Since roadstyle `7d4534f`, the editor solves, makes
+  its map and cuts its tiles in a Web Worker, so the page does not stop: the longest task of the main thread while
+  Monaco opens is 0.16 s. `makeArea` still runs in the main thread. A larger area was not tested in the page.
+- If the editor's worker stops (no memory, a file that does not load), its waiting calls fail, and card 7 says so.
+  Close the editor and open it again.
 - `edge_levels_meta.roadstyle_version` keeps the value of the build: the page does not know the version of roadstyle's
   module.
 

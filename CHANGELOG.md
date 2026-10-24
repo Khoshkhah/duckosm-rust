@@ -12,7 +12,7 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ### Changed
 
-- The page uses roadstyle `1832d90` (branch `editor-followups`) for its map (the style, the tiles, the dashboard, the SQL files). The levels of
+- The page uses roadstyle `7d4534f` (branch `editor-followups`) for its map (the style, the tiles, the dashboard, the SQL files). The levels of
   `duckosm-core` stay at roadstyle `aba5884`.
 
 ## 0.3.0 (2026-10-23)

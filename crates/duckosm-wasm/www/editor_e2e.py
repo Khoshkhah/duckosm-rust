@@ -59,11 +59,15 @@ with sync_playwright() as p:
     before = sql(page, "SELECT count(*) FROM visualization.edge_levels WHERE head_end_m = 7 OR head_start_m = 7")[0]
 
     # open the editor: the level area from the tables, the editor's roads on the page's map (tiles lv://), its panel on the right
+    # the longest task of the main thread while the editor opens (the editor's engine is in a worker: the page does not stop)
+    page.evaluate("""window.longTask = 0; new PerformanceObserver((l) => l.getEntries().forEach((e) =>
+        window.longTask = Math.max(window.longTask, e.duration))).observe({type: 'longtask'})""")
     t = time.time()
     page.click("#edit-open")
     page.wait_for_function("window.levelEditorOpen || /failed/.test(document.getElementById('editnote').textContent)", timeout=300_000)
     assert page.evaluate("!!window.levelEditorOpen"), page.inner_text("#editnote")
-    print(f"open: {time.time() - t:.2f} s from the click until the editor is open")
+    print(f"open: {time.time() - t:.2f} s from the click until the editor is open; longest main-thread task "
+          f"{page.evaluate('window.longTask') / 1000:.2f} s")
     made = page.evaluate("window.editorArea")
     print("editor:", page.inner_text("#editnote"))
     assert made["roads"] > 6000 and made["pairs"] > 0, made      # Monaco: 6,830 roads (13,298 edges)
@@ -89,7 +93,7 @@ with sync_playwright() as p:
 
     # one edit: the end head of a long road 7 m long, as the panel's API does it; the editor solves again and sends "solved"
     page.evaluate("window.solvedEvents = 0; window.levelEditorOpen.addEventListener('solved', () => window.solvedEvents++)")
-    road = page.evaluate("JSON.parse(window.levelEditorOpen.area.facts()).find((f) => f.length_m > 30).road")   # a head of 7 m fits
+    road = page.evaluate("window.levelEditorOpen.roads.find((f) => f.length_m > 30).road")   # a head of 7 m fits
     said = page.evaluate("r => window.lvApi('/api/apply', {ops: [{op: 'head', road: r, end: 'end', m: '7'}]})", road)
     assert said["ok"] and said["redrawn"], said
     assert page.evaluate("window.solvedEvents") == 1
