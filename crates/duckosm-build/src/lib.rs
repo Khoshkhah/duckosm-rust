@@ -524,49 +524,63 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
         Some(b) => Input::Area(&open, b),
         None => Input::Path(pbf_path),
     };
-    // the GeoParquet files are the input of the .duckdb writer, so they always go to a folder
+    // the GeoParquet files are the input of the .duckdb writer, so they always go to a folder: without the format
+    // geoparquet, a new temporary folder for each call (two Python threads can build at the same time)
     let pq_dir = if p.geoparquet {
         out.to_path_buf()
     } else {
-        std::env::temp_dir().join(format!("duckosm-{}", std::process::id()))
+        static CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let t = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos());
+        std::env::temp_dir().join(format!("duckosm-{}-{n}-{t}", std::process::id()))
     };
     std::fs::create_dir_all(&pq_dir).map_err(|e| e.to_string())?;
-    let mut files = Vec::new();
-    let mut sum = run(
-        input,
-        &fixes,
-        area_boundary.as_deref(),
-        p,
-        &mut log,
-        |name| {
-            // raw.* is not in the .duckdb file, so it goes to the output folder
-            let path = if name.starts_with("raw_") {
-                out
-            } else {
-                &pq_dir
-            }
-            .join(name);
-            files.push((name.trim_end_matches(".parquet").to_string(), path.clone()));
-            std::fs::File::create(&path).map_err(|e| e.to_string())
-        },
-    )?;
-    sum.files = files;
-    if p.geoparquet {
-        write_layers_json(&pq_dir, &sum)?;
-        sum.files
-            .push(("layers".to_string(), pq_dir.join("layers.json")));
-    }
-    #[cfg(feature = "duckdb")]
-    if p.duckdb {
-        let names: Vec<&str> = p.modes.iter().map(|m| m.name()).collect();
-        let db = out.join(format!("{}.duckdb", p.name));
-        duckosm_duckdb::write_database(&db, &pq_dir, &names)?;
-        sum.files.push(("duckdb".to_string(), db));
-        log.step("write duckdb");
-    }
+    let res = (|| -> Result<Summary, String> {
+        let mut files = Vec::new();
+        let mut sum = run(
+            input,
+            &fixes,
+            area_boundary.as_deref(),
+            p,
+            &mut log,
+            |name| {
+                // raw.* is not in the .duckdb file, so it goes to the output folder
+                let path = if name.starts_with("raw_") {
+                    out
+                } else {
+                    &pq_dir
+                }
+                .join(name);
+                files.push((name.trim_end_matches(".parquet").to_string(), path.clone()));
+                std::fs::File::create(&path).map_err(|e| e.to_string())
+            },
+        )?;
+        sum.files = files;
+        if p.geoparquet {
+            write_layers_json(&pq_dir, &sum)?;
+            sum.files
+                .push(("layers".to_string(), pq_dir.join("layers.json")));
+        }
+        #[cfg(feature = "duckdb")]
+        if p.duckdb {
+            let names: Vec<&str> = p.modes.iter().map(|m| m.name()).collect();
+            let db = out.join(format!("{}.duckdb", p.name));
+            duckosm_duckdb::write_database(&db, &pq_dir, &names)?;
+            sum.files.push(("duckdb".to_string(), db));
+            log.step("write duckdb");
+        }
+        Ok(sum)
+    })();
+    // the temporary folder goes also after an error
     if !p.geoparquet {
         let _ = std::fs::remove_dir_all(&pq_dir);
-        sum.files.retain(|(k, _)| k == "duckdb");
+    }
+    let mut sum = res?;
+    if !p.geoparquet {
+        sum.files
+            .retain(|(k, _)| k == "duckdb" || k.starts_with("raw_"));
     }
     sum.steps = log
         .rows
