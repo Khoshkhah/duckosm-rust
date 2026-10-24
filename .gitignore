@@ -9,4 +9,5 @@ __pycache__/
 /crates/duckosm-wasm/www/pkg/
 /crates/duckosm-wasm/www/pkg-threads/
 /crates/duckosm-wasm/www/map/pkg/
+/crates/duckosm-wasm/www/map/roadstyle/
 /crates/duckosm-wasm/relay/.wrangler/

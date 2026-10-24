@@ -1,6 +1,6 @@
 // The roads map in a Web Worker: roadstyle's Rust module (geolibre-roadstyle, wasm/, built into map/pkg/ by
-// crates/duckosm-wasm/build.sh) makes a MapLibre style with vector-tile sources from roads.parquet (map/roads_sql.js), the
-// base-map layers (features.parquet, map/features_sql.js; optional) and the look (map/look.json), and then makes each tile when
+// crates/duckosm-wasm/build.sh) makes a MapLibre style with vector-tile sources from roads.parquet (map/roadstyle/roads_sql.js), the
+// base-map layers (features.parquet, map/roadstyle/features_sql.js; optional) and the look (map/look.json), and then makes each tile when
 // the map asks for it.
 // In: {roads: Uint8Array, features: Uint8Array or undefined, name, prefix, keep}. Out: {style: JSON text, seconds, memoryMiB} or
 // {error}. Then in: {tile: [source, z, x, y], id}. Out: {id, data: ArrayBuffer} (empty when nothing is in the tile). And in:

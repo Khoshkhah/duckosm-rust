@@ -107,28 +107,63 @@ Kaveh's layout of 2026-10-23: the data in card 5, the map in card 6.
   prefix. A layer with `text-font` gets a font of OpenFreeMap (Noto Sans).
 - When the roads show, the fill of the area goes away and only its line stays, so the fill does not change
   the colors of the roads.
-- A click on a road shows its data, but not while the user draws or uses **What is here?**. The map draws the roads
-  from roadstyle's pieces (`rs-simple`), and the road's properties come from the map worker by its number
-  (`__rs_edge`). Before the tiles, the click looked for the source `rs-roads`, whose layers are hidden, and found
-  nothing.
-- The buttons under the zoom buttons (Kaveh's design of 2026-10-23):
-  - **3D** tilts the map to 60 degrees and shows the 3D buildings. A second click makes the map flat again.
-  - **Base map** (the grid) opens a list: OpenFreeMap, Light gray (Esri), Satellite (Esri World Imagery) and
-    Blank. All except OpenFreeMap hide all of OpenFreeMap's layers, also its labels (in the 3D view without the duckOSM 3D buildings, its 3D buildings stay). After a
+- **roadstyle's dashboard** (2026-10-23, Kaveh: "go") does the map's interaction: the 2D/3D button, Street View with
+  its marker, Google 3D, the road popup, the hover tooltip, the purple glow of the selected road, and the legend of a
+  `color_by`. It is roadstyle's one module `src/roadstyle/static/dashboard/`, which `build.sh` takes at
+  `ROADSTYLE_COMMIT` into `www/map/roadstyle/dashboard/` (not in git; `e2e.py` checks that the served files are
+  roadstyle's). The page calls `rsDashboard(map, {prefix: "rs-", tiles: true, simple: "roads-simple", engine: {props}})`
+  once, before the roads; after each build or network change, `showRoads` adds the roads style's sources and layers
+  with the prefix (the one vector source `rs-roads`, with `promoteId: {simple: "__rs_edge"}` for the glow) and gives the
+  style to `rs.setStyle`. A click asks the map worker for the road's properties (`engine.props`). The page removes the
+  popup and the selection while the user draws or uses **What is here?**. The legend sits beside the panel.
+- The buttons under the zoom buttons (Kaveh's design of 2026-10-23, from roadstyle's map: the same icons, sizes and
+  spacing): 3D, the 3D buildings switch, Street View, Google 3D (only with a key), and the base map (▦) last:
+  - **3D** (roadstyle's 2D/3D button) tilts the map; it then shows "2D", which makes it flat again. It does not change
+    the buildings.
+  - **3D buildings** (the building icon, Kaveh's choice A of 2026-10-23) gives the footprints that show their height.
+    Off (the default), they stay flat. So the map can be tilted with flat buildings, or flat with 3D buildings. The
+    page keeps the switch (`duckosm.buildings`).
+  - **Base map** (▦) opens a list: OpenFreeMap, Light gray (Esri), Satellite (Esri World Imagery), Blank (`#efede8`)
+    and Blank dark (`#14181d`): roadstyle's two blank base maps, which do not follow the page's theme. All except
+    OpenFreeMap hide all of
+    OpenFreeMap's layers, also its labels (with 3D buildings on and without the duckOSM 3D buildings, its 3D buildings stay). After a
     build with the base-map layers, the list also has **duckOSM layers**. Satellite turns them off, because they
     cover the photo. The page keeps the base map.
-  - There is no buildings button: the style alone decides if the footprints show, and 3D only adds the 3D
-    version (Kaveh's rule).
+  - **Street View** (the person) opens roadstyle's floating window. A click on a road shows Google Street View there.
+    The window can be dragged and resized, stays inside the map, and the page keeps whether it is open and where. No
+    key is needed; it loads only in a page served over http(s). Open (at roadstyle `aba5884`): with tiles, the
+    dashboard does not find the clicked road's line (`_svFeat` in `svspot.js` does not use `_svTiled`), so Street View
+    stands at the click and looks north, and the map has no marker. The fix is in roadstyle's dashboard.
+  - **Your Google Maps key** (card 6, "Google 3D: your Google Maps key"): the key stays in this browser
+    (`localStorage`), never in the address or the code. The dashboard reads it when the page opens; with it, the
+    Street View window has roadstyle's **Linked** mode beside **Classic**, and the **Google 3D** button comes before
+    the base map (its camera and the map's linked both ways).
+  - No button hides the footprints: the style alone decides if they show (Kaveh's rule).
 - Only one 3D building layer shows: roadstyle's own when the duckOSM layers show (from the zoom of their buildings,
   15; below it OpenFreeMap's), else OpenFreeMap's. Before, the
-  two layers drew over each other at different heights. With 3D off, OpenFreeMap's 3D layer is flat (height 0), so
-  that its footprints stay.
+  two layers drew over each other at different heights. With 3D buildings off, OpenFreeMap's 3D layer is flat (height 0),
+  so that its footprints stay.
 - The height of a building (roadstyle-rs, rule C of mapstyle's `docs/design/buildings_3d.md`): the higher of
   `height` and (`building:levels` + `roof:levels`) × 3.66 m (as OpenMapTiles), or the one that is there, else the
   height of its kind. The higher of the two keeps Tartu's buildings correct, where `height` is often an ETAK code.
   Its base is `min_height`, else `building:min_level` × 3.66 m. On Monaco (2026-10-23), for the 490 buildings with these tags, the median
   difference to OpenFreeMap went from 3.0 m to 0.36 m. A building with no tags has the height of its kind (9 m by
   default); OpenFreeMap gives it 5 m.
+
+## The Google Maps key (plan for publishing)
+
+Street View's Linked mode and Google 3D need a Google Maps JavaScript API key. Kaveh has two keys (2026-10-23):
+
+- **Local work (localhost):** the environment variable `GOOGLE_MAPS_KEY` of his shell. The page does not read it: the
+  user enters the key once (card 6; the page uses it the next time it opens), and the page keeps it in this
+  browser (`localStorage`). The headless tests read it from the environment only for the test, and never write it to
+  a file, a log or a screenshot.
+- **The published page (later, GitHub Pages):** the repository secret `GOOGLE_MAPS_KEY`, as roadstyle does for its
+  manual's live maps (roadstyle `.github/workflows/docs.yml`, step "Build the live maps"). The plan: the Pages workflow
+  reads the secret into the environment, stops when it is empty, and writes it into the page that it deploys (for
+  example as the default of the key field); the key is never in git. A key in a deployed page is visible to its
+  readers, so it must be limited to the site's address (for example `https://khoshkhah.github.io/*`) and to the Maps
+  JavaScript API (roadstyle `docs/guides/google-key.md`). Not set up yet.
 
 ## The code
 

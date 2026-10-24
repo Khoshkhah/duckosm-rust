@@ -128,11 +128,14 @@ The area is one list of polygons. Each way below replaces the area, except drawi
    and Monaco-Ville for "monaco", and Stockholms län and Stockholms kommun for "stockholm".
 3. The matches show as a list of cards. Each card has the name, the type (for example `country`, `county`,
    `city`, `district`), and the places above it (the city, the county, the state and the country).
-4. When the user points to a match, or moves to it with the arrow keys, the map shows the box of the match
-   (`extent` from Photon) as a preview.
-5. When the user selects a match, the tool gets its boundary from Nominatim (`/lookup`, `osm_ids=R<id>` or
-   `W<id>`, `format=geojson`, `polygon_geojson=1`, `extratags=1`), and the boundary becomes the area. The
-   name, `osm_id` and `admin_level` come from Nominatim.
+4. At once, the tool gets the real boundaries of all relations and ways of the list with one Nominatim request
+   (`/lookup`, `osm_ids=R<id>,W<id>,...`, up to 50 ids, `format=geojson`, `polygon_geojson=1`, `extratags=1`),
+   through the queue of one request each second. A match that Nominatim has no polygon for gets "no boundary".
+   Until the answer comes (about 1 s), a match has the box of Photon (`extent`). (Kaveh, 2026-10-23: before,
+   only a selection got the real boundary, and the boxes were "annoying".)
+5. When the user points to a match, or moves to it with the arrow keys, the map shows its boundary as a preview.
+6. When the user selects a match, its boundary becomes the area. The name, `osm_id` and `admin_level` come from
+   Nominatim. If the lookup of step 4 failed, the selection asks Nominatim for that one boundary.
 
 ### 2. Draw
 

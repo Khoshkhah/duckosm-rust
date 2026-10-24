@@ -262,8 +262,9 @@ extract (it needs a server with CORS).
 
 **M1: the roads map (2026-10-22).** Done. After the build, the page shows the roads on a MapLibre map (5.24.0), in the
 style of roadstyle:
-1. duckdb-wasm writes `roads.parquet` from the tables. `www/map/roads_sql.js` is a copy of geolibre-roadstyle's
-   `spike/worker/roads_sql.js` with one more option: `{levels: "tags"}`. The page has no level area, so the
+1. duckdb-wasm writes `roads.parquet` from the tables. The SQL is roadstyle's `roads_sql.js` (since 2026-10-23
+   `www/map/roadstyle/roads_sql.js`, which `build.sh` takes from roadstyle's `rust/roadstyle-wasm/js/`; before, a copy of
+   geolibre-roadstyle's `spike/worker/roads_sql.js`), with the option `{levels: "tags"}`. The page has no level area, so the
    drawing levels come from roadstyle's `compute_levels(method="tags")`, written in SQL: from layer, bridge
    and tunnel, and the levels of the roads at each end node. Since 2026-10-22 the build writes
    `visualization.edge_levels` (the tags rule, or roadstyle's solver: [levels.md](levels.md)), and the map reads

@@ -5,7 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>duckOSM in the browser</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css" crossorigin>
+<!-- roadstyle's dashboard and popup look (src/roadstyle/static/, copied by build.sh from roadstyle at ROADSTYLE_COMMIT) -->
+<link rel="stylesheet" href="map/roadstyle/dashboard/dashboard.css">
+<link rel="stylesheet" href="map/roadstyle/popup.css">
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js" crossorigin></script>
+<script src="coi-serviceworker.js"></script>   <!-- the COOP and COEP headers on GitHub Pages, for threads -->
 <script type="importmap">
 { "imports": {
   "terra-draw": "https://cdn.jsdelivr.net/npm/terra-draw@1.38.0/dist/terra-draw.modern.js",
@@ -39,9 +43,15 @@
   /* the map buttons under the zoom buttons: 3D and the base map (a list that opens to the left) */
   .mapctl { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
   .mapctl > .maplibregl-ctrl-group { margin: 0; position: relative; }
-  .mapctl button { display: grid; place-items: center; font: 700 12px system-ui, sans-serif; color: #333; }
+  /* roadstyle's map buttons (web_template.html, 2bccdcb): the text of 3D, the base map's ▦ character */
+  /* every map button is white in both themes: its icon dark (roadstyle's map has no dark theme; its Street View and
+     Google 3D icons are currentColor, which the page's dark theme made white) */
+  .maplibregl-ctrl-group button { color: #333; }
+  .mapctl button { display: grid; place-items: center; font: 700 11px/1 system-ui, sans-serif; letter-spacing: .03em; color: #333; }
+  .mapctl button.bm-icon { font: 16px/1 system-ui, sans-serif; letter-spacing: 0; color: #5b616b; }
+  .mapctl button.bm-icon:hover { color: #334155; }
   .mapctl button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; }
-  .mapctl button[aria-pressed="true"], .mapctl button[aria-expanded="true"] { color: #fff; background-color: #2563eb !important; }
+  .mapctl button[aria-pressed="true"] { color: #fff; background-color: #2563eb !important; }
   .basepop { position: absolute; top: 0; right: 38px; width: 180px; padding: 8px; display: grid; gap: 2px; border-radius: 8px;
     background: var(--bg); color: var(--fg); box-shadow: 0 2px 10px rgb(0 0 0 / 20%); font-size: 12.5px; }
   .basepop[hidden] { display: none; }
@@ -78,7 +88,8 @@
   .step h2 .n { background: var(--c); color: #fff; }
   #step1-card { --c: #7c3aed; } #step2-card { --c: #2563eb; } #extracts-box { --c: #ea580c; }
   h2 .n { width: 20px; height: 20px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 11px; }
-  svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  /* the panel's icons; not the map's and the floating windows' own SVGs (roadstyle's Street View marker and icons) */
+  svg:not(.maplibregl-map svg):not(.rs-svw svg) { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
   a { color: var(--accent); }
   .muted { color: var(--muted); }
   .small { font-size: 12.5px; }
@@ -212,7 +223,6 @@
     background: var(--surface); text-decoration: none; font-variant-numeric: tabular-nums; }
   #files .layers a:hover { outline: 1px solid var(--line); }
   #files .layers a span { color: var(--muted); font-size: 11.5px; }
-  .maplibregl-popup-content { color: #111827; font-size: 12.5px; }
 
   #status { position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 3; background: var(--fg); color: var(--bg); padding: 7px 14px; border-radius: 99px; font-size: 13px; box-shadow: var(--shadow); }
   #status:empty { display: none; }
@@ -221,6 +231,9 @@
   @media (min-width: 701px) {
     .maplibregl-ctrl-top-left, .maplibregl-ctrl-bottom-left { left: 370px; transition: left 0.25s ease; }
     body.collapsed .maplibregl-ctrl-top-left, body.collapsed .maplibregl-ctrl-bottom-left { left: 0; }
+    /* roadstyle's legend (dashboard.css: left 10px) beside the panel, not under it, and above the scale bar */
+    .co-lg { left: 380px; bottom: 36px; transition: left 0.25s ease; }
+    body.collapsed .co-lg { left: 10px; }
     #status { left: calc(50% + 185px); }
     body.collapsed #status { left: 50%; }
   }
@@ -264,20 +277,23 @@
   <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/></symbol>
   <symbol id="i-zoom" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5M11 8v6M8 11h6"/></symbol>
-  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M4 9.3h16M4 14.7h16M9.3 4v16M14.7 4v16"/></symbol>
+  <symbol id="i-building" viewBox="0 0 24 24"><path d="M4 21V8l7-4v17M11 21h9V10l-9-3M7 10v1M7 14v1M7 18v1M14 12h3M14 15h3M14 18h3"/></symbol>
   <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></symbol>
 </svg>
 
 <div id="map" role="region" aria-label="Map of the area"></div>
 <div id="mapctl" class="maplibregl-ctrl mapctl">
-  <div class="maplibregl-ctrl-group"><button id="b3d" type="button" title="3D view" aria-label="3D view" aria-pressed="false">3D</button></div>
-  <div class="maplibregl-ctrl-group"><button id="bbase" type="button" title="Base map" aria-label="Base map" aria-expanded="false" aria-controls="basepop"><svg><use href="#i-grid"/></svg></button>
+  <div class="maplibregl-ctrl-group"><button id="bbld" type="button" title="3D buildings" aria-label="3D buildings" aria-pressed="false"><svg><use href="#i-building"/></svg></button></div>
+</div>
+<div id="basectl" class="maplibregl-ctrl mapctl">
+  <div class="maplibregl-ctrl-group"><button id="bbase" class="bm-icon" type="button" title="Base map" aria-label="Base map" aria-expanded="false" aria-controls="basepop">&#9638;</button>
     <div id="basepop" class="basepop" role="group" aria-label="Base map" hidden>
       <div class="h">Base map</div>
       <label><input type="radio" name="base" value=""><span class="sw" style="background:#f2efe9"></span>OpenFreeMap</label>
       <label><input type="radio" name="base" value="esri_gray"><span class="sw" style="background:#e4e4e4"></span>Light gray</label>
       <label><input type="radio" name="base" value="satellite"><span class="sw" style="background:linear-gradient(135deg,#3d5a3a,#7b8a5c 50%,#a09a7c)"></span>Satellite</label>
-      <label><input type="radio" name="base" value="blank"><span class="sw" style="background:var(--bg)"></span>Blank</label>
+      <label><input type="radio" name="base" value="blank"><span class="sw" style="background:#efede8"></span>Blank</label>
+      <label><input type="radio" name="base" value="blank_dark"><span class="sw" style="background:#14181d"></span>Blank dark</label>
       <hr id="ownsep" hidden>
       <label id="ownbox" hidden><input type="checkbox" id="ownlayers" checked>duckOSM layers</label>
     </div></div>
@@ -429,6 +445,13 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
   </div>
   <div class="row" id="showrow" style="margin-top:10px" hidden><button id="show" class="btn primary">Show on map</button></div>
   <p id="mapnote" class="progress" aria-live="polite"></p>
+  <details style="margin-top:10px"><summary>Google 3D: your Google Maps key</summary>
+    <p class="small muted" style="margin:6px 0">Google's 3D view needs a Google Maps JavaScript API key. The key stays only in this browser.
+      <a href="https://khoshkhah.github.io/roadstyle/guides/google-key/" target="_blank" rel="noopener">How to get a key</a></p>
+    <div class="row" style="margin-top:0"><input id="gkey" type="password" autocomplete="off" placeholder="The key" aria-label="Google Maps key" style="flex:1;min-width:0">
+      <button id="gkey-save" class="btn">Save</button><button id="gkey-del" class="btn">Remove</button></div>
+    <p id="gkey-note" class="small muted" aria-live="polite" style="margin:6px 0 0"></p>
+  </details>
 </section>
 
 </div>
@@ -445,6 +468,7 @@ import { TerraDraw, TerraDrawRectangleMode, TerraDrawPolygonMode, TerraDrawCircl
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import * as duck from "./app/duck.js";
 import * as regions from "./app/regions.js";
+import { rsDashboard } from "./map/roadstyle/dashboard/index.js";   // roadstyle's map dashboard (copied by build.sh at ROADSTYLE_COMMIT)
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
@@ -507,7 +531,22 @@ async function covering(polys) {
 const empty = { type: "FeatureCollection", features: [] };
 const map = new maplibregl.Map({ container: "map", style: "https://tiles.openfreemap.org/styles/liberty", center: [10, 50], zoom: 3 });
 map.addControl(new maplibregl.NavigationControl(), "top-right");
-map.addControl({ onAdd: () => $("mapctl"), onRemove: () => {} }, "top-right");   // 3D and the base map: under the zoom buttons
+// roadstyle's dashboard (docs/app.md), made once, before the roads: the 2D/3D button, Street View with its marker, Google 3D (with the
+// user's key), the road popup and the hover and select glow. The roads come later as vector tiles (the prefix rs-; showRoads gives
+// each new roads style to rs.setStyle), and a click asks the map worker for the road's properties. The page's base map stays its own.
+const googleKey = (() => { try { return localStorage.getItem("duckosm.googleKey") || ""; } catch (e) { return ""; } })();
+const rs = rsDashboard(map, { style: null, prefix: "rs-", tiles: true, simple: "roads-simple",
+  engine: { props: (id) => duck.roadProps(id) }, select_color: "#7c4dff",   // the look's theme.selection.select
+  street_view: "window", street_view_key: googleKey, google_3d: !!googleKey });
+// the page's 3D buildings switch right after the dashboard's 2D/3D button, and its base map last, as in roadstyle
+map.addControl({ onAdd: () => $("mapctl"), onRemove: () => {} }, "top-right");
+map.addControl({ onAdd: () => $("basectl"), onRemove: () => {} }, "top-right");
+[...$("mapctl").parentElement.children].find((c) => /^[23]D$/.test(c.querySelector("button")?.textContent ?? ""))?.after($("mapctl"));
+// no road popup or selection while the user draws a shape or picks a point (the dashboard has its own click on the roads)
+document.addEventListener("rs:select", () => {
+  if ($("draw").hidden && $("here").getAttribute("aria-pressed") !== "true") return;
+  setTimeout(() => { window.rsDeselect?.(); document.querySelectorAll(".maplibregl-popup").forEach((p) => p.remove()); });
+});
 // the tiles of the roads map: roadstyle's module makes each one when the map asks for it (app/duck.js tile())
 maplibregl.addProtocol("rs", async (params) => ({ data: await duck.tile(params.url) }));
 map.addControl(new maplibregl.ScaleControl(), "bottom-left");
@@ -605,7 +644,7 @@ function theme(t) {
   $("theme").title = $("theme").ariaLabel = dark() ? "Light theme" : "Dark theme";
 }
 theme(kept("duckosm.theme"));
-$("theme").onclick = () => { const t = dark() ? "light" : "dark"; theme(t); keep("duckosm.theme", t); loaded.then(setBase); };   // the blank base map follows the theme
+$("theme").onclick = () => { const t = dark() ? "light" : "dark"; theme(t); keep("duckosm.theme", t); loaded.then(setBase); };
 function collapse(on) {
   document.body.classList.toggle("collapsed", on);
   $("panel").inert = on && innerWidth > 700;  // out of the view on a computer; on a phone the header stays
@@ -720,13 +759,13 @@ function list(features) {
     const [title, ...rest] = p.display_name.split(", ");
     return `<label class="${ok ? "" : "point"}" data-i="${i}" title="${esc(p.display_name)}"><input type="radio" name="hit" value="${i}"${ok ? "" : " disabled"}>` +
       `<span><span class="t">${esc(title)}</span><span class="badge">${esc(p.addresstype ?? p.type)}</span>` +
-      (ok ? "" : `<span class="badge no">a point: no boundary</span>`) +
+      (ok ? "" : `<span class="badge no">${f.geometry?.type === "Point" ? "a point: " : ""}no boundary</span>`) +
       `<span class="d">${esc(rest.join(", ") || `${p.osm_type} ${p.osm_id}`)}</span></span></label>`;
   }).join("") || `<p class="small muted">No place found.</p>`;
 }
 
 // a Photon match as a Nominatim feature for list(). A relation or a way can have a boundary: its geometry is its box
-// (the preview), and a selection gets the boundary from Nominatim. A node is a point: list() shows it, disabled.
+// until boundaries() gets the real one from Nominatim. A node is a point: list() shows it, disabled.
 function photon(f) {
   const p = f.properties, e = p.extent;  // [west, north, east, south]
   const above = [...new Set([p.city, p.county, p.state, p.country])].filter((x) => x && x !== p.name);
@@ -734,6 +773,27 @@ function photon(f) {
            properties: { photon: p.osm_type !== "N", osm_type: { R: "relation", W: "way", N: "node" }[p.osm_type], osm_id: p.osm_id,
                          name: p.name, display_name: [p.name, ...above].join(", "),
                          addresstype: ["house", "other", "street"].includes(p.type) ? p.osm_value : p.type } };
+}
+
+// the real boundaries of a Photon list at once (Kaveh: the boxes were "annoying"): one Nominatim lookup for all its relations
+// and ways (it takes up to 50 ids), through the queue of 1 request each second. Each place gets its boundary, or "no boundary"
+// when Nominatim has no polygon; the box stays when the lookup fails (a selection then asks again).
+async function boundaries(feats) {
+  const key = (p) => p.osm_type + p.osm_id;
+  const ids = feats.filter((f) => f.properties.photon).map((f) => f.properties.osm_type[0].toUpperCase() + f.properties.osm_id);
+  if (!ids.length) return;
+  let got;
+  try { got = await nominatim("lookup", { osm_ids: ids.join(",") }); } catch (e) { return; }
+  if (found !== feats) return;   // a newer list
+  const byId = new Map(got.map((g) => [key(g.properties), g]));
+  const real = feats.map((f) => {
+    const g = f.properties.photon && byId.get(key(f.properties));
+    return g ? { ...g, properties: { ...g.properties, display_name: f.properties.display_name, addresstype: f.properties.addresstype } } : f;
+  });
+  // the user already chose one: keep the list as it is on the screen, with the new boundaries behind it
+  if (document.querySelector("#found input:checked")) real.forEach((f, i) => (feats[i] = f));
+  else list(real);
+  if (previewed != null) preview(previewed);
 }
 
 const searching = () => ($("found").innerHTML = `<p class="small muted">Searching…</p>`);
@@ -748,7 +808,9 @@ async function search() {
   try {
     const r = await fetch("https://photon.komoot.io/api/?" + new URLSearchParams({ q, limit: "10" }), { signal: mine.signal });
     if (!r.ok) throw new Error(`Photon answered ${r.status}`);
-    list(((await r.json()).features ?? []).map(photon));
+    const feats = ((await r.json()).features ?? []).map(photon);
+    list(feats);
+    boundaries(feats);
   } catch (e) {
     if (!mine.signal.aborted) $("found").innerHTML = `<p class="small error">The search failed: ${esc(e.message)}</p>`;
   }
@@ -781,7 +843,11 @@ map.on("click", async (ev) => {
   }
 });
 
+let previewed = null;   // the place of the list under the mouse
 function preview(i) {
+  // after a selection only the selected place shows (Kaveh): the others of the list stay off the map until a new search
+  if (i != null && document.querySelector("#found input:checked")) i = null;
+  previewed = i;
   setData("preview", i == null ? null : { type: "Feature", properties: { name: found[i].properties.display_name.split(",")[0] }, geometry: found[i].geometry });
   if (i != null) fitTo(found[i].geometry, { ifHidden: true });
 }
@@ -1134,7 +1200,7 @@ $("run").onclick = async () => {
 // ---- step 5: the roads on the map, in roadstyle's style (map/): its sources, images and layers with the prefix rs-, over the base
 // map and under the area line, the matches, the extracts and the drawn shapes (as GeoLibre's roadstyle plugin adds a style) ----
 let roadsRun = 0;
-const ROAD_KEYS = ["name", "edge_id", "osm_id", "highway", "edge_ref", "lanes", "bridge", "tunnel", "access"];   // the road popup
+const ROAD_KEYS = ["name", "edge_id", "osm_id", "highway", "edge_ref", "lanes", "bridge", "tunnel", "access"];   // kept in the tiles
 // the roads of the base map (OpenFreeMap's transportation layers) go away while the duckOSM roads show, so the two do not compete
 let roadsShown = false;
 function removeRoads() {
@@ -1162,7 +1228,9 @@ async function showRoads() {
     removeRoads();
     const own = r.style.metadata?.["roadstyle:images"] || {};
     await addImages(Object.fromEntries(Object.entries(own).map(([n, v]) => ["rs-" + n, v])));
-    for (const [id, src] of Object.entries(r.style.sources)) map.addSource("rs-" + id, src);
+    // the one vector source "roads" (its source layers: roads, simple, slots, ov<i>); promoteId: a road's pieces have the road's id,
+    // so the dashboard lights them all with one feature state
+    for (const [id, src] of Object.entries(r.style.sources)) map.addSource("rs-" + id, id === "roads" ? { ...src, promoteId: { simple: "__rs_edge" } } : src);
     for (const l of r.style.layers) {
       let json = JSON.stringify(l);
       for (const n of Object.keys(own)) json = json.replaceAll(`"${n}"`, `"rs-${n}"`);   // the image names in the layout
@@ -1171,6 +1239,7 @@ async function showRoads() {
       if (layer.layout?.visibility === "none") offLayers.add("rs-" + l.id);
     }
     map.setLayoutProperty("area-fill", "visibility", "none");   // the fill would change the colors of the roads
+    rs.setStyle(r.style);   // the dashboard reads the new roads style (its layers and metadata)
     roadsShown = true;
     setBase();
     // the first tiles: the map is drawn when it is idle (at most 60 s)
@@ -1206,6 +1275,19 @@ async function visualization() {
   else $("mapnote").textContent = `${num(roadCount.all)} roads: a large map. Click Show on map to draw it.`;
 }
 $("show").onclick = showRoads;
+// the Google Maps key of Google 3D: only in this browser's storage, never in the address or the page's code
+$("gkey").value = kept("duckosm.googleKey") ?? "";
+$("gkey-save").onclick = () => {
+  const k = $("gkey").value.trim();
+  if (!k) return;
+  keep("duckosm.googleKey", k);
+  $("gkey-note").textContent = "Saved. Open the page again to use it: then the Google 3D button and Street View's Linked mode are on the map.";
+};
+$("gkey-del").onclick = () => {
+  try { localStorage.removeItem("duckosm.googleKey"); } catch (e) { /* no storage */ }
+  $("gkey").value = "";
+  $("gkey-note").textContent = "Removed. The Google 3D button goes away the next time the page opens.";
+};
 $("mapmode").onchange = () => { if (roadsShown) showRoads(); };
 
 // the base map: OpenFreeMap, or a layer over it (under the roads): roadstyle's keyless raster map, or an empty background
@@ -1217,12 +1299,15 @@ const BASEMAPS = {
 };
 // the map buttons: the base map (OpenFreeMap without its roads while the duckOSM roads show, Esri's light gray or satellite
 // tiles, or a blank background; all but OpenFreeMap hide all of its layers, also its labels and 3D buildings), the duckOSM
-// layers (the base-map layers of the build, the style's sources ov<i>, over any base map) and the 3D view.
-// The style alone shows the building footprints (and from which zoom). The 3D view adds their 3D version: the duckOSM
-// layers' own (roadstyle adds them hidden), and OpenFreeMap's, which is flat (height 0) when the 3D view is off.
-const view = { base: BASEMAPS[kept("duckosm.basemap")] || kept("duckosm.basemap") === "blank" ? kept("duckosm.basemap") : "",
-  threeD: false };
+// layers (the base-map layers of the build, the style's sources ov<i>, over any base map), the 3D buildings and the 3D view.
+// The style alone shows the building footprints (and from which zoom). The 3D buildings switch adds their 3D version: the
+// duckOSM layers' own (roadstyle adds them hidden), and OpenFreeMap's, which is flat (height 0) when the switch is off.
+// The 3D view only tilts the map.
+const BLANKS = { blank: "#efede8", blank_dark: "#14181d" };   // roadstyle's tile-less base maps (basemaps.py), not the page's theme
+const view = { base: BASEMAPS[kept("duckosm.basemap")] || BLANKS[kept("duckosm.basemap")] ? kept("duckosm.basemap") : "",
+  buildings: kept("duckosm.buildings") === "1" };
 const offLayers = new Set();   // the layers that roadstyle adds hidden (showRoads)
+const isOv = (l) => l.source === "rs-roads" && /^ov\d/.test(l["source-layer"] ?? "");   // a base-map layer of the build
 const heights = {};            // the 3D heights of OpenFreeMap's buildings: [height, base] for each layer
 function setBase() {
   if (map.getLayer("base-over")) map.removeLayer("base-over");
@@ -1231,25 +1316,25 @@ function setBase() {
   const show = (l, on) => map.setLayoutProperty(l.id, "visibility", on ? "visible" : "none");
   const style = map.getStyle().layers;
   for (const l of baseLayers) show(style.find((x) => x.id === l.id) ?? l, v === "" && !(roadsShown && l.road));
-  // one 3D layer: when the duckOSM layers have their 3D buildings, OpenFreeMap's stop in the 3D view at the zoom where ours start
-  const ours = own && style.find((l) => l.type === "fill-extrusion" && l.source?.startsWith("rs-ov"));
+  // one 3D layer: when the duckOSM layers have their 3D buildings, OpenFreeMap's stop at the zoom where ours start
+  const ours = own && style.find((l) => l.type === "fill-extrusion" && isOv(l));
   for (const l of style) if (l.type === "fill-extrusion" && !l.source?.startsWith("rs-")) {
     heights[l.id] ??= [map.getPaintProperty(l.id, "fill-extrusion-height"), map.getPaintProperty(l.id, "fill-extrusion-base"), l.minzoom ?? 0, l.maxzoom ?? 24];
     const [height, base, minzoom, maxzoom] = heights[l.id];
-    map.setPaintProperty(l.id, "fill-extrusion-height", view.threeD ? height : 0);
-    map.setPaintProperty(l.id, "fill-extrusion-base", view.threeD ? base : 0);
-    map.setLayerZoomRange(l.id, minzoom, ours && view.threeD ? Math.max(minzoom, ours.minzoom ?? 0) : maxzoom);
-    if (view.threeD && !ours) show(l, true);   // without the duckOSM 3D buildings, OpenFreeMap's show over every base map
+    map.setPaintProperty(l.id, "fill-extrusion-height", view.buildings ? height : 0);
+    map.setPaintProperty(l.id, "fill-extrusion-base", view.buildings ? base : 0);
+    map.setLayerZoomRange(l.id, minzoom, ours && view.buildings ? Math.max(minzoom, ours.minzoom ?? 0) : maxzoom);
+    if (view.buildings && !ours) show(l, true);   // without the duckOSM 3D buildings, OpenFreeMap's show over every base map
   }
-  for (const l of style) if (l.source?.startsWith("rs-ov")) show(l, own && (!offLayers.has(l.id) || (l.type === "fill-extrusion" && view.threeD)));
+  for (const l of style) if (isOv(l)) show(l, own && (!offLayers.has(l.id) || (l.type === "fill-extrusion" && view.buildings)));
   const bottom = style[0].id;
-  if (v === "blank") map.addLayer({ id: "base-over", type: "background", paint: { "background-color": dark() ? "#17181c" : "#ffffff" } }, bottom);
+  if (BLANKS[v]) map.addLayer({ id: "base-over", type: "background", paint: { "background-color": BLANKS[v] } }, bottom);
   else if (BASEMAPS[v]) {
     map.addSource("base-over", { type: "raster", tileSize: 256, ...BASEMAPS[v] });
     map.addLayer({ id: "base-over", type: "raster", source: "base-over" }, bottom);
   }
   for (const r of document.querySelectorAll("input[name=base]")) r.checked = r.value === v;
-  $("b3d").ariaPressed = String(view.threeD);
+  $("bbld").ariaPressed = String(view.buildings);
 }
 const popBase = (open) => { $("basepop").hidden = !open; $("bbase").ariaExpanded = String(open); };
 $("bbase").onclick = () => popBase($("basepop").hidden);
@@ -1261,26 +1346,9 @@ for (const r of document.querySelectorAll("input[name=base]")) r.onchange = () =
   loaded.then(setBase);
 };
 $("ownlayers").onchange = () => loaded.then(setBase);
-$("b3d").onclick = () => {
-  view.threeD = !view.threeD;
-  map.easeTo({ pitch: view.threeD ? 60 : 0, bearing: view.threeD ? map.getBearing() : 0, zoom: view.threeD ? Math.max(map.getZoom(), 15.5) : map.getZoom() });
-  loaded.then(setBase);
-};
-map.on("pitchend", () => { if ((map.getPitch() > 0) !== view.threeD) { view.threeD = map.getPitch() > 0; setBase(); } });
+$("bbld").onclick = () => { view.buildings = !view.buildings; keep("duckosm.buildings", view.buildings ? "1" : "0"); loaded.then(setBase); };
 loaded.then(setBase);
 
-// a click on a road shows its data, but not while the user draws or picks a point (the tiles carry these properties: ROAD_KEYS is
-// declared above showRoads)
-// The map draws the roads from roadstyle's pieces (rs-simple) and names (rs-slots); __rs_edge is the road's number, and the map worker
-// gives the road's properties.
-map.on("click", async (e) => {
-  if (!$("draw").hidden || $("here").getAttribute("aria-pressed") === "true") return;
-  const f = map.queryRenderedFeatures(e.point).find((x) => x.source.startsWith("rs-") && x.properties.__rs_edge != null && !x.source.startsWith("rs-ov"));
-  if (!f) return;
-  const p = (await duck.roadProps(f.properties.__rs_edge)) ?? {};
-  const rows = ROAD_KEYS.filter((k) => p[k] != null && p[k] !== "").map((k) => `<b>${k}</b> ${esc(p[k])}`);
-  new maplibregl.Popup().setLngLat(e.lngLat).setHTML(rows.join("<br>") || "(no data)").addTo(map);
-});
 window.duckMap = map;   // for e2e.py
 
 // SQL on the tables
