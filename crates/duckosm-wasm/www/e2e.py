@@ -57,11 +57,12 @@ with sync_playwright() as p:
     # the files that build.sh takes from roadstyle are roadstyle's own at ROADSTYLE_COMMIT (no copy that can drift)
     pin = re.search(r"^ROADSTYLE_COMMIT=(\w+)", (WWW.parent / "build.sh").read_text(), re.M).group(1)
     clone = WWW.parents[2] / "target" / "roadstyle"
-    dashboard = subprocess.run(["git", "-C", str(clone), "ls-tree", "--name-only", pin, "src/roadstyle/static/dashboard/"],
+    dashboard = subprocess.run(["git", "-C", str(clone), "ls-tree", "-r", "--name-only", pin, "src/roadstyle/static/dashboard/"],
                                capture_output=True, text=True, check=True).stdout.split()
     for served, source in [("popup.css", "src/roadstyle/static/popup.css"), ("popup.js", "src/roadstyle/static/popup.js"),
                            ("roads_sql.js", "rust/roadstyle-wasm/js/roads_sql.js"), ("features_sql.js", "rust/roadstyle-wasm/js/features_sql.js"),
-                           *[("dashboard/" + f.rsplit("/", 1)[1], f) for f in dashboard]]:
+                           ("level_editor.html", "src/roadstyle/static/level_editor.html"),
+                           *[(f.removeprefix("src/roadstyle/static/"), f) for f in dashboard]]:
         want = subprocess.run(["git", "-C", str(clone), "show", f"{pin}:{source}"], capture_output=True, check=True).stdout
         got = page.request.get(url.split("index.html")[0] + "map/roadstyle/" + served).body()
         assert got == want, f"map/roadstyle/{served} is not roadstyle's {source} at {pin}: run build.sh"

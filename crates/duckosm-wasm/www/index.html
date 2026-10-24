@@ -533,10 +533,11 @@ const map = new maplibregl.Map({ container: "map", style: "https://tiles.openfre
 map.addControl(new maplibregl.NavigationControl(), "top-right");
 // roadstyle's dashboard (docs/app.md), made once, before the roads: the 2D/3D button, Street View with its marker, Google 3D (with the
 // user's key), the road popup and the hover and select glow. The roads come later as vector tiles (the prefix rs-; showRoads gives
-// each new roads style to rs.setStyle), and a click asks the map worker for the road's properties. The page's base map stays its own.
+// each new roads style to rs.setStyle), and a click reads the road's fields in the road table of the style (window.RS_SIDE). The page's
+// base map stays its own.
 const googleKey = (() => { try { return localStorage.getItem("duckosm.googleKey") || ""; } catch (e) { return ""; } })();
 const rs = rsDashboard(map, { style: null, prefix: "rs-", tiles: true, simple: "roads-simple",
-  engine: { props: (id) => duck.roadProps(id) }, select_color: "#7c4dff",   // the look's theme.selection.select
+  select_color: "#7c4dff",   // the look's theme.selection.select
   street_view: "window", street_view_key: googleKey, google_3d: !!googleKey });
 // the page's 3D buildings switch right after the dashboard's 2D/3D button, and its base map last, as in roadstyle
 map.addControl({ onAdd: () => $("mapctl"), onRemove: () => {} }, "top-right");
@@ -1239,6 +1240,7 @@ async function showRoads() {
       if (layer.layout?.visibility === "none") offLayers.add("rs-" + l.id);
     }
     map.setLayoutProperty("area-fill", "visibility", "none");   // the fill would change the colors of the roads
+    window.RS_SIDE = r.roadTable;   // the road fields (the popup)
     rs.setStyle(r.style);   // the dashboard reads the new roads style (its layers and metadata)
     roadsShown = true;
     setBase();

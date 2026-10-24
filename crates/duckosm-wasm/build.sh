@@ -7,10 +7,11 @@
 #                     headers (www/serve.py). The maximum memory is 4 GB, as in the build without threads.
 #   www/map/pkg/      roadstyle's Rust module for the roads map (the style and its vector tiles): the crate roadstyle-wasm
 #                     of roadstyle's engine (roadstyle repository, rust/) at the commit ROADSTYLE_COMMIT, cloned into
-#                     target/roadstyle (or ROADSTYLE_REPO, a local copy). duckosm-core uses the same commit for the levels.
+#                     target/roadstyle (or ROADSTYLE_REPO, a local copy). duckosm-core takes the levels from an older commit
+#                     (aba5884, crates/duckosm-core/Cargo.toml): at this commit they are the crate roadstyle-levels.
 set -e
 NIGHTLY=nightly-2026-10-15
-ROADSTYLE_COMMIT=aba588464d79f5d6795acda92759dbbfdeef9c4c   # the full SHA: a fetch by SHA needs it
+ROADSTYLE_COMMIT=fdc3d232aaff06edd5258b32368c81bedf914721   # the full SHA: a fetch by SHA needs it
 ROADSTYLE_REPO=${ROADSTYLE_REPO:-https://github.com/Khoshkhah/roadstyle.git}
 cargo build --release --target wasm32-unknown-unknown -p duckosm-wasm
 wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/pkg target/wasm32-unknown-unknown/release/duckosm_wasm.wasm
@@ -32,10 +33,12 @@ git -C $R checkout -q --force FETCH_HEAD
 cargo build --release --target wasm32-unknown-unknown --manifest-path $R/rust/Cargo.toml -p roadstyle-wasm
 rm -rf crates/duckosm-wasm/www/map/pkg
 # roadstyle's files, as they are at ROADSTYLE_COMMIT (no copy in git; e2e.py checks that the served files equal them): the map's
-# dashboard (src/roadstyle/static/dashboard/: the buttons, Street View, Google 3D, the popup, the glow), the popup's look and text
-# (src/roadstyle/static/), and the SQL that makes the map module's input (rust/roadstyle-wasm/js/, its only copy)
+# dashboard (src/roadstyle/static/dashboard/: the buttons, Street View, Google 3D, the popup, the glow; dashboard/editor/: the level
+# editor), the popup's look and text and the level editor's panel (src/roadstyle/static/), and the SQL that makes the map module's input
+# (rust/roadstyle-wasm/js/, its only copy)
 mkdir -p crates/duckosm-wasm/www/map/roadstyle
-cp $R/src/roadstyle/static/popup.css $R/src/roadstyle/static/popup.js crates/duckosm-wasm/www/map/roadstyle/
+cp $R/src/roadstyle/static/popup.css $R/src/roadstyle/static/popup.js $R/src/roadstyle/static/level_editor.html \
+  crates/duckosm-wasm/www/map/roadstyle/
 cp $R/rust/roadstyle-wasm/js/roads_sql.js $R/rust/roadstyle-wasm/js/features_sql.js crates/duckosm-wasm/www/map/roadstyle/
 rm -rf crates/duckosm-wasm/www/map/roadstyle/dashboard crates/duckosm-wasm/www/map/roadstyle/windows.js
 cp -r $R/src/roadstyle/static/dashboard crates/duckosm-wasm/www/map/roadstyle/

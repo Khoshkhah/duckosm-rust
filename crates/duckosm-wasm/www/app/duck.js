@@ -1,8 +1,13 @@
 // The build side of the app (docs/app.md): duckdb-wasm, the build worker (../build_worker.js), the load of the tables, the style of
 // the roads map (../map/), SQL, load.sql, and the data of an area from the Overpass API. The page (../index.html) calls it.
 // roadstyle's SQL for the map module's input (rust/roadstyle-wasm/js/ at ROADSTYLE_COMMIT, copied by build.sh)
-import { writeRoads } from "../map/roadstyle/roads_sql.js";
+import { makeRoads, writeRoads } from "../map/roadstyle/roads_sql.js";
 import { writeFeatures } from "../map/roadstyle/features_sql.js";
+// roadstyle's Rust module in the page (map/pkg/): roads_sql.js and features_sql.js ask it for their SQL. It loads the first time that
+// the page needs it.
+import init, * as roadstylePkg from "../map/pkg/roadstyle_wasm.js";
+let roadstyleReady = null;
+export const roadstyle = () => (roadstyleReady ??= init().then(() => roadstylePkg));
 
 // duckdb-wasm with DuckDB 1.5: the GEOMETRY type of the tables is core from 1.5 (the version that the geolibre-roadstyle spike tested)
 const DUCKDB = "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.33.1-dev57.0/+esm";
@@ -131,6 +136,7 @@ export async function loadTables(files) {
 }
 
 export const query = (sql) => conn.query(sql);
+const rows = async (sql) => (await conn.query(sql)).toArray().map((r) => r.toJSON());
 // the memory of DuckDB in MiB (its buffers: the tables, the caches), for the log of the steps
 export const memoryMiB = async () =>
   Number((await conn.query("SELECT sum(memory_usage_bytes) AS b FROM duckdb_memory()")).toArray()[0].b) / 2 ** 20;
@@ -220,8 +226,8 @@ export async function zipAll(areaName, boundary) {
 // the style of the roads map: duckdb-wasm writes roads.parquet (the drawing levels of visualization.edge_levels, else from the tags)
 // and, with the base-map layers, features.parquet; roadstyle's Rust module makes the MapLibre style in a new worker
 // (map/map_worker.js), with vector-tile sources rs://<generation>/<source>/{z}/{x}/{y}. The worker stays to make the tiles that the
-// map asks for (tile()), until the next style (a worker that ends gives its memory back). keep: the road properties that the page
-// reads (its popup); the tiles have only these and the ones the style reads.
+// map asks for (tile()), until the next style (a worker that ends gives its memory back). keep: the road properties in the tiles, with the
+// ones the style reads. The road table (the fields of each road, for roadstyle's dashboard: the popup) comes with the style.
 let look = null, mapWorker = null, generation = 0, tileId = 0;
 const tileCalls = new Map();
 function endMapWorker() {
@@ -232,10 +238,12 @@ function endMapWorker() {
 }
 export async function roadsStyle(mode, name, keep = []) {
   const t = performance.now();
-  const q = async (sql) => (await conn.query(sql)).toArray().map((r) => r.toJSON());
+  const q = rows;
+  await roadstyle();
   await db.dropFile("roads.parquet").catch(() => {});     // duckdb-wasm does not see a second COPY to a kept file name
   const stored = tables.some((t) => t.mode === "visualization" && t.table === "edge_levels");
-  await writeRoads(q, "memory", mode, { levels: stored ? "stored" : "tags" });
+  const levels = await makeRoads(q, "memory", { levels: stored ? "stored" : "tags" });
+  await writeRoads(q, mode);
   const roads = await db.copyFileToBuffer("roads.parquet");
   // the base-map layers, when the build made them: features.parquet, the rows of the look's layers (map/roadstyle/features_sql.js)
   let features;
@@ -259,9 +267,9 @@ export async function roadsStyle(mode, name, keep = []) {
       } else ok(data);
     };
     w.onerror = (e) => { endMapWorker(); fail(new Error(e.message || "the map worker failed")); };
-    w.postMessage({ roads, features, name, prefix, keep }, [roads.buffer, ...(features ? [features.buffer] : [])]);
+    w.postMessage({ roads, features, name, prefix, keep, levels }, [roads.buffer, ...(features ? [features.buffer] : [])]);
   });
-  return { style: JSON.parse(out.style), roadsSeconds, styleSeconds: out.seconds, memoryMiB: out.memoryMiB };
+  return { style: JSON.parse(out.style), roadTable: JSON.parse(out.roadTable), roadsSeconds, styleSeconds: out.seconds, memoryMiB: out.memoryMiB };
 }
 
 // a question to the map worker, answered by its id
@@ -275,8 +283,6 @@ export function tile(url) {
   const [gen, source, z, x, y] = url.slice("rs://".length).split("/");
   return +gen !== generation ? Promise.resolve(new ArrayBuffer(0)) : ask({ tile: [source, +z, +x, +y] }, new ArrayBuffer(0));
 }
-// the properties of road number `edge` of the map (the property __rs_edge of what the map draws), or null
-export const roadProps = async (edge) => JSON.parse((await ask({ props: ["roads", edge] }, "null")) || "null");
 
 // the data of an area from the Overpass API: the highway ways and ferry lines in the bounding box of each outer ring, with all their
 // nodes, and the type=restriction relations of these ways. duckosm-rust then keeps the ways with a node inside the boundary, as in
