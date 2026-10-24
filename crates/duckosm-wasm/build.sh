@@ -23,8 +23,10 @@ RUSTFLAGS='-C target-feature=+atomics,+bulk-memory,+mutable-globals -C link-arg=
 wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/pkg-threads \
   target/threads/wasm32-unknown-unknown/release/duckosm_wasm.wasm
 R=target/roadstyle
-# fetch only this commit: a folder from an older build (or the CI cache) can have no ref that contains it
-[ -d $R/.git ] || git init -q $R
+# fetch only this commit into a new folder: a folder from an older build or from the CI cache (rust-cache keeps
+# target/ but removes files in it) can have a .git with no files, and then the checkout gives no rust/Cargo.toml
+rm -rf $R
+git init -q $R
 git -C $R fetch -q --depth 1 "$ROADSTYLE_REPO" $ROADSTYLE_COMMIT
 git -C $R checkout -q --force FETCH_HEAD
 cargo build --release --target wasm32-unknown-unknown --manifest-path $R/rust/Cargo.toml -p roadstyle-wasm
