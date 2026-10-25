@@ -1,7 +1,8 @@
 """The page on a phone in headless Chromium (Playwright's "iPhone 13": 390 x 664 page, touch, scale 3; docs/app.md, "On a phone"):
-build Monaco, scroll the cards, fold the panel, open and close the level editor with taps. It checks that the map stays at the top
-while the cards scroll, that the editor's bar (the counts, Apply, Close) is in view with no overlap of the map and the editor's
-panel, and that the page's panel comes back at its place after Close. It writes phone-*.png for each state.
+build Monaco, scroll the cards, fold the panel, and use the level editor with taps: roadstyle's sheet at the bottom of the map, a tap
+on a road, its end head, "Apply and solve", Apply in the page's bar, the sheet's handle, Close. It checks that the map stays at the
+top while the cards scroll, that the editor's bar (the counts, Apply, Close) is in view above the map and the sheet, and that the
+page's panel comes back at its place after Apply and Close. It writes phone-*.png for each state.
 
     python crates/duckosm-wasm/www/phone_e2e.py [out folder] [page folder]
 
@@ -55,28 +56,73 @@ with sync_playwright() as p:
     page.tap("#collapse")
     assert page.is_visible("#step1-card")
 
-    # the level editor: one panel at a time, the bar with Apply and Close in view, no overlap of the bar, the map and the editor's panel
+    # the level editor: one panel at a time. The page's bar with Apply and Close at the top, the map under it, roadstyle's sheet at the
+    # bottom of the map (half the height)
+    def open_editor():
+        page.evaluate("document.getElementById('step7-card').scrollIntoView()")
+        page.tap("#edit-open")
+        page.wait_for_function("window.levelEditorOpen || /failed/.test(document.getElementById('editnote').textContent)", timeout=300_000)
+        assert page.evaluate("!!window.levelEditorOpen"), page.inner_text("#editnote")
+        page.wait_for_function("window.duckMap.loaded()", timeout=120_000)
+        page.wait_for_timeout(400)                  # the sheet's height and the map's padding (0.2 s)
+
+    def back_at(before):
+        page.wait_for_function("!window.levelEditorOpen && !window.mapDrawing && window.duckMap.loaded()", timeout=300_000)
+        assert page.is_visible("#step7-card") and page.is_visible("footer") and not page.is_visible("#editbar")
+        # the page's place again: card 7 in view (card 6's note can change its height while the map draws)
+        top = page.evaluate("document.getElementById('step7-card').getBoundingClientRect().top")
+        assert 0 <= top < page.evaluate("innerHeight") - 100, ("card 7 in view again", before, page.evaluate("scrollY"), top)
+
     page.evaluate("document.getElementById('step7-card').scrollIntoView()")
     before = page.evaluate("scrollY")
-    page.tap("#edit-open")
-    page.wait_for_function("window.levelEditorOpen || /failed/.test(document.getElementById('editnote').textContent)", timeout=300_000)
-    assert page.evaluate("!!window.levelEditorOpen"), page.inner_text("#editnote")
-    page.wait_for_function("window.duckMap.loaded()", timeout=120_000)
+    open_editor()
     bar, mp, lv = (page.evaluate(BOX, i) for i in ("editbar", "map", "lv"))
     height = page.evaluate("innerHeight")
-    assert bar[1] == 0 and mp[1] >= bar[3] - 1 and lv[1] >= mp[3] - 1 and lv[3] <= height + 1, ("no overlap", bar, mp, lv, height)
+    assert page.evaluate("document.body.classList.contains('lv-sheet')"), "roadstyle's sheet"
+    assert bar[1] == 0 and abs(mp[1] - bar[3]) < 1 and abs(mp[3] - height) < 1, ("the map under the bar", bar, mp, height)
+    assert abs(lv[3] - height) < 1 and bar[3] < lv[1] < height * 0.6, ("the sheet at the bottom, half the height", lv, height)
     assert not page.is_visible("#step1-card") and not page.is_visible("footer"), "the page's panel is away"
     for b in page.query_selector_all("#editbar button"):
         r = b.bounding_box()
         assert r and r["y"] >= 0 and r["y"] + r["height"] <= bar[3], ("in the bar", b.inner_text(), r)
-    print(f"editor: bar {bar}, map {mp}, editor panel {lv}, window height {height}")
-    shot("5-editor")
+    print(f"editor: bar {bar}, map {mp}, sheet {lv}, window height {height}")
+    shot("5-editor-sheet")
+
+    # a tap on a road in the part of the map above the sheet: the sheet shows its card
+    point = page.evaluate("""(top) => { const m = window.duckMap, t = window.RS_SIDE, bottom = document.getElementById('lv').getBoundingClientRect().top;
+        for (const c of t.mids) { if (!c) continue; const p = m.project(c), y = p.y + top;
+          if (p.x > 30 && p.x < innerWidth - 70 && y > top + 20 && y < bottom - 20) return [p.x, y]; } return null; }""", mp[1])
+    assert point, "a road above the sheet"
+    page.touchscreen.tap(*point)
+    page.wait_for_selector("#lv-cards [data-hroad]", timeout=30_000)
+    shot("6-road")
+    # its end head one metre shorter (the slider, as a finger moves it), then "Apply and solve" in the sheet
+    page.evaluate("""() => { const b = document.querySelectorAll('#lv-cards [data-hroad] input')[1];
+        b.value = String(Math.max(+b.min || 0.5, +b.value - 1)); b.dispatchEvent(new Event('input')); b.dispatchEvent(new Event('change')); }""")
+    page.tap("#lv-apply")
+    page.wait_for_function("document.getElementById('lv-queue-sec').hidden", timeout=120_000)
+    page.wait_for_function("/Solved again/.test(document.getElementById('editnote').textContent)", timeout=60_000)
+    # Apply in the page's bar: the tables, the map again, the page's panel back
+    page.tap("#editbar [data-for=edit-apply]")
+    page.wait_for_function("/Applied|failed/.test(document.getElementById('editnote').textContent)", timeout=120_000)
+    assert "heads: 1" in page.inner_text("#editnote"), page.inner_text("#editnote")
+    back_at(before)
+    page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent)", timeout=300_000)
+    assert "drawn" in page.inner_text("#mapnote"), page.inner_text("#mapnote")
+    shot("7-applied")
+
+    # the sheet's handle: half, full, one row; then Close, and the page's panel back
+    open_editor()
+    for state in ("full", "fold"):
+        page.tap("#lv-handle")
+        page.wait_for_timeout(400)
+        assert page.evaluate("document.body.dataset.lvSheet") == state
+        shot(f"8-sheet-{state}")
     page.tap("#editbar [data-for=edit-close]")
-    page.wait_for_function("!window.levelEditorOpen && !window.mapDrawing && window.duckMap.loaded()", timeout=300_000)
-    assert page.is_visible("#step7-card") and page.is_visible("footer") and not page.is_visible("#editbar")
-    assert abs(page.evaluate("scrollY") - before) < 2, ("the panel at its place again", before, page.evaluate("scrollY"))
-    shot("6-closed")
+    back_at(before)
+    shot("9-closed")
     assert not errors, errors
-    print("phone: the map stays at the top, the panel folds, the editor's bar is in view, the panel comes back; no page errors")
+    print("phone: the map stays at the top, the panel folds; the editor: the sheet, a tap on a road, a head, Apply, the handle, Close; "
+          "the page's panel comes back; no page errors")
     browser.close()
 server.shutdown()

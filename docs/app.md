@@ -46,17 +46,17 @@ On a screen of 700 px or less:
   attribution starts folded (an "i" button), so it does not cover the read-out.
 - The button at the right of the page's header folds the panel to one bar at the bottom, and the map gets the screen.
 - **The level editor: one panel at a time.** The page's panel goes away. A bar at the top keeps the counts, **Apply** and
-  **Close** in view. The map has the upper part of the screen, and the editor's panel the lower part. After Apply or
-  Close, the page's panel comes back at its place. (The rules for the editor's panel are in the page until roadstyle has
-  its own layout for a phone; then the page removes them.)
+  **Close** in view, and the map fills the rest of the screen. The editor's panel is roadstyle's sheet at the bottom of
+  the map (since roadstyle `d25601e`, its layout `"auto"` up to 700 px): half the height, and its handle changes it to
+  the full height or to one row. The editor keeps the roads above the sheet, a finger can pick a road (a wide line that
+  takes the taps), and the buttons are 44 px high. After Apply or Close, the page's panel comes back with card 7 in view.
 - Before 2026-10-24 the editor's panel (400 px wide) covered the whole screen of a phone, and Apply and Close were
   under it.
-- Open: on the map of the editor, the column of map buttons is taller than the map, so its last button touches the
-  attribution button.
 
-The check: `phone_e2e.py` (Playwright's "iPhone 13": a 390 × 664 page, touch). It builds Monaco, scrolls the cards,
-folds the panel, opens and closes the editor with taps, checks the places of the map, the bar and the editor's panel,
-and writes `phone-*.png`.
+The check: `phone_e2e.py` (Playwright's "iPhone 13": a 390 × 664 page, touch). It builds Monaco, scrolls the cards and
+folds the panel. Then, with taps, it opens the editor, picks a road above the sheet, makes its end head shorter, solves
+("Apply and solve" in the sheet), applies in the page's bar, opens the editor again, moves the sheet with its handle and
+closes it. It checks the places of the bar, the map and the sheet, and writes `phone-*.png`.
 
 ### The cards fold
 
