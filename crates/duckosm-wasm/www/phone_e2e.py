@@ -1,5 +1,6 @@
 """The page on a phone in headless Chromium (Playwright's "iPhone 13": 390 x 664 page, touch, scale 3; docs/app.md, "On a phone"):
-build Monaco, scroll the cards, fold the panel, and use the level editor with taps: roadstyle's sheet at the bottom of the map, a tap
+the page's sheet (its handle: half, full, one row; the map's padding), Build from one row, a scroll in the sheet, the limit of the
+map, and the level editor with taps: roadstyle's sheet at the bottom of the map, a tap
 on a road, its end head, "Apply and solve", Apply in the page's bar, the sheet's handle, Close. It checks that the map stays at the
 top while the cards scroll, that the editor's bar (the counts, Apply, Close) is in view above the map and the sheet, and that the
 page's panel comes back at its place after Apply and Close. It writes phone-*.png for each state.
@@ -31,15 +32,58 @@ with sync_playwright() as p:
     page.goto(url)
     page.wait_for_function("window.mapReady && window.timings && window.timings.duckdbStart", timeout=120_000)
     page.evaluate("localStorage.clear()")
-    shot("1-start")
+    H = page.evaluate("innerHeight")
+    state = lambda: page.evaluate("document.body.dataset.sheet")  # noqa: E731
+    sheet_h = lambda: (lambda b: b[3] - b[1])(page.evaluate(BOX, "panel"))  # noqa: E731
+    padding = lambda: page.evaluate("window.duckMap.getPadding().bottom")  # noqa: E731
+    page.wait_for_function("window.duckMap.getPadding().bottom > 0", timeout=30_000)   # the sheet's padding: after the map's load
+
+    # the page's panel is a sheet at the bottom: half the height at first; the map fills the screen, its padding is the sheet's height
+    mp, pn = page.evaluate(BOX, "map"), page.evaluate(BOX, "panel")
+    assert state() == "half" and mp[1] == 0 and abs(mp[3] - H) < 1, (state(), mp, H)
+    assert abs(pn[3] - H) < 1 and abs(sheet_h() - H / 2) < 2 and abs(padding() - sheet_h()) < 2, (pn, padding(), H)
+    shot("1-half")
+    # the handle: full, one row (the title and the Build bar), half again
+    for want in ("full", "fold", "half"):
+        page.tap("#sheet-handle")
+        page.wait_for_timeout(400)
+        assert state() == want, (want, state())
+        assert abs(padding() - sheet_h()) < 2 and abs(page.evaluate(BOX, "panel")[3] - H) < 1, (want, padding(), sheet_h())
+        if want == "fold":
+            assert not page.is_visible("#step1-card") and page.is_visible("#run") and sheet_h() < 200, (sheet_h(),)
+        if want == "full":
+            assert page.evaluate(BOX, "panel")[1] < 60
+        shot(f"2-{want}")
+        # the map's buttons are in view above the sheet when it is one row or half
+        if want != "full":
+            assert page.evaluate("document.querySelector('.maplibregl-ctrl-top-right').getBoundingClientRect().bottom") < H - sheet_h()
+
+    # the area and the region file in the half sheet, then Build from one row; after the build the sheet is half again (the result)
     page.set_input_files("#file", str(ROOT / "tests/data/monaco.geojson"))
     page.wait_for_function("window.areas >= 1", timeout=60_000)
     page.tap("#tab-region")
     page.set_input_files("#region", str(ROOT / "tests/data/monaco_sample.osm.pbf"))
+    page.tap("#sheet-handle")
+    page.tap("#sheet-handle")
+    assert state() == "fold"
     page.tap("#run")
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && window.duckMap.loaded()", timeout=600_000)
     assert "drawn" in page.inner_text("#mapnote"), page.inner_text("#mapnote")
-    shot("2-built")
+    assert state() == "half", state()
+    page.wait_for_timeout(400)
+    card5, pn = page.evaluate(BOX, "step5-card"), page.evaluate(BOX, "panel")
+    assert pn[1] < card5[1] < H - 100, ("card 5 (the result) in view in the sheet", card5, pn)
+    shot("3-built")
+
+    # a scroll inside the sheet moves the cards, not the map and not the page
+    centre = page.evaluate("window.duckMap.getCenter().toArray()")
+    page.mouse.move(195, H - 120)
+    page.mouse.wheel(0, 700)
+    page.wait_for_timeout(500)
+    assert page.evaluate("document.querySelector('#panel > .scroll').scrollTop") > 0, "the cards scroll"
+    assert page.evaluate("scrollY") == 0 and page.evaluate("window.duckMap.getCenter().toArray()") == centre, "the map and the page stay"
+    assert not page.evaluate("document.querySelector('.maplibregl-ctrl-attrib').classList.contains('maplibregl-compact-show')")
+    shot("4-cards")
 
     # the largest map on a small device (a touch screen: 40,000 roads): with a limit of 10,000 for Monaco's 13,298 roads, the note says
     # so and nothing is drawn; one network that is smaller (driving: 3,454 roads) draws
@@ -57,25 +101,9 @@ with sync_playwright() as p:
                            timeout=300_000)
     assert "drawn" in page.inner_text("#mapnote"), page.inner_text("#mapnote")
 
-    # the cards scroll under the map, which stays at the top; the attribution starts folded
-    page.evaluate("document.getElementById('step5-card').scrollIntoView()")
-    left, top, right, bottom = page.evaluate(BOX, "map")
-    assert top == 0 and bottom > 200, ("the map stays at the top", top, bottom)
-    assert not page.evaluate("document.querySelector('.maplibregl-ctrl-attrib').classList.contains('maplibregl-compact-show')")
-    shot("3-cards")
-
-    # the panel folds and opens with a tap
-    page.evaluate("window.scrollTo(0, 0)")
-    page.tap("#collapse")
-    assert page.evaluate("document.body.classList.contains('collapsed')") and not page.is_visible("#step1-card")
-    shot("4-folded")
-    page.tap("#collapse")
-    assert page.is_visible("#step1-card")
-
     # the level editor: one panel at a time. The page's bar with Apply and Close at the top, the map under it, roadstyle's sheet at the
     # bottom of the map (half the height)
     def open_editor():
-        page.evaluate("document.getElementById('step7-card').scrollIntoView()")
         page.tap("#edit-open")
         page.wait_for_function("window.levelEditorOpen || /failed/.test(document.getElementById('editnote').textContent)", timeout=300_000)
         assert page.evaluate("!!window.levelEditorOpen"), page.inner_text("#editnote")
@@ -84,20 +112,22 @@ with sync_playwright() as p:
 
     def back_at(before):
         page.wait_for_function("!window.levelEditorOpen && !window.mapDrawing && window.duckMap.loaded()", timeout=300_000)
+        page.wait_for_timeout(400)
         assert page.is_visible("#step7-card") and page.is_visible("footer") and not page.is_visible("#editbar")
-        # the page's place again: card 7 in view (card 6's note can change its height while the map draws)
-        top = page.evaluate("document.getElementById('step7-card').getBoundingClientRect().top")
-        assert 0 <= top < page.evaluate("innerHeight") - 100, ("card 7 in view again", before, page.evaluate("scrollY"), top)
+        # the page's sheet again, in the state it had, with the map's padding for it, and card 7 in view in it
+        assert state() == before and abs(page.evaluate(BOX, "panel")[3] - H) < 1 and abs(padding() - sheet_h()) < 2, (state(), padding())
+        top, card = page.evaluate(BOX, "panel")[1], page.evaluate(BOX, "step7-card")
+        assert top - 1 <= card[1] < H - 100, ("card 7 in view again", top, card)
+        assert page.evaluate("scrollY") == 0
 
-    page.evaluate("document.getElementById('step7-card').scrollIntoView()")
-    before = page.evaluate("scrollY")
+    before = state()
     open_editor()
     bar, mp, lv = (page.evaluate(BOX, i) for i in ("editbar", "map", "lv"))
     height = page.evaluate("innerHeight")
     assert page.evaluate("document.body.classList.contains('lv-sheet')"), "roadstyle's sheet"
     assert bar[1] == 0 and abs(mp[1] - bar[3]) < 1 and abs(mp[3] - height) < 1, ("the map under the bar", bar, mp, height)
     assert abs(lv[3] - height) < 1 and bar[3] < lv[1] < height * 0.6, ("the sheet at the bottom, half the height", lv, height)
-    assert not page.is_visible("#step1-card") and not page.is_visible("footer"), "the page's panel is away"
+    assert not page.is_visible("#step1-card") and not page.is_visible("footer") and sheet_h() < 1, "the page's sheet is away"
     for b in page.query_selector_all("#editbar button"):
         r = b.bounding_box()
         assert r and r["y"] >= 0 and r["y"] + r["height"] <= bar[3], ("in the bar", b.inner_text(), r)
@@ -129,16 +159,16 @@ with sync_playwright() as p:
 
     # the sheet's handle: half, full, one row; then Close, and the page's panel back
     open_editor()
-    for state in ("full", "fold"):
+    for lv_state in ("full", "fold"):
         page.tap("#lv-handle")
         page.wait_for_timeout(400)
-        assert page.evaluate("document.body.dataset.lvSheet") == state
-        shot(f"8-sheet-{state}")
+        assert page.evaluate("document.body.dataset.lvSheet") == lv_state
+        shot(f"8-sheet-{lv_state}")
     page.tap("#editbar [data-for=edit-close]")
     back_at(before)
     shot("9-closed")
     assert not errors, errors
-    print("phone: the map stays at the top, the panel folds; the editor: the sheet, a tap on a road, a head, Apply, the handle, Close; "
+    print("phone: the sheet (half, full, one row), Build from one row, a scroll in the sheet; the editor: the sheet, a tap on a road, a head, Apply, the handle, Close; "
           "the page's panel comes back; no page errors")
     browser.close()
 server.shutdown()

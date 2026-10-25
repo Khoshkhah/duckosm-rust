@@ -41,22 +41,34 @@ the user makes the area, builds it, and sees the roads on the same map, with no 
 Kaveh tests the page on his phone (2026-10-24: "I couldn't test editing dashboard. It's not workable on mobile phone").
 On a screen of 700 px or less:
 
-- The map is at the top (42 % of the height) and stays there while the cards scroll under it. The footer with **Build**
-  stays at the bottom. The scale bar does not show. The zoom read-out is at the bottom left of the map, and the
-  attribution starts folded (an "i" button), so it does not cover the read-out.
-- The button at the right of the page's header folds the panel to one bar at the bottom, and the map gets the screen.
+- **The page's panel is a sheet** (2026-10-25, Kaveh: "The mechanism of side panel scroll is not right"). The map fills
+  the screen, and the panel (the header and the seven cards) is a sheet at its bottom, as the level editor's sheet. Its
+  handle taps through three states: half the height (the first state), the full height, and one row (the title and the
+  Build bar). The page keeps the state. The cards scroll inside the sheet; the page itself does not scroll, so a scroll
+  in the sheet does not move the map. The Build bar (GeoJSON, Build) is at the sheet's bottom edge in every state.
+- The map's padding at the bottom is the sheet's height, so the area and the roads stay above the sheet, and the map's
+  buttons are in view in the half and one-row states. The zoom read-out and the attribution are above the sheet; the
+  scale bar does not show, and the attribution starts folded (an "i" button).
+- After a build, the sheet shows card 5 (the result); from the one-row state it opens to half the height.
+- The cards' scroll box has a background that is 1 % transparent. With an opaque one over the map's canvas, Chromium
+  (2026-10, also headless) left a band of the map undrawn, at the size of the scroll box but near the top of the screen.
+- Before (2026-10-24), the map was at the top (42 %) and the cards scrolled with the page under it; the map then had
+  less room, and a scroll in the cards moved the page.
 - **The level editor: one panel at a time.** The page's panel goes away. A bar at the top keeps the counts, **Apply** and
   **Close** in view, and the map fills the rest of the screen. The editor's panel is roadstyle's sheet at the bottom of
   the map (since roadstyle `d25601e`, its layout `"auto"` up to 700 px): half the height, and its handle changes it to
   the full height or to one row. The editor keeps the roads above the sheet, a finger can pick a road (a wide line that
-  takes the taps), and the buttons are 44 px high. After Apply or Close, the page's panel comes back with card 7 in view.
+  takes the taps), and the buttons are 44 px high. After Apply or Close, the page's sheet comes back in the state it had,
+  with card 7 in view and the map's padding for it.
 - Before 2026-10-24 the editor's panel (400 px wide) covered the whole screen of a phone, and Apply and Close were
   under it.
 
-The check: `phone_e2e.py` (Playwright's "iPhone 13": a 390 × 664 page, touch). It builds Monaco, scrolls the cards and
-folds the panel. Then, with taps, it opens the editor, picks a road above the sheet, makes its end head shorter, solves
+The check: `phone_e2e.py` (Playwright's "iPhone 13": a 390 × 664 page, touch). It taps the page's sheet through its three
+states (the map's padding each time), builds Monaco from the one-row state, and checks that a scroll in the sheet moves
+neither the map nor the page. Then, with taps, it opens the editor, picks a road above the sheet, makes its end head shorter, solves
 ("Apply and solve" in the sheet), applies in the page's bar, opens the editor again, moves the sheet with its handle and
-closes it. It checks the places of the bar, the map and the sheet, and writes `phone-*.png`.
+closes it. It checks the places of the bar, the map and the sheets, and that the page's sheet comes back in its state,
+and writes `phone-*.png`.
 
 ### The memory of the page
 

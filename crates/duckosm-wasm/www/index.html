@@ -264,21 +264,30 @@
     body.collapsed #status { left: 50%; }
   }
   #editbar { display: none; }
+  #sheet-handle { display: none; }
   @media (max-width: 700px) {
-    /* the map stays at the top while the panel scrolls under it (sticky in the body: the body has the height of the page) */
-    body { height: auto; min-height: 100%; }
-    #map { position: sticky; top: 0; z-index: 3; height: 42vh; }
-    #panel { position: static; width: auto; box-shadow: none; border-right: 0; border-top: 1px solid var(--line); transition: none; }
+    /* a phone: the map fills the screen and the page's panel is a sheet at its bottom (the pattern of the level editor's sheet). The
+       handle taps through one row (the title and the Build bar), half the height and the full height; the cards scroll inside the
+       sheet, the page itself never scrolls. The map's padding follows the sheet (sheet() in the script), so the area stays above it. */
+    html, body { overflow: hidden; overscroll-behavior: none; }
+    #map { position: fixed; inset: 0; }
+    #panel { position: fixed; top: auto; left: 0; right: 0; bottom: 0; width: auto; height: 50dvh; z-index: 4; border-right: 0;
+             border-top: 1px solid var(--line); border-radius: 14px 14px 0 0; box-shadow: 0 -4px 18px rgba(0, 0, 0, 0.14); transition: height 0.2s ease; }
+    body[data-sheet=full] #panel { height: calc(100dvh - 40px); }
+    body[data-sheet=fold] #panel { height: auto; }
+    body[data-sheet=fold] #panel > .scroll { display: none; }
     body.collapsed #panel { transform: none; }
-    body.collapsed #panel > :not(header) { display: none; }
+    /* the background 1 % transparent: with an opaque scroll box over the map's canvas, Chromium (2026-10, also headless) leaves a
+       band of the canvas undrawn at the wrong place (the box's size, as if the sheet were at the top of the screen) */
+    #panel > .scroll { overflow-y: auto; overscroll-behavior: contain; background: color-mix(in srgb, var(--surface) 99%, transparent); }
+    #sheet-handle { display: flex; align-items: center; justify-content: center; flex: none; width: 100%; height: 22px; border: 0; padding: 0;
+                    background: none; touch-action: none; }
+    #sheet-handle::before { content: ""; width: 44px; height: 5px; border-radius: 3px; background: var(--line); }
+    header { padding-top: 2px; }
     header p { display: none; }
-    body.collapsed #map { height: calc(100vh - 61px); }
-    body.collapsed #open { display: none; }
-    #collapse svg { transform: rotate(-90deg); }
-    body.collapsed #collapse svg { transform: rotate(90deg); }
+    #collapse, #open, body.collapsed #open { display: none; }
+    .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { bottom: var(--sheet-px, 0px); }
     .maplibregl-ctrl-scale { display: none; }
-    .scroll { overflow: visible; }
-    footer { position: sticky; bottom: 0; }
     .btn, .segmented [role=tab] { height: 44px; }
     .shapes button { height: 44px; }
     /* the level editor on a phone: one panel at a time. The page's panel goes away, a fixed bar at the top keeps the counts, Apply and
@@ -289,7 +298,7 @@
     #editbar span { flex: 1; min-width: 0; font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #editbar .btn { height: 40px; }
     body.editing #panel > :not(#lvhost) { display: none; }
-    body.editing #panel { border-top: 0; }
+    body.editing #panel { height: 0; border: 0; box-shadow: none; }
     body.editing #map, body.editing.lv-open #map { position: fixed; top: 48px; left: 0; right: 0; bottom: 0; height: auto; }
   }
 </style>
@@ -345,6 +354,7 @@
 
 <button id="open" title="Open the panel" aria-label="Open the panel" aria-controls="panel"><svg style="transform:rotate(180deg)"><use href="#i-chevron"/></svg>duckOSM</button>
 <main id="panel">
+<button id="sheet-handle" title="Fold or open the panel" aria-label="Fold or open the panel"></button>
 <header>
   <div class="logo"><svg><use href="#i-poly"/></svg></div>
   <div><h1>duckOSM in the browser</h1><p>Build the road network of an area in your browser</p></div>
@@ -1290,6 +1300,11 @@ $("run").onclick = async () => {
     $("resultline").textContent = `${counts.join(" · ")} (edges / nodes), built in ${num((ready - start) / 1000, 1)} s`;
     $("step5-card").hidden = false;
     unfold("step5-card");
+    if (phone.matches) {                          // a phone: the result shows in the sheet (its cards scroll, the page does not)
+      if (document.body.dataset.sheet === "fold") sheet("half");
+      const cards = document.querySelector("#panel > .scroll");
+      cards.scrollTop += $("step5-card").getBoundingClientRect().top - cards.getBoundingClientRect().top - 8;
+    }
     await visualization();
   } catch (e) {
     progress("Error: " + e.message);
@@ -1503,6 +1518,28 @@ loaded.then(setBase);
 
 window.duckMap = map;   // for e2e.py
 
+// the page's sheet on a phone (the CSS at 700 px): its state (fold: one row, half, full; the page keeps it), and the map's padding at
+// the bottom, the sheet's height, so that the area and the roads stay above the sheet. The level editor has its own sheet: while it is
+// open, the page's sheet is away and the editor sets the padding.
+const phone = matchMedia("(max-width: 700px)");
+const NEXT_SHEET = { fold: "half", half: "full", full: "fold" };
+function sheet(state) {
+  if (state) {
+    document.body.dataset.sheet = state;
+    keep("duckosm.sheet", state);
+  }
+  setTimeout(() => {
+    if (document.body.classList.contains("editing")) return;
+    const h = phone.matches ? Math.round($("panel").getBoundingClientRect().height) : 0;
+    document.body.style.setProperty("--sheet-px", `${h}px`);
+    map.setPadding({ ...map.getPadding(), bottom: h });
+  }, 220);
+}
+document.body.dataset.sheet = NEXT_SHEET[kept("duckosm.sheet")] ? kept("duckosm.sheet") : "half";
+$("sheet-handle").onclick = () => sheet(NEXT_SHEET[document.body.dataset.sheet]);
+phone.addEventListener("change", () => sheet());
+loaded.then(() => sheet());
+
 // ---- each numbered card folds: a click on its heading or on its chevron (a button, with aria-expanded). The page keeps the fold of each
 // card (duckosm.card.<n>); a card opens again when its step becomes active (unfold). ----
 const cards = [...document.querySelectorAll("section.step")];
@@ -1537,11 +1574,15 @@ const workerStopped = (e) => {
   if (editor && m.includes("the worker stopped")) editNote(`The level editor's worker stopped (${m}). Close the editor and open it again.`);
 };
 window.addEventListener("unhandledrejection", workerStopped);
-let panelScroll = 0;                              // where the page was when the editor opened (a phone: the panel goes away)
+let panelScroll = 0;                              // where the panel's cards were when the editor opened (a phone: the panel goes away)
 function editing(on) {
-  if (on) panelScroll = scrollY;
+  const cards = document.querySelector("#panel > .scroll");
+  if (on) panelScroll = cards.scrollTop;
   document.body.classList.toggle("editing", on);
-  if (!on) scrollTo(0, panelScroll);
+  if (!on) {
+    cards.scrollTop = panelScroll;
+    sheet();                                      // the page's sheet in its state again, and the map's padding for it
+  }
   $("edit-open").hidden = on;
   $("edit-apply").hidden = $("edit-close").hidden = $("edit-dl").hidden = !on;
   $("edit-open").disabled = false;
