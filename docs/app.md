@@ -49,10 +49,10 @@ On a screen of 700 px or less:
 - The map's padding at the bottom is the sheet's height, so the area and the roads stay above the sheet, and the map's
   buttons are in view in the half and one-row states. The padding follows each step of the sheet's height change (a
   `ResizeObserver` on the panel). Before, the page read the height 220 ms after the change; when a draw kept the main
-- The view stays still when the map's box or padding changes (the editor's panel or sheet opens or closes, the page's sheet moves): the page keeps the same point at the same screen position, with no animation, and the editor does not fit the map to the area. `editor_e2e.py` and `phone_e2e.py` check this within 2 px.
-- The 3D building layers are after every road layer (a line over an extrusion is not hidden by it) and before the labels; `editor_e2e.py` checks the order in 3D.
   thread busy, the height was not at its end value yet (the check got a padding of 290 px for a sheet of 332 px). The zoom read-out and the attribution are above the sheet; the
   scale bar does not show, and the attribution starts folded (an "i" button).
+- The view stays still when the map's box or padding changes (the editor's panel or sheet opens or closes, the page's sheet moves): the page keeps the same point at the same screen position, with no animation, and the editor does not fit the map to the area. `editor_e2e.py` and `phone_e2e.py` check this within 2 px.
+- The 3D building layers are after every road layer (a line over an extrusion is not hidden by it) and before the labels; `editor_e2e.py` checks the order in 3D.
 - After a build, the sheet shows card 5 (the result); from the one-row state it opens to half the height.
 - The cards' scroll box has a background that is 1 % transparent. With an opaque one over the map's canvas, Chromium
   (2026-10, also headless) left a band of the map undrawn, at the size of the scroll box but near the top of the screen.
