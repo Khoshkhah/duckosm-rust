@@ -88,6 +88,7 @@ with sync_playwright() as p:
     for box in page.query_selector_all("input[name=mode]"):
         box.set_checked(box.get_attribute("value") in args.modes.split(","))
     page.set_checked("#features", not args.no_features)
+    assert page.input_value("#levels") == "solve", "the drawing order of a new page is Optimized (Kaveh, 2026-10-24)"
     page.select_option("#levels", args.levels)
     page.click("#run")
     page.wait_for_function("!document.getElementById('step5-card').hidden || document.getElementById('buildstatus').textContent.startsWith('Error')",

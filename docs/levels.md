@@ -171,7 +171,8 @@ against it (complementary slackness). This is a proof that the flow is the best.
 - WebAssembly: a last argument `levels` of `build`, `build_area` and `build_osm_json` (`undefined` is `tags`).
   `run_node.mjs` takes it as its fifth argument.
 - The page: in step 4 (**Build**), "Drawing order: From the tags (fast) | Optimized (slower)". The
-  default is "from the tags". The map reads `visualization.edge_levels`; it computes `TAG_LEVELS` only for a build
+  default is "Optimized" since 2026-10-24 (Kaveh: "drawing order should be set in optimized for default"; before, it
+  was "from the tags"). The CLI keeps `tags`. The map reads `visualization.edge_levels`; it computes `TAG_LEVELS` only for a build
   without that table.
 
 ### What the meta row says

@@ -82,6 +82,8 @@ The page keeps the selected file only in memory. After a reload, the user select
 
 - The modes (three check boxes) and, under **Advanced: corrections to the map data**, the OSM fixes file
   (duckOSM `osm_overrides`), with one sentence that tells what it is (Kaveh found the first label unclear).
+- **Drawing order**: "Optimized (slower)" (roadstyle's solver) by default since 2026-10-24, or "From the tags (fast)"
+  ([levels.md](levels.md)). Monaco: the build takes about 0.5 s more with the solver.
 - **Base map layers** (a check box, on): with a region file, the build also makes duckOSM's base-map layers
   (`features.*`), see [features.md](features.md).
 - **Build** (in the footer) starts the build in the Web Worker (`build_worker.js`, with threads when the page
