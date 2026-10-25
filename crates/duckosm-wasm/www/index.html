@@ -248,6 +248,8 @@
   #status:empty { display: none; }
   body.picking #map canvas { cursor: crosshair; }
 
+  /* roadstyle's zoom read-out beside the scale bar (the page moves it into the map's bottom-left box) */
+  .maplibregl-ctrl-bottom-left .rs-zoom { position: static; float: left; margin: 0 0 10px 6px; pointer-events: none; }
   @media (min-width: 701px) {
     .maplibregl-ctrl-top-left, .maplibregl-ctrl-bottom-left { left: 370px; transition: left 0.25s ease; }
     body.collapsed .maplibregl-ctrl-top-left, body.collapsed .maplibregl-ctrl-bottom-left { left: 0; }
@@ -587,6 +589,9 @@ document.addEventListener("rs:select", () => {
 // the tiles of the roads map: roadstyle's module makes each one when the map asks for it (app/duck.js tile())
 maplibregl.addProtocol("rs", async (params) => ({ data: await duck.tile(params.url) }));
 map.addControl(new maplibregl.ScaleControl(), "bottom-left");
+// roadstyle's zoom read-out ("z 13.8", .rs-zoom) sits at a fixed place of the window, which is under this page's panel: it goes beside
+// the scale bar, in the map's bottom-left box, which moves with the panel
+document.querySelector(".maplibregl-ctrl-bottom-left").append(...document.querySelectorAll(".rs-zoom"));
 const loaded = new Promise((ok) => map.on("load", ok));
 // OpenFreeMap's layers (the style before the page adds its own), and which of them are roads
 const baseLayers = [];
@@ -1166,6 +1171,8 @@ $("run").onclick = async () => {
   $("showrow").hidden = true;
   $("mapnote").textContent = "";
   closeEditor();
+  roadsRun++;                                     // a draw that runs stops at its next step
+  await drawing;
   $("step7-card").hidden = true;
   removeRoads();
   areaName = $("name").value.trim() || "area";
@@ -1260,9 +1267,31 @@ const addImages = (images) => Promise.all(Object.entries(images).map(([n, v]) =>
   img.onerror = done;
   img.src = o.url;
 })));
-async function showRoads() {
+// One draw at a time: a draw makes temporary tables in DuckDB and writes roads.parquet, so two draws at once break each other ("Table
+// with name e does not exist"). A draw that is asked for while one runs (a click, the draw after Apply) comes after it, one time only.
+// "Show on map" and the network list are off while a draw runs or the level editor is open.
+let drawing = null, drawAgain = false;
+const drawControls = () => { $("show").disabled = $("mapmode").disabled = !!drawing || !!editor; };
+function showRoads() {
+  if (drawing) {
+    drawAgain = true;
+    return drawing;
+  }
+  drawing = window.mapDrawing = (async () => {
+    do {
+      drawAgain = false;
+      await drawRoads();
+    } while (drawAgain);
+  })().finally(() => {
+    drawing = window.mapDrawing = null;
+    drawControls();
+  });
+  drawControls();
+  return drawing;
+}
+async function drawRoads() {
   const run = ++roadsRun;
-  $("mapnote").textContent = "making the map…";
+  $("mapnote").textContent = "drawing…";
   try {
     const t0 = performance.now();
     const r = await duck.roadsStyle($("mapmode").value, areaName, ROAD_KEYS);
@@ -1437,6 +1466,7 @@ function editing(on) {
   $("edit-open").hidden = on;
   $("edit-apply").hidden = $("edit-close").hidden = $("edit-dl").hidden = !on;
   $("edit-open").disabled = false;
+  drawControls();
 }
 // the editor goes away (destroy: its panel, its roads and its listeners); the page's roads come back when draw is true
 function closeEditor(draw = false) {
@@ -1464,7 +1494,8 @@ $("edit-open").onclick = async () => {
     a.free();
     editNote(`${made}. Solving…`);
     await loaded;
-    roadsRun++;                                   // a drawing of the page's roads that is still running stops
+    roadsRun++;                                   // a draw of the page's roads that runs stops at its next step
+    await drawing;
     window.rsDeselect?.();
     document.querySelectorAll(".maplibregl-popup").forEach((p) => p.remove());
     // the worker loads roadstyle's module by this URL (the deploy puts its version on it, version_refs.py)

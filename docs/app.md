@@ -108,6 +108,16 @@ and the two download buttons between them. With three modes, the line takes thre
 - **Show on map** draws the roads of the network. After a build, the page draws them at once only for a small area
   (fewer than 20,000 roads: Monaco has 13,298). A larger area waits for the click (Tartu: 64,828 roads).
 - One line under it: the number of roads and the time of the last drawing. The table in step 4 has each step.
+- One draw at a time (2026-10-24, after two faults that Kaveh got on the live page). A draw makes temporary tables in
+  DuckDB (roadstyle's `makeRoads`) and writes `roads.parquet`. Two draws at the same time broke each other ("Table with
+  name e does not exist"), and the next draw then failed too ("File is not opened in write mode"). Now:
+  - A draw that is asked for while one runs (a second click, the draw after **Apply**) comes after it, one time only.
+  - **Show on map** and the network list are off while a draw runs ("drawing…") and while the level editor is open.
+  - A new build and the level editor wait until the draw stops.
+  - The page removes `roads.parquet` and `features.parquet` from DuckDB before and after each draw, also after a draw
+    that failed, so the next draw starts clean.
+- roadstyle's zoom read-out ("z 13.8") is beside the scale bar of the map. roadstyle puts it at a fixed place, which on
+  this page is under the side panel, next to the Build bar.
 - The base map and the layers are buttons on the map (see "The map"). For one commit they were in this card; Kaveh
   wants them on the map ("it has a good design").
 

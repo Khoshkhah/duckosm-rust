@@ -38,6 +38,14 @@ def sql(page, text):
     return got
 
 
+def drawn(page, js):
+    """Run js (clicks that start a draw), then wait until no draw runs (window.mapDrawing) and the map is drawn or failed."""
+    page.evaluate(js)
+    page.wait_for_timeout(1000)                     # a second click 300 ms later is in
+    page.wait_for_function("!window.mapDrawing && /drawn|failed/.test(document.getElementById('mapnote').textContent) && "
+                           "window.duckMap.loaded()", timeout=300_000)
+
+
 with sync_playwright() as p:
     browser = p.chromium.launch()
     page = browser.new_page(accept_downloads=True, viewport={"width": 1400, "height": 850})
@@ -63,6 +71,21 @@ with sync_playwright() as p:
     assert page.get_attribute("#step6 .fold", "aria-expanded") == "false"
     page.click("#step6 .fold")
     assert page.is_visible("#show") and page.evaluate("localStorage.getItem('duckosm.card.6')") == "0"
+
+    # one draw at a time: two clicks at once, a click while a draw runs, then each network after "all"
+    for what, js in [("two clicks at once", "document.getElementById('show').click(); document.getElementById('show').click()"),
+                     ("a click while a draw runs", "document.getElementById('show').click(); setTimeout(() => document.getElementById('show').click(), 300)"),
+                     *[(f"network {m}", f"(s => {{ s.value = '{m}'; s.dispatchEvent(new Event('change')); }})(document.getElementById('mapmode'))")
+                       for m in ["driving", "all", "walking", "all", "cycling", "all"]]]:
+        drawn(page, js)
+        assert "drawn" in page.inner_text("#mapnote"), f"{what}: {page.inner_text('#mapnote')}"
+    # a draw that fails (an unknown network) must not break the next ones
+    failed = page.evaluate("import('./app/duck.js').then((d) => d.roadsStyle('nope', 'x')).then(() => '', (e) => e.message)")
+    assert failed, "the draw with an unknown network fails"
+    for m in ["driving", "all"]:
+        drawn(page, f"(s => {{ s.value = '{m}'; s.dispatchEvent(new Event('change')); }})(document.getElementById('mapmode'))")
+        assert "drawn" in page.inner_text("#mapnote"), f"network {m} after a failed draw: {page.inner_text('#mapnote')}"
+    print("draws: two clicks, a click during a draw, the networks, and the networks after a failed draw: each one drawn")
     edges = int(sql(page, "SELECT count(*) FROM visualization.edge_levels")[0])
     before = sql(page, "SELECT count(*) FROM visualization.edge_levels WHERE head_end_m = 7 OR head_start_m = 7")[0]
 
@@ -113,7 +136,7 @@ with sync_playwright() as p:
         print("apply note:", page.inner_text("#editnote"))
     print("apply:", page.inner_text("#editnote"))
     assert "Applied" in page.inner_text("#editnote")
-    page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && window.duckMap.loaded()", timeout=300_000)
+    drawn(page, "document.getElementById('show').click()")   # a click while the draw after Apply runs: one more draw after it
     assert "drawn" in page.inner_text("#mapnote"), page.inner_text("#mapnote")
     assert page.evaluate("window.duckMap.getStyle().sources['rs-roads'].tiles[0]").startswith("rs://"), "the page's roads again"
     assert not page.is_visible("#lv") and not page.evaluate("window.levelEditorOpen"), "the editor is closed"

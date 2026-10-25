@@ -243,17 +243,23 @@ export async function roadsStyle(mode, name, keep = []) {
   const t = performance.now();
   const q = rows;
   await roadstyle();
-  await db.dropFile("roads.parquet").catch(() => {});     // duckdb-wasm does not see a second COPY to a kept file name
-  const stored = tables.some((t) => t.mode === "visualization" && t.table === "edge_levels");
-  const levels = await makeRoads(q, "memory", { levels: stored ? "stored" : "tags" });
-  await writeRoads(q, mode);
-  const roads = await db.copyFileToBuffer("roads.parquet");
-  // the base-map layers, when the build made them: features.parquet, the rows of the look's layers (map/roadstyle/features_sql.js)
-  let features;
-  if (tables.some((t) => t.mode === "features")) {
-    look ??= fetch(new URL("../map/look.json", import.meta.url)).then((r) => r.json());
-    await db.dropFile("features.parquet").catch(() => {});
-    if (await writeFeatures(q, "memory", (await look).features.layers_yaml.layers)) features = await db.copyFileToBuffer("features.parquet");
+  // the two files go away before and after (also after a failure): duckdb-wasm does not see a second COPY to a kept file name, and a
+  // COPY that failed leaves its file open ("File is not opened in write mode" at the next COPY)
+  const drop = () => Promise.all(["roads.parquet", "features.parquet"].map((f) => db.dropFile(f).catch(() => {})));
+  let roads, levels, features;
+  await drop();
+  try {
+    const stored = tables.some((t) => t.mode === "visualization" && t.table === "edge_levels");
+    levels = await makeRoads(q, "memory", { levels: stored ? "stored" : "tags" });
+    await writeRoads(q, mode);
+    roads = await db.copyFileToBuffer("roads.parquet");
+    // the base-map layers, when the build made them: features.parquet, the rows of the look's layers (map/roadstyle/features_sql.js)
+    if (tables.some((t) => t.mode === "features")) {
+      look ??= fetch(new URL("../map/look.json", import.meta.url)).then((r) => r.json());
+      if (await writeFeatures(q, "memory", (await look).features.layers_yaml.layers)) features = await db.copyFileToBuffer("features.parquet");
+    }
+  } finally {
+    await drop();
   }
   const roadsSeconds = (performance.now() - t) / 1000;
   endMapWorker();
