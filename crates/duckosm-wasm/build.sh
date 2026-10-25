@@ -7,7 +7,7 @@
 #                     headers (www/serve.py). The maximum memory is 4 GB, as in the build without threads.
 #   www/map/pkg/      roadstyle's Rust module for the roads map (the style and its vector tiles): the crate roadstyle-wasm
 #                     of roadstyle's engine (roadstyle repository, rust/) at the commit ROADSTYLE_COMMIT, cloned into
-#                     target/roadstyle (or ROADSTYLE_REPO, a local copy). duckosm-core takes the levels from an older commit
+#                     target/roadstyle-<commit> (or ROADSTYLE_REPO, a local copy). duckosm-core takes the levels from an older commit
 #                     (aba5884, crates/duckosm-core/Cargo.toml): at this commit they are the crate roadstyle-levels.
 set -e
 NIGHTLY=nightly-2026-10-15
@@ -23,13 +23,17 @@ RUSTFLAGS='-C target-feature=+atomics,+bulk-memory,+mutable-globals -C link-arg=
   --target-dir target/threads -Z build-std=panic_abort,std
 wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/pkg-threads \
   target/threads/wasm32-unknown-unknown/release/duckosm_wasm.wasm
-R=target/roadstyle
-# fetch only this commit into a new folder: a folder from an older build or from the CI cache (rust-cache keeps
-# target/ but removes files in it) can have a .git with no files, and then the checkout gives no rust/Cargo.toml
-rm -rf $R
-git init -q $R
-git -C $R fetch -q --depth 1 "$ROADSTYLE_REPO" $ROADSTYLE_COMMIT
-git -C $R checkout -q --force FETCH_HEAD
+# one folder for each commit, because the worktrees can share target/ (docs/development.md, "One shared build
+# folder"). Keep a complete checkout of the commit; else fetch only this commit into a new folder: a folder from the
+# CI cache (rust-cache keeps target/ but removes files in it) can have a .git with no files, and then the checkout
+# gives no rust/Cargo.toml
+R=target/roadstyle-$ROADSTYLE_COMMIT
+if [ "$(git -C $R rev-parse -q --verify HEAD 2>/dev/null)" != $ROADSTYLE_COMMIT ] || ! git -C $R diff --quiet HEAD; then
+  rm -rf $R
+  git init -q $R
+  git -C $R fetch -q --depth 1 "$ROADSTYLE_REPO" $ROADSTYLE_COMMIT
+  git -C $R checkout -q --force FETCH_HEAD
+fi
 cargo build --release --target wasm32-unknown-unknown --manifest-path $R/rust/Cargo.toml -p roadstyle-wasm
 rm -rf crates/duckosm-wasm/www/map/pkg
 # roadstyle's files, as they are at ROADSTYLE_COMMIT (no copy in git; e2e.py checks that the served files equal them): the map's

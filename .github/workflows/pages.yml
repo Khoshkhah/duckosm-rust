@@ -38,7 +38,7 @@ jobs:
       - name: Build the WebAssembly modules and copy roadstyle's dashboard
         # a roadstyle folder from the cache can be incomplete: start from none
         run: |
-          rm -rf target/roadstyle
+          rm -rf target/roadstyle-*
           ./crates/duckosm-wasm/build.sh
       - name: Put the Google Maps key into the deployed page
         env:

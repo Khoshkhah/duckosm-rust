@@ -1,4 +1,5 @@
-/target/
+/target
+/.shared-target/
 *.so
 *.pyd
 *.whl
