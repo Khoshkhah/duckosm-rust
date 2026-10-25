@@ -3,7 +3,7 @@
 // base-map layers (features.parquet, map/roadstyle/features_sql.js; optional) and the look (map/look.json), and then makes each tile when
 // the map asks for it.
 // In: {roads: Uint8Array, features: Uint8Array or undefined, name, prefix, keep, levels: the look's keyword levels (roads_sql.js
-// makeRoads)}. Out: {style: JSON text, roadTable: JSON text (the road fields that roadstyle's dashboard reads), seconds, memoryMiB} or
+// makeRoads)}. Out: {style: JSON text, roadTable: the road table (each road's fields, middle, box and line), seconds, memoryMiB} or
 // {error}. Then in: {tile: [source, z, x, y], id}. Out: {id, data: ArrayBuffer} (empty when nothing is in the tile).
 // The page starts a new worker for each style: WebAssembly memory only grows, and a worker that ends gives it back.
 import init, { Look, makeSources, tileSources, memoryBytes } from "./pkg/roadstyle_wasm.js";
@@ -25,8 +25,12 @@ onmessage = async ({ data }) => {
     // stage 1 (the sources and the road table), then the vector tiles of stage 2
     const sources = makeSources(data.roads, Look.fromJson(JSON.stringify(l)), data.features, undefined, data.name);
     tiler = tileSources(sources, data.prefix, data.keep);
-    const roadTable = new TextDecoder().decode(sources.roadTable());
+    // the road table with only the fields that the page and roadstyle's dashboard read: the popup's (keep), and the dashboard's own
+    // (lvl, oneway, length and the engine's __rs_* fields). Each road has about 30 fields; a city of 150,000 roads gave 88 MB of them.
+    const roadTable = JSON.parse(new TextDecoder().decode(sources.roadTable()));
     sources.free();
+    const wanted = new Set([...data.keep, "lvl", "oneway", "length", "highway", "name"]);
+    roadTable.props = roadTable.props.map((p) => p && Object.fromEntries(Object.entries(p).filter(([k]) => wanted.has(k) || k.startsWith("__rs_"))));
     postMessage({ style: tiler.style(), roadTable, seconds: (performance.now() - t) / 1000, memoryMiB: Math.round(memoryBytes() / 2 ** 20) });
   } catch (e) {
     postMessage({ error: String((e && e.message) || e) });

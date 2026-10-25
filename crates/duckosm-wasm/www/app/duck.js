@@ -72,15 +72,19 @@ export const duckReady = (async () => {
   return (performance.now() - t0) / 1000;
 })();
 
-// the build in a Web Worker; onStep(text) gets its steps
-const worker = new Worker(new URL("../build_worker.js", import.meta.url), { type: "module" });
+// the build in a Web Worker; onStep(text) gets its steps. Each build has a new worker, which ends when the build ends: its WebAssembly
+// memory (it only grows: about 400 MiB after a city of 150,000 roads) goes back to the browser, which a phone needs for the map. The
+// files are then in DuckDB and in the page. A panic or an out-of-memory error of one build cannot stop the next one.
 export function build(msg, onStep) {
+  const worker = new Worker(new URL("../build_worker.js", import.meta.url), { type: "module" });
   return new Promise((resolve, reject) => {
     worker.onmessage = ({ data }) => {
-      if (data.step) onStep(data.step);
-      else if (data.error) reject(new Error(data.error));
+      if (data.step) return onStep(data.step);
+      worker.terminate();
+      if (data.error) reject(new Error(data.error));
       else resolve(data);
     };
+    worker.onerror = (e) => { worker.terminate(); reject(new Error(e.message || "the build worker stopped")); };
     worker.postMessage(msg, msg.pbf || msg.json ? [msg.pbf || msg.json] : []);
   });
 }
@@ -124,12 +128,14 @@ export async function loadTables(files) {
     if (name.startsWith("raw_")) continue;     // loadFeatures reads them
     const { mode, table } = split(name);
     // registerFileBuffer moves the buffer into DuckDB's worker, so DuckDB gets a copy and the page keeps the file for its download.
-    // ponytail: two copies of each file; read them back from DuckDB if memory matters.
+    // DuckDB's copy goes away when the table is made (a phone has little memory).
+    // ponytail: the page still keeps each file for the downloads; read them back from DuckDB if memory matters more.
     await db.registerFileBuffer(name, bytes.slice());
     await conn.query(`CREATE SCHEMA IF NOT EXISTS ${mode}`);
     const cols = (await conn.query(`DESCRIBE SELECT * FROM read_parquet('${name}')`)).toArray().map((r) => r.column_name);
     await conn.query(`CREATE OR REPLACE TABLE ${mode}.${table} AS ${selectWkb(table, cols)} FROM read_parquet('${name}')`);
     const rows = Number((await conn.query(`SELECT count(*) AS n FROM ${mode}.${table}`)).toArray()[0].n);
+    await db.dropFile(name);
     tables.push({ mode, table, name, bytes, rows });
   }
   await conn.query("SET enable_geoparquet_conversion = true");
@@ -148,9 +154,9 @@ export const memoryMiB = async () =>
 let spatial = null;
 export const loadSpatial = () => (spatial ??= duckReady.then(() => conn.query("INSTALL spatial; LOAD spatial")));
 
-// duckOSM's raw.* files of the build, then duckOSM's SQL of the layers (features.sql, from the wasm module) makes features.*; raw.* stays
-// for SQL, as in a duckOSM .duckdb file. Each features table also becomes features_<table>.parquet, as duckOSM's GeoParquet export
-// (every column but tags).
+// duckOSM's raw.* files of the build, then duckOSM's SQL of the layers (features.sql, from the wasm module) makes features.*. Then raw.*
+// goes away: it is more than half of DuckDB's memory, the map does not read it, and no download has it (a phone has little memory).
+// Each features table also becomes features_<table>.parquet, as duckOSM's GeoParquet export (every column but tags).
 export async function loadFeatures(files, sql) {
   await loadSpatial();
   for (const name of ["raw_nodes.parquet", "raw_ways.parquet", "raw_relations.parquet"]) await db.registerFileBuffer(name, files[name]);
@@ -163,9 +169,11 @@ export async function loadFeatures(files, sql) {
     await db.dropFile(name).catch(() => {});     // duckdb-wasm does not see a second COPY to a kept file name
     await conn.query(`COPY (SELECT * EXCLUDE (tags) FROM features.${table}) TO '${name}' (FORMAT parquet)`);
     const bytes = await db.copyFileToBuffer(name);
+    await db.dropFile(name);
     const rows = Number((await conn.query(`SELECT count(*) AS n FROM features.${table}`)).toArray()[0].n);
     tables.push({ mode: "features", table, name, bytes, rows });
   }
+  await conn.query("DROP SCHEMA IF EXISTS raw CASCADE");
 }
 
 // the .duckdb file of the tables of the build, as make_duckdb.sql makes it: the tables, mm.edges and the macros. DuckDB writes it
@@ -251,7 +259,21 @@ export async function roadsStyle(mode, name, keep = []) {
   try {
     const stored = tables.some((t) => t.mode === "visualization" && t.table === "edge_levels");
     levels = await makeRoads(q, "memory", { levels: stored ? "stored" : "tags" });
-    await writeRoads(q, mode);
+    if (mode === "all") await writeRoads(q, mode);
+    else {
+      // one network: only its roads and its private roads (roadstyle's SELECT of a mode has every road, with that mode's access). A
+      // city's driving network has 40 % of its roads, and the map's memory follows. The stored levels were solved for every road, so
+      // the engine checks these roads as a part of them (roadstyle's subset check).
+      const rs = await roadstyle();
+      const select = JSON.parse(rs.duckosmPlan(JSON.stringify(await readCatalog(q, "memory")), mode, !stored, "[]")).select;
+      const only = `SELECT * FROM (${select}) WHERE ${mode} OR access IS NOT NULL`;
+      await conn.query(`COPY (${only}) TO 'roads.parquet' (FORMAT parquet)`);
+      if (stored) {
+        const [m] = await q("SELECT source, n_edges, edge_hash FROM visualization.edge_levels_meta");
+        const ids = BigInt64Array.from((await conn.query(`SELECT edge_id FROM (${only})`)).toArray().map((r) => BigInt(r.edge_id)));
+        levels = JSON.parse(rs.duckosmSubsetLevels(m.source, Number(m.n_edges), m.edge_hash, 0, undefined, ids));
+      }
+    }
     roads = await db.copyFileToBuffer("roads.parquet");
     // the base-map layers, when the build made them: features.parquet, the rows of the look's layers (map/roadstyle/features_sql.js)
     if (tables.some((t) => t.mode === "features")) {
@@ -260,6 +282,9 @@ export async function roadsStyle(mode, name, keep = []) {
     }
   } finally {
     await drop();
+    // roadstyle's temporary tables of the reading (r: every road with its line, f<n>: the base-map layers) go away too: the next draw
+    // makes them again, and a city's take about 90 MiB of DuckDB's memory
+    for (const { t } of await rows("SELECT table_name AS t FROM duckdb_tables() WHERE temporary")) await conn.query(`DROP TABLE IF EXISTS temp."${t}"`);
   }
   const roadsSeconds = (performance.now() - t) / 1000;
   endMapWorker();
@@ -278,7 +303,7 @@ export async function roadsStyle(mode, name, keep = []) {
     w.onerror = (e) => { endMapWorker(); fail(new Error(e.message || "the map worker failed")); };
     w.postMessage({ roads, features, name, prefix, keep, levels }, [roads.buffer, ...(features ? [features.buffer] : [])]);
   });
-  return { style: JSON.parse(out.style), roadTable: JSON.parse(out.roadTable), roadsSeconds, styleSeconds: out.seconds, memoryMiB: out.memoryMiB };
+  return { style: JSON.parse(out.style), roadTable: out.roadTable, roadsSeconds, styleSeconds: out.seconds, memoryMiB: out.memoryMiB };
 }
 
 // a question to the map worker, answered by its id
