@@ -76,6 +76,23 @@ with sync_playwright() as p:
     assert page.evaluate("document.querySelector('input[name=base]:checked')?.value") == "blank"
     w, s_, e, n = AREA
     assert page.evaluate(f"(b => b.contains([{w}, {s_}]) && b.contains([{e}, {n}]))(window.duckMap.getBounds())"), "the area in view"
+    # a real hover and a real click on a road (roadstyle's pick layer, rs-roads-simple): the road's hover state, then rs:select
+    point = page.evaluate("""() => { const m = window.duckMap, c = m.getCanvas().getBoundingClientRect();
+        for (const f of m.queryRenderedFeatures({layers: ['rs-roads-simple']})) {
+          const g = f.geometry.type === 'LineString' ? f.geometry.coordinates : f.geometry.coordinates[0];
+          const p = m.project(g[Math.floor(g.length / 2)]);
+          const hit = m.queryRenderedFeatures(p, {layers: ['rs-roads-simple']})[0];
+          if (hit && p.x > 420 && p.x < c.width - 80 && p.y > 40 && p.y < c.height - 60) return [p.x + c.left, p.y + c.top, hit.id]; }
+        return null; }""")
+    assert point, "a road on the map"
+    page.evaluate("window.selected = null; document.addEventListener('rs:select', (e) => { window.selected = e.detail.id; })")
+    page.mouse.move(point[0], point[1])
+    page.wait_for_function("""(id) => window.duckMap.getFeatureState({source: 'rs-roads', sourceLayer: 'simple', id}).hover === true""",
+                           arg=point[2], timeout=10_000)
+    page.mouse.click(point[0], point[1])
+    page.wait_for_function("window.selected != null", timeout=10_000)
+    print(f"hover and click: road row {point[2]} glows, rs:select gives row {page.evaluate('window.selected')}")
+    page.evaluate("window.rsDeselect?.()")
     # a card folds with a click on its heading, the page keeps the fold, and a second click opens it
     page.click("#step6")
     assert page.evaluate("document.getElementById('step6-card').classList.contains('folded')") and not page.is_visible("#show")
@@ -200,8 +217,27 @@ with sync_playwright() as p:
     assert not page.evaluate("Object.keys(window.duckMap.getStyle().sources).some((id) => id.startsWith('rs-lv-'))")
     assert page.evaluate("window.duckMap.getStyle().layers.some((l) => l.source === 'rs-roads' && l['source-layer'] === 'simple')"), "the roads"
     assert sql(page, "SELECT count(*) FROM visualization.edge_levels WHERE head_end_m = 7 OR head_start_m = 7")[0] == after
+    print("close: no change")
+
+    # a browser that cannot keep large files (localStorage has about 5 MB for the site; Burnaby's pairs.csv is larger): each value over
+    # 100 KB fails, as with a full storage. The editor opens with those files in memory, it solves, and the card says so.
+    page.evaluate("""() => { const set = Storage.prototype.setItem; window.realSetItem = set;
+        Storage.prototype.setItem = function (k, v) {
+          if (String(v).length > 100000) throw new DOMException("the quota has been exceeded", "QuotaExceededError");
+          return set.call(this, k, v); }; }""")
+    page.click("#edit-open")
+    page.wait_for_function("window.levelEditorOpen || /failed/.test(document.getElementById('editnote').textContent)", timeout=300_000)
+    assert page.evaluate("!!window.levelEditorOpen"), page.inner_text("#editnote")
+    assert "could not keep the area files" in page.inner_text("#editnote"), page.inner_text("#editnote")
+    said = page.evaluate("r => window.lvApi('/api/apply', {ops: [{op: 'head', road: r, end: 'end', m: '6'}]})", road)
+    assert said["ok"], said
+    assert "could not keep the area files" in page.inner_text("#editnote"), page.inner_text("#editnote")
+    print("full storage:", page.inner_text("#editnote")[-160:])
+    page.click("#edit-close")
+    page.wait_for_function("window.duckMap.loaded() && !window.levelEditorOpen", timeout=300_000)
+    page.evaluate("() => { Storage.prototype.setItem = window.realSetItem; }")
     assert not errors, errors
     assert not unversioned, f"requests with no version: {unversioned}"
-    print("close: no change; no page errors")
+    print("no page errors")
     browser.close()
 server.shutdown()

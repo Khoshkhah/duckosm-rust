@@ -267,6 +267,11 @@ Limits:
 - The editor's panel covers the right side of the map (400 px). It is not in the page's side panel.
 - The store is for each area name. If a different area gets the same name, the old edits can name roads that the new
   area does not have.
+- roadstyle's store keeps the text files in `localStorage`, which has about 5 MB for the site. Burnaby's `pairs.csv` is
+  larger (Kaveh, 2026-10-25: "exceeded the quota"). A file that the browser cannot keep stays in memory for the page,
+  the editor opens, and card 7 says: "The browser could not keep the area files (N MB): your edits stay only until you
+  close the page; download edits.csv to keep them." roadstyle moves the large files to the site's private file system
+  later. `editor_e2e.py` tests it with a storage that refuses each value over 100 KB (Monaco: 1.9 MB stays in memory).
 - A build of the page has no `level_edits`, `level_heads` or `level_caps` tables. Thus the editor starts from the store
   only, not from the tables of a file.
 - Monaco takes 2.2 to 2.9 s to open (6,830 roads, 21,476 pairs). Since roadstyle `7d4534f`, the editor solves, makes

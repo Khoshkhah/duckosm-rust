@@ -1580,7 +1580,25 @@ for (const c of cards) {
 // and Close (destroy) puts them back. Apply first writes the editor's levels.csv into the tables (visualization.edge_levels), and then the
 // page draws its roads again. ----
 let editor = null, editorStore = null;
-const editNote = (t) => { $("editnote").textContent = t; };
+const editNote = (t) => { $("editnote").textContent = t + lostNote(); };
+// The area's files in this browser (roadstyle's browserStore: the texts in localStorage, which has about 5 MB for the site). A file that
+// the browser cannot keep (Burnaby's pairs.csv is larger; a full storage) stays in memory for this page, and the card says so.
+// ponytail: memory only, lost at a reload; roadstyle moves the large texts to the private file system later.
+function fallbackStore(store) {
+  const mem = new Map();
+  let lost = 0;
+  return { key: store.key, name: store.name, lostBytes: () => lost,
+    async load(n, bytes) { return mem.has(n) ? mem.get(n) : store.load(n, bytes); },
+    async save(n, data) {
+      if (!mem.has(n)) {
+        try { return await store.save(n, data); } catch (e) { console.warn(`level editor: ${n} not kept in the browser (${e.message})`); }
+        lost += typeof data === "string" ? data.length : data.byteLength;
+      }
+      mem.set(n, { body: data, mtime: Date.now() / 1000 });
+    } };
+}
+const lostNote = () => editorStore?.lostBytes() ? ` The browser could not keep the area files (${num(editorStore.lostBytes() / 2 ** 20, 1)} MB): ` +
+  "your edits stay only until you close the page; download edits.csv to keep them." : "";
 // the editor's worker can stop (no memory, a file that does not load): its waiting calls are then rejected with this text
 const workerStopped = (e) => {
   const m = String(e.reason?.message ?? e.reason ?? "");
@@ -1617,12 +1635,13 @@ $("edit-open").onclick = async () => {
     `device it can show up to ${num(window.mapMaxRoads)}. Use a desktop browser, or a smaller area.`);
   $("edit-open").disabled = true;
   try {
+    editorStore = null;                           // the note of a store of an earlier area goes
     editNote("making the level area…");
     const t0 = performance.now();
     const [pkg, { levelEditor, browserStore }] = await Promise.all([duck.roadstyle(), import("./map/roadstyle/dashboard/editor/level_editor.js")]);
     const a = pkg.makeArea(await duck.levelEdges(), JSON.stringify({ id_col: "edge_id" }));
     const made = `${num(a.roadCount)} roads, ${num(a.pairCount)} pairs` + (a.warnings.length ? `. Warnings: ${a.warnings.join("; ")}` : "");
-    const store = browserStore("duckosm:" + areaName, areaName);
+    const store = (editorStore = fallbackStore(browserStore("duckosm:" + areaName, areaName)));
     await store.save("roads.parquet", a.roads);
     await store.save("pairs.csv", a.pairs);
     if (!(await store.load("edits.csv"))) await store.save("edits.csv", a.edits);   // the edits of an earlier session of this area stay
