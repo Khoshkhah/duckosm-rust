@@ -176,28 +176,33 @@ with sync_playwright() as p:
     page.click("#edit-open")
     page.wait_for_function("window.levelEditorOpen || /failed/.test(document.getElementById('editnote').textContent)", timeout=300_000)
     assert page.evaluate("!!window.levelEditorOpen"), page.inner_text("#editnote")
-    assert page.evaluate("window.solves") == 1, "the first open solves"
+    # the page gives the editor the map's levels (levelEditor's levels, roadstyle 083224c): no solve also at the first open
+    print("first open: the editor starts from", page.evaluate("window.levelEditorOpen.answer().resolve"))
+    assert page.evaluate("window.solves") == 0, "the first open starts from the page's levels"
     print(f"open: {time.time() - t:.2f} s from the click until the editor is open; longest main-thread task "
           f"{page.evaluate('window.longTask') / 1000:.2f} s")
-    print(f"first open: the solve took {page.evaluate('window.workerSeconds.solve'):.2f} s;", page.inner_text("#editnote"))
+    print("first open:", page.inner_text("#editnote"))
     # the second open of the same area: the page writes the area's files again; since roadstyle 6be68c2 the editor starts from the
     # stored levels when levels_info.json names the same inputs (the SHA-256 of roads.parquet, pairs.csv and edits.csv): no solve
     page.click("#edit-close")
     page.wait_for_function("!window.levelEditorOpen && !window.mapDrawing && window.duckMap.loaded()", timeout=300_000)
+    made = page.evaluate("window.editorArea")
+    page.evaluate("window.editorArea = null")
     t = time.time()
     page.click("#edit-open")
     page.wait_for_function("window.levelEditorOpen || /failed/.test(document.getElementById('editnote').textContent)", timeout=300_000)
     assert page.evaluate("!!window.levelEditorOpen"), page.inner_text("#editnote")
+    assert page.evaluate("window.editorArea") is None, "the area is not made again: its edges did not change (areaIsFor)"
+    print("second open: the editor starts from", page.evaluate("window.levelEditorOpen.answer().resolve"))
     print(f"second open: {time.time() - t:.2f} s from the click until the editor is open, "
-          f"{page.evaluate('window.solves') - 1} solve(s)")
-    if page.evaluate("window.solves") != 1:      # why: the stored key and the files' key
+          f"{page.evaluate('window.solves')} solve(s)")
+    if page.evaluate("window.solves") != 0:      # why: the stored key and the files' key
         print("stored inputs key:", page.evaluate("""async () => { const d = await (await navigator.storage.getDirectory()).getDirectoryHandle('lv-duckosm_Monaco');
             const text = async (n) => (await (await d.getFileHandle(n)).getFile()).arrayBuffer();
             const sha = async (b) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', b))].map((x) => x.toString(16).padStart(2, '0')).join('');
             return [JSON.parse(new TextDecoder().decode(await text('levels_info.json'))).inputs,
               [await sha(await text('roads.parquet')), await sha(await text('pairs.csv')), await sha(await text('edits.csv'))].join(':')]; }"""))
-    assert page.evaluate("window.solves") == 1, "the second open of the same area starts from the stored levels"
-    made = page.evaluate("window.editorArea")
+    assert page.evaluate("window.solves") == 0, "the second open of the same area starts from the stored levels"
     print("editor:", page.inner_text("#editnote"))
     assert made["roads"] > 6000 and made["pairs"] > 0, made      # Monaco: 6,830 roads (13,298 edges)
     tiles = page.evaluate("window.duckMap.getStyle().sources['rs-lv-roads'].tiles[0]")
@@ -308,6 +313,8 @@ with sync_playwright() as p:
 
     # a browser that cannot keep large files (a full storage of the site): each file over 100 KB fails in the private file system. The
     # editor opens with those files in memory, it solves, and the card says so.
+    # the store empty first: the page makes the area again and writes its files (areaIsFor is false)
+    page.evaluate("async () => { await (await navigator.storage.getDirectory()).removeEntry('lv-duckosm_Monaco', {recursive: true}); }")
     page.evaluate("""() => { const w = FileSystemWritableFileStream.prototype.write; window.realWrite = w;
         FileSystemWritableFileStream.prototype.write = function (data) {
           const n = typeof data === "string" ? data.length : data.byteLength ?? data.size ?? 0;

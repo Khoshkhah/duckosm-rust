@@ -238,24 +238,29 @@ roads join, the length of the heads and the shape of the line ends. Everything r
 
 The card shows after a build that has `visualization.edge_levels` (each build of the page has it). The flow:
 
-1. **Edit levels.** The page runs roadstyle's query `level_edges` in DuckDB (`duckosmPlan`: the edges of duckOSM's
-   `load_roads`, one row for each `edge_id` of all modes) and writes `edges.parquet`. roadstyle's `makeArea` makes the
-   level area from it (`roads.parquet`, `pairs.csv` and an empty `edits.csv`). The page keeps the area in this browser
-   (`browserStore("duckosm:<area name>")`: the text files in `localStorage`, `roads.parquet` in the private file system
-   of the site). If the store already has `edits.csv` for this area name, the page keeps it: the edits of an earlier
-   session show again. The card gives the number of roads and pairs and the warnings of `makeArea`.
-2. The editor (`levelEditor({map, container, pkgUrl, store, dashboard: rs, prefix: "rs-"})`) solves the area and draws its
-   roads on the page's map, with the page's dashboard. Its panel (roadstyle's `level_editor.html`) is on the right of the
+1. **Edit levels.** The page follows roadstyle's `docs/rust/browser.md`, "The level editor in a page". It makes the level
+   area only when the area's edges changed: `areaIsFor(store, edge_hash)` compares the `edge_hash` of
+   `visualization.edge_levels_meta` with the hash in the store's `edges.json`. To make the area, the page runs roadstyle's
+   query `level_edges` in DuckDB (`duckosmPlan`: the edges of duckOSM's `load_roads`, one row for each `edge_id` of all
+   modes) and writes `edges.parquet`. roadstyle's `makeArea` makes the level area from it, and `saveArea` keeps it in
+   this browser (`roads.parquet`, `pairs.csv`, `edges.json`, and `edits.csv` only when the store has none, so the edits
+   of an earlier session show again). The store is `browserStore("duckosm:<area name>")`, in the private file system of
+   the site. The card gives the number of roads and the warnings of `makeArea`.
+2. The editor (`levelEditor({map, container, pkgUrl, store, dashboard: rs, prefix: "rs-", levels})`) draws the area's
+   roads on the page's map, with the page's dashboard. `levels` is the build's `visualization.edge_levels` as CSV text,
+   with the `edge_hash` of `edge_levels_meta` (`duck.storedLevels()`). The editor starts from its stored `levels.csv`
+   when it was solved for the same inputs (roadstyle `6be68c2`: the SHA-256 of `roads.parquet`, `pairs.csv` and
+   `edits.csv`), else from the build's levels (since `083224c`); it solves the whole area only when neither fits. Its panel (roadstyle's `level_editor.html`) is on the right of the
    map. A click on a road picks it. The panel has the cards with the ends and the heads, and the tabs Edit, History and
    Issues (roadstyle's guide `docs/guides/levels.md`, "Fix it by hand"). The editor solves again only for a change of
    the order rules (in the roads around the change). Since roadstyle `6be68c2`, a head or a line end (a cap) is drawing
    only: the editor saves it and draws the map again at once, with no solve and no **Apply and solve**.
-   Since `6be68c2`, the editor also starts from its stored levels when `levels_info.json` names the same inputs (the
-   SHA-256 of `roads.parquet`, `pairs.csv` and `edits.csv`). Thus a second open of the same area does not solve, also
-   when the page writes the area's files again. The check on Monaco (`editor_e2e.py`, 2026-10-25): the first open
-   takes 2.4–4.1 s and its solve 0.13–0.20 s; the second open takes 2.2–3.0 s with no solve. On Monaco the solve is a
-   small part of an open. A head or a cap change takes 4–8 s until the map is drawn again; of this time, the worker
-   makes the new tiles and the road table in about 1.9 s (`build`), and the rest is the map's new tiles on the page.
+   The check (`editor_e2e.py` counts the `solve` messages to the editor's worker, 2026-10-25, a busy machine): on
+   Monaco (6,830 roads) the first open starts from the build's levels (`given`) and the second from the stored ones
+   (`stored`), with no solve on either. The opens take 2.2–7.5 s; at `6be68c2` the first open solved (0.13–0.20 s). On
+   Burnaby (76,189 roads) the first open takes 14.1 s and the second 11.5 s, with no solve. A head or a cap change takes
+   4–13 s until the map is drawn again; of this time, the worker makes the new tiles and the road table in 1.6–2.2 s
+   (`build`), and the rest is the map's new tiles on the page.
 3. **Apply** writes the editor's `levels.csv` into `visualization.edge_levels`. `edge_levels_meta` gets `source = 'area'`,
    `area = 'this browser: <area name>'` and a new `created` time. `n_edges` and `edge_hash` do not change, because the
    edges are the same. The user's own files go into `level_edits`, `level_heads` and `level_caps`, as roadstyle's

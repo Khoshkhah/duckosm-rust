@@ -12,12 +12,12 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ### Changed
 
-- The page uses roadstyle `6be68c2` (branch `rust-engine`) for its map (the style, the tiles, the dashboard, the SQL files). The levels of
+- The page uses roadstyle `083224c` (branch `rust-engine`) for its map (the style, the tiles, the dashboard, the SQL files). The levels of
   `duckosm-core` stay at roadstyle `aba5884`.
 - The page's map: **Show on map** and the draw after a build first show a veil with a spinner over the map, then set the blank
   base map and put the area in view when the roads are ready (docs/app.md, step 6).
-- The level editor (roadstyle `6be68c2`): a head or a line end is saved and drawn at once, with no solve. A second open of
-  the same area starts from the stored levels.
+- The level editor (roadstyle `083224c`): it starts from the build's levels with no solve, and the page makes the level
+  area only when the area's edges changed. A head or a line end is saved and drawn at once, with no solve.
 
 ### Fixed
 

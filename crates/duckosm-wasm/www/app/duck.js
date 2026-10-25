@@ -325,6 +325,22 @@ export function tile(url) {
 
 // The level editor (card 7, docs/app.md): the edges of the build's level area (duckOSM's load_roads: roadstyle's query level_edges), as
 // the bytes of edges.parquet for roadstyle's makeArea
+// the stored levels for the level editor (levelEditor's `levels`): the edge hash of visualization.edge_levels_meta and
+// visualization.edge_levels as CSV text; null when the build has no levels
+export async function storedLevels() {
+  if (!tables.some((t) => t.mode === "visualization" && t.table === "edge_levels_meta")) return null;
+  const meta = (await conn.query("SELECT edge_hash FROM visualization.edge_levels_meta")).toArray()[0];
+  if (!meta) return null;
+  try {
+    await db.dropFile("levels.csv").catch(() => {});
+    await conn.query("COPY (SELECT edge_id AS edge, casing_start, casing_level, casing_end, fill_level FROM visualization.edge_levels) " +
+      "TO 'levels.csv' (HEADER)");
+    return { edge_hash: String(meta.edge_hash), csv: new TextDecoder().decode(await db.copyFileToBuffer("levels.csv")) };
+  } finally {
+    await db.dropFile("levels.csv").catch(() => {});
+  }
+}
+
 export async function levelEdges() {
   const rs = await roadstyle();
   const plan = JSON.parse(rs.duckosmPlan(JSON.stringify(await readCatalog(rows, "memory")), "all", true, "[]"));

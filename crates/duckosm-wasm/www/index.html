@@ -1659,18 +1659,22 @@ $("edit-open").onclick = async () => {
   $("edit-open").disabled = true;
   try {
     editorStore = null;                           // the note of a store of an earlier area goes
-    editNote("making the level area…");
+    editNote("opening the level editor…");
     const t0 = performance.now();
-    const [pkg, { levelEditor, browserStore }] = await Promise.all([duck.roadstyle(), import("./map/roadstyle/dashboard/editor/level_editor.js")]);
-    const a = pkg.makeArea(await duck.levelEdges(), JSON.stringify({ id_col: "edge_id" }));
-    const made = `${num(a.roadCount)} roads, ${num(a.pairCount)} pairs` + (a.warnings.length ? `. Warnings: ${a.warnings.join("; ")}` : "");
+    const [pkg, { levelEditor, browserStore, saveArea, areaIsFor }, levels] = await Promise.all([duck.roadstyle(),
+      import("./map/roadstyle/dashboard/editor/level_editor.js"), duck.storedLevels()]);
     const store = (editorStore = fallbackStore(browserStore("duckosm:" + areaName, areaName)));
-    await store.save("roads.parquet", a.roads);
-    await store.save("pairs.csv", a.pairs);
-    if (!(await store.load("edits.csv"))) await store.save("edits.csv", a.edits);   // the edits of an earlier session of this area stay
-    window.editorArea = { roads: a.roadCount, pairs: a.pairCount, warnings: a.warnings };   // for editor_e2e.py
-    a.free();
-    editNote(`${made}. Solving…`);
+    // roadstyle's docs/rust/browser.md, "The level editor in a page": the area is made only when its edges changed (the store's
+    // edges.json has the edge hash of the build's levels), and the editor starts from the map's levels (levels), with no solve
+    let warnings = "";
+    if (!levels || !(await areaIsFor(store, levels.edge_hash))) {
+      editNote("making the level area…");
+      const a = pkg.makeArea(await duck.levelEdges(), JSON.stringify({ id_col: "edge_id" }));
+      await saveArea(store, a, levels?.edge_hash ?? "");   // edits.csv only when the store has none: the edits of an earlier session stay
+      window.editorArea = { roads: a.roadCount, pairs: a.pairCount, warnings: a.warnings };   // for editor_e2e.py
+      if (a.warnings.length) warnings = `. Warnings: ${a.warnings.join("; ")}`;
+      a.free();
+    }
     await loaded;
     roadsRun++;                                   // a draw of the page's roads that runs stops at its next step
     await drawing;
@@ -1678,8 +1682,9 @@ $("edit-open").onclick = async () => {
     document.querySelectorAll(".maplibregl-popup").forEach((p) => p.remove());
     // the worker loads roadstyle's module by this URL (the deploy puts its version on it, version_refs.py)
     const pkgUrl = new URL("./map/pkg/roadstyle_wasm.js", location.href);
-    editor = await levelEditor({ map, container: $("lvhost"), pkgUrl, store, dashboard: rs, prefix: "rs-" });
+    editor = await levelEditor({ map, container: $("lvhost"), pkgUrl, store, dashboard: rs, prefix: "rs-", levels: levels ?? undefined });
     editorStore = store;
+    const made = `${num(editor.roads.length)} roads` + warnings;
     window.levelEditorOpen = editor;              // for editor_e2e.py
     // "solved": after each change (since roadstyle 6be68c2 a head or a cap is drawing only, with no solve)
     editor.addEventListener("solved", () => editNote(`${made}. Changed: Apply puts the new drawing order into the tables.`));
