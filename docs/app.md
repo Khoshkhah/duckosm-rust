@@ -58,6 +58,51 @@ folds the panel. Then, with taps, it opens the editor, picks a road above the sh
 ("Apply and solve" in the sheet), applies in the page's bar, opens the editor again, moves the sheet with its handle and
 closes it. It checks the places of the bar, the map and the sheet, and writes `phone-*.png`.
 
+### The memory of the page
+
+Kaveh (2026-10-25): "I tried the dashboard for burnaby on my mobile phone, it couldnt handle visualization and drawing map
+part". A phone's tab has about 1.5 GB for everything. Burnaby (151,770 roads with all networks; duckOSM's cut
+`burnaby.complete_ways.osm.pbf` as the region file, with its boundary and the base-map layers) took 3.7 GB of the tab after
+the draw. The measurements are of the renderer process (the page, its workers and their WebAssembly memory) in desktop
+Chromium:
+
+| Burnaby, all networks | Before | After |
+|---|---|---|
+| The tab after the build | 1,799 MiB | 1,273 MiB |
+| The tab after the draw | 3,660 to 3,825 MiB | 3,174 MiB |
+| DuckDB after the draw | 462 MiB | 321 MiB |
+| The build worker (WebAssembly) after the build | 402 MiB, kept | 0: the worker ends |
+| The road table of the dashboard (`window.RS_SIDE`, as JSON) | 118 MB | 71 MB |
+| The map worker (WebAssembly) | 796 MiB | 796 MiB |
+| Network "Driving": roads on the map / the tab after the draw | 151,770 / 3,229 MiB | 62,453 / 2,512 MiB |
+
+The changes:
+
+- **The build worker ends after each build.** Its WebAssembly memory only grows; the files are then in DuckDB and in the
+  page. A new build makes a new worker, so a panic or an out-of-memory error of one build does not stop the next one.
+- **DuckDB:** the Parquet file of each table goes away when the table is made; `raw.*` goes away when the base-map layers
+  are made (no download has it, the map does not read it); roadstyle's temporary tables of a draw (`r`, `f<n>`) go away
+  after the draw. (Before, they stayed, and the later draws had fewer base-map layers: 34 of 52 on Monaco.)
+- **The road table** keeps only the fields that the popup and the dashboard read (about 15 of 32), and it comes from the
+  map worker as an object, not as a 118 MB text that the page parsed again.
+- **One network:** "Driving", "Walking" or "Cycling" draws only the roads of that network and its private roads (before,
+  roadstyle's SELECT of a mode had every road). The stored drawing order is checked for these roads (roadstyle's subset
+  check).
+
+**The limit on a small device.** About 1,000 MiB plus 14 KB for each road on the map fits the measurements (Monaco
+13,298 roads: 1,077 MiB; Tartu 64,828: 2,050 MiB; Burnaby 151,770: 3,174 MiB). With 1.5 GB, a phone can thus show about
+40,000 roads. On a small device (`navigator.deviceMemory` 4 GB or less, or a touch screen; Safari has no
+`deviceMemory`), the page draws at most 40,000 roads. A larger map gives the note "This map has N roads; on this device
+the map can show up to 40,000. Choose a network that is smaller, use a desktop browser, or a smaller area. SQL and the
+downloads work." The level editor (all the roads of the area) has the same limit. A draw that fails with a memory error
+gives the same advice. `?maxroads=N` in the address changes the limit (`?maxroads=0`: no limit), so a phone with more
+memory can try. Burnaby on a phone: the build, SQL and the downloads work; its map (151,770 roads, or 62,453 for
+"Driving") is over the limit.
+
+Not done: the map worker's memory (roadstyle's engine: about 5 KB for each road, with the base map), and the page's own
+copy of each Parquet file for the downloads (75 MiB for Burnaby; DuckDB can write them again, but the files of the
+downloads must stay equal to the native build's).
+
 ### The cards fold
 
 Kaveh (2026-10-24): "the result card is not well designed and take many space and its not collapsable". Each

@@ -61,7 +61,8 @@ I ran duckOSM's own feature SQL (recorded from `FeaturesBuilder` on duckOSM's `r
 
 **A. Rust writes `raw.*`, duckdb-wasm runs duckOSM's feature SQL.** Rust cuts the region file as osmium's `smart` does and writes
 `raw_nodes.parquet`, `raw_ways.parquet` and `raw_relations.parquet`. The page loads them into `raw.*` and runs the feature SQL,
-which is the SQL of duckOSM, unchanged.
+which is the SQL of duckOSM, unchanged. Since 2026-10-25 the page then drops `raw.*`: it was more than half of DuckDB's memory
+(Monaco 50 of 81 MiB), the map does not read it, and no download has it ([app.md](app.md), "The memory of the page").
 
 **B. A Rust port of the features step.** Rust makes the lines, the polygons and the 11 tables itself and writes them as GeoParquet
 files, as the network step does.

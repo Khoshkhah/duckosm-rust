@@ -41,6 +41,22 @@ with sync_playwright() as p:
     assert "drawn" in page.inner_text("#mapnote"), page.inner_text("#mapnote")
     shot("2-built")
 
+    # the largest map on a small device (a touch screen: 40,000 roads): with a limit of 10,000 for Monaco's 13,298 roads, the note says
+    # so and nothing is drawn; one network that is smaller (driving: 3,454 roads) draws
+    assert page.evaluate("window.mapMaxRoads") == 40000, page.evaluate("window.mapMaxRoads")
+    page.evaluate("window.mapMaxRoads = 10000; document.getElementById('show').click()")
+    page.wait_for_function("/on this device the map can show up to 10,000/.test(document.getElementById('mapnote').textContent)", timeout=30_000)
+    print("limit:", page.inner_text("#mapnote"))
+    page.select_option("#mapmode", "driving")
+    page.wait_for_function("/drawn|failed|on this device/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing "
+                           "&& window.duckMap.loaded()", timeout=300_000)
+    assert "drawn" in page.inner_text("#mapnote"), page.inner_text("#mapnote")
+    page.evaluate("window.mapMaxRoads = 40000")
+    page.select_option("#mapmode", "all")
+    page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing && window.duckMap.loaded()",
+                           timeout=300_000)
+    assert "drawn" in page.inner_text("#mapnote"), page.inner_text("#mapnote")
+
     # the cards scroll under the map, which stays at the top; the attribution starts folded
     page.evaluate("document.getElementById('step5-card').scrollIntoView()")
     left, top, right, bottom = page.evaluate(BOX, "map")

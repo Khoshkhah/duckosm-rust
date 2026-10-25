@@ -1338,8 +1338,23 @@ function showRoads() {
   drawControls();
   return drawing;
 }
+// The largest map on a small device (docs/app.md, "On a phone"). A phone's tab has about 1.5 GB for everything; the page measured
+// (2026-10-25, desktop Chromium, the whole tab) about 1,000 MiB plus 14 KB for each road on the map: Monaco 13,298 roads 1,077 MiB,
+// Tartu 64,828 roads 2,050 MiB, Burnaby 151,770 roads 3,174 MiB. Thus about 40,000 roads. A small device: deviceMemory 4 GB or less,
+// or a touch screen (Safari has no deviceMemory). ?maxroads=N in the address changes the limit (0: none).
+const SMALL_DEVICE = (navigator.deviceMemory ?? 8) <= 4 || matchMedia("(pointer: coarse)").matches;
+const maxParam = new URLSearchParams(location.search).get("maxroads");
+window.mapMaxRoads = maxParam !== null ? (Number(maxParam) || Infinity) : SMALL_DEVICE ? 40000 : Infinity;
+const tooLarge = (n) => `This map has ${num(n)} roads; on this device the map can show up to ${num(window.mapMaxRoads)}. ` +
+  (duck.MODES.some((m) => (roadCount[m] ?? Infinity) <= window.mapMaxRoads) ? "Choose a network that is smaller, use" : "Use") +
+  " a desktop browser, or a smaller area. SQL and the downloads work.";
 async function drawRoads() {
   const run = ++roadsRun;
+  const n = roadCount[$("mapmode").value] ?? 0;
+  if (n > window.mapMaxRoads) {
+    $("mapnote").textContent = tooLarge(n);
+    return;
+  }
   $("mapnote").textContent = "drawing…";
   try {
     const t0 = performance.now();
@@ -1375,7 +1390,10 @@ async function drawRoads() {
     $("mapnote").textContent = `${num(roadCount[$("mapmode").value] ?? 0)} roads, drawn in ${num(total, 1)} s (step 4 gives each ` +
       `step). Click a road for its data.`;
   } catch (e) {
-    if (run === roadsRun) $("mapnote").textContent = "The map failed: " + e.message;
+    // no memory (a WebAssembly memory that cannot grow, an allocation): the same advice as the limit above
+    const memory = /memory|allocat|RangeError/i.test(`${e.name} ${e.message}`);
+    if (run === roadsRun) $("mapnote").textContent = memory ? `The map needs more memory than this device gives it (${e.message}). ` + tooLarge(n)
+      : "The map failed: " + e.message;
   }
 }
 // card 6 after a build: the networks of the build (no list for one), the duckOSM layers when the build made them, and the roads
@@ -1397,8 +1415,9 @@ async function visualization() {
   unfold("step6-card");
   if (!$("step7-card").hidden) unfold("step7-card");
   $("editnote").textContent = "";
-  if (roadCount.all < AUTO_DRAW) showRoads();
-  else $("mapnote").textContent = `${num(roadCount.all)} roads: a large map. Click Show on map to draw it.`;
+  if (roadCount.all < AUTO_DRAW && roadCount.all <= window.mapMaxRoads) showRoads();
+  else $("mapnote").textContent = roadCount.all > window.mapMaxRoads ? tooLarge(roadCount.all)
+    : `${num(roadCount.all)} roads: a large map. Click Show on map to draw it.`;
 }
 $("show").onclick = showRoads;
 // the Google Maps key of Google 3D: only in this browser's storage, never in the address or the page's code
@@ -1414,7 +1433,12 @@ $("gkey-del").onclick = () => {
   $("gkey").value = "";
   $("gkey-note").textContent = "Removed. The Google 3D button goes away the next time the page opens.";
 };
-$("mapmode").onchange = () => { if (roadsShown) showRoads(); };
+// a network: drawn at once when the map shows roads; else the note says how many roads it has (or the limit of the device)
+$("mapmode").onchange = () => {
+  if (roadsShown) return showRoads();
+  const n = roadCount[$("mapmode").value] ?? 0;
+  $("mapnote").textContent = n > window.mapMaxRoads ? tooLarge(n) : `${num(n)} roads. Click Show on map to draw it.`;
+};
 
 // the base map: OpenFreeMap, or a layer over it (under the roads): roadstyle's keyless raster map, or an empty background
 const BASEMAPS = {
@@ -1532,6 +1556,9 @@ function closeEditor(draw = false) {
   if (draw) showRoads();
 }
 $("edit-open").onclick = async () => {
+  // the editor draws every road of the area (all networks): the same limit as the map on a small device
+  if (roadCount.all > window.mapMaxRoads) return editNote(`The level editor shows all ${num(roadCount.all)} roads of the area; on this ` +
+    `device it can show up to ${num(window.mapMaxRoads)}. Use a desktop browser, or a smaller area.`);
   $("edit-open").disabled = true;
   try {
     editNote("making the level area…");
