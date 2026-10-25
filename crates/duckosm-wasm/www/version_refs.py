@@ -18,8 +18,8 @@ LITERAL = re.compile(r"""(["'`])(""" + REL + r""")\1""")
 STATIC = re.compile(r"""(\b(?:from|import)\s*)(["'])(""" + REL + r""")\2""")
 CALL = re.compile(r"""(\b(?:import|new URL|fetch)\s*\()([^()]*)\)""")
 ATTR = re.compile(r"""(\b(?:src|href)=)(["'])(""" + REL + r""")\2""")
-# strings that are names, not references: the zip's file, the level editor's store file, wasm-bindgen's import module of the wasm file
-NAMES = {"layers.json", "levels_info.json"}
+# strings that are names, not references: the zip's file, the level editor's store files (levels_info.json, edges.json), wasm-bindgen's import module of the wasm file
+NAMES = {"layers.json", "levels_info.json", "edges.json"}
 
 
 def version(text, v):

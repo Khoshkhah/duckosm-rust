@@ -40,6 +40,12 @@ jobs:
           tool: wasm-bindgen@0.2.129
       - name: Both WebAssembly modules of the page build (one thread, and threads)
         run: ./crates/duckosm-wasm/build.sh
+      # The Pages deploy puts a version on every file reference of the page (version_refs.py) and stops when one is left
+      # without: check it here on a copy, so that a new file name in roadstyle's files stops the pull request, not the deploy
+      - name: Each file reference of the page gets a version
+        run: |
+          cp -r crates/duckosm-wasm/www "$RUNNER_TEMP/www"
+          python3 crates/duckosm-wasm/www/version_refs.py "$RUNNER_TEMP/www" check
       # The test of duckosm-wasm wrote the native files and fixes.yaml to target/tmp/<checkout folder> (one folder for
       # each checkout, because worktrees can share target/). The metadata and the levels metadata hold the build time
       # and the time zone, so they are not compared.
