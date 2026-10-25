@@ -327,6 +327,7 @@ map of one mode, the duckOSM base-map layers while the editor is open, and Close
   prefix. A layer with `text-font` gets a font of OpenFreeMap (Noto Sans).
 - When the roads show, the fill of the area goes away and only its line stays, so the fill does not change
   the colors of the roads.
+- The base map (since roadstyle `fc59e6c`, 2026-10-25) has the theme "liberty" and stops at the area's boundary. `map/look.json` is version 2: `make_look.mjs` makes it, and the worker sets `levels` with `withArg`.
 - The tiles (since roadstyle `b976864`, 2026-10-25). At a low zoom only the roads of the classes that the look's profile
   shows there are in the tiles (each class's `minzoom`), and a casing narrower than 1 px is left out. The tiles go to
   zoom 18 (`config.tiles.maxzoom` in `map/look.json`, before 15): MapLibre scales the last zoom's tiles up, and at

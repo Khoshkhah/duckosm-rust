@@ -20,10 +20,10 @@ onmessage = async ({ data }) => {
   try {
     const [, look] = await Promise.all([init(), fetch(new URL("./look.json", import.meta.url)).then((r) => r.text())]);
     const t = performance.now();
-    const l = JSON.parse(look);
-    l.args.levels = data.levels;   // "tags", or the stored levels' {edge_hash, n_edges}, which the engine checks
+    // levels: "tags", or the stored levels' {edge_hash, n_edges}, which the engine checks
+    const l = Look.fromJson(look).withArg("levels", JSON.stringify(data.levels));
     // stage 1 (the sources and the road table), then the vector tiles of stage 2
-    const sources = makeSources(data.roads, Look.fromJson(JSON.stringify(l)), data.features, undefined, data.name);
+    const sources = makeSources(data.roads, l, data.features, undefined, data.name);
     tiler = tileSources(sources, data.prefix, data.keep);
     // the road table with only the fields that the page and roadstyle's dashboard read: the popup's (keep), and the dashboard's own
     // (lvl, oneway, length and the engine's __rs_* fields). Each road has about 30 fields; a city of 150,000 roads gave 88 MB of them.

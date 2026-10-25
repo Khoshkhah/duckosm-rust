@@ -283,7 +283,7 @@ export async function roadsStyle(mode, name, keep = []) {
     // the base-map layers, when the build made them: features.parquet, the rows of the look's layers (map/roadstyle/features_sql.js)
     if (tables.some((t) => t.mode === "features")) {
       look ??= fetch(new URL("../map/look.json", import.meta.url)).then((r) => r.json());
-      if (await writeFeatures(q, "memory", (await look).features.layers_yaml.layers)) features = await db.copyFileToBuffer("features.parquet");
+      if (await writeFeatures(q, "memory", (await look).base_map.layers_yaml.layers)) features = await db.copyFileToBuffer("features.parquet");
     }
   } finally {
     await drop();

@@ -41,6 +41,7 @@ a.add_argument("--no-features", action="store_true", help="the box 'Base map lay
 a.add_argument("--levels", choices=["tags", "solve"], default="tags", help="the drawing order (docs/levels.md)")
 a.add_argument("--one-thread", action="store_true", help="serve the page without the COOP and COEP headers")
 a.add_argument("--threads", type=int, help="the size of the thread pool (default: the cores, at most 8)")
+a.add_argument("--view", help="lng,lat,zoom: move the map there before the picture (map.png)")
 a.add_argument("--www", default=str(WWW), help="the page's folder (default: this one)")
 args = a.parse_args()
 out = pathlib.Path(args.out)
@@ -134,6 +135,10 @@ with sync_playwright() as p:
         page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent)", timeout=600_000)
     print("map:", page.inner_text("#mapnote"))
     page.wait_for_function("window.duckMap && window.duckMap.loaded()", timeout=600_000)   # the tiles are cut and drawn
+    if args.view:
+        lng, lat, z = map(float, args.view.split(","))
+        page.evaluate(f"window.duckMap.jumpTo({{center: [{lng}, {lat}], zoom: {z}}})")
+        page.wait_for_function("window.duckMap.loaded()", timeout=600_000)
     print("map view:", page.evaluate("(() => { const m = window.duckMap; return {center: m.getCenter(), zoom: m.getZoom()}; })()"))
     page.screenshot(path=str(out / "map.png"))
     print(json.dumps(page.evaluate("window.timings")))
