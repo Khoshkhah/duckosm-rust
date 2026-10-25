@@ -172,11 +172,16 @@ with sync_playwright() as p:
               if (e.data.id === m.id) { window.workerSeconds[m.type] = (performance.now() - t0) / 1000; w.removeEventListener('message', done); } });
           }
           return post.call(this, m, ...r); }; }""")
+    ref = page.evaluate("(() => { const c = window.duckMap.getCenter(); return [c.lng + 0.001, c.lat + 0.001]; })()")
+    at = lambda: page.evaluate("r => { const q = window.duckMap.project(r); return [q.x, q.y]; }", ref)
+    pos0 = at()
     t = time.time()
     page.click("#edit-open")
     page.wait_for_function("window.levelEditorOpen || /failed/.test(document.getElementById('editnote').textContent)", timeout=300_000)
     assert page.evaluate("!!window.levelEditorOpen"), page.inner_text("#editnote")
     # the page gives the editor the map's levels (levelEditor's levels, roadstyle 083224c): no solve also at the first open
+    page.wait_for_timeout(500)
+    assert max(abs(x - y) for x, y in zip(at(), pos0)) <= 2, ("the view moved when the editor opened", pos0, at())
     print("first open: the editor starts from", page.evaluate("window.levelEditorOpen.answer().resolve"))
     assert page.evaluate("window.solves") == 0, "the first open starts from the page's levels"
     print(f"open: {time.time() - t:.2f} s from the click until the editor is open; longest main-thread task "
@@ -186,6 +191,8 @@ with sync_playwright() as p:
     # stored levels when levels_info.json names the same inputs (the SHA-256 of roads.parquet, pairs.csv and edits.csv): no solve
     page.click("#edit-close")
     page.wait_for_function("!window.levelEditorOpen && !window.mapDrawing && window.duckMap.loaded()", timeout=300_000)
+    page.wait_for_timeout(500)
+    assert max(abs(x - y) for x, y in zip(at(), pos0)) <= 2, ("the view moved when the editor closed", pos0, at())
     made = page.evaluate("window.editorArea")
     page.evaluate("window.editorArea = null")
     t = time.time()

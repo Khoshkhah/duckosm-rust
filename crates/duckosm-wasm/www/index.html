@@ -1554,6 +1554,21 @@ loaded.then(setBase);
 
 window.duckMap = map;   // for e2e.py
 
+// The view stays still when the map's box or padding changes (the editor's panel or sheet, the page's sheet): MapLibre keeps the centre
+// in the middle of the padded box, so the roads would jump. Each setPadding and resize puts the old centre back on its screen point, with no
+// animation. This also covers roadstyle's level_editor.js, which calls map.setPadding itself (lines 379, 385, 428).
+for (const name of ["setPadding", "resize"]) {
+  const orig = map[name].bind(map);
+  map[name] = (...a) => {
+    if (map.isMoving()) return orig(...a);       // an animation (fitBounds) goes on: its end sets the view
+    const c = map.getCenter(), before = map.project(c);
+    const r = orig(...a);
+    const d = map.project(c).sub(before);
+    if (Math.abs(d.x) + Math.abs(d.y) > 0.01) map.jumpTo({ center: map.unproject(map.project(c).add(d)) });
+    return r;
+  };
+}
+
 // the page's sheet on a phone (the CSS at 700 px): its state (fold: one row, half, full; the page keeps it), and the map's padding at
 // the bottom, the sheet's height, so that the area and the roads stay above the sheet. The level editor has its own sheet: while it is
 // open, the page's sheet is away and the editor sets the padding.
@@ -1682,7 +1697,11 @@ $("edit-open").onclick = async () => {
     document.querySelectorAll(".maplibregl-popup").forEach((p) => p.remove());
     // the worker loads roadstyle's module by this URL (the deploy puts its version on it, version_refs.py)
     const pkgUrl = new URL("./map/pkg/roadstyle_wasm.js", location.href);
-    editor = await levelEditor({ map, container: $("lvhost"), pkgUrl, store, dashboard: rs, prefix: "rs-", levels: levels ?? undefined });
+    // the view stays: the module fits the map to the area when it starts (level_editor.js, "else map.fitBounds"), which moves what the user sees
+    const fit = map.fitBounds;
+    map.fitBounds = () => map;
+    try { editor = await levelEditor({ map, container: $("lvhost"), pkgUrl, store, dashboard: rs, prefix: "rs-", levels: levels ?? undefined }); }
+    finally { map.fitBounds = fit; }
     editorStore = store;
     const made = `${num(editor.roads.length)} roads` + warnings;
     window.levelEditorOpen = editor;              // for editor_e2e.py

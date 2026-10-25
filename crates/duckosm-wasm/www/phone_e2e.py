@@ -131,10 +131,12 @@ with sync_playwright() as p:
         assert page.evaluate("!!window.levelEditorOpen"), page.inner_text("#editnote")
         page.wait_for_function("window.duckMap.loaded()", timeout=120_000)
         page.wait_for_timeout(400)                  # the sheet's height and the map's padding (0.2 s)
+        same("opened")
 
     def back_at(before):
         page.wait_for_function("!window.levelEditorOpen && !window.mapDrawing && window.duckMap.loaded()", timeout=300_000)
         page.wait_for_timeout(400)
+        same("closed")
         assert page.is_visible("#step7-card") and page.is_visible("footer") and not page.is_visible("#editbar")
         # the page's sheet again, in the state it had, with the map's padding for it, and card 7 in view in it
         assert state() == before and abs(page.evaluate(BOX, "panel")[3] - H) < 1 and abs(padding() - sheet_h()) < 2, (state(), padding(), sheet_h())
@@ -142,6 +144,11 @@ with sync_playwright() as p:
         assert top - 1 <= card[1] < H - 100, ("card 7 in view again", top, card)
         assert page.evaluate("scrollY") == 0
 
+    ref = page.evaluate("(() => { const c = window.duckMap.getCenter(); return [c.lng + 0.001, c.lat + 0.001]; })()")
+    at = lambda: page.evaluate("r => { const q = window.duckMap.project(r); return [q.x, q.y]; }", ref)
+    pos0 = at()
+    def same(what):
+        assert max(abs(x - y) for x, y in zip(at(), pos0)) <= 2, (f"the view moved when the editor {what}", pos0, at())
     before = state()
     open_editor()
     bar, mp, lv = (page.evaluate(BOX, i) for i in ("editbar", "map", "lv"))
