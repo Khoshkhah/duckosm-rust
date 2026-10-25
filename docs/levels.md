@@ -186,7 +186,7 @@ against it (complementary slackness). This is a proof that the flow is the best.
 | `roadstyle_version` | the roadstyle version that the port follows (0.24.2) | the same |
 | `created` | the time of the build | the same |
 
-The page's check (at roadstyle `65af6e6`: `levels_keyword` in roadstyle-io's `duckosm.rs`) accepts `area`, `tags`
+The page's check (at roadstyle `b976864`: `levels_keyword` in roadstyle-io's `duckosm.rs`) accepts `area`, `tags`
 and `solve`. roadstyle's Python level editor (`load_area_levels`) accepts `area` only. To edit the levels of a Rust build:
 
 - in the page, card 7 **Edit levels** ([app.md](app.md), "Step 7: edit the levels"): roadstyle's level editor solves in
@@ -208,7 +208,7 @@ Rust build, when a user needs it:
 - the time limit: the flow has no time limit, because it always ends.
 
 The levels of `duckosm-core` come from roadstyle `aba5884` (`crates/duckosm-core/Cargo.toml`). The page's map and editor
-use roadstyle `65af6e6` (`build.sh`). At `65af6e6` the levels are the crate `roadstyle-levels`, with another API and
+use roadstyle `b976864` (`build.sh`). At `b976864` the levels are the crate `roadstyle-levels`, with another API and
 another `ROADSTYLE_VERSION`. A move of `duckosm-core` to it changes the code and the meta row, and needs a new check
 against the golden files.
 

@@ -298,6 +298,14 @@ map of one mode, the duckOSM base-map layers while the editor is open, and Close
   prefix. A layer with `text-font` gets a font of OpenFreeMap (Noto Sans).
 - When the roads show, the fill of the area goes away and only its line stays, so the fill does not change
   the colors of the roads.
+- The tiles (since roadstyle `b976864`, 2026-10-25). At a low zoom only the roads of the classes that the look's profile
+  shows there are in the tiles (each class's `minzoom`), and a casing narrower than 1 px is left out. The tiles go to
+  zoom 18 (`config.tiles.maxzoom` in `map/look.json`, before 15): MapLibre scales the last zoom's tiles up, and at
+  zoom 21–22 a casing piece of a zoom-15 tile stood up to 4–5 px off its fill (Kaveh saw it on Burnaby's edge
+  1069319787511741120: a step at the join of two pieces). Monaco, the centre tile at zoom 12: 1.24 MB before, 186 KB
+  after; at zoom 14: 796 KB before, 223 KB after. The time of a cold view at zoom 12 or 14 (the jump to the map's idle) is
+  about 0.35–0.65 s before and after: the base map and MapLibre take most of it. Burnaby, all networks: the tab after the
+  draw is 2,570 MiB (before 3,002 MiB).
 - **roadstyle's dashboard** (2026-10-23, Kaveh: "go") does the map's interaction: the 2D/3D button, Street View with
   its marker, Google 3D, the road popup, the hover tooltip, the purple glow of the selected road, and the legend of a
   `color_by`. It is roadstyle's one module `src/roadstyle/static/dashboard/`, which `build.sh` takes at
