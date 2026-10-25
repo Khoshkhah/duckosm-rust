@@ -26,7 +26,7 @@ fn monaco_levels() {
             built_at: Some(0),
             ..Params::default()
         };
-        p.options.levels = method;
+        p.levels = method;
         let out = tmp.join(format!("duckosm-levels-{}", method.name()));
         let sum = build(&data.join("monaco_sample.osm.pbf"), &out, &p).unwrap();
         assert_eq!(sum.levels.as_deref(), Some(want));

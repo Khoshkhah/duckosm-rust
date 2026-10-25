@@ -1,7 +1,5 @@
 use clap::Parser;
-use duckosm_build::{
-    build, config, parse_modes, LevelsMethod as Method, NetworkMode, NetworkOptions, Params,
-};
+use duckosm_build::{build, config, parse_levels, NetworkMode, NetworkOptions, Params};
 use std::path::PathBuf;
 
 /// duckosm-rust: build the road networks of duckOSM (driving, walking, cycling) from an .osm.pbf file.
@@ -105,11 +103,6 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let cli = Cli::parse();
-    let default_format = if cfg!(feature = "duckdb") {
-        "duckdb,geoparquet"
-    } else {
-        "geoparquet"
-    };
     let (pbf, out, mut p) = if let Some(cfg) = &cli.config {
         let c = config::read(cfg, cli.pbf_is_cut, !cli.allow_skipped)?;
         for s in &c.skipped {
@@ -124,8 +117,9 @@ fn run() -> Result<(), String> {
             name: cli.name.clone(),
             ..Params::default()
         };
-        p.modes = parse_modes(&cli.modes)?;
+        p.modes = NetworkMode::parse_all(&cli.modes.split(',').collect::<Vec<_>>())?;
         p.infer_sidewalks = !cli.no_sidewalk_inference;
+        p.bus_routes = !cli.no_bus_routes;
         p.options = NetworkOptions {
             keep_largest_component: !cli.no_component_filter,
             cycling_dismount: !cli.no_cycling_dismount,
@@ -139,8 +133,6 @@ fn run() -> Result<(), String> {
             build_graph: !cli.no_graph,
             extract_restrictions: !cli.no_restrictions,
             ways_tables: !cli.no_ways_tables,
-            bus_routes: !cli.no_bus_routes,
-            ..NetworkOptions::default()
         };
         (
             cli.pbf.clone().unwrap(),
@@ -149,8 +141,7 @@ fn run() -> Result<(), String> {
         )
     };
     if let Some(m) = &cli.levels {
-        p.options.levels = Method::parse(m)
-            .ok_or_else(|| format!("--levels: '{m}' is not tags, solve or none"))?;
+        p.levels = parse_levels(m)?;
     }
     if let Some(f) = &cli.fixes {
         p.osm_fixes = Some(f.clone());
@@ -159,43 +150,11 @@ fn run() -> Result<(), String> {
         p.boundary = cli.boundary.clone();
         p.raw = cli.raw;
     }
-    p.geoparquet = false;
-    p.duckdb = false;
-    for f in cli
-        .format
-        .as_deref()
-        .unwrap_or(default_format)
-        .split(',')
-        .map(str::trim)
-    {
-        match f {
-            "duckdb" => p.duckdb = true,
-            "geoparquet" => p.geoparquet = true,
-            _ => return Err(format!("unknown format '{f}' (use duckdb or geoparquet)")),
-        }
+    if let Some(f) = &cli.format {
+        p.set_formats(&f.split(',').collect::<Vec<_>>())?;
     }
     let sum = build(&pbf, &out, &p)?;
-    if p.infer_sidewalks && p.modes.contains(&NetworkMode::Walking) {
-        eprintln!(
-            "sidewalk rule: {} roads get sidewalk=separate",
-            sum.sidewalk_roads
-        );
-    }
-    for m in &sum.modes {
-        eprintln!(
-            "{}: {} edges, {} nodes, {} private edges, {} connectors, {} edge_id_map rows, {} OSM fixes, {} edge_graph rows, {} turn restrictions",
-            m.mode.name(),
-            m.edges,
-            m.nodes,
-            m.private_edges,
-            m.connectors,
-            m.edge_id_map,
-            m.osm_fixes,
-            m.edge_graph,
-            m.turn_restrictions
-        );
-    }
-    for l in sum.levels.iter().chain(&sum.lanes) {
+    for l in sum.lines() {
         eprintln!("{l}");
     }
     if cli.timing {

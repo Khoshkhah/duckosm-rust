@@ -15,12 +15,13 @@ fn data(name: &str) -> PathBuf {
 }
 
 type Tags = Vec<(String, String)>;
+type Member = (i64, MemberType, String);
 
 #[derive(Default)]
 struct File {
     nodes: Vec<(i64, u64, u64, Tags)>,
     ways: Vec<(i64, Tags, Vec<i64>)>,
-    relations: Vec<(i64, Tags, Vec<(i64, MemberType, String)>)>,
+    relations: Vec<(i64, Tags, Vec<Member>)>,
 }
 
 fn tags<'a>(t: impl Iterator<Item = (&'a str, &'a str)>) -> Tags {

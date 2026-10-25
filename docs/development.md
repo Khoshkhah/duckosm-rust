@@ -83,9 +83,9 @@ Build the two modules and their JavaScript bindings (Git ignores both folders):
   `index.html`) adds them in the browser and loads the page again. The first load has one thread.
 - `www/map/pkg/`: roadstyle's Rust module for the roads map. `build.sh` fetches the commit `ROADSTYLE_COMMIT` (a full SHA)
   of roadstyle into `target/roadstyle` and builds the crate `roadstyle-wasm` of its Rust engine (`rust/`). With
-  `ROADSTYLE_REPO=/home/kaveh/projects/roadstyle`, it fetches from the local copy. `duckosm-core` takes roadstyle's
-  engine for the drawing levels from an older commit (`roadstyle-rs` at `aba5884`, a git dependency): the newer commits
-  have the levels in the crate `roadstyle-levels`, with another API ([levels.md](levels.md)).
+  `ROADSTYLE_REPO=/home/kaveh/projects/roadstyle`, it fetches from the local copy. `duckosm-build` and `duckosm-parquet`
+  take roadstyle's engine for the drawing levels from an older commit (`roadstyle-rs` at `aba5884`, a git dependency): the
+  newer commits have the levels in the crate `roadstyle-levels`, with another API ([levels.md](levels.md)).
 
 Open the page (`index.html`, the plan is [browser.md](browser.md)). A browser does not load a module from
 a `file://` address, so use a local server. `serve.py` sends the two headers; `python3 -m http.server` does
@@ -252,8 +252,10 @@ python3 -m venv /tmp/t && /tmp/t/bin/pip install wheels/duckosm_rust-*.whl duckd
 ## Wheels for other systems
 
 `.github/workflows/ci.yml` builds the wheel on 5 targets (Linux x86_64 and aarch64 with manylinux 2_28, macOS
-x86_64 and arm64, Windows x64), plus the sdist, runs `tests/test_wheel.py` on each wheel, runs the Rust tests and
-the WebAssembly build with the test of `duckosm-wasm`. It runs on each push to `main` of
+x86_64 and arm64, Windows x64), plus the sdist, runs `tests/test_wheel.py` on each wheel, runs the Rust tests of
+`duckosm-core`, `duckosm-duckdb`, `duckosm-build` and `duckosm-wasm`, and builds the WebAssembly modules. Then it
+runs the module in Node on Monaco (`run_node.mjs`) and compares each file with `cmp` to the native file of the
+`duckosm-wasm` test. The metadata files hold the build time, so it does not compare them. It runs on each push to `main` of
 [Khoshkhah/duckosm-rust](https://github.com/Khoshkhah/duckosm-rust) (private) and on each pull request. The
 results are on the Actions page of the repository. It does not publish.
 

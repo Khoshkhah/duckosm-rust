@@ -1,9 +1,9 @@
-//! The browser build (`run`, PBF bytes in) writes the same files as the native build (`duckosm_build::build`),
+//! The browser build (`duckosm_build::run` as duckosm-wasm calls it, PBF bytes in) writes the same files as the native build (`duckosm_build::build`),
 //! byte for byte: all three modes, the edge graph, the turn restrictions and an OSM fixes file. The files of
 //! `run` go to target/tmp/duckosm-wasm-native: compare them with `cmp` to the output of the WebAssembly
 //! module (`www/run_node.mjs`).
 
-use duckosm_build::{build, Params};
+use duckosm_build::{build, config::parse_osm_fixes, run, Input, Params, StepLog};
 use duckosm_core::filter::Mode;
 use std::path::PathBuf;
 
@@ -39,15 +39,20 @@ fn browser_build_equals_native_build() {
     };
     build(&pbf, &native, &p).unwrap();
     let mut names = Vec::new();
-    duckosm_wasm::run(
-        duckosm_wasm::Input::Pbf(&std::fs::read(&pbf).unwrap()),
-        "driving,walking,cycling",
-        Some(FIXES),
+    let browser = Params {
+        modes: p.modes.clone(),
+        built_at: Some(0),
+        timezone_entry: Some(monaco_timezone()),
+        ..Params::default()
+    };
+    let fixes = parse_osm_fixes(FIXES, "the OSM fixes file").unwrap();
+    let bytes = std::fs::read(&pbf).unwrap();
+    run(
+        Input::Pbf(&bytes),
+        &fixes,
         None,
-        duckosm_core::levels::Method::Tags,
-        0,
-        Some(&monaco_timezone()),
-        false,
+        &browser,
+        &mut StepLog::system(),
         |name| {
             names.push(name.to_string());
             std::fs::File::create(wasm.join(name)).map_err(|e| e.to_string())
@@ -104,25 +109,31 @@ fn browser_area_build_equals_native_build() {
         built_at: Some(0),
         ..Params::default()
     };
-    p.options.levels = duckosm_core::levels::Method::Solve;
+    p.levels = duckosm_build::LevelsMethod::Solve;
     build(&pbf, &native, &p).unwrap();
 
     let boundary = Boundary::parse(&std::fs::read_to_string(&geojson).unwrap()).unwrap();
     let bytes = std::fs::read(&pbf).unwrap();
-    let open = || -> Result<BlobReader<Box<dyn duckosm_wasm::Source + '_>>, String> {
-        let r: Box<dyn duckosm_wasm::Source> = Box::new(std::io::Cursor::new(&bytes[..]));
+    let open = || -> Result<BlobReader<Box<dyn duckosm_build::Source + '_>>, String> {
+        let r: Box<dyn duckosm_build::Source> = Box::new(std::io::Cursor::new(&bytes[..]));
         BlobReader::new_seekable(r).map_err(|e| e.to_string())
     };
     let mut names = Vec::new();
-    duckosm_wasm::run(
-        duckosm_wasm::Input::Area(&open, &boundary),
-        "driving,walking,cycling",
-        Some(FIXES_AREA),
+    let mut browser = Params {
+        modes: p.modes.clone(),
+        raw: true,
+        built_at: Some(0),
+        timezone_entry: Some(monaco_timezone()),
+        ..Params::default()
+    };
+    browser.levels = duckosm_build::LevelsMethod::Solve;
+    let fixes = parse_osm_fixes(FIXES_AREA, "the OSM fixes file").unwrap();
+    run(
+        Input::Area(&open, &boundary),
+        &fixes,
         Some(&std::fs::read_to_string(&geojson).unwrap()),
-        duckosm_core::levels::Method::Solve,
-        0,
-        Some(&monaco_timezone()),
-        true,
+        &browser,
+        &mut StepLog::system(),
         |name| {
             names.push(name.to_string());
             std::fs::File::create(wasm.join(name)).map_err(|e| e.to_string())

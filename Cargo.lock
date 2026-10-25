@@ -663,6 +663,7 @@ dependencies = [
  "duckosm-core",
  "duckosm-duckdb",
  "duckosm-parquet",
+ "roadstyle-rs",
  "serde_json",
  "tzf-rs",
  "yaml-rust2",
@@ -682,7 +683,6 @@ version = "0.3.0"
 dependencies = [
  "osmpbf",
  "rayon",
- "roadstyle-rs",
  "rstar",
  "serde",
  "serde_json",
@@ -704,6 +704,7 @@ dependencies = [
  "arrow-schema 60.0.0",
  "duckosm-core",
  "parquet",
+ "roadstyle-rs",
 ]
 
 [[package]]

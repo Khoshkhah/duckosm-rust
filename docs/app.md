@@ -142,11 +142,13 @@ The page keeps the selected file only in memory. After a reload, the user select
   restrictions ("turns"); then one row each for the bus routes, the raw cut (nodes, ways, relations), the levels (the
   method, edges, roads, the stack pairs given up, the order wishes not kept) and the lane profile. The solver's stage
   values go to the browser console only. Before, the card had all of it as long text.
+  A panic hook in the build module keeps the panic message, so the card shows it and not only
+  "RuntimeError: unreachable".
 - A new build replaces the result of the last build.
 - **Time and memory of each step**: a table under the progress (open; a click closes it), with one row for each
   step and its time and memory. The line above it gives the total: from the click on Build until the tables are in
   DuckDB. The Rust build records its steps (`run()` in
-  `duckosm-wasm/src/lib.rs`: the read of the file, the sidewalk rule, the network and the files of each mode, the bus
+  `duckosm-build/src/lib.rs`: the read of the file, the sidewalk rule, the network and the files of each mode, the bus
   routes, the area tables, the raw files, the drawing levels, the lane profile). The page adds its own steps (the
   download, the module load, the transfer of the files, DuckDB's tables and base-map layers, the map). The memory is
   the WebAssembly memory of the build module (it only grows, so it is the largest size until then), DuckDB's
@@ -338,7 +340,8 @@ Street View's Linked mode and Google 3D need a Google Maps JavaScript API key. K
 - `index.html`: the page (the boundary tool's HTML and CSS, and the new steps).
 - `app/duck.js`: a new module with the build side of the old page: duckdb-wasm, the build worker, the load of
   the tables, the roads style, SQL, `load.sql`. The page calls it.
-- `build_worker.js` and `serve.py` do not change. `map/map_worker.js` makes the style and the road table.
+- `serve.py` does not change. `build_worker.js` sends the kept panic message after a panic. `map/map_worker.js` makes the
+  style and the road table.
 - Card 7 is in `index.html`. `app/duck.js` has `levelEdges` (the edges of the level area) and `saveLevels` (Apply).
 - `e2e.py` uses the new page: the boundary goes in through the File tab. `boundary_e2e.py` opens `index.html`
   and checks that **Build** is on after an area and a region file.

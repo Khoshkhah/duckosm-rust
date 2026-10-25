@@ -230,7 +230,8 @@ pub fn routes(
         }
     }
     // (osm_id, u, v) -> the edges with that node pair, in that order
-    let mut pairs: FxHashMap<(i64, i64, i64), Vec<(&Edge, bool)>> = FxHashMap::default();
+    type Pairs<'a> = FxHashMap<(i64, i64, i64), Vec<(&'a Edge, bool)>>;
+    let mut pairs: Pairs = FxHashMap::default();
     for (list, lane) in [(edges, false), (private_edges, true)] {
         for e in list {
             for uv in e.refs.windows(2) {

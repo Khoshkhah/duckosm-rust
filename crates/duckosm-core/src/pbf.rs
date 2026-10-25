@@ -219,13 +219,16 @@ fn each_block<R: Read + Seek + Send, T: Send>(
     Ok(out)
 }
 
+/// The network input of an area, and `raw.*` when it was asked for.
+type Cut = (Vec<Way>, Coords, Vec<Relation>, Option<Raw>);
+
 /// [`read_area`]; `use_sort: false` reads the file as if it had no sort flag (for the test); `raw`: also `raw.*`.
 fn cut<R: Read + Seek + Send>(
     open: impl Fn() -> Result<BlobReader<R>, String>,
     boundary: &Boundary,
     use_sort: bool,
     raw: bool,
-) -> Result<(Vec<Way>, Coords, Vec<Relation>, Option<Raw>), String> {
+) -> Result<Cut, String> {
     let err = |e: osmpbf::Error| e.to_string();
     // pass 1
     let mut blobs = open()?;

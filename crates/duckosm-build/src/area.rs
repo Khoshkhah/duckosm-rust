@@ -2,11 +2,11 @@
 //! `main.boundary`, `main.visualization_metadata` and `mm.transfers`, as duckOSM writes them. The files are
 //! `<table>_<schema>.parquet`, so a reader of `<table>_<mode>.parquet` takes them without a change.
 
+use crate::levels::{self, LevelEdges, Method};
 use duckosm_core::filter::Mode;
 use duckosm_core::fixes::OsmFixes;
 use duckosm_core::geom::Pt;
 use duckosm_core::lanes::{self, LaneEdges};
-use duckosm_core::levels::{self, LevelEdges, Method};
 use duckosm_core::model::{Node, Way};
 use duckosm_core::network::{self, Coords, Options};
 use duckosm_parquet::{self as pq, Metadata, Prop, Transfer};

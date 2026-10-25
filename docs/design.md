@@ -1,6 +1,7 @@
 # Design of duckosm-rust
 
-Status: draft for review by Kaveh. Date: 2026-10-21. No Rust code exists yet.
+Status: started as a draft for review by Kaveh on 2026-10-21. The Rust code exists. The tables of sections 2 and 3
+give the state of each part.
 
 The repository is `duckosm-rust`. It is a Cargo workspace. Its first crate is `duckosm-core`.
 
@@ -26,7 +27,7 @@ the map.
 
 The CLI and the wheel write a `.duckdb` file by default, with the same tables as duckOSM. They also
 write GeoParquet. This needs DuckDB inside the program (section 3). The WebAssembly package has no
-DuckDB and writes GeoParquet only.
+DuckDB and writes GeoParquet. The page loads these files into duckdb-wasm and can give a `.duckdb` file from them.
 
 **Non-goals.**
 
@@ -46,7 +47,7 @@ The features of version 0.1 are complete after milestone M2. M3 releases them (s
 |---|---|---|---|
 | 1 | Cut the PBF to the boundary with `osmium` (`importer.py`) | Yes (B4) | `pbf::read_area`: a polygon cut in Rust with the result of osmium's `complete_ways` (browser.md, step B4). |
 | 2 | Read OSM into `raw.*` with `ST_READOSM` | Yes | Rust keeps only highway ways, the tags it needs, and the nodes of these ways. |
-| 3 | Load the boundary, boundary cells | No | |
+| 3 | Load the boundary, boundary cells | Partly | `main.boundary` is written (`area.rs`). The boundary cells are not. |
 | 4 | Global junctions (`global_junctions.py`) | Yes | Needed in every mode: a footway that crosses a road cuts the road. |
 | 5 | Filter roads per mode (`road_filter.py`): class, access, one-way direction, lanes | Yes | Driving, walking and cycling are done. The dismount flag of cycling is done. The sidewalk rule (`separate_sidewalks.py`, step 5b) is done too (`sidewalks.rs`, option `--no-sidewalk-inference`). |
 | 6 | OSM fixes (`osm_overrides.py`, `DuckOSM._raw_way_fixes`) | Yes | Done on 2026-10-22 (`fixes.rs`, section 6, item 6c). The rules for the arrows of the lanes and the extra turn restrictions are not part of the network step. |
@@ -61,8 +62,8 @@ The features of version 0.1 are complete after milestone M2. M3 releases them (s
 | 15 | Speeds, travel-time costs, walk and cycle type | Yes | Done (2026-10-21). Speeds and costs: `maxspeed_kmh` replaces `maxspeed`, and `cost_s` is added, with the `f32` arithmetic of the SQL. `--no-speeds` and `--no-costs` switch them off (then the raw `maxspeed` stays). `walk_type` (walking) and `cycle_type` (cycling) are written as in duckOSM (`filter.rs`; a cycling edge that is walked has the type `dismount`); `--no-functional-types` switches them off. |
 | 16 | Turn restrictions, edge graph | Yes | Done on 2026-10-22 (`graph.rs`, [edge_graph.md](edge_graph.md)): `edge_graph`, `turn_permission`, and in driving `turn_restrictions` and `turn_path_restrictions`, with the synthetic rules of the OSM fixes. Options `build_graph` and `extract_restrictions` (CLI `--no-graph`, `--no-restrictions`). |
 | 17 | H3 cells | No | |
-| 18 | Multimodal graph, `features.*`, bus routes, lane profile, drawing order | No | |
-| 19 | `edge_id_hash` macros, metadata, time zone, report, maps | No | Python keeps these. |
+| 18 | Multimodal graph, `features.*`, bus routes, lane profile, drawing order | Partly | `mm.transfers` and the view `mm.edges`, `bus.*` ([bus.md](bus.md)), the lane profile ([lane_profile.md](lane_profile.md)) and the drawing order ([levels.md](levels.md)) are done. `features.*` comes from `raw.*` with duckOSM's SQL (`features.sql`, [features.md](features.md)): the page runs it in duckdb-wasm. The rest of the multimodal graph is not done. |
+| 19 | `edge_id_hash` macros, metadata, time zone, report, maps | Partly | The macros, `main.visualization_metadata` and its time zone are written. Python keeps the report and the maps. |
 
 ### Facts that decide if the results are equal
 
@@ -119,6 +120,10 @@ returns the network of one mode in memory (`Network`: the edges, the private edg
 is cut) is not planned, because the target (a region or a small country, section 1) fits: Estonia uses
 1.5 GB. Section 7 has the limit (Iran, 219 MB, does not fit in 4 GB).
 
+`duckosm-core` also has no format code: it does not depend on arrow, parquet or roadstyle (since 2026-10-24).
+`duckosm-build` (not in the diagram) has the pipeline (`run`, all steps of a build) and the drawing levels
+(roadstyle-rs). The CLI, the Python module and the WebAssembly module call it.
+
 ### Crate choices
 
 | Need | Choice | Why |
@@ -131,7 +136,7 @@ is cut) is not planned, because the target (a region or a small country, section
 | CLI | `clap` 4 | The usual choice. |
 | Python binding | `pyo3` 0.30 with `maturin` 1.15, `abi3` wheel | One wheel for each system works for all Python 3.9+ versions. The GIL is released during a build. |
 | WebAssembly | `wasm-bindgen` | M4. |
-| Parallel work | `rayon`, through `osmpbf` | In WebAssembly, `rayon` uses the current thread (section 7). |
+| Parallel work | `rayon`, through `osmpbf` | In the WebAssembly module without threads, `rayon` uses the current thread. The module with threads gives `rayon` a pool of Web Workers (section 7). |
 | Hash | Own module, no dependency | About 25 lines. See section 5. |
 
 Versions come from crates.io on 2026-10-21.
@@ -139,7 +144,8 @@ Versions come from crates.io on 2026-10-21.
 ### Output
 
 The CLI and the wheel write both formats by default. `--format geoparquet` or `--format duckdb`
-chooses one. The WebAssembly build has no `duckdb` feature and writes GeoParquet only.
+chooses one. The WebAssembly build has no `duckdb` feature and writes GeoParquet. The page makes the DuckDB
+tables from these files in duckdb-wasm.
 
 **GeoParquet.** For each mode the Rust core writes files with the same names as
 `duckosm export-gis -f geoparquet`: `edges_<mode>.parquet`, `nodes_<mode>.parquet` and
@@ -159,8 +165,9 @@ writes this part of what duckOSM writes today (checked in `monaco.duckdb` of 202
 | `main.edge_id_hash`, `main.edge_id_hash_v1` (macros) | Yes. The same SQL as `edge_id.py`. They call the `hash()` of the DuckDB in the file, so they agree with the ids only for DuckDB 1.3 and later (section 5). |
 | `<mode>.edge_id_map` | Yes (with `merge_segments`). |
 | `<mode>.edge_graph`, `<mode>.turn_permission`, `driving.turn_restrictions`, `driving.turn_path_restrictions` | Yes (with `build_graph` and `extract_restrictions`, both on by default). |
-| `lane_profile`, `virtual_nodes`, `way_nodes`, `ways` | No. `virtual_nodes`, `way_nodes` and `ways` are intermediate tables of duckOSM; the virtual nodes are in `nodes`. |
-| `main.global_junctions`, `main.boundary`, `main.visualization_metadata`, `raw.*`, `features.*`, `bus.*`, `mm.*`, `visualization.*` | No. |
+| `lane_profile`, `virtual_nodes`, `way_nodes`, `ways` | Yes. `virtual_nodes` is empty, as in duckOSM (the virtual nodes are in `nodes`). `--no-ways-tables` removes `ways` and `way_nodes`. |
+| `main.global_junctions`, `main.boundary`, `main.visualization_metadata`, `bus.*`, `mm.*`, `visualization.*` | Yes. `main.boundary` and `bus.*` need a boundary. `mm.*` is `mm.transfers` and the view `mm.edges`. |
+| `raw.*`, `features.*` | `raw.*` only as Parquet files (`--raw`, with a boundary). `features.*` only in the page. |
 
 Python duckOSM can read the file and continue with the steps that are not ported. The DuckDB in the
 program can be newer than the DuckDB in the Python environment of the user. Today the program has
@@ -383,9 +390,10 @@ the first measurement.
 
 **WebAssembly.** One tab has at most 4 GB of address space, so the target is a city or a small
 region. Since 2026-10-22, the browser is the main goal ([browser.md](browser.md)). The crate
-`duckosm-wasm` has one function, `build(pbf_bytes, modes, fixes_yaml)`. It uses the default options
-of the CLI and returns all files of the chosen modes, with the edge graph and the turn restrictions,
-written by `duckosm_build::write_tables` (the native build uses the same function). The page
+`duckosm-wasm` has four build functions: `build` (the bytes of a PBF file that is cut to the area),
+`build_area` and `build_area_bytes` (a region PBF and a boundary, cut while it is read) and `build_osm_json`
+(the answer of the Overpass API). They use the default options of the CLI and return all files of the
+chosen modes. All four call `duckosm_build::run`, the function that the native build also calls. The page
 `crates/duckosm-wasm/www/index.html` builds in a Web Worker, loads the tables into duckdb-wasm for SQL,
 and gives the files. [development.md](development.md) tells how to build and test it.
 
@@ -395,11 +403,14 @@ and gives the files. [development.md](development.md) tells how to build and tes
   `write_edge_id_map_to`). In WebAssembly, the writer sends the bytes to JavaScript in parts of
   1 MB, so the output files are not in the WebAssembly memory. Each file is an array of
   `Uint8Array` parts, and `new Blob(parts)` gives the file.
-- `build` runs the same steps as `duckosm_build::build`: the OSM fixes (`parse_osm_fixes`, from the
-  text), the relations, the sidewalk rule, then each mode with `write_tables`. It cannot call `build`
-  itself, because `build` uses files and a clock (`Instant::now` panics in `wasm32-unknown-unknown`).
-- `osmpbf` uses `rayon`. In WebAssembly, `rayon` cannot start threads, so it does all the work on
-  the current thread. It does not panic.
+- `duckosm_build::run` has all steps of the build and uses no file system. It gets the input (`Input`: a
+  path, the bytes of a PBF file, OSM JSON, or a region PBF and a boundary), the OSM fixes, and a function
+  that gives a writer for each file name. `duckosm_build::build` gives files in a folder. `duckosm-wasm`
+  gives JavaScript arrays. The caller also gives the clock of `StepLog`, because `Instant::now` and
+  `SystemTime::now` panic in `wasm32-unknown-unknown`.
+- `osmpbf` uses `rayon`. In the module without threads (`pkg/`), `rayon` cannot start threads, so it does
+  all the work on the current thread. It does not panic. The module with threads (`pkg-threads/`) gives
+  `rayon` a pool of Web Workers ([development.md](development.md), "WebAssembly").
 - `parquet` uses Snappy. The `zstd` feature needs a C compiler for WebAssembly (`clang`), so it
   is off.
 - The `.duckdb` writer has no WebAssembly build.

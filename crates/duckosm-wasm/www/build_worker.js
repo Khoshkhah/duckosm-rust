@@ -4,7 +4,8 @@
 // ArrayBuffer, boundary} (OSM JSON from the Overpass API), with {modes: "driving,walking", fixes: text or null}.
 // Out: {step}, then {files: {name: Uint8Array}, summary, seconds: {load, build}, memoryMiB, threads, featuresSql, log}
 // (the buffers are transferred, not copied; featuresSql: the SQL of the base-map layers, with raw; log: [{step, ms,
-// mib}], the time of each step and the WebAssembly memory after it), or {error}.
+// mib}], the time of each step and the WebAssembly memory after it), or {error}. After {error}, the page makes a new
+// worker.
 // A cross-origin isolated page (the COOP and COEP headers, www/serve.py) gets the module with threads
 // (pkg-threads, rayon on Web Workers); another page gets the module with one thread (pkg).
 
@@ -65,6 +66,7 @@ onmessage = async ({ data }) => {
       Object.values(files).map((f) => f.buffer),
     );
   } catch (e) {
-    postMessage({ error: String((e && e.message) || e) });
+    // after a panic, the module's panic hook has kept the message (e is only "RuntimeError: unreachable")
+    postMessage({ error: self.duckosmPanic || String((e && e.message) || e) });
   }
 };

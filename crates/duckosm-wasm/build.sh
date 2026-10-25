@@ -7,8 +7,8 @@
 #                     headers (www/serve.py). The maximum memory is 4 GB, as in the build without threads.
 #   www/map/pkg/      roadstyle's Rust module for the roads map (the style and its vector tiles): the crate roadstyle-wasm
 #                     of roadstyle's engine (roadstyle repository, rust/) at the commit ROADSTYLE_COMMIT, cloned into
-#                     target/roadstyle (or ROADSTYLE_REPO, a local copy). duckosm-core takes the levels from an older commit
-#                     (aba5884, crates/duckosm-core/Cargo.toml): at this commit they are the crate roadstyle-levels.
+#                     target/roadstyle (or ROADSTYLE_REPO, a local copy). duckosm-build takes the levels from an older commit
+#                     (aba5884, crates/duckosm-build/Cargo.toml): at this commit they are the crate roadstyle-levels.
 set -e
 NIGHTLY=nightly-2026-10-15
 ROADSTYLE_COMMIT=bcea0aecb10c7bb59f713b131e6fe759248a0039   # the full SHA: a fetch by SHA needs it
