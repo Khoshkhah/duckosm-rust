@@ -182,6 +182,18 @@ with sync_playwright() as p:
     # the page gives the editor the map's levels (levelEditor's levels, roadstyle 083224c): no solve also at the first open
     page.wait_for_timeout(500)
     assert max(abs(x - y) for x, y in zip(at(), pos0)) <= 2, ("the view moved when the editor opened", pos0, at())
+    # 3D at z16: the extrusion layers are after every road layer (lines draw over extrusions), also with the editor's roads
+    page.evaluate("document.getElementById('bbld').click(); window.duckMap.jumpTo({zoom: 16, pitch: 60})")
+    page.wait_for_function("window.duckMap.loaded()", timeout=120_000)
+    page.wait_for_timeout(1500)
+    order = page.evaluate("window.duckMap.getStyle().layers.map((l) => [l.id, l.type])")
+    ext = [i for i, (_, t) in enumerate(order) if t == "fill-extrusion"]
+    roads = [i for i, (n, t) in enumerate(order) if t == "line" and n.startswith(("rs-roads", "rs-lv-"))]
+    print("3D layers:", len(ext), "road layers:", len(roads))
+    assert not ext or not roads or min(ext) > max(roads), ("extrusion layers after the road layers", ext, roads)
+    page.screenshot(path=str(out / "editor-3d-pitch60.png"))
+    page.evaluate("document.getElementById('bbld').click(); window.duckMap.jumpTo({pitch: 0})")
+    pos0 = at()
     print("first open: the editor starts from", page.evaluate("window.levelEditorOpen.answer().resolve"))
     assert page.evaluate("window.solves") == 0, "the first open starts from the page's levels"
     print(f"open: {time.time() - t:.2f} s from the click until the editor is open; longest main-thread task "

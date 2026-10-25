@@ -1552,6 +1552,18 @@ $("ownlayers").onchange = () => loaded.then(setBase);
 $("bbld").onclick = () => { view.buildings = !view.buildings; keep("duckosm.buildings", view.buildings ? "1" : "0"); loaded.then(setBase); };
 loaded.then(setBase);
 
+// A line layer after a fill-extrusion layer is drawn over the 3D buildings (lines have no depth test against them), so a road behind a
+// building shows through it. The extrusion layers go after the last line layer (the page's roads, the editor's, the base map's), before
+// the first label after it. Every draw (rs.setStyle) and the editor add layers on top, so this runs again when the map is idle.
+function liftBuildings() {
+  const ls = map.getStyle()?.layers ?? [], ext = ls.filter((l) => l.type === "fill-extrusion").map((l) => l.id);
+  const lastLine = ls.reduce((n, l, i) => (l.type === "line" ? i : n), -1);
+  if (!ext.length || ls.findIndex((l, i) => l.type === "fill-extrusion" && i > 0 && i < lastLine) < 0) return;   // the order is right
+  const sym = ls.find((l, i) => i > lastLine && l.type === "symbol")?.id;
+  for (const id of ext) map.moveLayer(id, sym);
+}
+map.on("idle", liftBuildings);
+
 window.duckMap = map;   // for e2e.py
 
 // The view stays still when the map's box or padding changes (the editor's panel or sheet, the page's sheet): MapLibre keeps the centre
