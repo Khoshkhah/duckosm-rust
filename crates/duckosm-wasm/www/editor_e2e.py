@@ -79,12 +79,16 @@ with sync_playwright() as p:
                        for m in ["driving", "all", "walking", "all", "cycling", "all"]]]:
         drawn(page, js)
         assert "drawn" in page.inner_text("#mapnote"), f"{what}: {page.inner_text('#mapnote')}"
+        if what.startswith("network"):       # the roads on the map: the network's own (Monaco: driving 3,454, walking 11,910, cycling 11,257)
+            print(f"{what}: {page.evaluate('window.RS_SIDE.props.length')} roads on the map")
     # a draw that fails (an unknown network) must not break the next ones
     failed = page.evaluate("import('./app/duck.js').then((d) => d.roadsStyle('nope', 'x')).then(() => '', (e) => e.message)")
     assert failed, "the draw with an unknown network fails"
     for m in ["driving", "all"]:
         drawn(page, f"(s => {{ s.value = '{m}'; s.dispatchEvent(new Event('change')); }})(document.getElementById('mapmode'))")
         assert "drawn" in page.inner_text("#mapnote"), f"network {m} after a failed draw: {page.inner_text('#mapnote')}"
+    # each reading drops its own temporary tables (roadstyle's run: "drop")
+    assert sql(page, "SELECT count(*) FROM duckdb_tables() WHERE temporary") == ["0"], "no temporary table after the draws"
     print("draws: two clicks, a click during a draw, the networks, and the networks after a failed draw: each one drawn")
     edges = int(sql(page, "SELECT count(*) FROM visualization.edge_levels")[0])
     before = sql(page, "SELECT count(*) FROM visualization.edge_levels WHERE head_end_m = 7 OR head_start_m = 7")[0]

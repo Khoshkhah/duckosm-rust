@@ -1,7 +1,7 @@
 // The build side of the app (docs/app.md): duckdb-wasm, the build worker (../build_worker.js), the load of the tables, the style of
 // the roads map (../map/), SQL, load.sql, and the data of an area from the Overpass API. The page (../index.html) calls it.
 // roadstyle's SQL for the map module's input (rust/roadstyle-wasm/js/ at ROADSTYLE_COMMIT, copied by build.sh)
-import { makeRoads, writeRoads, readCatalog } from "../map/roadstyle/roads_sql.js";
+import { readCatalog } from "../map/roadstyle/roads_sql.js";
 import { writeFeatures } from "../map/roadstyle/features_sql.js";
 // roadstyle's Rust module in the page (map/pkg/): roads_sql.js and features_sql.js ask it for their SQL, and the level editor solves with
 // it. It loads the first time that the page needs it.
@@ -254,26 +254,31 @@ export async function roadsStyle(mode, name, keep = []) {
   // the two files go away before and after (also after a failure): duckdb-wasm does not see a second COPY to a kept file name, and a
   // COPY that failed leaves its file open ("File is not opened in write mode" at the next COPY)
   const drop = () => Promise.all(["roads.parquet", "features.parquet"].map((f) => db.dropFile(f).catch(() => {})));
-  let roads, levels, features;
+  let roads, levels, features, plan = null;
   await drop();
   try {
+    // roadstyle's reading of the file (duckosmPlan, roadstyle-io's duckosm.rs): one run, whose temporary tables have their own names
+    // ("drop" drops them). "All": every road; one network (only): the roads of that network and its private roads, so the map's memory
+    // follows the network (Burnaby: driving 62,453 of 151,770 roads). The stored levels were solved for every road: for one network
+    // the engine checks its roads as a part of them (the plan's "subset" and duckosmSubsetLevels).
     const stored = tables.some((t) => t.mode === "visualization" && t.table === "edge_levels");
-    levels = await makeRoads(q, "memory", { levels: stored ? "stored" : "tags" });
-    if (mode === "all") await writeRoads(q, mode);
-    else {
-      // one network: only its roads and its private roads (roadstyle's SELECT of a mode has every road, with that mode's access). A
-      // city's driving network has 40 % of its roads, and the map's memory follows. The stored levels were solved for every road, so
-      // the engine checks these roads as a part of them (roadstyle's subset check).
-      const rs = await roadstyle();
-      const select = JSON.parse(rs.duckosmPlan(JSON.stringify(await readCatalog(q, "memory")), mode, !stored, "[]")).select;
-      const only = `SELECT * FROM (${select}) WHERE ${mode} OR access IS NOT NULL`;
-      await conn.query(`COPY (${only}) TO 'roads.parquet' (FORMAT parquet)`);
-      if (stored) {
-        const [m] = await q("SELECT source, n_edges, edge_hash FROM visualization.edge_levels_meta");
-        const ids = BigInt64Array.from((await conn.query(`SELECT edge_id FROM (${only})`)).toArray().map((r) => BigInt(r.edge_id)));
-        levels = JSON.parse(rs.duckosmSubsetLevels(m.source, Number(m.n_edges), m.edge_hash, 0, undefined, ids));
-      }
+    const rs = await roadstyle(), cat = JSON.stringify(await readCatalog(q, "memory"));
+    plan = JSON.parse(rs.duckosmPlan(cat, mode, !stored, "[]", mode !== "all"));
+    if (!plan.roads) throw new Error(plan.roads_error || "duckosmPlan: no roads");
+    const [e, r, dropE] = plan.roads;
+    await q(e);
+    const meta = stored ? (await q(plan.meta))[0] : null;
+    await q(r);
+    await q(dropE);
+    levels = "tags";
+    if (stored && mode === "all") levels = JSON.parse(rs.duckosmLevels(meta?.source, meta ? Number(meta.n_edges) : undefined, meta?.edge_hash));
+    else if (stored) {
+      const [missing, example] = Object.values((await q(plan.subset[0]))[0]);
+      const ids = BigInt64Array.from((await conn.query(plan.subset[1])).toArray().map((x) => BigInt(x.edge_id)));
+      levels = JSON.parse(rs.duckosmSubsetLevels(meta?.source, meta ? Number(meta.n_edges) : undefined, meta?.edge_hash, Number(missing),
+        example == null ? undefined : BigInt(example), ids));
     }
+    await conn.query(`COPY (${plan.select}) TO 'roads.parquet' (FORMAT parquet)`);
     roads = await db.copyFileToBuffer("roads.parquet");
     // the base-map layers, when the build made them: features.parquet, the rows of the look's layers (map/roadstyle/features_sql.js)
     if (tables.some((t) => t.mode === "features")) {
@@ -282,9 +287,9 @@ export async function roadsStyle(mode, name, keep = []) {
     }
   } finally {
     await drop();
-    // roadstyle's temporary tables of the reading (r: every road with its line, f<n>: the base-map layers) go away too: the next draw
-    // makes them again, and a city's take about 90 MiB of DuckDB's memory
-    for (const { t } of await rows("SELECT table_name AS t FROM duckdb_tables() WHERE temporary")) await conn.query(`DROP TABLE IF EXISTS temp."${t}"`);
+    // the run's temporary tables (every road with its line) go away too: a city's take about 90 MiB of DuckDB's memory. writeFeatures
+    // drops the tables of its own run.
+    if (plan) await conn.query(plan.drop);
   }
   const roadsSeconds = (performance.now() - t) / 1000;
   endMapWorker();
@@ -323,9 +328,14 @@ export function tile(url) {
 export async function levelEdges() {
   const rs = await roadstyle();
   const plan = JSON.parse(rs.duckosmPlan(JSON.stringify(await readCatalog(rows, "memory")), "all", true, "[]"));
-  await db.dropFile("edges.parquet").catch(() => {});
-  await conn.query(`COPY (${plan.level_edges}) TO 'edges.parquet' (FORMAT parquet)`);
-  return db.copyFileToBuffer("edges.parquet");
+  try {
+    await db.dropFile("edges.parquet").catch(() => {});
+    await conn.query(`COPY (${plan.level_edges}) TO 'edges.parquet' (FORMAT parquet)`);
+    return await db.copyFileToBuffer("edges.parquet");
+  } finally {
+    await conn.query(plan.drop);                  // the run's tables (none for level_edges: a plain query)
+    await db.dropFile("edges.parquet").catch(() => {});
+  }
 }
 
 // The level editor's result into the tables, as roadstyle's save_area_levels writes it: levels.csv (one row for each edge) as

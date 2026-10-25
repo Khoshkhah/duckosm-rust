@@ -81,13 +81,15 @@ The changes:
 - **The build worker ends after each build.** Its WebAssembly memory only grows; the files are then in DuckDB and in the
   page. A new build makes a new worker, so a panic or an out-of-memory error of one build does not stop the next one.
 - **DuckDB:** the Parquet file of each table goes away when the table is made; `raw.*` goes away when the base-map layers
-  are made (no download has it, the map does not read it); roadstyle's temporary tables of a draw (`r`, `f<n>`) go away
-  after the draw. (Before, they stayed, and the later draws had fewer base-map layers: 34 of 52 on Monaco.)
+  are made (no download has it, the map does not read it); roadstyle's temporary tables of a draw go away after the draw
+  (since roadstyle `bcea0ae`: each reading is a "run" with tables of its own names, and its "drop" removes them). Before,
+  they stayed, and the later draws had fewer base-map layers: 34 of 52 on Monaco.
 - **The road table** keeps only the fields that the popup and the dashboard read (about 15 of 32), and it comes from the
   map worker as an object, not as a 118 MB text that the page parsed again.
-- **One network:** "Driving", "Walking" or "Cycling" draws only the roads of that network and its private roads (before,
-  roadstyle's SELECT of a mode had every road). The stored drawing order is checked for these roads (roadstyle's subset
-  check).
+- **One network:** "Driving", "Walking" or "Cycling" draws only the roads of that network and its private roads:
+  roadstyle's reading of one mode alone (`duckosmPlan(..., only = true)`; Monaco: driving 3,454, walking 11,910, cycling
+  11,257 of 13,298 roads). Before, the page drew every road with the access of that mode. The stored drawing order is
+  checked for these roads (the plan's "subset" queries and `duckosmSubsetLevels`).
 
 **The limit on a small device.** About 1,000 MiB plus 14 KB for each road on the map fits the measurements (Monaco
 13,298 roads: 1,077 MiB; Tartu 64,828: 2,050 MiB; Burnaby 151,770: 3,174 MiB). With 1.5 GB, a phone can thus show about
@@ -185,13 +187,16 @@ and the two download buttons between them. With three modes, the line takes thre
   (fewer than 20,000 roads: Monaco has 13,298). A larger area waits for the click (Tartu: 64,828 roads).
 - One line under it: the number of roads and the time of the last drawing. The table in step 4 has each step.
 - One draw at a time (2026-10-24, after two faults that Kaveh got on the live page). A draw makes temporary tables in
-  DuckDB (roadstyle's `makeRoads`) and writes `roads.parquet`. Two draws at the same time broke each other ("Table with
+  DuckDB (roadstyle's `duckosmPlan`) and writes `roads.parquet`. Two draws at the same time broke each other ("Table with
   name e does not exist"), and the next draw then failed too ("File is not opened in write mode"). Now:
   - A draw that is asked for while one runs (a second click, the draw after **Apply**) comes after it, one time only.
   - **Show on map** and the network list are off while a draw runs ("drawing…") and while the level editor is open.
   - A new build and the level editor wait until the draw stops.
   - The page removes `roads.parquet` and `features.parquet` from DuckDB before and after each draw, also after a draw
     that failed, so the next draw starts clean.
+  - Since roadstyle `bcea0ae` the temporary tables of each reading have names of their own (its "run"), and the page
+    drops them after the draw ("drop"). Two readings at the same time thus do not meet either; the page keeps its one
+    draw at a time, because the draws also share `roads.parquet`.
 - roadstyle's zoom read-out ("z 13.8") is beside the scale bar of the map. roadstyle puts it at a fixed place, which on
   this page is under the side panel, next to the Build bar.
 - The base map and the layers are buttons on the map (see "The map"). For one commit they were in this card; Kaveh
