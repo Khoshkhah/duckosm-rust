@@ -1,6 +1,6 @@
 //! The browser build (`duckosm_build::run` as duckosm-wasm calls it, PBF bytes in) writes the same files as the native build (`duckosm_build::build`),
 //! byte for byte: all three modes, the edge graph, the turn restrictions and an OSM fixes file. The files of
-//! `run` go to target/tmp/duckosm-wasm-native: compare them with `cmp` to the output of the WebAssembly
+//! `run` go to target/tmp/<checkout>/duckosm-wasm-native: compare them with `cmp` to the output of the WebAssembly
 //! module (`www/run_node.mjs`).
 
 use duckosm_build::{build, config::parse_osm_fixes, run, Input, Params, StepLog};
@@ -16,6 +16,15 @@ fn monaco_timezone() -> String {
     table["regions"]["monaco"].to_string()
 }
 
+/// target/tmp/<checkout>: one folder for each checkout, because the worktrees can share target/ (docs/development.md,
+/// "One shared build folder").
+fn tmp() -> PathBuf {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().unwrap();
+    let tmp = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(root.file_name().unwrap());
+    println!("files in {}", tmp.display());
+    tmp
+}
+
 const FIXES: &str = "overrides:\n  - osm_id: 93137596\n    lanes: 1\n";
 /// The fixes of duckOSM's Monaco file that change raw.ways: a tag and the arrows of the lanes.
 const FIXES_AREA: &str = "overrides:\n  - osm_id: 93137596\n    lanes: 1\n  - osm_id: 4227277\n    turn_lanes_forward: none|none\n";
@@ -23,7 +32,7 @@ const FIXES_AREA: &str = "overrides:\n  - osm_id: 93137596\n    lanes: 1\n  - os
 #[test]
 fn browser_build_equals_native_build() {
     let pbf = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/data/monaco.osm.pbf");
-    let tmp = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
+    let tmp = tmp();
     let (native, wasm) = (tmp.join("duckosm-native"), tmp.join("duckosm-wasm-native"));
     std::fs::create_dir_all(&wasm).unwrap();
     let fixes = tmp.join("fixes.yaml");
@@ -91,7 +100,7 @@ fn browser_area_build_equals_native_build() {
         data.join("monaco_sample.osm.pbf"),
         data.join("monaco.geojson"),
     );
-    let tmp = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
+    let tmp = tmp();
     let (native, wasm) = (
         tmp.join("duckosm-native-area"),
         tmp.join("duckosm-wasm-area"),

@@ -59,7 +59,7 @@ with sync_playwright() as p:
     page.wait_for_function("window.mapReady && window.timings && window.timings.duckdbStart", timeout=120_000)
     # the files that build.sh takes from roadstyle are roadstyle's own at ROADSTYLE_COMMIT (no copy that can drift)
     pin = re.search(r"^ROADSTYLE_COMMIT=(\w+)", (WWW.parent / "build.sh").read_text(), re.M).group(1)
-    clone = WWW.parents[2] / "target" / "roadstyle"
+    clone = WWW.parents[2] / "target" / f"roadstyle-{pin}"
     dashboard = subprocess.run(["git", "-C", str(clone), "ls-tree", "-r", "--name-only", pin, "src/roadstyle/static/dashboard/"],
                                capture_output=True, text=True, check=True).stdout.split()
     for served, source in [("popup.css", "src/roadstyle/static/popup.css"), ("popup.js", "src/roadstyle/static/popup.js"),

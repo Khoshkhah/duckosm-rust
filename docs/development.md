@@ -35,6 +35,39 @@ cargo build --release --no-default-features -p duckosm-cli   # without DuckDB: G
 
 The binary is `target/release/duckosm-rust`. `--timing` prints the time of each step.
 
+## One shared build folder
+
+On Kaveh's machine, all worktrees of duckosm-rust and of roadstyle use one build folder for each repository:
+`<main checkout>/.shared-target`. Thus the dependencies (DuckDB is the largest) compile one time, not one time
+for each worktree. The `cargo` wrapper `tools/cargo` does this. Install it before `~/.cargo/bin` in `PATH`:
+
+```bash
+install -m 755 tools/cargo ~/.local/bin/cargo
+```
+
+For `build`, `check`, `clippy`, `doc`, `fix`, `run`, `rustc`, `test` and `bench` in a checkout of one of the two
+repositories, the wrapper does these steps:
+
+1. If the workspace has no `target`, it makes `target` a link to `.shared-target`. Paths such as
+   `target/release/duckosm-rust` thus stay correct. A workspace that has a `target/` folder of its own keeps
+   that folder: the change starts when you delete the old folder.
+2. Cargo finds a crate "fresh" from the file times, and it identifies a workspace crate by its relative path.
+   Thus a worktree with older files can get the binary of the worktree that built last. To prevent this, the
+   wrapper keeps the path of the last workspace in `.shared-target/.last-tree`. When another workspace builds,
+   the wrapper touches all files of that workspace that Git tracks. The workspace crates then compile again, but
+   the dependencies do not.
+3. A lock (`.shared-target/.lock`) lets the cargo commands of only one workspace use the folder at a time. The
+   commands of the same workspace can run together. When a command waits, the wrapper tells which workspace it
+   waits for. A `cargo run` that does not stop (a server) thus stops the builds of the other worktrees: run the
+   program from `target/` instead.
+
+`build.sh` puts roadstyle's clone in `target/roadstyle-<commit>`, one folder for each `ROADSTYLE_COMMIT`, and it keeps
+a complete clone. The clone is a different Git repository, so it builds in its own `rust/target`. The test
+`tests/native.rs` writes to `target/tmp/<checkout>/`. CI has no wrapper and uses a plain `target/`.
+
+To stop the shared folder, delete `~/.local/bin/cargo`, or set `CARGO_TARGET_DIR` or `--target-dir` to a
+folder outside `.shared-target`. `cargo clean` deletes the shared folder of all worktrees.
+
 ## Check the result against duckOSM
 
 `tests/data/golden_monaco.yaml` builds the golden database with duckOSM 0.6.0 (run it in an empty
@@ -82,7 +115,7 @@ Build the two modules and their JavaScript bindings (Git ignores both folders):
   GitHub Pages cannot send the two headers: there, `www/coi-serviceworker.js` (one `<script>` line in
   `index.html`) adds them in the browser and loads the page again. The first load has one thread.
 - `www/map/pkg/`: roadstyle's Rust module for the roads map. `build.sh` fetches the commit `ROADSTYLE_COMMIT` (a full SHA)
-  of roadstyle into `target/roadstyle` and builds the crate `roadstyle-wasm` of its Rust engine (`rust/`). With
+  of roadstyle into `target/roadstyle-<commit>` and builds the crate `roadstyle-wasm` of its Rust engine (`rust/`). With
   `ROADSTYLE_REPO=/home/kaveh/projects/roadstyle`, it fetches from the local copy. `duckosm-build` and `duckosm-parquet`
   take roadstyle's engine for the drawing levels from an older commit (`roadstyle-rs` at `aba5884`, a git dependency): the
   newer commits have the levels in the crate `roadstyle-levels`, with another API ([levels.md](levels.md)).
@@ -123,7 +156,8 @@ python crates/duckosm-wasm/www/e2e.py tests/data/monaco_sample.osm.pbf out-area 
 duckosm-rust tests/data/monaco_sample.osm.pbf --boundary tests/data/monaco.geojson -m driving,walking,cycling -f geoparquet -o out-cli   # the same, native
 ```
 
-The test writes its files to `target/tmp/duckosm-wasm-native/`. Compare them with `cmp` to the files of
+The test writes its files to `target/tmp/<checkout>/duckosm-wasm-native/` (`<checkout>`: the folder name of the
+checkout, for example `duckosm-rust`). Compare them with `cmp` to the files of
 `run_node.mjs` or `e2e.py` (built with the same fixes text as the test). `e2e.py` also prints the times of
 the page as JSON. The CLI writes zstd and the page writes snap, so compare `out-area` and `out-cli` by rows,
 not with `cmp`.
