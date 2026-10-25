@@ -36,6 +36,28 @@ the user makes the area, builds it, and sees the roads on the same map, with no 
 +----------------------------+
 ```
 
+### On a phone
+
+Kaveh tests the page on his phone (2026-10-24: "I couldn't test editing dashboard. It's not workable on mobile phone").
+On a screen of 700 px or less:
+
+- The map is at the top (42 % of the height) and stays there while the cards scroll under it. The footer with **Build**
+  stays at the bottom. The scale bar does not show. The zoom read-out is at the bottom left of the map, and the
+  attribution starts folded (an "i" button), so it does not cover the read-out.
+- The button at the right of the page's header folds the panel to one bar at the bottom, and the map gets the screen.
+- **The level editor: one panel at a time.** The page's panel goes away. A bar at the top keeps the counts, **Apply** and
+  **Close** in view. The map has the upper part of the screen, and the editor's panel the lower part. After Apply or
+  Close, the page's panel comes back at its place. (The rules for the editor's panel are in the page until roadstyle has
+  its own layout for a phone; then the page removes them.)
+- Before 2026-10-24 the editor's panel (400 px wide) covered the whole screen of a phone, and Apply and Close were
+  under it.
+- Open: on the map of the editor, the column of map buttons is taller than the map, so its last button touches the
+  attribution button.
+
+The check: `phone_e2e.py` (Playwright's "iPhone 13": a 390 × 664 page, touch). It builds Monaco, scrolls the cards,
+folds the panel, opens and closes the editor with taps, checks the places of the map, the bar and the editor's panel,
+and writes `phone-*.png`.
+
 ### The cards fold
 
 Kaveh (2026-10-24): "the result card is not well designed and take many space and its not collapsable". Each

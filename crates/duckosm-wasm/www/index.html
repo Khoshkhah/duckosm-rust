@@ -259,8 +259,11 @@
     #status { left: calc(50% + 185px); }
     body.collapsed #status { left: 50%; }
   }
+  #editbar { display: none; }
   @media (max-width: 700px) {
-    #map { position: relative; height: 52vh; }
+    /* the map stays at the top while the panel scrolls under it (sticky in the body: the body has the height of the page) */
+    body { height: auto; min-height: 100%; }
+    #map { position: sticky; top: 0; z-index: 3; height: 42vh; }
     #panel { position: static; width: auto; box-shadow: none; border-right: 0; border-top: 1px solid var(--line); transition: none; }
     body.collapsed #panel { transform: none; }
     body.collapsed #panel > :not(header) { display: none; }
@@ -274,6 +277,19 @@
     footer { position: sticky; bottom: 0; }
     .btn, .segmented [role=tab] { height: 44px; }
     .shapes button { height: 44px; }
+    /* the level editor on a phone: one panel at a time. The page's panel goes away, a fixed bar at the top keeps the counts, Apply and
+       Close, the map takes the upper part of the screen and the editor's panel the lower part. The rules for #lv (roadstyle's panel)
+       stay until roadstyle has its own layout for a phone; then remove them. */
+    body.editing #editbar { display: flex; position: fixed; top: 0; left: 0; right: 0; z-index: 8; height: 52px; align-items: center;
+                            gap: 8px; padding: 0 10px; background: var(--bg); border-bottom: 1px solid var(--line); }
+    #editbar span { flex: 1; min-width: 0; font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #editbar .btn { height: 40px; }
+    body.editing #panel > :not(#lvhost) { display: none; }
+    body.editing #panel { border-top: 0; }
+    body.editing #map, body.editing.lv-open #map { position: fixed; top: 52px; left: 0; right: 0; height: calc(45vh - 52px); }
+    body.editing #lv { top: 45vh; left: 0; width: auto; border-left: 0; border-top: 1px solid var(--lv-line, var(--line)); }
+    body.editing #lv-toggle { display: none; }
+    body.editing #lv-busy { right: 0; }
   }
 </style>
 </head>
@@ -304,6 +320,9 @@
 </svg>
 
 <div id="map" role="region" aria-label="Map of the area"></div>
+<!-- the level editor's bar on a phone (card 7): the counts, Apply and Close stay in view -->
+<div id="editbar"><span id="editbar-note"></span><button class="btn primary" data-for="edit-apply">Apply</button>
+  <button class="btn" data-for="edit-close">Close</button></div>
 <div id="mapctl" class="maplibregl-ctrl mapctl">
   <div class="maplibregl-ctrl-group"><button id="bbld" type="button" title="3D buildings" aria-label="3D buildings" aria-pressed="false"><svg><use href="#i-building"/></svg></button></div>
 </div>
@@ -593,6 +612,7 @@ map.addControl(new maplibregl.ScaleControl(), "bottom-left");
 // the scale bar, in the map's bottom-left box, which moves with the panel
 document.querySelector(".maplibregl-ctrl-bottom-left").append(...document.querySelectorAll(".rs-zoom"));
 const loaded = new Promise((ok) => map.on("load", ok));
+loaded.then(() => { if (matchMedia("(max-width: 700px)").matches) document.querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show"); });
 // OpenFreeMap's layers (the style before the page adds its own), and which of them are roads
 const baseLayers = [];
 loaded.then(() => map.getStyle().layers.forEach((l) => baseLayers.push({ id: l.id, road: /^transportation/.test(l["source-layer"] ?? "") })));
@@ -1462,7 +1482,11 @@ const workerStopped = (e) => {
   if (editor && m.includes("the worker stopped")) editNote(`The level editor's worker stopped (${m}). Close the editor and open it again.`);
 };
 window.addEventListener("unhandledrejection", workerStopped);
+let panelScroll = 0;                              // where the page was when the editor opened (a phone: the panel goes away)
 function editing(on) {
+  if (on) panelScroll = scrollY;
+  document.body.classList.toggle("editing", on);
+  if (!on) scrollTo(0, panelScroll);
   $("edit-open").hidden = on;
   $("edit-apply").hidden = $("edit-close").hidden = $("edit-dl").hidden = !on;
   $("edit-open").disabled = false;
@@ -1504,6 +1528,7 @@ $("edit-open").onclick = async () => {
     editorStore = store;
     window.levelEditorOpen = editor;              // for editor_e2e.py
     editor.addEventListener("solved", () => editNote(`${made}. Solved again: Apply puts the new drawing order into the tables.`));
+    $("editbar-note").textContent = made;
     editing(true);
     editNote(`${made}, solved in ${num((performance.now() - t0) / 1000, 1)} s. Click a road on the map to start. Apply puts the drawing ` +
       "order into the tables and the downloads; Close goes back with no change.");
@@ -1534,6 +1559,7 @@ $("edit-apply").onclick = async () => {
   }
   $("edit-apply").disabled = false;
 };
+for (const b of document.querySelectorAll("#editbar [data-for]")) b.onclick = () => $(b.dataset.for).click();
 for (const b of document.querySelectorAll("#edit-dl [data-dl]")) {
   b.onclick = () => editor?.download(b.dataset.dl).catch((e) => editNote(`The download of ${b.dataset.dl} failed: ${e.message}`));
 }

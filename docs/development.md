@@ -135,6 +135,13 @@ download, Close. It writes `editor.png` and `editor-dark.png` and prints the tim
 python crates/duckosm-wasm/www/editor_e2e.py out-editor
 ```
 
+Check the page on a phone (390 × 664, touch): the map at the top, the panel's fold, and the level editor with its bar
+([app.md](app.md), "On a phone"). It writes `phone-*.png`:
+
+```bash
+python crates/duckosm-wasm/www/phone_e2e.py out-phone
+```
+
 ### The deployed page: a version on each file
 
 GitHub Pages sends `cache-control: max-age=600`. After a deploy, a browser can thus get the new `index.html` with an
