@@ -267,11 +267,13 @@ Limits:
 - The editor's panel covers the right side of the map (400 px). It is not in the page's side panel.
 - The store is for each area name. If a different area gets the same name, the old edits can name roads that the new
   area does not have.
-- roadstyle's store keeps the text files in `localStorage`, which has about 5 MB for the site. Burnaby's `pairs.csv` is
-  larger (Kaveh, 2026-10-25: "exceeded the quota"). A file that the browser cannot keep stays in memory for the page,
-  the editor opens, and card 7 says: "The browser could not keep the area files (N MB): your edits stay only until you
-  close the page; download edits.csv to keep them." roadstyle moves the large files to the site's private file system
-  later. `editor_e2e.py` tests it with a storage that refuses each value over 100 KB (Monaco: 1.9 MB stays in memory).
+- Until roadstyle `65af6e6`, roadstyle's store kept the text files in `localStorage`, which has about 5 MB for the site,
+  and Burnaby's `pairs.csv` (12.2 MB) was larger (Kaveh, 2026-10-25: "exceeded the quota"). Since `65af6e6` every file
+  of the editor is in the site's private file system (OPFS); `localStorage` keeps only the save times. Burnaby's editor
+  now opens with its files kept (76,189 roads, 232,831 pairs, 23 s). If the private file system fails too (a full
+  storage), a file that the browser cannot keep stays in memory for the page, the editor opens, and card 7 says: "The browser could not keep the area files (N MB): your edits stay only until you
+  close the page; download edits.csv to keep them." `editor_e2e.py` tests it with a private file system that refuses each file over 100 KB (Monaco: 2.7 MB stays in
+  memory).
 - A build of the page has no `level_edits`, `level_heads` or `level_caps` tables. Thus the editor starts from the store
   only, not from the tables of a file.
 - Monaco takes 2.2 to 2.9 s to open (6,830 roads, 21,476 pairs). Since roadstyle `7d4534f`, the editor solves, makes
@@ -337,9 +339,23 @@ map of one mode, the duckOSM base-map layers while the editor is open, and Close
 - The height of a building (roadstyle-rs, rule C of mapstyle's `docs/design/buildings_3d.md`): the higher of
   `height` and (`building:levels` + `roof:levels`) × 3.66 m (as OpenMapTiles), or the one that is there, else the
   height of its kind. The higher of the two keeps Tartu's buildings correct, where `height` is often an ETAK code.
-  Its base is `min_height`, else `building:min_level` × 3.66 m. On Monaco (2026-10-23), for the 490 buildings with these tags, the median
-  difference to OpenFreeMap went from 3.0 m to 0.36 m. A building with no tags has the height of its kind (9 m by
-  default); OpenFreeMap gives it 5 m.
+  Its base is `min_height`, else `building:min_level` × 3.66 m. A building with no tags has the height of its kind (9 m
+  by default); OpenFreeMap gives it 5 m.
+- Until roadstyle `65af6e6` the SQL read only the first character of each height tag (`tags['k'][1]` on a text: "25"
+  became "2"), so every tower was short (Metrotower 7.3 m in place of 91.5 m). The number of the earlier text, "0.36 m on
+  Monaco", was measured with that fault and is not valid. The measurement of 2026-10-25 (each of our buildings against
+  the OpenFreeMap building that holds its centre, in the page at z 16 / 15.5 with the 3D buildings on):
+
+  | | Buildings matched | Median difference (all) | Towers (OpenFreeMap 30 m or more) | Towers within 10 % | Median difference of the towers |
+  |---|---|---|---|---|---|
+  | Burnaby, Metrotown, before (`bcea0ae`) | 3,876 | 0 m | 81 | 0 | 70 m (ours at most 25.6 m) |
+  | Burnaby, Metrotown, after (`65af6e6`) | 3,876 | 0 m | 81 | 74 | 0.6 m |
+  | Monaco, before | 1,155 | +4 m | 106 | 35 | 37 m (ours at most 32.9 m) |
+  | Monaco, after | 1,155 | +4 m | 106 | 97 | 0.4 m |
+
+  The median of all buildings is mostly houses with no tags, so it does not change. Monaco's +4 m is the height of the
+  kind (9 m) against OpenFreeMap's 5 m. A tower that is higher than OpenFreeMap (Le Millefiori: 135 m, OpenFreeMap 111 m)
+  has `building:levels` × 3.66 m above its `height` tag; rule C takes the higher of the two.
 
 ## The Google Maps key (plan for publishing)
 

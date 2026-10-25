@@ -35,7 +35,7 @@ gzip; [tables.md](tables.md)). Kaveh chose it on 2026-10-23. Two other ways, for
   - `makeArea` runs in the main thread: a large area (Tartu) can stop the page while the level area is made. The
     editor's own engine is in a Web Worker since roadstyle `7d4534f`.
   - The page does not know the version of roadstyle's module, so `edge_levels_meta.roadstyle_version` keeps the build's.
-  - `duckosm-core` takes its levels from roadstyle `aba5884`; the map and the editor from `bcea0ae` ([levels.md](levels.md)).
+  - `duckosm-core` takes its levels from roadstyle `aba5884`; the map and the editor from `65af6e6` ([levels.md](levels.md)).
 
 ## The tables
 

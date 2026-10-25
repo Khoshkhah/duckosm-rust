@@ -210,7 +210,11 @@ with sync_playwright() as p:
     # Close with no Apply changes nothing; the editor opens again with the edit of this area
     page.click("#edit-open")
     page.wait_for_function("window.levelEditorOpen", timeout=300_000)
-    assert page.evaluate("r => window.lvApi('/api/edits').then(() => localStorage.getItem('lv:duckosm:Monaco:heads.csv'))", road).count(road) == 1
+    # the area's files are in the site's private file system (roadstyle's browserStore since 65af6e6), heads.csv with the edit
+    heads = page.evaluate("""async () => { const d = await (await navigator.storage.getDirectory()).getDirectoryHandle('lv-duckosm_Monaco');
+        return (await (await d.getFileHandle('heads.csv')).getFile()).text(); }""")
+    assert heads.count(road) == 1, heads
+    assert page.evaluate("localStorage.getItem('lv:duckosm:Monaco:pairs.csv')") is None, "no text file in localStorage"
     page.click("#edit-close")                       # destroy puts the page's road layers back: no new drawing
     page.wait_for_function("window.duckMap.loaded()", timeout=300_000)
     assert page.evaluate("window.duckMap.getStyle().sources['rs-roads'].tiles[0]").startswith("rs://")
@@ -219,12 +223,13 @@ with sync_playwright() as p:
     assert sql(page, "SELECT count(*) FROM visualization.edge_levels WHERE head_end_m = 7 OR head_start_m = 7")[0] == after
     print("close: no change")
 
-    # a browser that cannot keep large files (localStorage has about 5 MB for the site; Burnaby's pairs.csv is larger): each value over
-    # 100 KB fails, as with a full storage. The editor opens with those files in memory, it solves, and the card says so.
-    page.evaluate("""() => { const set = Storage.prototype.setItem; window.realSetItem = set;
-        Storage.prototype.setItem = function (k, v) {
-          if (String(v).length > 100000) throw new DOMException("the quota has been exceeded", "QuotaExceededError");
-          return set.call(this, k, v); }; }""")
+    # a browser that cannot keep large files (a full storage of the site): each file over 100 KB fails in the private file system. The
+    # editor opens with those files in memory, it solves, and the card says so.
+    page.evaluate("""() => { const w = FileSystemWritableFileStream.prototype.write; window.realWrite = w;
+        FileSystemWritableFileStream.prototype.write = function (data) {
+          const n = typeof data === "string" ? data.length : data.byteLength ?? data.size ?? 0;
+          if (n > 100000) return Promise.reject(new DOMException("the quota has been exceeded", "QuotaExceededError"));
+          return w.call(this, data); }; }""")
     page.click("#edit-open")
     page.wait_for_function("window.levelEditorOpen || /failed/.test(document.getElementById('editnote').textContent)", timeout=300_000)
     assert page.evaluate("!!window.levelEditorOpen"), page.inner_text("#editnote")
@@ -235,7 +240,7 @@ with sync_playwright() as p:
     print("full storage:", page.inner_text("#editnote")[-160:])
     page.click("#edit-close")
     page.wait_for_function("window.duckMap.loaded() && !window.levelEditorOpen", timeout=300_000)
-    page.evaluate("() => { Storage.prototype.setItem = window.realSetItem; }")
+    page.evaluate("() => { FileSystemWritableFileStream.prototype.write = window.realWrite; }")
     assert not errors, errors
     assert not unversioned, f"requests with no version: {unversioned}"
     print("no page errors")
