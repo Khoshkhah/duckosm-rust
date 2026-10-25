@@ -47,7 +47,9 @@ On a screen of 700 px or less:
   Build bar). The page keeps the state. The cards scroll inside the sheet; the page itself does not scroll, so a scroll
   in the sheet does not move the map. The Build bar (GeoJSON, Build) is at the sheet's bottom edge in every state.
 - The map's padding at the bottom is the sheet's height, so the area and the roads stay above the sheet, and the map's
-  buttons are in view in the half and one-row states. The zoom read-out and the attribution are above the sheet; the
+  buttons are in view in the half and one-row states. The padding follows each step of the sheet's height change (a
+  `ResizeObserver` on the panel). Before, the page read the height 220 ms after the change; when a draw kept the main
+  thread busy, the height was not at its end value yet (the check got a padding of 290 px for a sheet of 332 px). The zoom read-out and the attribution are above the sheet; the
   scale bar does not show, and the attribution starts folded (an "i" button).
 - After a build, the sheet shows card 5 (the result); from the one-row state it opens to half the height.
 - The cards' scroll box has a background that is 1 % transparent. With an opaque one over the map's canvas, Chromium
@@ -203,6 +205,13 @@ and the two download buttons between them. With three modes, the line takes thre
   area in view (Kaveh, 2026-10-25: "set base map to blank and zoom on the selected area"). Out of the area, OpenFreeMap's
   own colors (the water, the wetland pattern) made the two sides of the boundary look different. After the user chooses a
   base map (the ▦ button), the later draws of the page keep that choice. On a phone the area stays above the sheet.
+- The order of a draw (Kaveh, 2026-10-25: "a loading map processing shows first, then change base map to blank and zoom
+  to that area"). At the click, a light veil with a spinner and the step of the draw ("drawing: the roads table and the
+  style…", then "drawing: the first tiles…") covers the map. The map stays as it is under the veil. When the roads are
+  ready (the new style is set and the first tiles are on the map), the page sets the blank base map and puts the area in
+  view in one move, then removes the veil. Every draw shows the veil: also a change of the network and the draw after
+  **Apply**, which do not move the view. If the draw fails, the veil goes and the note under the button gives the error.
+  The veil covers only the part of the map that the panel (on a desktop) or the sheet (on a phone) does not cover.
 - One line under it: the number of roads and the time of the last drawing. The table in step 4 has each step.
 - One draw at a time (2026-10-24, after two faults that Kaveh got on the live page). A draw makes temporary tables in
   DuckDB (roadstyle's `duckosmPlan`) and writes `roads.parquet`. Two draws at the same time broke each other ("Table with

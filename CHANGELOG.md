@@ -14,6 +14,8 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 - The page uses roadstyle `b976864` (branch `rust-engine`) for its map (the style, the tiles, the dashboard, the SQL files). The levels of
   `duckosm-core` stay at roadstyle `aba5884`.
+- The page's map: **Show on map** and the draw after a build first show a veil with a spinner over the map, then set the blank
+  base map and put the area in view when the roads are ready (docs/app.md, step 6).
 
 ## 0.3.0 (2026-10-23)
 

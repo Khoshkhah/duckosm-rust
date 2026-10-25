@@ -40,6 +40,15 @@
   html, body { height: 100%; margin: 0; }
   body { font: 14px/1.45 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--fg); background: var(--bg); }
   #map { position: fixed; inset: 0; }
+  /* the map while a draw runs: a light veil and a spinner with the draw's step (showRoads), over the part of the map that the panel
+     or the phone's sheet leaves free */
+  #mapbusy { position: fixed; inset: 0 0 var(--sheet-px, 0px) 0; z-index: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 10px; background: color-mix(in srgb, var(--bg) 40%, transparent); pointer-events: none; }
+  #mapbusy[hidden] { display: none; }
+  #mapbusy .spin { width: 34px; height: 34px; border-radius: 50%; border: 4px solid var(--line); border-top-color: var(--fg); animation: spin 0.8s linear infinite; }
+  #mapbusy span { background: var(--bg); color: var(--fg); padding: 6px 12px; border-radius: 99px; font-size: 13px; box-shadow: var(--shadow); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { #mapbusy .spin { animation-duration: 3s; } }
   /* the map buttons under the zoom buttons: 3D and the base map (a list that opens to the left) */
   .mapctl { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
   .mapctl > .maplibregl-ctrl-group { margin: 0; position: relative; }
@@ -262,6 +271,8 @@
     body.collapsed .co-lg { left: 10px; }
     #status { left: calc(50% + 185px); }
     body.collapsed #status { left: 50%; }
+    #mapbusy { left: 370px; transition: left 0.25s ease; }
+    body.collapsed #mapbusy { left: 0; }
   }
   #editbar { display: none; }
   #sheet-handle { display: none; }
@@ -330,6 +341,7 @@
 </svg>
 
 <div id="map" role="region" aria-label="Map of the area"></div>
+<div id="mapbusy" hidden><div class="spin"></div><span id="mapbusy-text"></span></div>
 <!-- the level editor's bar on a phone (card 7): the counts, Apply and Close stay in view -->
 <div id="editbar"><span id="editbar-note"></span><button class="btn primary" data-for="edit-apply">Apply</button>
   <button class="btn" data-for="edit-close">Close</button></div>
@@ -1350,8 +1362,10 @@ function showRoads() {
     } while (drawAgain);
   })().finally(() => {
     drawing = window.mapDrawing = null;
+    $("mapbusy").hidden = true;
     drawControls();
   });
+  $("mapbusy").hidden = false;
   drawControls();
   return drawing;
 }
@@ -1366,17 +1380,20 @@ const tooLarge = (n) => `This map has ${num(n)} roads; on this device the map ca
   (duck.MODES.some((m) => (roadCount[m] ?? Infinity) <= window.mapMaxRoads) ? "Choose a network that is smaller, use" : "Use") +
   " a desktop browser, or a smaller area. SQL and the downloads work.";
 async function drawRoads() {
-  const run = ++roadsRun;
+  const run = ++roadsRun, isFresh = fresh;
+  fresh = false;
   const n = roadCount[$("mapmode").value] ?? 0;
   if (n > window.mapMaxRoads) {
     $("mapnote").textContent = tooLarge(n);
     return;
   }
-  $("mapnote").textContent = "drawing…";
+  const drawStep = (t) => { $("mapnote").textContent = $("mapbusy-text").textContent = t; };
+  drawStep("drawing: the roads table and the style…");
   try {
     const t0 = performance.now();
     const r = await duck.roadsStyle($("mapmode").value, areaName, ROAD_KEYS);
     if (run !== roadsRun) return;                       // another choice came in the meantime
+    drawStep("drawing: the first tiles…");
     await loaded;
     removeRoads();
     const own = r.style.metadata?.["roadstyle:images"] || {};
@@ -1399,6 +1416,14 @@ async function drawRoads() {
     // the first tiles: the map is drawn when it is idle (at most 60 s)
     await Promise.race([new Promise((ok) => map.once("idle", ok)), new Promise((ok) => setTimeout(ok, 60000))]);
     if (run !== roadsRun) return;
+    if (isFresh) {   // freshMap: the blank base map and the area in view in one move, when the roads are ready
+      if (!baseChosen) {
+        view.base = dark() ? "blank_dark" : "blank";
+        setBase();
+      }
+      zoomToArea();
+      await new Promise((ok) => { map.once("moveend", ok); setTimeout(ok, 1000); });
+    }
     window.timings = Object.assign(window.timings || {}, { map: { roadsSql: r.roadsSeconds, style: r.styleSeconds,
       total: (performance.now() - t0) / 1000, memoryMiB: r.memoryMiB } });
     const total = (performance.now() - t0) / 1000;
@@ -1438,14 +1463,12 @@ async function visualization() {
 }
 // "Show on map" and the draw after a build (Kaveh: "set base map to blank and zoom on the selected area"): the blank base map of the
 // theme, so that the map outside the area does not look different from the area, and the view on the area. A base map that the user
-// chooses after that stays for the next draws of this page.
-let baseChosen = false;
+// chooses after that stays for the next draws of this page. Kaveh: "a loading map processing shows first, then change base map to
+// blank and zoom to that area": the map stays as it is under the veil of showRoads, and drawRoads changes the base map and the view
+// when the roads are ready.
+let baseChosen = false, fresh = false;
 function freshMap() {
-  if (!baseChosen) {
-    view.base = dark() ? "blank_dark" : "blank";
-    loaded.then(setBase);
-  }
-  zoomToArea();
+  fresh = true;
   return showRoads();
 }
 $("show").onclick = freshMap;
@@ -1541,13 +1564,13 @@ function sheet(state) {
     document.body.dataset.sheet = state;
     keep("duckosm.sheet", state);
   }
-  setTimeout(() => {
-    if (document.body.classList.contains("editing")) return;
-    const h = phone.matches ? Math.round($("panel").getBoundingClientRect().height) : 0;
-    document.body.style.setProperty("--sheet-px", `${h}px`);
-    map.setPadding({ ...map.getPadding(), bottom: h });
-  }, 220);
+  if (document.body.classList.contains("editing")) return;
+  const h = phone.matches ? Math.round($("panel").getBoundingClientRect().height) : 0;
+  document.body.style.setProperty("--sheet-px", `${h}px`);
+  map.setPadding({ ...map.getPadding(), bottom: h });
 }
+// the sheet's height changes in a transition (0.2 s): each step of it gives the padding, also when the main thread is busy
+new ResizeObserver(() => sheet()).observe($("panel"));
 document.body.dataset.sheet = NEXT_SHEET[kept("duckosm.sheet")] ? kept("duckosm.sheet") : "half";
 $("sheet-handle").onclick = () => sheet(NEXT_SHEET[document.body.dataset.sheet]);
 phone.addEventListener("change", () => sheet());

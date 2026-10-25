@@ -68,7 +68,16 @@ with sync_playwright() as p:
     page.tap("#sheet-handle")
     assert state() == "fold"
     page.tap("#run")
-    page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && window.duckMap.loaded()", timeout=600_000)
+    # first the loading veil over the map that the sheet leaves free (the base map of before), then the blank base and the area in view
+    page.wait_for_function("!document.getElementById('mapbusy').hidden", timeout=600_000, polling=50)
+    assert page.evaluate("document.querySelector('input[name=base]:checked')?.value") != "blank", "the old base map under the veil"
+    page.wait_for_timeout(300)                      # the sheet's height (a transition of 0.2 s)
+    if page.evaluate("!document.getElementById('mapbusy').hidden"):
+        busy, pn = page.evaluate(BOX, "mapbusy"), page.evaluate(BOX, "panel")
+        assert busy[1] == 0 and abs(busy[3] - pn[1]) <= 1, ("the veil above the sheet", busy, pn)
+        shot("3a-drawing")
+    page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && window.duckMap.loaded() && "
+                           "document.getElementById('mapbusy').hidden", timeout=600_000)
     assert "drawn" in page.inner_text("#mapnote"), page.inner_text("#mapnote")
     assert state() == "half", state()
     page.wait_for_timeout(400)
@@ -127,7 +136,7 @@ with sync_playwright() as p:
         page.wait_for_timeout(400)
         assert page.is_visible("#step7-card") and page.is_visible("footer") and not page.is_visible("#editbar")
         # the page's sheet again, in the state it had, with the map's padding for it, and card 7 in view in it
-        assert state() == before and abs(page.evaluate(BOX, "panel")[3] - H) < 1 and abs(padding() - sheet_h()) < 2, (state(), padding())
+        assert state() == before and abs(page.evaluate(BOX, "panel")[3] - H) < 1 and abs(padding() - sheet_h()) < 2, (state(), padding(), sheet_h())
         top, card = page.evaluate(BOX, "panel")[1], page.evaluate(BOX, "step7-card")
         assert top - 1 <= card[1] < H - 100, ("card 7 in view again", top, card)
         assert page.evaluate("scrollY") == 0

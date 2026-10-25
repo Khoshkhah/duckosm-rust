@@ -44,12 +44,18 @@ def sql(page, text):
     return got
 
 
+BUSY = "!document.getElementById('mapbusy').hidden"
+
+
 def drawn(page, js):
-    """Run js (clicks that start a draw), then wait until no draw runs (window.mapDrawing) and the map is drawn or failed."""
+    """Run js (clicks that start a draw), then wait until no draw runs (window.mapDrawing) and the map is drawn or failed. The map's
+    loading veil (#mapbusy) shows at once and goes when the draw stops."""
     page.evaluate(js)
+    assert page.evaluate(BUSY), "the loading veil shows at once"
     page.wait_for_timeout(1000)                     # a second click 300 ms later is in
     page.wait_for_function("!window.mapDrawing && /drawn|failed/.test(document.getElementById('mapnote').textContent) && "
                            "window.duckMap.loaded()", timeout=300_000)
+    assert not page.evaluate(BUSY), "the loading veil goes after the draw"
 
 
 with sync_playwright() as p:
@@ -67,7 +73,14 @@ with sync_playwright() as p:
     page.click("#tab-region")
     page.set_input_files("#region", str(ROOT / "tests/data/monaco_sample.osm.pbf"))
     page.click("#run")
-    page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent)", timeout=600_000)
+    # the draw after the build (Kaveh: "a loading map processing shows first, then change base map to blank and zoom to that area"):
+    # first the veil with the draw's step over the map as it is (the base map of before), then the blank base and the area in view
+    page.wait_for_function(BUSY, timeout=600_000, polling=50)
+    assert page.evaluate("document.querySelector('input[name=base]:checked')?.value") != "blank", "the old base map under the veil"
+    print("while the draw runs:", page.inner_text("#mapbusy-text"))
+    page.screenshot(path=str(out / "draw-during.png"))
+    page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && document.getElementById('mapbusy').hidden",
+                           timeout=600_000)
     assert "drawn" in page.inner_text("#mapnote"), page.inner_text("#mapnote")
     assert page.is_visible("#step7-card"), "card 7 shows after a build with levels"
     # the draw after the build: the blank base map (the light theme) and the area in view (Kaveh: "set base map to blank and zoom on
@@ -76,6 +89,7 @@ with sync_playwright() as p:
     assert page.evaluate("document.querySelector('input[name=base]:checked')?.value") == "blank"
     w, s_, e, n = AREA
     assert page.evaluate(f"(b => b.contains([{w}, {s_}]) && b.contains([{e}, {n}]))(window.duckMap.getBounds())"), "the area in view"
+    page.screenshot(path=str(out / "draw-after.png"))
     # a real hover and a real click on a road (roadstyle's pick layer, rs-roads-simple): the road's hover state, then rs:select
     point = page.evaluate("""() => { const m = window.duckMap, c = m.getCanvas().getBoundingClientRect();
         for (const f of m.queryRenderedFeatures({layers: ['rs-roads-simple']})) {
@@ -112,8 +126,11 @@ with sync_playwright() as p:
                      ("a click while a draw runs", "document.getElementById('show').click(); setTimeout(() => document.getElementById('show').click(), 300)"),
                      *[(f"network {m}", f"(s => {{ s.value = '{m}'; s.dispatchEvent(new Event('change')); }})(document.getElementById('mapmode'))")
                        for m in ["driving", "all", "walking", "all", "cycling", "all"]]]:
+        centre = page.evaluate("window.duckMap.getCenter().toArray()")
         drawn(page, js)
         assert "drawn" in page.inner_text("#mapnote"), f"{what}: {page.inner_text('#mapnote')}"
+        if what.startswith("network"):       # a network change does not move the view
+            assert page.evaluate("window.duckMap.getCenter().toArray()") == centre, what
         if what.startswith("network"):       # the roads on the map: the network's own (Monaco: driving 3,454, walking 11,910, cycling 11,257)
             print(f"{what}: {page.evaluate('window.RS_SIDE.props.length')} roads on the map")
     # a draw that fails (an unknown network) must not break the next ones
@@ -122,6 +139,13 @@ with sync_playwright() as p:
     for m in ["driving", "all"]:
         drawn(page, f"(s => {{ s.value = '{m}'; s.dispatchEvent(new Event('change')); }})(document.getElementById('mapmode'))")
         assert "drawn" in page.inner_text("#mapnote"), f"network {m} after a failed draw: {page.inner_text('#mapnote')}"
+    # a draw of the page that fails (the map refuses the roads source once): the veil goes and the note gives the error
+    page.evaluate("() => { window.duckMap.addSource = () => { delete window.duckMap.addSource; throw new Error('test fault'); }; }")
+    drawn(page, "document.getElementById('show').click()")
+    assert "The map failed: test fault" in page.inner_text("#mapnote"), page.inner_text("#mapnote")
+    print("a failed draw:", page.inner_text("#mapnote"))
+    drawn(page, "document.getElementById('show').click()")
+    assert "drawn" in page.inner_text("#mapnote"), f"the draw after a failed draw: {page.inner_text('#mapnote')}"
     # each reading drops its own temporary tables (roadstyle's run: "drop")
     assert sql(page, "SELECT count(*) FROM duckdb_tables() WHERE temporary") == ["0"], "no temporary table after the draws"
     print("draws: two clicks, a click during a draw, the networks, and the networks after a failed draw: each one drawn")
