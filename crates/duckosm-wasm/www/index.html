@@ -220,6 +220,10 @@
   .steplog th:first-child, .steplog td:first-child { text-align: left; }
   .steplog td { text-align: right; white-space: nowrap; }
   .steplog td:first-child { white-space: normal; }
+  /* card 4 after a build: one muted line, and the build details' text rows */
+  #buildstatus.done { padding: 0; background: none; color: var(--muted); }
+  #builddetails td[colspan] { text-align: left; white-space: normal; }
+  #builddetails th, #builddetails td { padding: 3px 4px; }
   .steplog tr.group td { padding-top: 9px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; border-bottom: 0; }
   .steplog tr.total td { font-weight: 600; border-bottom: 0; }
   /* the time cell: a bar for the share of the slowest step */
@@ -456,6 +460,7 @@
   </details>
   <p id="buildhint" class="small" style="margin:10px 0 0; color: var(--warn)" aria-live="polite"></p>
   <p id="buildstatus" class="progress" aria-live="polite"></p>
+  <details id="builddetails" hidden><summary>Build details</summary><table class="steplog"><tbody></tbody></table></details>
   <details id="steplog" open hidden><summary>Time and memory of each step</summary>
     <table class="steplog"><thead><tr><th>Step</th><th>Time (s)</th><th>Memory (MiB)</th></tr></thead><tbody></tbody>
       <tfoot><tr class="total"><td>Total</td><td></td><td></td></tr></tfoot></table>
@@ -1150,7 +1155,34 @@ refreshKept();
 canBuild();
 
 // ---- step 4: build ----
-const progress = (text) => ($("buildstatus").textContent = text);
+const progress = (text) => { $("buildstatus").classList.remove("done"); $("buildstatus").textContent = text; };
+// card 4's "Build details": the build's summary (one line for each part: "driving: 2765 edges, 1719 nodes, ...") as one small table: a row
+// for each mode with its numbers in columns, then one row for each other part. A line of another form stays as text.
+// the columns of a mode: [the words in the summary, the heading]; "graph": the rows of edge_graph, "turns": the turn restrictions
+const MODE_COLS = [["edges", "edges"], ["nodes", "nodes"], ["private edges", "private"], ["edge_graph rows", "graph"], ["turn restrictions", "turns"]];
+function buildDetails(summary) {
+  const cell = (t) => `<td>${esc(t)}</td>`;
+  const rows = [`<tr><th></th>${MODE_COLS.map(([, h]) => `<th>${h}</th>`).join("")}</tr>`], other = [];
+  for (const line of summary.split("\n").filter(Boolean)) {
+    const m = line.match(/^([^:]+): (.*)$/);
+    if (!m) { other.push(`<tr><td colspan="6">${esc(line)}</td></tr>`); continue; }
+    const [, label, rest] = m;
+    // the parts "N words", without the solver's stage values (for a developer: the browser console)
+    const best = rest.match(/ \(best values of the stages: [^)]*\)/);
+    if (best) console.info(`build ${label}:${best[0]}`);
+    const parts = rest.replace(/ \(best values of the stages: [^)]*\)/, "").split(", ").map((x) => x.match(/^(\d+) (.+)$/) ?? [x, null, x]);
+    if (duck.MODES.includes(label)) {
+      rows.push(`<tr><td>${esc(label)}</td>${MODE_COLS.map(([w]) => cell(num(+(parts.find((x) => x[2] === w)?.[1] ?? NaN)) .replace("NaN", "–"))).join("")}</tr>`);
+    } else {
+      const text = parts.map(([x, n, w]) => (n ? `${num(+n)} ${w.replace("stack pairs given up", "given up").replace("order wishes not kept", "not kept")}` : x)).join(" · ");
+      const method = label.match(/^levels \((\w+)\)$/);
+      other.push(`<tr><td>${esc(method ? "levels" : label)}</td><td colspan="5">${esc((method ? method[1] + " · " : "") + text)}</td></tr>`);
+    }
+  }
+  $("builddetails").querySelector("tbody").innerHTML = rows.concat(other).join("");
+  $("builddetails").hidden = false;
+  $("buildstatus").classList.add("done");
+}
 // the log: a row for each step of the build, the tables and the map, under a heading for each part. The memory is that of
 // the part: the build module (its WebAssembly memory, which only grows), DuckDB (its buffers) or the map module.
 const STEP_GROUPS = { build: "Build (WebAssembly module)", page: "In the page", duckdb: "DuckDB", map: "Map (roadstyle module)" };
@@ -1188,6 +1220,7 @@ $("run").onclick = async () => {
   unfold("step4-card");                           // the progress of the build shows there
   $("step5-card").hidden = true;
   $("steplog").hidden = true;
+  $("builddetails").hidden = true;
   $("showrow").hidden = true;
   $("mapnote").textContent = "";
   closeEditor();
@@ -1250,10 +1283,9 @@ $("run").onclick = async () => {
       wasmLoad: out.seconds.load, build: out.seconds.build, tables: (loaded - built) / 1000, clickToQuery: (ready - start) / 1000,
       memoryMiB: out.memoryMiB, threads: out.threads, download, features: featuresSeconds,
     });
-    const got = download ? `OSM data from ${download.server}: ${num(download.bytes / 2 ** 20, 1)} MB in ${num(download.seconds, 1)} s.\n` : "";
-    progress(`${out.summary}\n\n${got}Total ${num((ready - start) / 1000, 2)} s, from the click on Build until the tables are ` +
-             `in DuckDB and you can query them (the table below gives each step). Build module: ${out.memoryMiB} MiB, ` +
-             `${out.threads} thread(s).`);
+    const got = download ? ` · ${num(download.bytes / 2 ** 20, 1)} MB from ${download.server}` : "";
+    progress(`Built in ${num((ready - start) / 1000, 1)} s · ${out.threads} thread${out.threads > 1 ? "s" : ""} · ${out.memoryMiB} MiB${got}`);
+    buildDetails(out.summary);
     files();
     const counts = [...out.summary.matchAll(/^(\w+): (\d+) edges, (\d+) nodes/gm)].map((m) => `${m[1]} ${num(+m[2])} / ${num(+m[3])}`);
     $("resultline").textContent = `${counts.join(" · ")} (edges / nodes), built in ${num((ready - start) / 1000, 1)} s`;

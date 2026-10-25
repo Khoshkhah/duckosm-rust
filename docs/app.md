@@ -85,7 +85,14 @@ The page keeps the selected file only in memory. After a reload, the user select
 - **Base map layers** (a check box, on): with a region file, the build also makes duckOSM's base-map layers
   (`features.*`), see [features.md](features.md).
 - **Build** (in the footer) starts the build in the Web Worker (`build_worker.js`, with threads when the page
-  is cross-origin isolated). The card shows the progress, then the summary and the times, as the old page.
+  is cross-origin isolated). The card shows the progress, then one line: "Built in 2.3 s · 8 threads · 52 MiB" (the
+  time from the click on Build until the tables are in DuckDB, the threads, the memory of the build module; with
+  Overpass also the size of the download). An error stays in the same place (`#buildstatus`).
+- **Build details** (folded at first, Kaveh 2026-10-24: "This part need redesign or maybe remove"): one small table.
+  A row for each mode with its edges, nodes, private edges, the rows of `edge_graph` ("graph") and the turn
+  restrictions ("turns"); then one row each for the bus routes, the raw cut (nodes, ways, relations), the levels (the
+  method, edges, roads, the stack pairs given up, the order wishes not kept) and the lane profile. The solver's stage
+  values go to the browser console only. Before, the card had all of it as long text.
 - A new build replaces the result of the last build.
 - **Time and memory of each step**: a table under the progress (open; a click closes it), with one row for each
   step and its time and memory. The line above it gives the total: from the click on Build until the tables are in

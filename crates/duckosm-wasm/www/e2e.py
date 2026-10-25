@@ -96,6 +96,8 @@ with sync_playwright() as p:
     if status.startswith("Error"):
         raise SystemExit(status)
     print(status)
+    # the build details of card 4 (folded): one table row each
+    print("build details:", " | ".join(page.eval_on_selector_all("#builddetails tr", "rs => rs.map((r) => [...r.cells].map((c) => c.textContent).join(' ').trim())")))
     page.evaluate("document.getElementById('sql-box').open = true")   # the SQL box of card 5 is folded
     page.click("#query")
     page.wait_for_selector("#result table, #result .error", timeout=60_000)
