@@ -8,6 +8,7 @@ The page folder is this one by default; a copy with versions (version_refs.py, a
 each request of the page for a file of the site has the version. It uses tests/data/monaco_sample.osm.pbf and tests/data/monaco.geojson. Build the page first (docs/development.md, "WebAssembly").
 The page loads duckdb-wasm and MapLibre from cdn.jsdelivr.net, so the computer needs the network.
 """
+import json
 import pathlib
 import sys
 import time
@@ -18,6 +19,11 @@ from playwright.sync_api import sync_playwright
 from serve import WWW, start, unversioned_requests
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
+# the box of the test's area (tests/data/monaco.geojson): west, south, east, north
+_rings = [c for f in json.loads((ROOT / "tests/data/monaco.geojson").read_text())["features"] for c in
+          (f["geometry"]["coordinates"] if f["geometry"]["type"] == "Polygon" else [r for poly in f["geometry"]["coordinates"] for r in poly])]
+AREA = (min(x for r in _rings for x, _ in r), min(y for r in _rings for _, y in r), max(x for r in _rings for x, _ in r),
+        max(y for r in _rings for _, y in r))
 out = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else "out-editor")
 out.mkdir(parents=True, exist_ok=True)
 www = sys.argv[2] if len(sys.argv) > 2 else WWW
@@ -64,6 +70,12 @@ with sync_playwright() as p:
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent)", timeout=600_000)
     assert "drawn" in page.inner_text("#mapnote"), page.inner_text("#mapnote")
     assert page.is_visible("#step7-card"), "card 7 shows after a build with levels"
+    # the draw after the build: the blank base map (the light theme) and the area in view (Kaveh: "set base map to blank and zoom on
+    # the selected area")
+    page.wait_for_function("!window.duckMap.isMoving()", timeout=30_000)
+    assert page.evaluate("document.querySelector('input[name=base]:checked')?.value") == "blank"
+    w, s_, e, n = AREA
+    assert page.evaluate(f"(b => b.contains([{w}, {s_}]) && b.contains([{e}, {n}]))(window.duckMap.getBounds())"), "the area in view"
     # a card folds with a click on its heading, the page keeps the fold, and a second click opens it
     page.click("#step6")
     assert page.evaluate("document.getElementById('step6-card').classList.contains('folded')") and not page.is_visible("#show")
@@ -71,6 +83,12 @@ with sync_playwright() as p:
     assert page.get_attribute("#step6 .fold", "aria-expanded") == "false"
     page.click("#step6 .fold")
     assert page.is_visible("#show") and page.evaluate("localStorage.getItem('duckosm.card.6')") == "0"
+
+    # a base map that the user chooses stays for the next draws of the page
+    page.evaluate("(r => { r.checked = true; r.dispatchEvent(new Event('change')); })(document.querySelector('input[name=base][value=\"\"]'))")
+    drawn(page, "document.getElementById('show').click()")
+    assert page.evaluate("document.querySelector('input[name=base]:checked')?.value") == "", "the user's base map stays"
+    print("base map: blank at the first draw, the user's choice at the next ones")
 
     # one draw at a time: two clicks at once, a click while a draw runs, then each network after "all"
     for what, js in [("two clicks at once", "document.getElementById('show').click(); document.getElementById('show').click()"),

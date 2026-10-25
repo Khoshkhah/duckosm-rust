@@ -199,6 +199,10 @@ and the two download buttons between them. With three modes, the line takes thre
   (It was "Roads of" in step 5; Kaveh did not understand the name.) A change draws the map again when it shows.
 - **Show on map** draws the roads of the network. After a build, the page draws them at once only for a small area
   (fewer than 20,000 roads: Monaco has 13,298). A larger area waits for the click (Tartu: 64,828 roads).
+- **Show on map** and the draw after a build set the blank base map (Blank, or Blank dark with the dark theme) and put the
+  area in view (Kaveh, 2026-10-25: "set base map to blank and zoom on the selected area"). Out of the area, OpenFreeMap's
+  own colors (the water, the wetland pattern) made the two sides of the boundary look different. After the user chooses a
+  base map (the ▦ button), the later draws of the page keep that choice. On a phone the area stays above the sheet.
 - One line under it: the number of roads and the time of the last drawing. The table in step 4 has each step.
 - One draw at a time (2026-10-24, after two faults that Kaveh got on the live page). A draw makes temporary tables in
   DuckDB (roadstyle's `duckosmPlan`) and writes `roads.parquet`. Two draws at the same time broke each other ("Table with

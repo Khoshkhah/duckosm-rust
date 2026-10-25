@@ -9,6 +9,7 @@ page's panel comes back at its place after Apply and Close. It writes phone-*.pn
 
 Build the page first (docs/development.md, "WebAssembly"). The page loads its libraries from cdn.jsdelivr.net.
 """
+import json
 import pathlib
 import sys
 
@@ -73,6 +74,17 @@ with sync_playwright() as p:
     page.wait_for_timeout(400)
     card5, pn = page.evaluate(BOX, "step5-card"), page.evaluate(BOX, "panel")
     assert pn[1] < card5[1] < H - 100, ("card 5 (the result) in view in the sheet", card5, pn)
+    # the draw after the build: the blank base map and the area in view above the sheet (the map's padding)
+    page.wait_for_function("!window.duckMap.isMoving()", timeout=30_000)
+    assert page.evaluate("document.querySelector('input[name=base]:checked')?.value") == "blank"
+    area = page.evaluate("""() => { const c = window.duckMap.getContainer().getBoundingClientRect(), m = window.duckMap;
+        const b = [m.unproject([0, 0]), m.unproject([c.width, c.height - document.body.style.getPropertyValue('--sheet-px').replace('px', '')])];
+        return [b[0].lng, b[1].lat, b[1].lng, b[0].lat]; }""")
+    rings = [r for f in json.loads((ROOT / "tests/data/monaco.geojson").read_text())["features"] for r in
+             (f["geometry"]["coordinates"] if f["geometry"]["type"] == "Polygon" else [r for poly in f["geometry"]["coordinates"] for r in poly])]
+    w, s_, e, n = (min(x for r in rings for x, _ in r), min(y for r in rings for _, y in r), max(x for r in rings for x, _ in r),
+                   max(y for r in rings for _, y in r))
+    assert area[0] <= w and area[1] <= s_ and area[2] >= e and area[3] >= n, ("Monaco above the sheet", area, (w, s_, e, n))
     shot("3-built")
 
     # a scroll inside the sheet moves the cards, not the map and not the page

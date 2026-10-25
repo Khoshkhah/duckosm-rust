@@ -1432,11 +1432,23 @@ async function visualization() {
   unfold("step6-card");
   if (!$("step7-card").hidden) unfold("step7-card");
   $("editnote").textContent = "";
-  if (roadCount.all < AUTO_DRAW && roadCount.all <= window.mapMaxRoads) showRoads();
+  if (roadCount.all < AUTO_DRAW && roadCount.all <= window.mapMaxRoads) freshMap();
   else $("mapnote").textContent = roadCount.all > window.mapMaxRoads ? tooLarge(roadCount.all)
     : `${num(roadCount.all)} roads: a large map. Click Show on map to draw it.`;
 }
-$("show").onclick = showRoads;
+// "Show on map" and the draw after a build (Kaveh: "set base map to blank and zoom on the selected area"): the blank base map of the
+// theme, so that the map outside the area does not look different from the area, and the view on the area. A base map that the user
+// chooses after that stays for the next draws of this page.
+let baseChosen = false;
+function freshMap() {
+  if (!baseChosen) {
+    view.base = dark() ? "blank_dark" : "blank";
+    loaded.then(setBase);
+  }
+  zoomToArea();
+  return showRoads();
+}
+$("show").onclick = freshMap;
 // the Google Maps key of Google 3D: only in this browser's storage, never in the address or the page's code
 $("gkey").value = kept("duckosm.googleKey") ?? "";
 $("gkey-save").onclick = () => {
@@ -1507,6 +1519,7 @@ const popBase = (open) => { $("basepop").hidden = !open; $("bbase").ariaExpanded
 $("bbase").onclick = () => popBase($("basepop").hidden);
 document.addEventListener("click", (e) => { if (!$("basepop").hidden && !e.target.closest("#bbase, #basepop")) popBase(false); });
 for (const r of document.querySelectorAll("input[name=base]")) r.onchange = () => {
+  baseChosen = true;                              // the next draws keep it (freshMap)
   view.base = r.value;
   keep("duckosm.basemap", r.value);
   if (r.value === "satellite") $("ownlayers").checked = false;   // the duckOSM layers would cover the photo
