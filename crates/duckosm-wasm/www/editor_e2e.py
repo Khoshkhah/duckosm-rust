@@ -44,6 +44,7 @@ def sql(page, text):
     return got
 
 
+BOX = "(id) => { const r = document.getElementById(id).getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; }"
 BUSY = "!document.getElementById('mapbusy').hidden"
 
 
@@ -65,6 +66,10 @@ with sync_playwright() as p:
     page.on("pageerror", lambda e: errors.append(str(e)))
     unversioned = unversioned_requests(page, www)
     page.on("console", lambda m: m.type == "error" and print("console:", m.text))
+    # roadstyle's dashboard checks each roads style's interaction contract (roadstyle:contract, since 6be68c2): an error for a newer
+    # one, an info line for a style without it. The page's look is not "live", so its styles have no contract: read as version 1.
+    contract = []
+    page.on("console", lambda m: "contract" in m.text and contract.append(f"{m.type}: {m.text}"))
     page.goto(url)
     page.wait_for_function("window.mapReady && window.timings && window.timings.duckdbStart", timeout=120_000)
     page.evaluate("localStorage.clear()")             # no edits of an earlier run
@@ -156,12 +161,42 @@ with sync_playwright() as p:
     # the longest task of the main thread while the editor opens (the editor's engine is in a worker: the page does not stop)
     page.evaluate("""window.longTask = 0; new PerformanceObserver((l) => l.getEntries().forEach((e) =>
         window.longTask = Math.max(window.longTask, e.duration))).observe({type: 'longtask'})""")
+    # the messages to the editor's worker (roadstyle's call.js: {type, id}): the number of solves, and the time of each type until its
+    # answer (window.workerSeconds, the last one of each type)
+    page.evaluate("""() => { window.solves = 0; window.workerSeconds = {}; const post = Worker.prototype.postMessage;
+        Worker.prototype.postMessage = function (m, ...r) {
+          if (m && /^[a-z]/.test(m.type) && m.id) {      // MapLibre's workers have messages {type, id} too, with upper-case types
+            if (m.type === 'solve') window.solves++;
+            const t0 = performance.now(), w = this;
+            w.addEventListener('message', function done(e) {
+              if (e.data.id === m.id) { window.workerSeconds[m.type] = (performance.now() - t0) / 1000; w.removeEventListener('message', done); } });
+          }
+          return post.call(this, m, ...r); }; }""")
     t = time.time()
     page.click("#edit-open")
     page.wait_for_function("window.levelEditorOpen || /failed/.test(document.getElementById('editnote').textContent)", timeout=300_000)
     assert page.evaluate("!!window.levelEditorOpen"), page.inner_text("#editnote")
+    assert page.evaluate("window.solves") == 1, "the first open solves"
     print(f"open: {time.time() - t:.2f} s from the click until the editor is open; longest main-thread task "
           f"{page.evaluate('window.longTask') / 1000:.2f} s")
+    print(f"first open: the solve took {page.evaluate('window.workerSeconds.solve'):.2f} s;", page.inner_text("#editnote"))
+    # the second open of the same area: the page writes the area's files again; since roadstyle 6be68c2 the editor starts from the
+    # stored levels when levels_info.json names the same inputs (the SHA-256 of roads.parquet, pairs.csv and edits.csv): no solve
+    page.click("#edit-close")
+    page.wait_for_function("!window.levelEditorOpen && !window.mapDrawing && window.duckMap.loaded()", timeout=300_000)
+    t = time.time()
+    page.click("#edit-open")
+    page.wait_for_function("window.levelEditorOpen || /failed/.test(document.getElementById('editnote').textContent)", timeout=300_000)
+    assert page.evaluate("!!window.levelEditorOpen"), page.inner_text("#editnote")
+    print(f"second open: {time.time() - t:.2f} s from the click until the editor is open, "
+          f"{page.evaluate('window.solves') - 1} solve(s)")
+    if page.evaluate("window.solves") != 1:      # why: the stored key and the files' key
+        print("stored inputs key:", page.evaluate("""async () => { const d = await (await navigator.storage.getDirectory()).getDirectoryHandle('lv-duckosm_Monaco');
+            const text = async (n) => (await (await d.getFileHandle(n)).getFile()).arrayBuffer();
+            const sha = async (b) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', b))].map((x) => x.toString(16).padStart(2, '0')).join('');
+            return [JSON.parse(new TextDecoder().decode(await text('levels_info.json'))).inputs,
+              [await sha(await text('roads.parquet')), await sha(await text('pairs.csv')), await sha(await text('edits.csv'))].join(':')]; }"""))
+    assert page.evaluate("window.solves") == 1, "the second open of the same area starts from the stored levels"
     made = page.evaluate("window.editorArea")
     print("editor:", page.inner_text("#editnote"))
     assert made["roads"] > 6000 and made["pairs"] > 0, made      # Monaco: 6,830 roads (13,298 edges)
@@ -184,14 +219,38 @@ with sync_playwright() as p:
     assert page.evaluate("getComputedStyle(document.getElementById('lv')).backgroundColor") != "rgb(246, 247, 249)", "the dark panel"
     page.screenshot(path=str(out / "editor-dark.png"))
     page.evaluate("document.documentElement.dataset.theme = 'light'")
+    # the page's panel collapses and opens while the editor is open: the editor's panel stays on the right and works (Kaveh, 2026-10-25:
+    # "when I collapse duckosm side panel, the level editor convert totally white": a transform on the page's panel took it away)
+    lv_box = lambda: page.evaluate(BOX, "lv")  # noqa: E731
+    for click, collapsed in [("#collapse", True), ("#open", False)]:
+        page.click(click)
+        page.wait_for_timeout(400)
+        assert page.evaluate("document.body.classList.contains('collapsed')") == collapsed
+        assert page.evaluate(BOX, "panel")[2] <= 0 if collapsed else page.evaluate(BOX, "panel")[0] == 0, page.evaluate(BOX, "panel")
+        assert lv_box()[0] >= 900 and lv_box()[2] == 1400, ("the editor's panel on the right", collapsed, lv_box())
+        page.click("#lv-tabs [data-t=history]")
+        page.wait_for_function("document.querySelector('#lv-tabs [data-t=history]').classList.contains('on')", timeout=5_000)
+        page.click("#lv-tabs [data-t=edit]")
+        if collapsed:
+            page.screenshot(path=str(out / "editor-collapsed.png"))
+    print("collapse: the editor's panel stays on the right and its tabs work, with the page's panel collapsed and open")
 
     # one edit: the end head of a long road 7 m long, as the panel's API does it; the editor solves again and sends "solved"
     page.evaluate("window.solvedEvents = 0; window.levelEditorOpen.addEventListener('solved', () => window.solvedEvents++)")
     road = page.evaluate("window.levelEditorOpen.roads.find((f) => f.length_m > 30).road")   # a head of 7 m fits
+    t = time.time()
     said = page.evaluate("r => window.lvApi('/api/apply', {ops: [{op: 'head', road: r, end: 'end', m: '7'}]})", road)
     assert said["ok"] and said["redrawn"], said
     assert page.evaluate("window.solvedEvents") == 1
-    print("edit:", said["said"])
+    print(f"edit: a head: {time.time() - t:.2f} s until the map is drawn again ({said['said']})")
+    # a cap change and its undo (the cap of the editor's default): each is drawing only
+    for cap in ["square", ""]:
+        t = time.time()
+        said = page.evaluate("([r, c]) => window.lvApi('/api/apply', {ops: [{op: 'cap', road: r, end: 'start', cap: c}]})", [road, cap])
+        assert said["ok"] and said["redrawn"], said
+        print(f"edit: a cap ({cap or 'auto'}): {time.time() - t:.2f} s until the map is drawn again ({said['said']})")
+    print("the worker's last times (s):", {k: round(v, 2) for k, v in page.evaluate("window.workerSeconds").items()})
+    assert page.evaluate("window.solvedEvents") == 3
     page.click("#edit-apply")
     try:
         page.wait_for_function("/Applied|failed/.test(document.getElementById('editnote').textContent)", timeout=120_000)
@@ -266,6 +325,8 @@ with sync_playwright() as p:
     page.wait_for_function("window.duckMap.loaded() && !window.levelEditorOpen", timeout=300_000)
     page.evaluate("() => { FileSystemWritableFileStream.prototype.write = window.realWrite; }")
     assert not errors, errors
+    assert not [c for c in contract if not c.startswith("info:")], contract
+    print(f"contract: no error; {len(contract)} info line(s) (a style with no roadstyle:contract is read as version 1)")
     assert not unversioned, f"requests with no version: {unversioned}"
     print("no page errors")
     browser.close()

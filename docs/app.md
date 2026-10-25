@@ -67,8 +67,8 @@ On a screen of 700 px or less:
 
 The check: `phone_e2e.py` (Playwright's "iPhone 13": a 390 × 664 page, touch). It taps the page's sheet through its three
 states (the map's padding each time), builds Monaco from the one-row state, and checks that a scroll in the sheet moves
-neither the map nor the page. Then, with taps, it opens the editor, picks a road above the sheet, makes its end head shorter, solves
-("Apply and solve" in the sheet), applies in the page's bar, opens the editor again, moves the sheet with its handle and
+neither the map nor the page. Then, with taps, it opens the editor, picks a road above the sheet, makes its end head shorter
+(the editor saves and draws it at once, with no solve, since roadstyle `6be68c2`), applies in the page's bar, opens the editor again, moves the sheet with its handle and
 closes it. It checks the places of the bar, the map and the sheets, and that the page's sheet comes back in its state,
 and writes `phone-*.png`.
 
@@ -247,7 +247,15 @@ The card shows after a build that has `visualization.edge_levels` (each build of
 2. The editor (`levelEditor({map, container, pkgUrl, store, dashboard: rs, prefix: "rs-"})`) solves the area and draws its
    roads on the page's map, with the page's dashboard. Its panel (roadstyle's `level_editor.html`) is on the right of the
    map. A click on a road picks it. The panel has the cards with the ends and the heads, and the tabs Edit, History and
-   Issues (roadstyle's guide `docs/guides/levels.md`, "Fix it by hand"). The page solves each change again.
+   Issues (roadstyle's guide `docs/guides/levels.md`, "Fix it by hand"). The editor solves again only for a change of
+   the order rules (in the roads around the change). Since roadstyle `6be68c2`, a head or a line end (a cap) is drawing
+   only: the editor saves it and draws the map again at once, with no solve and no **Apply and solve**.
+   Since `6be68c2`, the editor also starts from its stored levels when `levels_info.json` names the same inputs (the
+   SHA-256 of `roads.parquet`, `pairs.csv` and `edits.csv`). Thus a second open of the same area does not solve, also
+   when the page writes the area's files again. The check on Monaco (`editor_e2e.py`, 2026-10-25): the first open
+   takes 2.4–4.1 s and its solve 0.13–0.20 s; the second open takes 2.2–3.0 s with no solve. On Monaco the solve is a
+   small part of an open. A head or a cap change takes 4–8 s until the map is drawn again; of this time, the worker
+   makes the new tiles and the road table in about 1.9 s (`build`), and the rest is the map's new tiles on the page.
 3. **Apply** writes the editor's `levels.csv` into `visualization.edge_levels`. `edge_levels_meta` gets `source = 'area'`,
    `area = 'this browser: <area name>'` and a new `created` time. `n_edges` and `edge_hash` do not change, because the
    edges are the same. The user's own files go into `level_edits`, `level_heads` and `level_caps`, as roadstyle's
@@ -269,6 +277,13 @@ How the editor shares the map:
   `map/pkg/roadstyle_wasm.js`), not in the map worker.
 - The panel follows the page's theme (the theme button and the system's theme): its colors are variables, with a dark set
   for `:root[data-theme=dark]` and for the system's dark theme.
+- The editor's panel is in `#lvhost`, out of the page's panel. Before 2026-10-25 it was in the page's panel. A collapse of
+  the page's panel then moved the editor's panel off the screen and made it inert (Kaveh: "when I collapse duckosm side
+  panel, the level editor convert totally white! like disable"). Now the page's panel collapses and opens while the
+  editor stays on the right and works (`editor_e2e.py` clicks its tabs in both states).
+- The dashboard checks the interaction contract of each roads style (`roadstyle:contract`, since `6be68c2`). The page's
+  look is not "live", so its styles have no contract. The dashboard reads them as version 1 and writes an info line in
+  the console, not an error.
 
 Limits:
 

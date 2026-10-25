@@ -12,6 +12,7 @@ Build the page first (docs/development.md, "WebAssembly"). The page loads its li
 import json
 import pathlib
 import sys
+import time
 
 from playwright.sync_api import sync_playwright
 
@@ -163,12 +164,20 @@ with sync_playwright() as p:
     page.touchscreen.tap(*point)
     page.wait_for_selector("#lv-cards [data-hroad]", timeout=30_000)
     shot("6-road")
-    # its end head one metre shorter (the slider, as a finger moves it), then "Apply and solve" in the sheet
+    # its end head one metre shorter (the slider, as a finger moves it): since roadstyle 6be68c2 a head is saved and drawn at once, with
+    # no solve and no "Apply and solve"; the editor's new road table (RS_SIDE) comes with the new map
+    page.evaluate("window.oldSide = window.RS_SIDE")
+    t = time.time()
     page.evaluate("""() => { const b = document.querySelectorAll('#lv-cards [data-hroad] input')[1];
         b.value = String(Math.max(+b.min || 0.5, +b.value - 1)); b.dispatchEvent(new Event('input')); b.dispatchEvent(new Event('change')); }""")
-    page.tap("#lv-apply")
-    page.wait_for_function("document.getElementById('lv-queue-sec').hidden", timeout=120_000)
-    page.wait_for_function("/Solved again/.test(document.getElementById('editnote').textContent)", timeout=60_000)
+    page.wait_for_function("window.RS_SIDE !== window.oldSide && window.duckMap.loaded()", timeout=120_000)
+    print(f"head slider: {time.time() - t:.2f} s until the map is drawn again")
+    assert page.is_hidden("#lv-apply"), "no Apply and solve for a head"
+    # roadstyle's fault (level_editor.js tap(), since before b976864): a tap near a road's edge sends a second rs:select from the wide
+    # tap line, with no road; the panel then asks for the road "undefined" and says "unknown road"
+    if "unknown road" in page.evaluate("document.getElementById('lv-toast').textContent"):
+        print("roadstyle fault: the tap picked a second road 'undefined' (unknown road)")
+    page.wait_for_function("/Changed/.test(document.getElementById('editnote').textContent)", timeout=60_000)
     # Apply in the page's bar: the tables, the map again, the page's panel back
     page.tap("#editbar [data-for=edit-apply]")
     page.wait_for_function("/Applied|failed/.test(document.getElementById('editnote').textContent)", timeout=120_000)
