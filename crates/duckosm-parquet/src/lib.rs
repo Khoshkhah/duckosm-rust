@@ -933,7 +933,7 @@ pub fn write_raw_relations_to<W: Write + Send>(out: W, rows: &[Relation]) -> Res
 /// Write `visualization.edge_levels` (docs/levels.md): the four numbers of each edge, and the heads and the caps.
 pub fn write_edge_levels_to<W: Write + Send>(
     out: W,
-    rows: &[roadstyle_rs::levels::Row],
+    rows: &[roadstyle_levels::Row],
 ) -> Result<(), String> {
     let fields = vec![
         field("edge_id", DataType::Int64),
@@ -947,7 +947,7 @@ pub fn write_edge_levels_to<W: Write + Send>(
         field("cap_end", DataType::Utf8),
     ];
     write_rows(out, fields, rows, |c| {
-        let f64s = |get: fn(&roadstyle_rs::levels::Row) -> Option<f64>| -> ArrayRef {
+        let f64s = |get: fn(&roadstyle_levels::Row) -> Option<f64>| -> ArrayRef {
             let mut b = Float64Builder::new();
             c.iter().for_each(|r| b.append_option(get(r)));
             Arc::new(b.finish())

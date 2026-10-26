@@ -16,4 +16,4 @@ arrow-array = "=60.0.0"
 arrow-schema = "=60.0.0"
 parquet = { version = "=60.0.0", default-features = false, features = ["arrow"] }
 # the rows of visualization.edge_levels (the same commit as duckosm-build)
-roadstyle-rs = { git = "https://github.com/Khoshkhah/roadstyle.git", rev = "aba5884" }
+roadstyle-levels = { git = "https://github.com/Khoshkhah/roadstyle.git", rev = "f0a161b9abd2d993c7963b909de0a9a4322f38bf" }

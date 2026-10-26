@@ -26,7 +26,7 @@ tzf-rs = { version = "2.1", default-features = false, features = ["bundled"], op
 # main.boundary keeps the order of the properties of the file, as GDAL does
 serde_json = { version = "1", features = ["preserve_order"] }
 # roadstyle's engine in Rust (roadstyle repository, rust/): the drawing levels (levels.rs), roadstyle's rules in one place
-roadstyle-rs = { git = "https://github.com/Khoshkhah/roadstyle.git", rev = "aba5884" }
+roadstyle-levels = { git = "https://github.com/Khoshkhah/roadstyle.git", rev = "f0a161b9abd2d993c7963b909de0a9a4322f38bf" }
 
 [dev-dependencies]
 # the tests read the .duckdb file that the build writes (the version of duckosm-duckdb)
