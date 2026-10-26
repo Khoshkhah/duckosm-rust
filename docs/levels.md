@@ -18,7 +18,7 @@ rule.
   answer. Thus a minimum-cost flow can solve each stage. The Rust port is one algorithm in pure Rust, for all the
   cases: no OR-tools, no HiGHS, no WebAssembly build of a C++ solver.
 - The code was in `duckosm-core` (the module `levels`). Since 2026-10-23 it is in roadstyle's own Rust engine
-  (`roadstyle_rs::levels`, roadstyle repository `rust/`). `duckosm-build/src/levels.rs` (in `duckosm-core` until
+  (`roadstyle_rs::levels`, roadstyle repository `rust/`). Since 2026-10-26 it is the crate `roadstyle-levels` at roadstyle `f0a161b`, with the crossing rule (a road that crosses another at one level keeps its order). The columns of `edge_levels` do not change. `duckosm-build/src/levels.rs` (in `duckosm-core` until
   2026-10-24) only gives it duckosm's edges. The CLI, the Python package and the page all have it.
 - Tartu (flow only): every row is equal to roadstyle's. Monaco (stages): the values of the stages are equal, and
   13,288 of 13,298 rows are equal. The other 10 edges have other numbers of the same quality.

@@ -249,8 +249,9 @@ The card shows after a build that has `visualization.edge_levels` (each build of
    this browser (`roads.parquet`, `pairs.csv`, `edges.json`, and `edits.csv` only when the store has none, so the edits
    of an earlier session show again). The store is `browserStore("duckosm:<area name>")`, in the private file system of
    the site. The card gives the number of roads and the warnings of `makeArea`.
-2. The editor (`levelEditor({map, container, pkgUrl, store, dashboard: rs, prefix: "rs-", levels})`) draws the area's
-   roads on the page's map, with the page's dashboard. `levels` is the build's `visualization.edge_levels` as CSV text,
+2. The editor (`levelEditor({map, container, pkgUrl, store, dashboard: rs, levels, host: {edgeIdCol, replaceRoads}, colors})`) draws on the page's own
+   map, roads and dashboard (roadstyle `f0a161b`, host mode): the editor has the same colours and profile as the roads of the page.
+   `replaceRoads` sends the changed edges to the map worker (`LiveMap.relevel`) and the visible tiles load again; the tables change at **Apply**. `levels` is the build's `visualization.edge_levels` as CSV text,
    with the `edge_hash` of `edge_levels_meta` (`duck.storedLevels()`). The editor starts from its stored `levels.csv`
    when it was solved for the same inputs (roadstyle `6be68c2`: the SHA-256 of `roads.parquet`, `pairs.csv` and
    `edits.csv`), else from the build's levels (since `083224c`); it solves the whole area only when neither fits. Its panel (roadstyle's `level_editor.html`) is on the right of the
