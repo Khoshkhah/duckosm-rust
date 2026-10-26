@@ -245,15 +245,11 @@ with sync_playwright() as p:
     assert page.evaluate("window.solves") == 0, "the second open of the same area starts from the stored levels"
     print("editor:", page.inner_text("#editnote"))
     assert made["roads"] > 6000 and made["pairs"] > 0, made      # Monaco: 6,830 roads (13,298 edges)
-    tiles = page.evaluate("window.duckMap.getStyle().sources['rs-lv-roads'].tiles[0]")
-    assert tiles.startswith("lv://"), tiles
-    assert page.evaluate("window.duckMap.getStyle().layers.some((l) => l.source === 'rs-lv-roads')"), "the editor's roads"
-    # the duckOSM base-map layers stay with the page's tile source rs-roads; only the page's road layers go
-    page_layers = page.evaluate("""window.duckMap.getStyle().layers.filter((l) => l.source === 'rs-roads')
-        .map((l) => [l['source-layer'], (l.layout || {}).visibility || 'visible'])""")
-    assert page_layers and all(sl.startswith("ov") for sl, _ in page_layers), page_layers
-    assert any(v == "visible" for _, v in page_layers), "a duckOSM base-map layer shows"
-    print(f"base map: {len(page_layers)} duckOSM layers stay while the editor is open")
+    # host mode: the editor draws on the page's own map and tile source rs-roads; only its end markers are its own
+    assert page.evaluate("window.duckMap.getStyle().sources['rs-roads'].tiles[0]").startswith("rs://"), "the page's roads"
+    assert page.evaluate("'lv-ends' in window.duckMap.getStyle().sources"), "the editor's end markers"
+    assert page.evaluate("window.duckMap.getStyle().layers.some((l) => l.source === 'rs-roads' && l['source-layer'] === 'simple')"), "the roads"
+    print("host mode: the editor uses the page's tile source rs-roads")
     assert page.is_visible("#lv"), "the editor's panel"
     page.evaluate("window.rsSelect(200)")          # a road picked, as a click on it does: the panel shows its card
     page.wait_for_function("window.duckMap.loaded()", timeout=120_000)

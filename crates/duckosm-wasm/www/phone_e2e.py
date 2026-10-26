@@ -166,18 +166,20 @@ with sync_playwright() as p:
     # a tap on a road in the part of the map above the sheet: the sheet shows its card
     point = page.evaluate("""(top) => { const m = window.duckMap, t = window.RS_SIDE, bottom = document.getElementById('lv').getBoundingClientRect().top;
         for (const c of t.mids) { if (!c) continue; const p = m.project(c), y = p.y + top;
-          if (p.x > 30 && p.x < innerWidth - 70 && y > top + 20 && y < bottom - 20) return [p.x, y]; } return null; }""", mp[1])
+          if (p.x > 30 && p.x < innerWidth - 70 && y > top + 20 && y < bottom - 20 &&
+            m.queryRenderedFeatures([[p.x - 4, p.y - 4], [p.x + 4, p.y + 4]], {layers: ['rs-roads-simple']}).length) return [p.x, y]; } return null; }""", mp[1])
     assert point, "a road above the sheet"
     page.touchscreen.tap(*point)
     page.wait_for_selector("#lv-cards [data-hroad]", timeout=30_000)
     shot("6-road")
     # its end head one metre shorter (the slider, as a finger moves it): since roadstyle 6be68c2 a head is saved and drawn at once, with
-    # no solve and no "Apply and solve"; the editor's new road table (RS_SIDE) comes with the new map
-    page.evaluate("window.oldSide = window.RS_SIDE")
+    # no solve and no "Apply and solve"
     t = time.time()
     page.evaluate("""() => { const b = document.querySelectorAll('#lv-cards [data-hroad] input')[1];
         b.value = String(Math.max(+b.min || 0.5, +b.value - 1)); b.dispatchEvent(new Event('input')); b.dispatchEvent(new Event('change')); }""")
-    page.wait_for_function("window.RS_SIDE !== window.oldSide && window.duckMap.loaded()", timeout=120_000)
+    page.wait_for_function("/Changed/.test(document.getElementById('editnote').textContent)", timeout=120_000)   # host mode (LiveMap.relevel): the map redraws in place, RS_SIDE stays
+    page.wait_for_timeout(300)
+    page.wait_for_function("window.duckMap.loaded()", timeout=120_000)
     print(f"head slider: {time.time() - t:.2f} s until the map is drawn again")
     assert page.is_hidden("#lv-apply"), "no Apply and solve for a head"
     # roadstyle's fault (level_editor.js tap(), since before b976864): a tap near a road's edge sends a second rs:select from the wide
