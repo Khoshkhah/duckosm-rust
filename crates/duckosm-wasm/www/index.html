@@ -1632,13 +1632,16 @@ function fallbackStore(store) {
   const mem = new Map();
   let lost = 0;
   return { key: store.key, name: store.name, lostBytes: () => lost,
-    async load(n, bytes) { return mem.has(n) ? mem.get(n) : store.load(n, bytes); },
+    async load(n, bytes) { const t = performance.now(); try { return mem.has(n) ? mem.get(n) : await store.load(n, bytes); } finally { lap(`store.load ${n}`, t); } },
     async save(n, data) {
+      const t0 = performance.now();
+      try {
       if (!mem.has(n)) {
         try { return await store.save(n, data); } catch (e) { console.warn(`level editor: ${n} not kept in the browser (${e.message})`); }
         lost += typeof data === "string" ? data.length : data.byteLength;
       }
       mem.set(n, { body: data, mtime: Date.now() / 1000 });
+      } finally { lap(`store.save ${n} (${(typeof data === "string" ? data.length : data.byteLength) >> 10} KB)`, t0); }
     } };
 }
 const lostNote = () => editorStore?.lostBytes() ? ` The browser could not keep the area files (${num(editorStore.lostBytes() / 2 ** 20, 1)} MB): ` +
@@ -1676,9 +1679,14 @@ function closeEditor(draw = false) {
 }
 // The editor's replaceRoads (roadstyle's host call): the map worker draws the changed edges again (relevel), and the visible tiles load again
 // (a new style, when the answer says so). The tables do not change until Apply.
+// lap(name, t0) keeps the seconds of each step in window.lvTimes (and a performance.measure); editor_e2e.py and the Burnaby test read them
+const lap = (name, t0) => { (window.lvTimes ||= []).push([name, +((performance.now() - t0) / 1000).toFixed(2)]); performance.measure(name, { start: t0 }); };
 async function replaceRoads(rows) {
+  let t = performance.now();
   const r = await duck.relevel(rows);
+  lap(`relevel worker (${rows.length} rows)`, t);
   editedMap = true;
+  t = performance.now();
   if (r.style) {
     removeRoads();
     await addRoadStyle(JSON.parse(r.style));
@@ -1688,7 +1696,10 @@ async function replaceRoads(rows) {
   } else {
     for (const id of Object.keys(map.getStyle().sources)) if (id.startsWith("rs-")) map.getSource(id).reload?.();
   }
+  lap(r.style ? "new style" : "tiles reload", t);
+  t = performance.now();
   await new Promise((ok) => { map.once("idle", ok); setTimeout(ok, 30000); });
+  lap("idle after relevel", t);
   window.relevelCounts = r.counts;                // for editor_e2e.py
 }
 $("edit-open").onclick = async () => {
@@ -1700,23 +1711,37 @@ $("edit-open").onclick = async () => {
     editorStore = null;                           // the note of a store of an earlier area goes
     editNote("opening the level editor…");
     const t0 = performance.now();
-    const [pkg, { levelEditor, browserStore, saveArea, areaIsFor }, levels] = await Promise.all([duck.roadstyle(),
-      import("./map/roadstyle/dashboard/editor/level_editor.js"), duck.storedLevels()]);
+    window.lvTimes = [];
+    const timed = (name, p) => { const t = performance.now(); return p.then((v) => { lap(name, t); return v; }); };
+    const [pkg, { levelEditor, browserStore, saveArea, areaIsFor }, levels] = await Promise.all([timed("roadstyle wasm", duck.roadstyle()),
+      timed("import level_editor.js", import("./map/roadstyle/dashboard/editor/level_editor.js")), timed("storedLevels (CSV from DuckDB)", duck.storedLevels())]);
     const store = (editorStore = fallbackStore(browserStore("duckosm:" + areaName, areaName)));
     // roadstyle's docs/rust/browser.md, "The level editor in a page": the area is made only when its edges changed (the store's
     // edges.json has the edge hash of the build's levels), and the editor starts from the map's levels (levels), with no solve
     let warnings = "";
-    if (!levels || !(await areaIsFor(store, levels.edge_hash))) {
+    let t = performance.now();
+    const same = levels && await areaIsFor(store, levels.edge_hash);
+    lap(`areaIsFor = ${!!same}`, t);
+    if (!same) {
       editNote("making the level area…");
-      const a = pkg.makeArea(await duck.levelEdges(), JSON.stringify({ id_col: "edge_id" }));
-      await saveArea(store, a, levels?.edge_hash ?? "");   // edits.csv only when the store has none: the edits of an earlier session stay
+      t = performance.now();
+      const edges = await duck.levelEdges();
+      lap("level_edges SQL", t);
+      t = performance.now();
+      const a = pkg.makeArea(edges, JSON.stringify({ id_col: "edge_id" }));
+      lap("makeArea", t);
+      t = performance.now();
+      await saveArea(store, a, levels?.edge_hash ?? "");
+      lap("saveArea", t);   // edits.csv only when the store has none: the edits of an earlier session stay
       window.editorArea = { roads: a.roadCount, pairs: a.pairCount, warnings: a.warnings };   // for editor_e2e.py
       if (a.warnings.length) warnings = `. Warnings: ${a.warnings.join("; ")}`;
       a.free();
     }
+    t = performance.now();
     await loaded;
     if (!roadsShown) await showRoads();           // the editor draws on the page's roads
     else await drawing;
+    lap(`page's roads (shown before: ${roadsShown})`, t);
     editedMap = false;
     window.rsDeselect?.();
     document.querySelectorAll(".maplibregl-popup").forEach((p) => p.remove());
@@ -1725,9 +1750,12 @@ $("edit-open").onclick = async () => {
     // the view stays: the module fits the map to the area when it starts (level_editor.js, "else map.fitBounds"), which moves what the user sees
     const fit = map.fitBounds;
     map.fitBounds = () => map;
+    t = performance.now();
     try { editor = await levelEditor({ map, container: $("lvhost"), pkgUrl, store, dashboard: rs, levels: levels ?? undefined,
       host: { edgeIdCol: "edge_id", replaceRoads }, colors: { select: "#7c4dff", hover: "#b388ff", second: "#4527a0" } }); }
     finally { map.fitBounds = fit; }
+    lap("levelEditor()", t);
+    lap("open, all", t0);
     editorStore = store;
     const made = `${num(editor.roads.length)} roads` + warnings;
     window.levelEditorOpen = editor;              // for editor_e2e.py
