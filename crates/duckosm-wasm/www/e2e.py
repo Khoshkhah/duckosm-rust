@@ -42,6 +42,7 @@ a.add_argument("--levels", choices=["tags", "solve"], default="tags", help="the 
 a.add_argument("--one-thread", action="store_true", help="serve the page without the COOP and COEP headers")
 a.add_argument("--threads", type=int, help="the size of the thread pool (default: the cores, at most 8)")
 a.add_argument("--view", help="lng,lat,zoom: move the map there before the picture (map.png)")
+a.add_argument("--boundary-shots", action="store_true", help="pictures at a point of the boundary (z12, z16; flat and pitch 60), OpenFreeMap base")
 a.add_argument("--www", default=str(WWW), help="the page's folder (default: this one)")
 args = a.parse_args()
 out = pathlib.Path(args.out)
@@ -141,6 +142,19 @@ with sync_playwright() as p:
         page.wait_for_function("window.duckMap.loaded()", timeout=600_000)
     print("map view:", page.evaluate("(() => { const m = window.duckMap; return {center: m.getCenter(), zoom: m.getZoom()}; })()"))
     page.screenshot(path=str(out / "map.png"))
+    if args.boundary_shots:
+        gj = json.loads(pathlib.Path(args.boundary).read_text())
+        g = gj["features"][0]["geometry"] if "features" in gj else gj
+        ring = g["coordinates"][0] if g["type"] == "Polygon" else g["coordinates"][0][0]
+        lng, lat = min(ring)[:2]                     # the westmost vertex of the boundary: the area on one side, OpenFreeMap on the other
+        for z in (12, 16):
+            for pitch in (0, 60):
+                page.evaluate(f"window.duckMap.jumpTo({{center: [{lng}, {lat}], zoom: {z}, pitch: {pitch}}})")
+                if pitch:
+                    page.evaluate("if (document.getElementById('bbld').ariaPressed !== 'true') document.getElementById('bbld').click()")
+                page.wait_for_function("window.duckMap.loaded()", timeout=600_000)
+                page.wait_for_timeout(1500)
+                page.screenshot(path=str(out / f"boundary-z{z}-pitch{pitch}.png"))
     print(json.dumps(page.evaluate("window.timings")))
     assert not unversioned, f"requests with no version: {unversioned}"
     browser.close()
