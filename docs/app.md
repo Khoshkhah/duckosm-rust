@@ -53,6 +53,7 @@ On a screen of 700 px or less:
   scale bar does not show, and the attribution starts folded (an "i" button).
 - The view stays still when the map's box or padding changes (the editor's panel or sheet opens or closes, the page's sheet moves): the page keeps the same point at the same screen position, with no animation, and the editor does not fit the map to the area. `editor_e2e.py` and `phone_e2e.py` check this within 2 px.
 - The 3D building layers are after every road layer (a line over an extrusion is not hidden by it) and before the labels; `editor_e2e.py` checks the order in 3D.
+- OpenFreeMap's own layers stay as served (no hidden road, no 3D heights, no zoom range); inside the area our base-map layers are above them. The 3D switch acts on our buildings only. Esri and the blank base map hide OpenFreeMap under them. `editor_e2e.py` compares them with the served liberty style.
 - After a build, the sheet shows card 5 (the result); from the one-row state it opens to half the height.
 - The cards' scroll box has a background that is 1 % transparent. With an opaque one over the map's canvas, Chromium
   (2026-10, also headless) left a band of the map undrawn, at the size of the scroll box but near the top of the screen.

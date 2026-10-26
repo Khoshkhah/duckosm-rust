@@ -186,12 +186,33 @@ with sync_playwright() as p:
     page.evaluate("document.getElementById('bbld').click(); window.duckMap.jumpTo({zoom: 16, pitch: 60})")
     page.wait_for_function("window.duckMap.loaded()", timeout=120_000)
     page.wait_for_timeout(1500)
-    order = page.evaluate("window.duckMap.getStyle().layers.map((l) => [l.id, l.type])")
-    ext = [i for i, (_, t) in enumerate(order) if t == "fill-extrusion"]
-    roads = [i for i, (n, t) in enumerate(order) if t == "line" and n.startswith(("rs-roads", "rs-lv-"))]
+    order = page.evaluate("window.duckMap.getStyle().layers.map((l) => [l.id, l.type, l.source ?? ''])")
+    ext = [i for i, (_, t, src) in enumerate(order) if t == "fill-extrusion" and src.startswith("rs-")]   # ours; OpenFreeMap's stay as served
+    roads = [i for i, (n, t, _) in enumerate(order) if t == "line" and n.startswith(("rs-roads", "rs-lv-"))]
     print("3D layers:", len(ext), "road layers:", len(roads))
     assert not ext or not roads or min(ext) > max(roads), ("extrusion layers after the road layers", ext, roads)
     page.screenshot(path=str(out / "editor-3d-pitch60.png"))
+    # OpenFreeMap's own layers stay as served (base map and 3D switch change only ours); the Esri switch and back too
+    cmp = """async () => {
+      const served = (await (await fetch("https://tiles.openfreemap.org/styles/liberty")).json()).layers;
+      const ids = new Set(served.map((l) => l.id)), mine = window.duckMap.getStyle().layers.filter((l) => ids.has(l.id));
+      const by = Object.fromEntries(mine.map((l) => [l.id, l]));
+      const bad = [];
+      for (const l of served) { const m = by[l.id]; if (!m) { bad.push(l.id + " missing"); continue; }
+        const vis = (x) => { const y = { ...(x ?? {}) }; if (y.visibility === "visible") delete y.visibility; return y; };
+        if (JSON.stringify(vis(m.layout)) !== JSON.stringify(vis(l.layout))) bad.push(l.id + ".layout");
+        for (const k of ["paint", "minzoom", "maxzoom"]) if (JSON.stringify(m[k] ?? null) !== JSON.stringify(l[k] ?? null)) bad.push(l.id + "." + k); }
+      return bad; }"""
+    own = page.evaluate("document.getElementById('ownlayers').checked")
+    for step in ("document.getElementById('bbld').click()", "document.querySelector('input[name=base][value=satellite]').click()",
+                 "document.querySelector('input[name=base][value=\"\"]').click()"):
+        page.evaluate(step)
+        page.wait_for_timeout(800)
+    bad = page.evaluate(cmp)
+    assert not bad, ("OpenFreeMap's layers changed", bad[:10])
+    page.evaluate("o => { const b = document.getElementById('ownlayers'); b.checked = o; b.dispatchEvent(new Event('change')); }", own)
+    page.evaluate("document.getElementById('bbld').click()")      # the 3D switch off again, as the test goes on
+    page.wait_for_timeout(800)
     page.evaluate("document.getElementById('bbld').click(); window.duckMap.jumpTo({pitch: 0})")
     pos0 = at()
     print("first open: the editor starts from", page.evaluate("window.levelEditorOpen.answer().resolve"))
