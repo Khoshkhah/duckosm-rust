@@ -298,7 +298,7 @@ export async function roadsStyle(mode, name, keep = []) {
   const out = await new Promise((ok, fail) => {
     w.onmessage = ({ data }) => {
       if (data.id != null) {
-        tileCalls.get(data.id)?.(data.data);
+        tileCalls.get(data.id)?.(data);
         tileCalls.delete(data.id);
       } else if (data.error) {
         endMapWorker();
@@ -320,7 +320,14 @@ const ask = (msg, none) => !mapWorker ? Promise.resolve(none) : new Promise((don
 // a tile of the roads map (MapLibre's request for rs://<generation>/<source>/<z>/<x>/<y>); a tile of an older style is empty
 export function tile(url) {
   const [gen, source, z, x, y] = url.slice("rs://".length).split("/");
-  return +gen !== generation ? Promise.resolve(new ArrayBuffer(0)) : ask({ tile: [source, +z, +x, +y] }, new ArrayBuffer(0));
+  return +gen !== generation ? Promise.resolve(new ArrayBuffer(0)) : ask({ tile: [source, +z, +x, +y] }, {}).then((r) => r.data ?? new ArrayBuffer(0));
+}
+// The level editor's changed edges (its replaceRoads rows, as text): the worker's LiveMap draws them again (roadstyle's relevel). The answer
+// is {counts: {edges, pieces_gone, sources, style_changed}, style} (style: the new style's JSON text, only when style_changed).
+export async function relevel(rows) {
+  const r = await ask({ relevel: rows }, { error: "the map worker is gone" });
+  if (r.error) throw new Error(r.error);
+  return r;
 }
 
 // The level editor (card 7, docs/app.md): the edges of the build's level area (duckOSM's load_roads: roadstyle's query level_edges), as

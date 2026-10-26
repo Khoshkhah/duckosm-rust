@@ -1379,6 +1379,21 @@ window.mapMaxRoads = maxParam !== null ? (Number(maxParam) || Infinity) : SMALL_
 const tooLarge = (n) => `This map has ${num(n)} roads; on this device the map can show up to ${num(window.mapMaxRoads)}. ` +
   (duck.MODES.some((m) => (roadCount[m] ?? Infinity) <= window.mapMaxRoads) ? "Choose a network that is smaller, use" : "Use") +
   " a desktop browser, or a smaller area. SQL and the downloads work.";
+async function addRoadStyle(style) {
+  const own = style.metadata?.["roadstyle:images"] || {};
+  await addImages(Object.fromEntries(Object.entries(own).map(([n, v]) => ["rs-" + n, v])));
+  // the one vector source "roads" (its source layers: roads, simple, slots, ov<i>); promoteId: a road's pieces have the road's id,
+  // so the dashboard lights them all with one feature state
+  for (const [id, src] of Object.entries(style.sources)) map.addSource("rs-" + id, id === "roads" ? { ...src, promoteId: { simple: "__rs_edge" } } : src);
+  for (const l of style.layers) {
+    let json = JSON.stringify(l);
+    for (const n of Object.keys(own)) json = json.replaceAll(`"${n}"`, `"rs-${n}"`);   // the image names in the layout
+    const layer = JSON.parse(json);
+    map.addLayer({ ...layer, id: "rs-" + l.id, source: "rs-" + l.source }, "area-fill");
+    if (layer.layout?.visibility === "none") offLayers.add("rs-" + l.id);
+  }
+  map.setLayoutProperty("area-fill", "visibility", "none");   // the fill would change the colors of the roads
+}
 async function drawRoads() {
   const run = ++roadsRun, isFresh = fresh;
   fresh = false;
@@ -1396,19 +1411,7 @@ async function drawRoads() {
     drawStep("drawing: the first tiles…");
     await loaded;
     removeRoads();
-    const own = r.style.metadata?.["roadstyle:images"] || {};
-    await addImages(Object.fromEntries(Object.entries(own).map(([n, v]) => ["rs-" + n, v])));
-    // the one vector source "roads" (its source layers: roads, simple, slots, ov<i>); promoteId: a road's pieces have the road's id,
-    // so the dashboard lights them all with one feature state
-    for (const [id, src] of Object.entries(r.style.sources)) map.addSource("rs-" + id, id === "roads" ? { ...src, promoteId: { simple: "__rs_edge" } } : src);
-    for (const l of r.style.layers) {
-      let json = JSON.stringify(l);
-      for (const n of Object.keys(own)) json = json.replaceAll(`"${n}"`, `"rs-${n}"`);   // the image names in the layout
-      const layer = JSON.parse(json);
-      map.addLayer({ ...layer, id: "rs-" + l.id, source: "rs-" + l.source }, "area-fill");
-      if (layer.layout?.visibility === "none") offLayers.add("rs-" + l.id);
-    }
-    map.setLayoutProperty("area-fill", "visibility", "none");   // the fill would change the colors of the roads
+    await addRoadStyle(r.style);
     window.RS_SIDE = r.roadTable;   // the road fields (the popup); the level editor puts its own here while it is open
     rs.setStyle(r.style);   // the dashboard reads the new roads style (its layers and metadata)
     roadsShown = true;
@@ -1616,11 +1619,11 @@ for (const c of cards) {
 }
 
 // ---- card 7: roadstyle's level editor on the page's map (docs/app.md). The page makes the level area from the tables (makeArea) and keeps
-// it in this browser (browserStore, one for each area name); the editor uses the page's dashboard and draws its roads with its prefix rs-.
-// It solves, makes its map and cuts its tiles in a Web Worker of its own (roadstyle's level_worker.js), with roadstyle's module from pkgUrl. The editor takes only the page's road layers off (the duckOSM base-map layers of the same tile source stay),
-// and Close (destroy) puts them back. Apply first writes the editor's levels.csv into the tables (visualization.edge_levels), and then the
-// page draws its roads again. ----
-let editor = null, editorStore = null;
+// it in this browser (browserStore, one for each area name). The editor uses the page's dashboard, map and roads (host mode): the page's roads
+// stay, and replaceRoads draws the edited edges again in the map worker. The editor solves and cuts no tiles of its own. Its pick adds
+// road and the line ends to the rows of window.RS_SIDE (destroy takes them off). Apply first writes the editor's levels.csv into the tables
+// (visualization.edge_levels), and then the page draws its roads again. ----
+let editor = null, editorStore = null, editedMap = false;   // editedMap: the map has levels that the tables do not have
 const editNote = (t) => { $("editnote").textContent = t + lostNote(); };
 // The area's files in this browser (roadstyle's browserStore: the texts in localStorage, which has about 5 MB for the site). A file that
 // the browser cannot keep (Burnaby's pairs.csv is larger; a full storage) stays in memory for this page, and the card says so.
@@ -1668,7 +1671,25 @@ function closeEditor(draw = false) {
   editor = window.levelEditorOpen = null;
   editing(false);
   map.resize();
-  if (draw) showRoads();
+  if (draw || editedMap) showRoads();
+  editedMap = false;
+}
+// The editor's replaceRoads (roadstyle's host call): the map worker draws the changed edges again (relevel), and the visible tiles load again
+// (a new style, when the answer says so). The tables do not change until Apply.
+async function replaceRoads(rows) {
+  const r = await duck.relevel(rows);
+  editedMap = true;
+  if (r.style) {
+    removeRoads();
+    await addRoadStyle(JSON.parse(r.style));
+    roadsShown = true;
+    setBase();
+    rs.setStyle(JSON.parse(r.style));
+  } else {
+    for (const id of Object.keys(map.getStyle().sources)) if (id.startsWith("rs-")) map.getSource(id).reload?.();
+  }
+  await new Promise((ok) => { map.once("idle", ok); setTimeout(ok, 30000); });
+  window.relevelCounts = r.counts;                // for editor_e2e.py
 }
 $("edit-open").onclick = async () => {
   // the editor draws every road of the area (all networks): the same limit as the map on a small device
@@ -1694,8 +1715,9 @@ $("edit-open").onclick = async () => {
       a.free();
     }
     await loaded;
-    roadsRun++;                                   // a draw of the page's roads that runs stops at its next step
-    await drawing;
+    if (!roadsShown) await showRoads();           // the editor draws on the page's roads
+    else await drawing;
+    editedMap = false;
     window.rsDeselect?.();
     document.querySelectorAll(".maplibregl-popup").forEach((p) => p.remove());
     // the worker loads roadstyle's module by this URL (the deploy puts its version on it, version_refs.py)
@@ -1703,7 +1725,8 @@ $("edit-open").onclick = async () => {
     // the view stays: the module fits the map to the area when it starts (level_editor.js, "else map.fitBounds"), which moves what the user sees
     const fit = map.fitBounds;
     map.fitBounds = () => map;
-    try { editor = await levelEditor({ map, container: $("lvhost"), pkgUrl, store, dashboard: rs, prefix: "rs-", levels: levels ?? undefined }); }
+    try { editor = await levelEditor({ map, container: $("lvhost"), pkgUrl, store, dashboard: rs, levels: levels ?? undefined,
+      host: { edgeIdCol: "edge_id", replaceRoads }, colors: { select: "#7c4dff", hover: "#b388ff", second: "#4527a0" } }); }
     finally { map.fitBounds = fit; }
     editorStore = store;
     const made = `${num(editor.roads.length)} roads` + warnings;

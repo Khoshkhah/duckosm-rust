@@ -6,11 +6,21 @@
 // makeRoads)}. Out: {style: JSON text, roadTable: the road table (each road's fields, middle, box and line), seconds, memoryMiB} or
 // {error}. Then in: {tile: [source, z, x, y], id}. Out: {id, data: ArrayBuffer} (empty when nothing is in the tile).
 // The page starts a new worker for each style: WebAssembly memory only grows, and a worker that ends gives it back.
-import init, { Look, makeSources, tileSources, memoryBytes } from "./pkg/roadstyle_wasm.js";
+import init, { Look, makeSources, LiveMap, memoryBytes } from "./pkg/roadstyle_wasm.js";
 
-let tiler = null;
+let tiler = null;   // a LiveMap: the tiles, and relevel (the level editor's changes) with no new style
 
 onmessage = async ({ data }) => {
+  if (data.relevel) {
+    // {relevel: rows, id}: the rows of the editor's replaceRoads. Out: {id, counts: {edges, pieces_gone, sources, style_changed}} or {id, error}
+    try {
+      const counts = JSON.parse(tiler.relevel(JSON.stringify(data.relevel)));
+      postMessage({ id: data.id, counts, style: counts.style_changed ? tiler.style() : undefined });
+    } catch (e) {
+      postMessage({ id: data.id, error: String((e && e.message) || e) });
+    }
+    return;
+  }
   if (data.tile) {
     const [source, z, x, y] = data.tile;
     const bytes = tiler.tile(source, z, x, y);
@@ -24,11 +34,10 @@ onmessage = async ({ data }) => {
     const l = Look.fromJson(look).withArg("levels", JSON.stringify(data.levels));
     // stage 1 (the sources and the road table), then the vector tiles of stage 2
     const sources = makeSources(data.roads, l, data.features, undefined, data.name);
-    tiler = tileSources(sources, data.prefix, data.keep);
     // the road table with only the fields that the page and roadstyle's dashboard read: the popup's (keep), and the dashboard's own
     // (lvl, oneway, length and the engine's __rs_* fields). Each road has about 30 fields; a city of 150,000 roads gave 88 MB of them.
     const roadTable = JSON.parse(new TextDecoder().decode(sources.roadTable()));
-    sources.free();
+    tiler = new LiveMap(sources, l, data.prefix, data.keep);   // takes the sources
     const wanted = new Set([...data.keep, "lvl", "oneway", "length", "highway", "name"]);
     roadTable.props = roadTable.props.map((p) => p && Object.fromEntries(Object.entries(p).filter(([k]) => wanted.has(k) || k.startsWith("__rs_"))));
     postMessage({ style: tiler.style(), roadTable, seconds: (performance.now() - t) / 1000, memoryMiB: Math.round(memoryBytes() / 2 ** 20) });
