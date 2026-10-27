@@ -241,6 +241,8 @@ with sync_playwright() as p:
     page.mouse.click(*page.evaluate(SPOT))
     page.wait_for_selector("#lv-cards .card, #lv-cards [data-hroad]", timeout=10_000)
     page.evaluate("c => window.duckMap.jumpTo(c)", cam)
+    # the road table has no lines (roadstyle a5209e9): the editor's end marks come from the worker's roadLines through linesOf
+    assert page.evaluate("window.RS_SIDE.props.some((p) => p && p.s_lon != null && p.e_lon != null)"), "the editor's end marks (lines of the roads)"
     print("editor: a road picked by a click; states while open:", len(page.evaluate(STATES)))
     # the second open of the same area: the page writes the area's files again; since roadstyle 6be68c2 the editor starts from the
     # stored levels when levels_info.json names the same inputs (the SHA-256 of roads.parquet, pairs.csv and edits.csv): no solve
@@ -261,6 +263,8 @@ with sync_playwright() as p:
     page.wait_for_timeout(700)
     picked = page.evaluate(STATES)
     assert picked, "a click on a road selects it after the editor"
+    page.wait_for_function("window.RS_SIDE._lines && window.RS_SIDE._lines.size > 0", timeout=20_000)   # the picked road's line was loaded (linesOf)
+    assert page.evaluate("[...window.RS_SIDE._lines.values()].some((l) => l && l.length >= 2)"), "the line of the picked road"
     page.mouse.click(*page.evaluate("() => { const m = window.duckMap; for (const [x, y] of [[420, 60], [430, 800], [1000, 70]]) { if (!m.queryRenderedFeatures([[x - 6, y - 6], [x + 6, y + 6]], {layers: ['rs-roads-simple']}).length) return [x, y]; } return [420, 60]; }"))
     page.wait_for_timeout(700)
     assert not page.evaluate(STATES), "a click on empty map clears the selection"

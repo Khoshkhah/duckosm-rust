@@ -8,9 +8,20 @@
 // The page starts a new worker for each style: WebAssembly memory only grows, and a worker that ends gives it back.
 import init, { Look, makeSources, LiveMap, memoryBytes } from "./pkg/roadstyle_wasm.js";
 
-let tiler = null;   // a LiveMap: the tiles, and relevel (the level editor's changes) with no new style
+let tiler = null, again = null, linesSources = null;   // again: what makeSources needs once more, for the lines (LiveMap takes the sources)   // a LiveMap: the tiles, and relevel (the level editor's changes) with no new style
 
 onmessage = async ({ data }) => {
+  if (data.lines) {
+    // {lines: rows, id}: the lines of these rows of the road table (roadstyle's roadLines). Out: {id, lines: [[lon, lat]...] | null for each row}
+    try {
+      // ponytail: LiveMap takes the first Sources, so the first call makes stage 1 again (Burnaby 1.2 s), once; roadstyle's LiveMap could give lines
+      linesSources ??= makeSources(again.roads, again.look, again.features, undefined, again.name);
+      postMessage({ id: data.id, lines: JSON.parse(new TextDecoder().decode(linesSources.roadLines(Uint32Array.from(data.lines)))) });
+    } catch (e) {
+      postMessage({ id: data.id, error: String((e && e.message) || e) });
+    }
+    return;
+  }
   if (data.relevel) {
     // {relevel: rows, id}: the rows of the editor's replaceRoads. Out: {id, counts: {edges, pieces_gone, sources, style_changed}} or {id, error}
     try {
@@ -42,6 +53,8 @@ onmessage = async ({ data }) => {
     // dashboard's own (lvl, oneway, length and the engine's __rs_* fields). The bytes go to the page, which parses them after the first tiles.
     const tableBytes = sources.roadTable(data.tableFields);
     lap("worker: road table bytes");
+    again = { roads: data.roads, look: l, features: data.features, name: data.name };
+    linesSources = null;
     tiler = new LiveMap(sources, l, data.prefix, data.keep);   // takes the sources
     lap("worker: LiveMap (tile index)");
     postMessage({ style: tiler.style(), tableBytes, laps, seconds: (performance.now() - t) / 1000, memoryMiB: Math.round(memoryBytes() / 2 ** 20) }, [tableBytes.buffer]);

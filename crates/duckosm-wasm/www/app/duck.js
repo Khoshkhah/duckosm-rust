@@ -348,6 +348,12 @@ export function tile(url) {
     return r.data ?? new ArrayBuffer(0);
   });
 }
+// The lines of these rows of the road table (roadstyle's roadLines, in the map worker): a Promise of a list, null for a row with no line
+export async function roadLines(rows) {
+  const r = await ask({ lines: rows }, { error: "the map worker is gone" });
+  if (r.error) throw new Error(r.error);
+  return r.lines;
+}
 // The level editor's changed edges (its replaceRoads rows, as text): the worker's LiveMap draws them again (roadstyle's relevel). The answer
 // is {counts: {edges, pieces_gone, sources, style_changed}, style} (style: the new style's JSON text, only when style_changed).
 export async function relevel(rows) {
