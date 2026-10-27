@@ -278,7 +278,7 @@ with sync_playwright() as p:
 
     # one edit: the end head of a long road 7 m long, as the panel's API does it; the editor solves again and sends "solved"
     page.evaluate("window.solvedEvents = 0; window.levelEditorOpen.addEventListener('solved', () => window.solvedEvents++)")
-    road = page.evaluate("window.levelEditorOpen.roads.find((f) => f.length_m > 30).road")   # a head of 7 m fits
+    road = page.evaluate("(async () => { const e = window.levelEditorOpen, ids = e.roads.slice(0, 300), f = await e.facts(ids); return ids.find((i) => f[i].length_m > 30); })()")   # a head of 7 m fits
     t = time.time()
     said = page.evaluate("r => window.lvApi('/api/apply', {ops: [{op: 'head', road: r, end: 'end', m: '7'}]})", road)
     assert said["ok"] and said["redrawn"], said

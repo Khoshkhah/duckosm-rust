@@ -302,9 +302,14 @@ export async function roadsStyle(mode, name, keep = []) {
   endMapWorker();
   const w = (mapWorker = new Worker(new URL("../map/map_worker.js", import.meta.url), { type: "module" }));
   const prefix = `rs://${++generation}/`;
+  let tableDone;
+  const roadTable = new Promise((ok) => (tableDone = ok));   // the road table comes in a second message, after the first tiles
   const out = await new Promise((ok, fail) => {
     w.onmessage = ({ data }) => {
-      if (data.id != null) {
+      if (data.roadTable) {
+        lap(`road table in the page (worker ${data.seconds} s)`);
+        tableDone(data.error ? null : data.table);
+      } else if (data.id != null) {
         tileCalls.get(data.id)?.(data);
         tileCalls.delete(data.id);
       } else if (data.error) {
@@ -319,7 +324,7 @@ export async function roadsStyle(mode, name, keep = []) {
     w.onerror = (e) => { endMapWorker(); fail(new Error(e.message || "the map worker failed")); };
     w.postMessage({ roads, features, name, prefix, keep, levels }, [roads.buffer, ...(features ? [features.buffer] : [])]);
   });
-  return { style: JSON.parse(out.style), roadTable: out.roadTable, roadsSeconds, styleSeconds: out.seconds, memoryMiB: out.memoryMiB };
+  return { style: JSON.parse(out.style), roadTable, roadsSeconds, styleSeconds: out.seconds, memoryMiB: out.memoryMiB };
 }
 
 // a question to the map worker, answered by its id

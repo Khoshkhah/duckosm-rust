@@ -44,12 +44,19 @@ onmessage = async ({ data }) => {
     lap("worker: road table bytes");
     tiler = new LiveMap(sources, l, data.prefix, data.keep);   // takes the sources
     lap("worker: LiveMap (tile index)");
-    const roadTable = JSON.parse(new TextDecoder().decode(tableBytes));
-    lap("worker: road table parsed");
-    const wanted = new Set([...data.keep, "lvl", "oneway", "length", "highway", "name"]);
-    roadTable.props = roadTable.props.map((p) => p && Object.fromEntries(Object.entries(p).filter(([k]) => wanted.has(k) || k.startsWith("__rs_"))));
-    lap("worker: filter the road table");
-    postMessage({ style: tiler.style(), roadTable, laps, sentAt: performance.timeOrigin + performance.now(), seconds: (performance.now() - t) / 1000, memoryMiB: Math.round(memoryBytes() / 2 ** 20) });
+    // the style goes at once, so that the map draws; the road table (the popup, the editor) follows after the first tiles
+    // ponytail: a fixed 1 s delay (the first view asks for its tiles within it); roadstyle could parse the table in a worker of its own
+    postMessage({ style: tiler.style(), laps, seconds: (performance.now() - t) / 1000, memoryMiB: Math.round(memoryBytes() / 2 ** 20) });
+    setTimeout(() => {
+      try {
+        const roadTable = JSON.parse(new TextDecoder().decode(tableBytes));
+        const wanted = new Set([...data.keep, "lvl", "oneway", "length", "highway", "name"]);
+        roadTable.props = roadTable.props.map((p) => p && Object.fromEntries(Object.entries(p).filter(([k]) => wanted.has(k) || k.startsWith("__rs_"))));
+        postMessage({ roadTable: true, table: roadTable, seconds: (performance.now() - t) / 1000 });
+      } catch (e) {
+        postMessage({ roadTable: true, error: String((e && e.message) || e) });
+      }
+    }, 1000);
   } catch (e) {
     postMessage({ error: String((e && e.message) || e) });
   }

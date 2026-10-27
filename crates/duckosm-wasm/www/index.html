@@ -1413,7 +1413,8 @@ async function drawRoads() {
     await loaded;
     removeRoads();
     await addRoadStyle(r.style);
-    window.RS_SIDE = r.roadTable;   // the road fields (the popup); the level editor puts its own here while it is open
+    roadTableReady = r.roadTable.then((t) => { if (run === roadsRun && t) window.RS_SIDE = t; });
+    //   // the road fields (the popup); the level editor puts its own here while it is open
     rs.setStyle(r.style);   // the dashboard reads the new roads style (its layers and metadata)
     roadsShown = true;
     setBase();
@@ -1472,7 +1473,7 @@ async function visualization() {
 // chooses after that stays for the next draws of this page. Kaveh: "a loading map processing shows first, then change base map to
 // blank and zoom to that area": the map stays as it is under the veil of showRoads, and drawRoads changes the base map and the view
 // when the roads are ready.
-let baseChosen = false, fresh = false;
+let baseChosen = false, fresh = false, roadTableReady = Promise.resolve();   // roadTableReady: the road table of the last draw is in RS_SIDE
 function freshMap() {
   fresh = true;
   return showRoads();
@@ -1746,6 +1747,7 @@ $("edit-open").onclick = async () => {
     editNote("opening the level editor…");
     const t0 = performance.now();
     const { levelEditor, store, levels, warnings } = await (areaPrep ??= prepareArea());
+    await roadTableReady;                         // the editor adds its pick to the rows of RS_SIDE
     editorStore = store;
     let t;
     t = performance.now();
