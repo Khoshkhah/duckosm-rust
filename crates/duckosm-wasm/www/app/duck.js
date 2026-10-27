@@ -124,6 +124,7 @@ export async function loadTables(files) {
   for (const t of tables) await conn.query(t.mode === "main" ? `DROP TABLE IF EXISTS main.${t.table}` : `DROP SCHEMA IF EXISTS ${t.mode} CASCADE`);
   await conn.query("DROP SCHEMA IF EXISTS raw CASCADE; SET enable_geoparquet_conversion = false");
   tables = [];
+  forgetRoads();
   for (const [name, bytes] of Object.entries(files)) {
     if (name.startsWith("raw_")) continue;     // loadFeatures reads them
     const { mode, table } = split(name);
@@ -251,10 +252,12 @@ function endMapWorker() {
 const TABLE_FIELDS = ["lvl", "oneway", "length", "highway", "name", "__rs_fill", "__rs_twoway", "__rs_cls", "__rs_edge2", "__rs_dup", "__rs_edge", "__rs_access"];
 export const drawLaps = [];   // [step, seconds since the start] of the last roadsStyle, for the page's step table and the tests
 export const tileStats = [];  // [z, seconds from the request to the answer, seconds in the worker] of each tile since the last style
-export async function roadsStyle(mode, name, keep = []) {
-  const t = performance.now();
-  drawLaps.length = tileStats.length = 0;
-  const lap = (n) => drawLaps.push([n, +((performance.now() - t) / 1000).toFixed(2)]);
+// The SQL side of a draw: the roads.parquet of a network (the plan's SELECT), the levels and the base-map layers' features.parquet. It is made
+// once for each network after a build (prepareRoads, in the background) and kept; "Show on map" then does no SQL. A new build and Apply
+// (the tables change) drop it. The runs go one after the other (the files have fixed names).
+let inputsCache = new Map(), inputsChain = Promise.resolve();
+const forgetRoads = () => { inputsCache = new Map(); };
+async function roadInputs(mode, lap) {
   const q = rows;
   await roadstyle();
   // the two files go away before and after (also after a failure): duckdb-wasm does not see a second COPY to a kept file name, and a
@@ -285,9 +288,11 @@ export async function roadsStyle(mode, name, keep = []) {
       levels = JSON.parse(rs.duckosmSubsetLevels(meta?.source, meta ? Number(meta.n_edges) : undefined, meta?.edge_hash, Number(missing),
         example == null ? undefined : BigInt(example), ids));
     }
+    // makeSources takes Parquet bytes (roadstyle-wasm), so the file stays: the COPY is in memory (Burnaby 0.25 s) and copyFileToBuffer 0.03 s
     await conn.query(`COPY (${plan.select}) TO 'roads.parquet' (FORMAT parquet)`);
-    roads = await db.copyFileToBuffer("roads.parquet");
     lap("SQL: COPY to roads.parquet");
+    roads = await db.copyFileToBuffer("roads.parquet");
+    lap(`SQL: copyFileToBuffer (${(roads.byteLength / 2 ** 20).toFixed(1)} MB)`);
     // the base-map layers, when the build made them: features.parquet, the rows of the look's layers (map/roadstyle/features_sql.js)
     if (tables.some((t) => t.mode === "features")) {
       look ??= fetch(new URL("../map/look.json", import.meta.url)).then((r) => r.json());
@@ -299,6 +304,30 @@ export async function roadsStyle(mode, name, keep = []) {
     // drops the tables of its own run.
     if (plan) await conn.query(plan.drop);
   }
+  return { roads, levels, features };
+}
+export function prepareRoads(mode) {
+  if (!inputsCache.has(mode)) {
+    const cache = inputsCache;
+    const run = inputsChain.then(async () => {
+      const t1 = performance.now(), v = await roadInputs(mode, () => {});
+      return { ...v, seconds: +((performance.now() - t1) / 1000).toFixed(2) };
+    });
+    inputsChain = run.catch(() => {});
+    cache.set(mode, run);
+    run.catch(() => cache.delete(mode));
+  }
+  return inputsCache.get(mode);
+}
+export async function roadsStyle(mode, name, keep = []) {
+  const t = performance.now();
+  drawLaps.length = tileStats.length = 0;
+  const lap = (n) => drawLaps.push([n, +((performance.now() - t) / 1000).toFixed(2)]);
+  const ready = inputsCache.has(mode);
+  const inputs = await prepareRoads(mode);
+  lap(`SQL: roads.parquet and features (made in ${inputs.seconds} s${ready ? ", before the draw: the build's idle time" : ""})`);
+  // the worker takes its own copies (a transferred buffer is gone for the cache)
+  const roads = inputs.roads.slice(), features = inputs.features?.slice(), levels = inputs.levels;
   const roadsSeconds = (performance.now() - t) / 1000;
   lap("SQL and features, all");
   endMapWorker();
@@ -346,6 +375,18 @@ export function tile(url) {
     return r.data ?? new ArrayBuffer(0);
   });
 }
+// The lines of these rows of the road table (roadstyle's roadLines, in the map worker): a Promise of a list, null for a row with no line
+export async function roadLines(rows) {
+  const r = await ask({ lines: rows }, { error: "the map worker is gone" });
+  if (r.error) throw new Error(r.error);
+  return r.lines;
+}
+// The two end points of each row's line (LiveMap.roadEnds): a Float64Array, 4 numbers for each row (NaN: no line)
+export async function roadEnds() {
+  const r = await ask({ ends: true }, { error: "the map worker is gone" });
+  if (r.error) throw new Error(r.error);
+  return r.ends;
+}
 // The level editor's changed edges (its replaceRoads rows, as text): the worker's LiveMap draws them again (roadstyle's relevel). The answer
 // is {counts: {edges, pieces_gone, sources, style_changed}, style} (style: the new style's JSON text, only when style_changed).
 export async function relevel(rows) {
@@ -391,6 +432,7 @@ export async function levelEdges() {
 // these three tables back. The Parquet files of the downloads follow; the .duckdb download reads the tables.
 const INPUTS = { "edits.csv": ["level_edits", ["a", "b"]], "heads.csv": ["level_heads", ["road"]], "caps.csv": ["level_caps", ["road"]] };
 export async function saveLevels(levelsCsv, inputs, area) {
+  forgetRoads();                                 // the levels of the roads change
   const [meta] = await rows("SELECT n_edges FROM visualization.edge_levels_meta");
   await db.registerFileText("levels.csv", levelsCsv);
   const [{ n }] = await rows("SELECT count(*) AS n FROM read_csv('levels.csv', header = true)");

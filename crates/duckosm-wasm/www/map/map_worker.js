@@ -11,6 +11,19 @@ import init, { Look, makeSources, LiveMap, memoryBytes } from "./pkg/roadstyle_w
 let tiler = null;   // a LiveMap: the tiles, and relevel (the level editor's changes) with no new style
 
 onmessage = async ({ data }) => {
+  if (data.lines || data.ends) {
+    // {lines: rows, id}: the lines of these rows of the road table (LiveMap.roadLines). Out: {id, lines: [[lon, lat]...] | null for each row}
+    // {ends: true, id}: LiveMap.roadEnds. Out: {id, ends: Float64Array, 4 numbers for each row (start lon, lat, end lon, lat; NaN: no line)}
+    try {
+      if (data.ends) {
+        const ends = tiler.roadEnds();
+        postMessage({ id: data.id, ends }, [ends.buffer]);
+      } else postMessage({ id: data.id, lines: JSON.parse(new TextDecoder().decode(tiler.roadLines(Uint32Array.from(data.lines)))) });
+    } catch (e) {
+      postMessage({ id: data.id, error: String((e && e.message) || e) });
+    }
+    return;
+  }
   if (data.relevel) {
     // {relevel: rows, id}: the rows of the editor's replaceRoads. Out: {id, counts: {edges, pieces_gone, sources, style_changed}} or {id, error}
     try {
