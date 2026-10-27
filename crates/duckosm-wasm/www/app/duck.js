@@ -381,6 +381,12 @@ export async function roadLines(rows) {
   if (r.error) throw new Error(r.error);
   return r.lines;
 }
+// The two end points of each row's line (LiveMap.roadEnds): a Float64Array, 4 numbers for each row (NaN: no line)
+export async function roadEnds() {
+  const r = await ask({ ends: true }, { error: "the map worker is gone" });
+  if (r.error) throw new Error(r.error);
+  return r.ends;
+}
 // The level editor's changed edges (its replaceRoads rows, as text): the worker's LiveMap draws them again (roadstyle's relevel). The answer
 // is {counts: {edges, pieces_gone, sources, style_changed}, style} (style: the new style's JSON text, only when style_changed).
 export async function relevel(rows) {

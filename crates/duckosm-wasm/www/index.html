@@ -1422,7 +1422,8 @@ async function drawRoads() {
     await Promise.race([new Promise((ok) => map.once("idle", ok)), new Promise((ok) => setTimeout(ok, 60000))]);
     if (run !== roadsRun) { fresh ||= isFresh; return; }
     window.RS_SIDE = r.roadTable();                // the road fields (the popup); the level editor puts its own here while it is open
-    window.RS_SIDE.linesOf = (rows) => duck.roadLines(rows);   // the table has no lines: the dashboard loads a road's line when it is picked
+    window.RS_SIDE.linesOf = (rows) => duck.roadLines(rows);
+    window.RS_SIDE.endsOf = () => duck.roadEnds();           // the editor's end marks   // the table has no lines: the dashboard loads a road's line when it is picked
     if (isFresh) {   // freshMap: the blank base map and the area in view in one move, when the roads are ready
       // "Show on map" and the draw after a build always set the blank base map, whatever the user chose before; his choice stays for the
       // draws that are not a fresh map (a network change, the draw after Apply, the editor's redraws)
