@@ -611,6 +611,7 @@ async function covering(polys) {
 
 // ---- the map ----
 const empty = { type: "FeatureCollection", features: [] };
+maplibregl.setWorkerCount(Math.min(4, navigator.hardwareConcurrency || 1));   // MapLibre has one worker by default; the dense road tiles parse in parallel with more (before the first map)
 const map = new maplibregl.Map({ container: "map", style: "https://tiles.openfreemap.org/styles/liberty", center: [10, 50], zoom: 3 });
 map.addControl(new maplibregl.NavigationControl(), "top-right");
 // roadstyle's dashboard (docs/app.md), made once, before the roads: the 2D/3D button, Street View with its marker, Google 3D (with the
