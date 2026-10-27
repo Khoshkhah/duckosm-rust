@@ -247,6 +247,8 @@ function endMapWorker() {
   for (const done of tileCalls.values()) done(undefined);
   tileCalls.clear();
 }
+// the fields of each road that the dashboard and the editor read, besides the popup's (keep)
+const TABLE_FIELDS = ["lvl", "oneway", "length", "highway", "name", "__rs_fill", "__rs_twoway", "__rs_cls", "__rs_edge2", "__rs_dup", "__rs_edge", "__rs_access"];
 export const drawLaps = [];   // [step, seconds since the start] of the last roadsStyle, for the page's step table and the tests
 export const tileStats = [];  // [z, seconds from the request to the answer, seconds in the worker] of each tile since the last style
 export async function roadsStyle(mode, name, keep = []) {
@@ -302,14 +304,9 @@ export async function roadsStyle(mode, name, keep = []) {
   endMapWorker();
   const w = (mapWorker = new Worker(new URL("../map/map_worker.js", import.meta.url), { type: "module" }));
   const prefix = `rs://${++generation}/`;
-  let tableDone;
-  const roadTable = new Promise((ok) => (tableDone = ok));   // the road table comes in a second message, after the first tiles
   const out = await new Promise((ok, fail) => {
     w.onmessage = ({ data }) => {
-      if (data.roadTable) {
-        lap(`road table in the page (worker ${data.seconds} s)`);
-        tableDone(data.error ? null : data.table);
-      } else if (data.id != null) {
+      if (data.id != null) {
         tileCalls.get(data.id)?.(data);
         tileCalls.delete(data.id);
       } else if (data.error) {
@@ -322,8 +319,15 @@ export async function roadsStyle(mode, name, keep = []) {
       }
     };
     w.onerror = (e) => { endMapWorker(); fail(new Error(e.message || "the map worker failed")); };
-    w.postMessage({ roads, features, name, prefix, keep, levels }, [roads.buffer, ...(features ? [features.buffer] : [])]);
+    w.postMessage({ roads, features, name, prefix, keep, levels, tableFields: [...new Set([...keep, ...TABLE_FIELDS])] }, [roads.buffer, ...(features ? [features.buffer] : [])]);
   });
+  // the road table is parsed by the page when it asks (after the first tiles): its own step, timed alone
+  const roadTable = () => {
+    const t = performance.now();
+    const table = JSON.parse(new TextDecoder().decode(out.tableBytes));
+    lap(`road table: JSON.parse of ${(out.tableBytes.byteLength / 2 ** 20).toFixed(1)} MB took ${((performance.now() - t) / 1000).toFixed(2)} s`);
+    return table;
+  };
   return { style: JSON.parse(out.style), roadTable, roadsSeconds, styleSeconds: out.seconds, memoryMiB: out.memoryMiB };
 }
 

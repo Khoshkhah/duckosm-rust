@@ -3,7 +3,7 @@
 // base-map layers (features.parquet, map/roadstyle/features_sql.js; optional) and the look (map/look.json), and then makes each tile when
 // the map asks for it.
 // In: {roads: Uint8Array, features: Uint8Array or undefined, name, prefix, keep, levels: the look's keyword levels (roads_sql.js
-// makeRoads)}. Out: {style: JSON text, roadTable: the road table (each road's fields, middle, box and line), seconds, memoryMiB} or
+// makeRoads)}. Out: {style: JSON text, tableBytes: the road table as JSON bytes (each road's fields, middle, box and line), seconds, memoryMiB} or
 // {error}. Then in: {tile: [source, z, x, y], id}. Out: {id, data: ArrayBuffer} (empty when nothing is in the tile).
 // The page starts a new worker for each style: WebAssembly memory only grows, and a worker that ends gives it back.
 import init, { Look, makeSources, LiveMap, memoryBytes } from "./pkg/roadstyle_wasm.js";
@@ -38,25 +38,13 @@ onmessage = async ({ data }) => {
     const lap = (n) => laps.push([n, +((performance.now() - t) / 1000).toFixed(2)]);   // seconds since the start, for the page's step table
     const sources = makeSources(data.roads, l, data.features, undefined, data.name);
     lap("worker: makeSources (stage 1)");
-    // the road table with only the fields that the page and roadstyle's dashboard read: the popup's (keep), and the dashboard's own
-    // (lvl, oneway, length and the engine's __rs_* fields). Each road has about 30 fields; a city of 150,000 roads gave 88 MB of them.
-    const tableBytes = sources.roadTable();
+    // the road table with only the fields that the page and roadstyle's dashboard read (data.tableFields): the popup's (keep), and the
+    // dashboard's own (lvl, oneway, length and the engine's __rs_* fields). The bytes go to the page, which parses them after the first tiles.
+    const tableBytes = sources.roadTable(data.tableFields);
     lap("worker: road table bytes");
     tiler = new LiveMap(sources, l, data.prefix, data.keep);   // takes the sources
     lap("worker: LiveMap (tile index)");
-    // the style goes at once, so that the map draws; the road table (the popup, the editor) follows after the first tiles
-    // ponytail: a fixed 1 s delay (the first view asks for its tiles within it); roadstyle could parse the table in a worker of its own
-    postMessage({ style: tiler.style(), laps, seconds: (performance.now() - t) / 1000, memoryMiB: Math.round(memoryBytes() / 2 ** 20) });
-    setTimeout(() => {
-      try {
-        const roadTable = JSON.parse(new TextDecoder().decode(tableBytes));
-        const wanted = new Set([...data.keep, "lvl", "oneway", "length", "highway", "name"]);
-        roadTable.props = roadTable.props.map((p) => p && Object.fromEntries(Object.entries(p).filter(([k]) => wanted.has(k) || k.startsWith("__rs_"))));
-        postMessage({ roadTable: true, table: roadTable, seconds: (performance.now() - t) / 1000 });
-      } catch (e) {
-        postMessage({ roadTable: true, error: String((e && e.message) || e) });
-      }
-    }, 1000);
+    postMessage({ style: tiler.style(), tableBytes, laps, seconds: (performance.now() - t) / 1000, memoryMiB: Math.round(memoryBytes() / 2 ** 20) }, [tableBytes.buffer]);
   } catch (e) {
     postMessage({ error: String((e && e.message) || e) });
   }
