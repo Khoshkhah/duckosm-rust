@@ -1466,6 +1466,7 @@ async function visualization() {
   if (!$("step7-card").hidden) unfold("step7-card");
   $("editnote").textContent = "";
   areaPrep = null;
+  duck.prepareRoads($("mapmode").value).catch(() => {});   // the roads for the map, in the idle time of the build: "Show on map" then does no SQL
   if (roadCount.all < AUTO_DRAW && roadCount.all <= window.mapMaxRoads) freshMap();
   else $("mapnote").textContent = roadCount.all > window.mapMaxRoads ? tooLarge(roadCount.all)
     : `${num(roadCount.all)} roads: a large map. Click Show on map to draw it.`;
