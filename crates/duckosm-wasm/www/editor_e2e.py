@@ -120,11 +120,13 @@ with sync_playwright() as p:
     page.click("#step6 .fold")
     assert page.is_visible("#show") and page.evaluate("localStorage.getItem('duckosm.card.6')") == "0"
 
-    # a base map that the user chooses stays for the next draws of the page
-    page.evaluate("(r => { r.checked = true; r.dispatchEvent(new Event('change')); })(document.querySelector('input[name=base][value=\"\"]'))")
+    # a base map that the user chooses: "Show on map" (a fresh map) sets the blank one again; the choice stays for the draws that are not fresh
+    choose = "(r => { r.checked = true; r.dispatchEvent(new Event('change')); })(document.querySelector('input[name=base][value=\"\"]'))"
+    page.evaluate(choose)
     drawn(page, "document.getElementById('show').click()")
-    assert page.evaluate("document.querySelector('input[name=base]:checked')?.value") == "", "the user's base map stays"
-    print("base map: blank at the first draw, the user's choice at the next ones")
+    assert page.evaluate("document.querySelector('input[name=base]:checked')?.value") == "blank", "Show on map sets blank after a chosen base map"
+    page.evaluate(choose)
+    print("base map: blank at each fresh draw (Show on map, after a build), whatever the user chose before")
 
     # one draw at a time: two clicks at once, a click while a draw runs, then each network after "all"
     for what, js in [("two clicks at once", "document.getElementById('show').click(); document.getElementById('show').click()"),
@@ -220,12 +222,51 @@ with sync_playwright() as p:
     print(f"open: {time.time() - t:.2f} s from the click until the editor is open; longest main-thread task "
           f"{page.evaluate('window.longTask') / 1000:.2f} s")
     print("first open:", page.inner_text("#editnote"))
+    SPOT = """() => { const m = window.duckMap, c = m.getCanvas().getBoundingClientRect();   // left of the editor's panel
+        for (const f of m.queryRenderedFeatures({layers: ['rs-roads-simple']})) {
+          const g = f.geometry.type === 'LineString' ? f.geometry.coordinates : f.geometry.coordinates[0];
+          const p = m.project(g[Math.floor(g.length / 2)]);
+          if (m.queryRenderedFeatures(p, {layers: ['rs-roads-simple']})[0] && p.x > 420 && p.x < c.width - 450 && p.y > 40 && p.y < c.height - 60) return [p.x + c.left, p.y + c.top]; }
+        return null; }"""
+    STATES = """() => { const m = window.duckMap, out = [];
+        const layers = [...new Set(m.getStyle().layers.filter((l) => l.source === 'rs-roads' && l['source-layer']).map((l) => l['source-layer']))];
+        for (const sl of layers) for (let i = 0; i < window.RS_SIDE.props.length; i++) {
+          const f = m.getFeatureState({source: 'rs-roads', sourceLayer: sl, id: i});
+          if (f && Object.keys(f).some((k) => f[k])) out.push([sl, i, JSON.stringify(f)]);
+        } return out; }"""
+    # the real click in the editor: a road picked as the user does it (the editor's tap), then Close
+    cam = page.evaluate("(() => { const m = window.duckMap; return {center: m.getCenter(), zoom: m.getZoom(), pitch: m.getPitch(), bearing: m.getBearing()}; })()")
+    page.evaluate("window.duckMap.jumpTo({zoom: 14, pitch: 0})")        # flat, where roads are left of the panel
+    page.wait_for_function("window.duckMap.loaded()", timeout=120_000)
+    page.mouse.click(*page.evaluate(SPOT))
+    page.wait_for_selector("#lv-cards .card, #lv-cards [data-hroad]", timeout=10_000)
+    page.evaluate("c => window.duckMap.jumpTo(c)", cam)
+    print("editor: a road picked by a click; states while open:", len(page.evaluate(STATES)))
     # the second open of the same area: the page writes the area's files again; since roadstyle 6be68c2 the editor starts from the
     # stored levels when levels_info.json names the same inputs (the SHA-256 of roads.parquet, pairs.csv and edits.csv): no solve
     page.click("#edit-close")
     page.wait_for_function("!window.levelEditorOpen && !window.mapDrawing && window.duckMap.loaded()", timeout=300_000)
     page.wait_for_timeout(500)
     assert max(abs(x - y) for x, y in zip(at(), pos0)) <= 2, ("the view moved when the editor closed", pos0, at())
+    # Kaveh's path (2026-10-26): a road picked while the editor was open (rsSelect(200) above), then Close: no road keeps select or hover
+    # state on the page's map, a real click on another road selects it, and a click on empty map clears it
+    left = page.evaluate(STATES)
+    print("states left after Close:", left[:5])
+    assert not left, ("the editor leaves feature state on the page's map", left[:5])
+    page.evaluate("window.duckMap.jumpTo({zoom: 14, pitch: 0})")
+    page.wait_for_function("window.duckMap.loaded()", timeout=120_000)
+    spot = page.evaluate(SPOT)
+    assert spot, "a road to click"
+    page.mouse.click(*spot)
+    page.wait_for_timeout(700)
+    picked = page.evaluate(STATES)
+    assert picked, "a click on a road selects it after the editor"
+    page.mouse.click(*page.evaluate("() => { const m = window.duckMap; for (const [x, y] of [[420, 60], [430, 800], [1000, 70]]) { if (!m.queryRenderedFeatures([[x - 6, y - 6], [x + 6, y + 6]], {layers: ['rs-roads-simple']}).length) return [x, y]; } return [420, 60]; }"))
+    page.wait_for_timeout(700)
+    assert not page.evaluate(STATES), "a click on empty map clears the selection"
+    print("after Close: no state left, a click selects a road, a click on empty map clears it")
+    page.evaluate("c => window.duckMap.jumpTo(c)", cam)
+    page.wait_for_function("window.duckMap.loaded()", timeout=120_000)
     made = page.evaluate("window.editorArea")
     page.evaluate("window.editorArea = null")
     t = time.time()

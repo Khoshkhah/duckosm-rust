@@ -1423,10 +1423,10 @@ async function drawRoads() {
     if (run !== roadsRun) { fresh ||= isFresh; return; }
     window.RS_SIDE = r.roadTable();                // the road fields (the popup); the level editor puts its own here while it is open
     if (isFresh) {   // freshMap: the blank base map and the area in view in one move, when the roads are ready
-      if (!baseChosen) {
-        view.base = dark() ? "blank_dark" : "blank";
-        setBase();
-      }
+      // "Show on map" and the draw after a build always set the blank base map, whatever the user chose before; his choice stays for the
+      // draws that are not a fresh map (a network change, the draw after Apply, the editor's redraws)
+      view.base = dark() ? "blank_dark" : "blank";
+      setBase();
       zoomToArea();
       await new Promise((ok) => { map.once("moveend", ok); setTimeout(ok, 1000); });
     }
@@ -1676,6 +1676,9 @@ function closeEditor(draw = false) {
   if (!editor) return;
   window.rsDeselect?.();                          // the selection's glow is on the editor's roads
   editor.destroy();
+  // destroy leaves the colour of the picked road (the panel's rsColor(ids), level_editor.html line 235: feature state rs_c, violet) on the page's map, so that no
+  // click removes it. The page paints no roads of its own, so all of them go. Module side: destroy() in level_editor.js should call rsColor(null) (the panel's node goes, its colour does not).
+  window.rsColor?.(null);
   editor = window.levelEditorOpen = null;
   editing(false);
   map.resize();

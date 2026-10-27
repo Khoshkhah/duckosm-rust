@@ -138,6 +138,13 @@ with sync_playwright() as p:
     # the draw after a build or "Show on map" with no base map chosen in this page: the blank base map (Kaveh, 2026-10-26: it did not change)
     assert page.evaluate("document.querySelector('input[name=base]:checked')?.value") == "blank", "the first draw sets the blank base map"
     page.wait_for_function("window.duckMap && window.duckMap.loaded()", timeout=600_000)   # the tiles are cut and drawn
+    # a base map chosen before: "Show on map" (a fresh map) sets the blank one again (Kaveh, 2026-10-26)
+    page.click("#bbase"); page.click("input[name=base][value='']"); page.wait_for_timeout(500)
+    assert page.evaluate("document.querySelector('input[name=base]:checked')?.value") == "", "OpenFreeMap chosen"
+    page.evaluate("document.getElementById('show').click()")
+    page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=600_000)
+    page.wait_for_function("window.duckMap.loaded()", timeout=600_000)
+    assert page.evaluate("document.querySelector('input[name=base]:checked')?.value") == "blank", "Show on map sets blank after a chosen base map"
     if args.view:
         lng, lat, z = map(float, args.view.split(","))
         page.evaluate(f"window.duckMap.jumpTo({{center: [{lng}, {lat}], zoom: {z}}})")
