@@ -247,8 +247,12 @@ function endMapWorker() {
   for (const done of tileCalls.values()) done(undefined);
   tileCalls.clear();
 }
+export const drawLaps = [];   // [step, seconds since the start] of the last roadsStyle, for the page's step table and the tests
+export const tileStats = [];  // [z, seconds from the request to the answer, seconds in the worker] of each tile since the last style
 export async function roadsStyle(mode, name, keep = []) {
   const t = performance.now();
+  drawLaps.length = tileStats.length = 0;
+  const lap = (n) => drawLaps.push([n, +((performance.now() - t) / 1000).toFixed(2)]);
   const q = rows;
   await roadstyle();
   // the two files go away before and after (also after a failure): duckdb-wasm does not see a second COPY to a kept file name, and a
@@ -270,6 +274,7 @@ export async function roadsStyle(mode, name, keep = []) {
     const meta = stored ? (await q(plan.meta))[0] : null;
     await q(r);
     await q(dropE);
+    lap("SQL: the roads table");
     levels = "tags";
     if (stored && mode === "all") levels = JSON.parse(rs.duckosmLevels(meta?.source, meta ? Number(meta.n_edges) : undefined, meta?.edge_hash));
     else if (stored) {
@@ -280,6 +285,7 @@ export async function roadsStyle(mode, name, keep = []) {
     }
     await conn.query(`COPY (${plan.select}) TO 'roads.parquet' (FORMAT parquet)`);
     roads = await db.copyFileToBuffer("roads.parquet");
+    lap("SQL: COPY to roads.parquet");
     // the base-map layers, when the build made them: features.parquet, the rows of the look's layers (map/roadstyle/features_sql.js)
     if (tables.some((t) => t.mode === "features")) {
       look ??= fetch(new URL("../map/look.json", import.meta.url)).then((r) => r.json());
@@ -292,6 +298,7 @@ export async function roadsStyle(mode, name, keep = []) {
     if (plan) await conn.query(plan.drop);
   }
   const roadsSeconds = (performance.now() - t) / 1000;
+  lap("SQL and features, all");
   endMapWorker();
   const w = (mapWorker = new Worker(new URL("../map/map_worker.js", import.meta.url), { type: "module" }));
   const prefix = `rs://${++generation}/`;
@@ -303,7 +310,11 @@ export async function roadsStyle(mode, name, keep = []) {
       } else if (data.error) {
         endMapWorker();
         fail(new Error(data.error));
-      } else ok(data);
+      } else {
+        lap(`worker answered (it took ${data.seconds} s)`);
+        drawLaps.push(...data.laps.map(([n, s]) => [n, +(s + roadsSeconds).toFixed(2)]));
+        ok(data);
+      }
     };
     w.onerror = (e) => { endMapWorker(); fail(new Error(e.message || "the map worker failed")); };
     w.postMessage({ roads, features, name, prefix, keep, levels }, [roads.buffer, ...(features ? [features.buffer] : [])]);
@@ -320,7 +331,11 @@ const ask = (msg, none) => !mapWorker ? Promise.resolve(none) : new Promise((don
 // a tile of the roads map (MapLibre's request for rs://<generation>/<source>/<z>/<x>/<y>); a tile of an older style is empty
 export function tile(url) {
   const [gen, source, z, x, y] = url.slice("rs://".length).split("/");
-  return +gen !== generation ? Promise.resolve(new ArrayBuffer(0)) : ask({ tile: [source, +z, +x, +y] }, {}).then((r) => r.data ?? new ArrayBuffer(0));
+  const t = performance.now();
+  return +gen !== generation ? Promise.resolve(new ArrayBuffer(0)) : ask({ tile: [source, +z, +x, +y] }, {}).then((r) => {
+    tileStats.push([+z, +((performance.now() - t) / 1000).toFixed(3), +((r.ms ?? 0) / 1000).toFixed(3), source]);
+    return r.data ?? new ArrayBuffer(0);
+  });
 }
 // The level editor's changed edges (its replaceRoads rows, as text): the worker's LiveMap draws them again (roadstyle's relevel). The answer
 // is {counts: {edges, pieces_gone, sources, style_changed}, style} (style: the new style's JSON text, only when style_changed).

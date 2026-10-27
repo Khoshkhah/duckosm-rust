@@ -548,6 +548,7 @@ import { TerraDraw, TerraDrawRectangleMode, TerraDrawPolygonMode, TerraDrawCircl
          TerraDrawSelectMode, ValidateNotSelfIntersecting } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import * as duck from "./app/duck.js";
+window.duckApi = duck;   // for the tests (drawLaps, tileStats)
 import * as regions from "./app/regions.js";
 import { rsDashboard } from "./map/roadstyle/dashboard/index.js";   // roadstyle's map dashboard (copied by build.sh at ROADSTYLE_COMMIT)
 
@@ -1407,7 +1408,7 @@ async function drawRoads() {
   try {
     const t0 = performance.now();
     const r = await duck.roadsStyle($("mapmode").value, areaName, ROAD_KEYS);
-    if (run !== roadsRun) return;                       // another choice came in the meantime
+    if (run !== roadsRun) { fresh ||= isFresh; return; }   // another choice came in the meantime: the next draw is the fresh one
     drawStep("drawing: the first tiles…");
     await loaded;
     removeRoads();
@@ -1418,7 +1419,7 @@ async function drawRoads() {
     setBase();
     // the first tiles: the map is drawn when it is idle (at most 60 s)
     await Promise.race([new Promise((ok) => map.once("idle", ok)), new Promise((ok) => setTimeout(ok, 60000))]);
-    if (run !== roadsRun) return;
+    if (run !== roadsRun) { fresh ||= isFresh; return; }
     if (isFresh) {   // freshMap: the blank base map and the area in view in one move, when the roads are ready
       if (!baseChosen) {
         view.base = dark() ? "blank_dark" : "blank";
@@ -1432,6 +1433,7 @@ async function drawRoads() {
     const total = (performance.now() - t0) / 1000;
     logSteps([{ step: "the roads table (DuckDB)", ms: r.roadsSeconds * 1000 }, { step: "the style", ms: r.styleSeconds * 1000, mib: r.memoryMiB },
       { step: "draw the map", ms: (total - r.roadsSeconds - r.styleSeconds) * 1000 }], "map");
+    if (!editor && !$("step7-card").hidden) setTimeout(() => (areaPrep ??= prepareArea()).catch(() => { areaPrep = null; }), 500);   // the editor opens sooner
     $("mapnote").textContent = `${num(roadCount[$("mapmode").value] ?? 0)} roads, drawn in ${num(total, 1)} s (step 4 gives each ` +
       `step). Click a road for its data.`;
   } catch (e) {
@@ -1460,6 +1462,7 @@ async function visualization() {
   unfold("step6-card");
   if (!$("step7-card").hidden) unfold("step7-card");
   $("editnote").textContent = "";
+  areaPrep = null;
   if (roadCount.all < AUTO_DRAW && roadCount.all <= window.mapMaxRoads) freshMap();
   else $("mapnote").textContent = roadCount.all > window.mapMaxRoads ? tooLarge(roadCount.all)
     : `${num(roadCount.all)} roads: a large map. Click Show on map to draw it.`;
@@ -1702,6 +1705,37 @@ async function replaceRoads(rows) {
   lap("idle after relevel", t);
   window.relevelCounts = r.counts;                // for editor_e2e.py
 }
+// The editor's level area, made before the open: after a draw (in the background) or at the open, once for each build (areaPrep is reset by a
+// build and by Apply). The steps are in window.lvTimes (lap).
+let areaPrep = null;
+async function prepareArea() {
+  window.lvTimes = [];
+  const timed = (name, p) => { const t = performance.now(); return p.then((v) => { lap(name, t); return v; }); };
+  const [pkg, { levelEditor, browserStore, saveArea, areaIsFor }, levels] = await Promise.all([timed("roadstyle wasm", duck.roadstyle()),
+    timed("import level_editor.js", import("./map/roadstyle/dashboard/editor/level_editor.js")), timed("storedLevels (CSV from DuckDB)", duck.storedLevels())]);
+  const store = fallbackStore(browserStore("duckosm:" + areaName, areaName));
+  // roadstyle's docs/rust/browser.md, "The level editor in a page": the area is made only when its edges changed (the store's
+  // edges.json has the edge hash of the build's levels), and the editor starts from the map's levels (levels), with no solve
+  let warnings = "";
+  let t = performance.now();
+  const same = levels && await areaIsFor(store, levels.edge_hash);
+  lap(`areaIsFor = ${!!same}`, t);
+  if (!same) {
+    t = performance.now();
+    const edges = await duck.levelEdges();
+    lap("level_edges SQL", t);
+    t = performance.now();
+    const a = pkg.makeArea(edges, JSON.stringify({ id_col: "edge_id" }));
+    lap("makeArea", t);
+    t = performance.now();
+    await saveArea(store, a, levels?.edge_hash ?? "");
+    lap("saveArea", t);   // edits.csv only when the store has none: the edits of an earlier session stay
+    window.editorArea = { roads: a.roadCount, pairs: a.pairCount, warnings: a.warnings };   // for editor_e2e.py
+    if (a.warnings.length) warnings = `. Warnings: ${a.warnings.join("; ")}`;
+    a.free();
+  }
+  return { levelEditor, store, levels, warnings };
+}
 $("edit-open").onclick = async () => {
   // the editor draws every road of the area (all networks): the same limit as the map on a small device
   if (roadCount.all > window.mapMaxRoads) return editNote(`The level editor shows all ${num(roadCount.all)} roads of the area; on this ` +
@@ -1711,32 +1745,9 @@ $("edit-open").onclick = async () => {
     editorStore = null;                           // the note of a store of an earlier area goes
     editNote("opening the level editor…");
     const t0 = performance.now();
-    window.lvTimes = [];
-    const timed = (name, p) => { const t = performance.now(); return p.then((v) => { lap(name, t); return v; }); };
-    const [pkg, { levelEditor, browserStore, saveArea, areaIsFor }, levels] = await Promise.all([timed("roadstyle wasm", duck.roadstyle()),
-      timed("import level_editor.js", import("./map/roadstyle/dashboard/editor/level_editor.js")), timed("storedLevels (CSV from DuckDB)", duck.storedLevels())]);
-    const store = (editorStore = fallbackStore(browserStore("duckosm:" + areaName, areaName)));
-    // roadstyle's docs/rust/browser.md, "The level editor in a page": the area is made only when its edges changed (the store's
-    // edges.json has the edge hash of the build's levels), and the editor starts from the map's levels (levels), with no solve
-    let warnings = "";
-    let t = performance.now();
-    const same = levels && await areaIsFor(store, levels.edge_hash);
-    lap(`areaIsFor = ${!!same}`, t);
-    if (!same) {
-      editNote("making the level area…");
-      t = performance.now();
-      const edges = await duck.levelEdges();
-      lap("level_edges SQL", t);
-      t = performance.now();
-      const a = pkg.makeArea(edges, JSON.stringify({ id_col: "edge_id" }));
-      lap("makeArea", t);
-      t = performance.now();
-      await saveArea(store, a, levels?.edge_hash ?? "");
-      lap("saveArea", t);   // edits.csv only when the store has none: the edits of an earlier session stay
-      window.editorArea = { roads: a.roadCount, pairs: a.pairCount, warnings: a.warnings };   // for editor_e2e.py
-      if (a.warnings.length) warnings = `. Warnings: ${a.warnings.join("; ")}`;
-      a.free();
-    }
+    const { levelEditor, store, levels, warnings } = await (areaPrep ??= prepareArea());
+    editorStore = store;
+    let t;
     t = performance.now();
     await loaded;
     if (!roadsShown) await showRoads();           // the editor draws on the page's roads
@@ -1771,6 +1782,9 @@ $("edit-open").onclick = async () => {
     document.body.classList.remove("lv-open");
     editing(false);
     showRoads();
+    const stale = areaPrep && /make the area first/.test(e.message);   // the browser's files of the area went after the area was made: once more
+    areaPrep = null;
+    if (stale) { $("lvhost").replaceChildren(); document.body.classList.remove("lv-open"); return $("edit-open").click(); }
     editNote("The level editor failed: " + e.message);
   }
 };
@@ -1782,6 +1796,7 @@ $("edit-apply").onclick = async () => {
     const text = async (n) => (await editorStore.load(n))?.body ?? "";
     const inputs = { "edits.csv": await text("edits.csv"), "heads.csv": await text("heads.csv"), "caps.csv": await text("caps.csv") };
     await duck.saveLevels(await text("levels.csv"), inputs, "this browser: " + areaName);
+    areaPrep = null;                              // the tables have the new levels
     files();                                      // the download links of the new files
     closeEditor(true);
     const n = (f) => Math.max(0, inputs[f].trim().split("\n").length - 1);

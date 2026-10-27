@@ -23,8 +23,9 @@ onmessage = async ({ data }) => {
   }
   if (data.tile) {
     const [source, z, x, y] = data.tile;
+    const t = performance.now();
     const bytes = tiler.tile(source, z, x, y);
-    postMessage({ id: data.id, data: bytes.buffer }, [bytes.buffer]);
+    postMessage({ id: data.id, data: bytes.buffer, ms: performance.now() - t }, [bytes.buffer]);
     return;
   }
   try {
@@ -33,14 +34,22 @@ onmessage = async ({ data }) => {
     // levels: "tags", or the stored levels' {edge_hash, n_edges}, which the engine checks
     const l = Look.fromJson(look).withArg("levels", JSON.stringify(data.levels));
     // stage 1 (the sources and the road table), then the vector tiles of stage 2
+    const laps = [];
+    const lap = (n) => laps.push([n, +((performance.now() - t) / 1000).toFixed(2)]);   // seconds since the start, for the page's step table
     const sources = makeSources(data.roads, l, data.features, undefined, data.name);
+    lap("worker: makeSources (stage 1)");
     // the road table with only the fields that the page and roadstyle's dashboard read: the popup's (keep), and the dashboard's own
     // (lvl, oneway, length and the engine's __rs_* fields). Each road has about 30 fields; a city of 150,000 roads gave 88 MB of them.
-    const roadTable = JSON.parse(new TextDecoder().decode(sources.roadTable()));
+    const tableBytes = sources.roadTable();
+    lap("worker: road table bytes");
     tiler = new LiveMap(sources, l, data.prefix, data.keep);   // takes the sources
+    lap("worker: LiveMap (tile index)");
+    const roadTable = JSON.parse(new TextDecoder().decode(tableBytes));
+    lap("worker: road table parsed");
     const wanted = new Set([...data.keep, "lvl", "oneway", "length", "highway", "name"]);
     roadTable.props = roadTable.props.map((p) => p && Object.fromEntries(Object.entries(p).filter(([k]) => wanted.has(k) || k.startsWith("__rs_"))));
-    postMessage({ style: tiler.style(), roadTable, seconds: (performance.now() - t) / 1000, memoryMiB: Math.round(memoryBytes() / 2 ** 20) });
+    lap("worker: filter the road table");
+    postMessage({ style: tiler.style(), roadTable, laps, sentAt: performance.timeOrigin + performance.now(), seconds: (performance.now() - t) / 1000, memoryMiB: Math.round(memoryBytes() / 2 ** 20) });
   } catch (e) {
     postMessage({ error: String((e && e.message) || e) });
   }

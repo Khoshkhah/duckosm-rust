@@ -135,6 +135,8 @@ with sync_playwright() as p:
         page.click("#show")
         page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent)", timeout=600_000)
     print("map:", page.inner_text("#mapnote"))
+    # the draw after a build or "Show on map" with no base map chosen in this page: the blank base map (Kaveh, 2026-10-26: it did not change)
+    assert page.evaluate("document.querySelector('input[name=base]:checked')?.value") == "blank", "the first draw sets the blank base map"
     page.wait_for_function("window.duckMap && window.duckMap.loaded()", timeout=600_000)   # the tiles are cut and drawn
     if args.view:
         lng, lat, z = map(float, args.view.split(","))
