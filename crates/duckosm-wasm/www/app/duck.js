@@ -285,9 +285,11 @@ export async function roadsStyle(mode, name, keep = []) {
       levels = JSON.parse(rs.duckosmSubsetLevels(meta?.source, meta ? Number(meta.n_edges) : undefined, meta?.edge_hash, Number(missing),
         example == null ? undefined : BigInt(example), ids));
     }
+    // makeSources takes Parquet bytes (roadstyle-wasm), so the file stays: the COPY is in memory (Burnaby 0.25 s) and copyFileToBuffer 0.03 s
     await conn.query(`COPY (${plan.select}) TO 'roads.parquet' (FORMAT parquet)`);
-    roads = await db.copyFileToBuffer("roads.parquet");
     lap("SQL: COPY to roads.parquet");
+    roads = await db.copyFileToBuffer("roads.parquet");
+    lap(`SQL: copyFileToBuffer (${(roads.byteLength / 2 ** 20).toFixed(1)} MB)`);
     // the base-map layers, when the build made them: features.parquet, the rows of the look's layers (map/roadstyle/features_sql.js)
     if (tables.some((t) => t.mode === "features")) {
       look ??= fetch(new URL("../map/look.json", import.meta.url)).then((r) => r.json());
