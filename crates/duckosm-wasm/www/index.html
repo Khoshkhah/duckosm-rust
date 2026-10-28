@@ -634,7 +634,7 @@ document.addEventListener("rs:select", () => {
   setTimeout(() => { window.rsDeselect?.(); document.querySelectorAll(".maplibregl-popup").forEach((p) => p.remove()); });
 });
 // the tiles of the roads map: roadstyle's module makes each one when the map asks for it (app/duck.js tile())
-maplibregl.addProtocol("rs", async (params) => ({ data: await duck.tile(params.url) }));
+maplibregl.addProtocol("rs", async (params, abort) => ({ data: await duck.tile(params.url, abort.signal) }));
 map.addControl(new maplibregl.ScaleControl(), "bottom-left");
 // roadstyle's zoom read-out ("z 13.8", .rs-zoom) sits at a fixed place of the window, which is under this page's panel: it goes beside
 // the scale bar, in the map's bottom-left box, which moves with the panel
@@ -1395,6 +1395,24 @@ async function addRoadStyle(style) {
     if (layer.layout?.visibility === "none") offLayers.add("rs-" + l.id);
   }
   map.setLayoutProperty("area-fill", "visibility", "none");   // the fill would change the colors of the roads
+  addOverview(style);
+}
+// MapLibre draws a tile that is not loaded yet from loaded tiles of the same source, but only from its parents and from children up to 3
+// zooms deeper. A fast zoom out passes zooms with no loaded tile near, and the area stays empty until the new tiles are cut and parsed
+// (0.5 to 0.9 s for a tile of 0.5 to 0.9 MB). So the opaque fill layers (land, water, buildings of the base map) are drawn also from a
+// second source of the same tiles that stops at zoom OVERVIEW_ZOOM: its few tiles of the area are always loaded, and the layers are under
+// the real ones (same paint, so nothing changes when the real tile is there).
+const OVERVIEW_ZOOM = 9;
+function addOverview(style) {
+  const src = style.sources.roads;
+  if (!src) return;
+  map.addSource("rs-low", { ...src, minzoom: Math.min(src.minzoom ?? 0, OVERVIEW_ZOOM), maxzoom: OVERVIEW_ZOOM });
+  const first = style.layers.find((l) => l.source === "roads");
+  for (const l of style.layers) {
+    const opaque = l.type === "fill" && l.source === "roads" && l.minzoom == null && (l.paint?.["fill-opacity"] ?? 1) === 1 && !l.paint?.["fill-pattern"]
+      && l.layout?.visibility !== "none";
+    if (opaque) map.addLayer({ ...l, id: "rs-low-" + l.id, source: "rs-low" }, "rs-" + first.id);
+  }
 }
 async function drawRoads() {
   const run = ++roadsRun, isFresh = fresh;

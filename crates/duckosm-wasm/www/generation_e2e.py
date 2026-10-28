@@ -1,6 +1,6 @@
 """The dashboard's check of the tiles' generation (roadstyle:generation, roadstyle's dashboard/generation.js) in headless Chromium
 (Playwright): build Monaco, draw the roads map, and check the normal path (the ?g= of the tile URL is the style's: no message, the roads
-show) and a stale generation (the event rs:tiles-generation with another one: the red message and the vector layers hidden;
+show) and a stale generation (the event rs:tiles-generation with another one: the red message and the vector layers hidden (not the overview fills, `rs-low`: land and water of the base map, with no road row);
 the right generation again: all back). The page must not hide the message.
 
     python crates/duckosm-wasm/www/generation_e2e.py
@@ -33,7 +33,7 @@ with sync_playwright() as p:
     page.wait_for_function("window.duckMap && window.duckMap.loaded()", timeout=300_000)
     tiles = page.evaluate("Object.values(window.duckMap.getStyle().sources).flatMap((s) => s.tiles ?? [])")
     gen = re.search(r"[?&]g=([0-9a-f]+)", " ".join(tiles)).group(1)
-    shown = "(() => { const l = window.duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-') && l.source !== 'rs-boundary'" \
+    shown = "(() => { const l = window.duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-') && l.source !== 'rs-boundary' && l.source !== 'rs-low'" \
             " && window.duckMap.getSource(l.source)?.type === 'vector'); return [l.length, l.filter((x) => window.duckMap.getLayoutProperty(x.id, 'visibility') === 'none').length]; })()"
 
     n, hidden = page.evaluate(shown)
