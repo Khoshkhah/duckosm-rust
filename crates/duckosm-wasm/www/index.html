@@ -6,10 +6,10 @@
 <title>duckOSM in the browser</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css" crossorigin>
 <!-- roadstyle's dashboard and popup look (src/roadstyle/static/, copied by build.sh from roadstyle at ROADSTYLE_COMMIT) -->
-<link rel="stylesheet" href="map/roadstyle/dashboard/dashboard.css">
-<link rel="stylesheet" href="map/roadstyle/popup.css">
+<link rel="stylesheet" href="map/roadstyle/dashboard/dashboard.css?v=check">
+<link rel="stylesheet" href="map/roadstyle/popup.css?v=check">
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js" crossorigin></script>
-<script src="coi-serviceworker.js"></script>   <!-- the COOP and COEP headers on GitHub Pages, for threads -->
+<script src="coi-serviceworker.js?v=check"></script>   <!-- the COOP and COEP headers on GitHub Pages, for threads -->
 <script type="importmap">
 { "imports": {
   "terra-draw": "https://cdn.jsdelivr.net/npm/terra-draw@1.38.0/dist/terra-draw.modern.js",
@@ -547,10 +547,10 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
 import { TerraDraw, TerraDrawRectangleMode, TerraDrawPolygonMode, TerraDrawCircleMode, TerraDrawFreehandMode,
          TerraDrawSelectMode, ValidateNotSelfIntersecting } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
-import * as duck from "./app/duck.js";
+import * as duck from "./app/duck.js?v=check";
 window.duckApi = duck;   // for the tests (drawLaps, tileStats)
-import * as regions from "./app/regions.js";
-import { rsDashboard } from "./map/roadstyle/dashboard/index.js";   // roadstyle's map dashboard (copied by build.sh at ROADSTYLE_COMMIT)
+import * as regions from "./app/regions.js?v=check";
+import { rsDashboard } from "./map/roadstyle/dashboard/index.js?v=check";   // roadstyle's map dashboard (copied by build.sh at ROADSTYLE_COMMIT)
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
@@ -566,7 +566,7 @@ function status(text, ms = 4000) {
 }
 
 // the list of Geofabrik's extracts (tools/make_geofabrik_index.py), loaded once
-const geofabrik = () => (extracts ??= fetch("geofabrik.json").then((r) => r.json()).then((d) => d.extracts));
+const geofabrik = () => (extracts ??= fetch("geofabrik.json?v=check").then((r) => r.json()).then((d) => d.extracts));
 
 // the polygons of a geometry, as a list of polygons (each a list of rings)
 const polygons = (g) => (g?.type === "Polygon" ? [g.coordinates] : g?.type === "MultiPolygon" ? g.coordinates : []);
@@ -1275,7 +1275,7 @@ $("run").onclick = async () => {
     // the time zone of main.visualization_metadata: the entry of the area's smallest Geofabrik region in the time zone
     // table (www/timezones.json, loaded one time, then from the cache of the browser)
     const region = area?.props.geofabrik?.[0]?.id;
-    if (region) msg.tz = JSON.stringify((await (timezones ??= fetch("timezones.json").then((r) => r.json()))).regions[region] ?? null);
+    if (region) msg.tz = JSON.stringify((await (timezones ??= fetch("timezones.json?v=check").then((r) => r.json()))).regions[region] ?? null);
     const b0 = performance.now();
     const out = await duck.build(msg, (t) => progress(t + "…"));
     logSteps(download ? [{ step: "download from " + download.server, ms: download.seconds * 1000 }] : [], "page", true);
@@ -1434,9 +1434,9 @@ async function drawRoads() {
       await new Promise((ok) => { map.once("moveend", ok); setTimeout(ok, 1000); });
     }
     window.timings = Object.assign(window.timings || {}, { map: { roadsSql: r.roadsSeconds, style: r.styleSeconds,
-      total: (performance.now() - t0) / 1000, memoryMiB: r.memoryMiB } });
+      total: (performance.now() - t0) / 1000, memoryMiB: r.memoryMiB, liveMiB: r.liveMiB } });
     const total = (performance.now() - t0) / 1000;
-    logSteps([{ step: "the roads table (DuckDB)", ms: r.roadsSeconds * 1000 }, { step: "the style", ms: r.styleSeconds * 1000, mib: r.memoryMiB },
+    logSteps([{ step: "the roads table (DuckDB)", ms: r.roadsSeconds * 1000 }, { step: "the style", ms: r.styleSeconds * 1000, mib: r.liveMiB[0] },
       { step: "draw the map", ms: (total - r.roadsSeconds - r.styleSeconds) * 1000 }], "map");
     if (!editor && !$("step7-card").hidden) setTimeout(() => (areaPrep ??= prepareArea()).catch(() => { areaPrep = null; }), 500);   // the editor opens sooner
     $("mapnote").textContent = `${num(roadCount[$("mapmode").value] ?? 0)} roads, drawn in ${num(total, 1)} s (step 4 gives each ` +
@@ -1721,7 +1721,7 @@ async function prepareArea() {
   window.lvTimes = [];
   const timed = (name, p) => { const t = performance.now(); return p.then((v) => { lap(name, t); return v; }); };
   const [pkg, { levelEditor, browserStore, saveArea, areaIsFor }, levels] = await Promise.all([timed("roadstyle wasm", duck.roadstyle()),
-    timed("import level_editor.js", import("./map/roadstyle/dashboard/editor/level_editor.js")), timed("storedLevels (CSV from DuckDB)", duck.storedLevels())]);
+    timed("import level_editor.js", import("./map/roadstyle/dashboard/editor/level_editor.js?v=check")), timed("storedLevels (CSV from DuckDB)", duck.storedLevels())]);
   const store = fallbackStore(browserStore("duckosm:" + areaName, areaName));
   // roadstyle's docs/rust/browser.md, "The level editor in a page": the area is made only when its edges changed (the store's
   // edges.json has the edge hash of the build's levels), and the editor starts from the map's levels (levels), with no solve
@@ -1766,7 +1766,7 @@ $("edit-open").onclick = async () => {
     window.rsDeselect?.();
     document.querySelectorAll(".maplibregl-popup").forEach((p) => p.remove());
     // the worker loads roadstyle's module by this URL (the deploy puts its version on it, version_refs.py)
-    const pkgUrl = new URL("./map/pkg/roadstyle_wasm.js", location.href);
+    const pkgUrl = new URL("./map/pkg/roadstyle_wasm.js?v=check", location.href);
     // the view stays: the module fits the map to the area when it starts (level_editor.js, "else map.fitBounds"), which moves what the user sees
     const fit = map.fitBounds;
     map.fitBounds = () => map;
