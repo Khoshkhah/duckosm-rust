@@ -62,12 +62,12 @@ with sync_playwright() as p:
     # the files that build.sh takes from roadstyle are roadstyle's own at ROADSTYLE_COMMIT (no copy that can drift)
     pin = re.search(r"^ROADSTYLE_COMMIT=(\w+)", (WWW.parent / "build.sh").read_text(), re.M).group(1)
     clone = WWW.parents[2] / "target" / f"roadstyle-{pin}"
-    dashboard = subprocess.run(["git", "-C", str(clone), "ls-tree", "-r", "--name-only", pin, "src/roadstyle/static/dashboard/"],
+    dashboard = subprocess.run(["git", "-C", str(clone), "ls-tree", "-r", "--name-only", pin, "rust/roadstyle-assets/files/static/dashboard/"],
                                capture_output=True, text=True, check=True).stdout.split()
-    for served, source in [("popup.css", "src/roadstyle/static/popup.css"), ("popup.js", "src/roadstyle/static/popup.js"),
+    for served, source in [("popup.css", "rust/roadstyle-assets/files/static/popup.css"), ("popup.js", "rust/roadstyle-assets/files/static/popup.js"),
                            ("roads_sql.js", "rust/roadstyle-wasm/js/roads_sql.js"), ("features_sql.js", "rust/roadstyle-wasm/js/features_sql.js"),
-                           ("level_editor.html", "src/roadstyle/static/level_editor.html"),
-                           *[(f.removeprefix("src/roadstyle/static/"), f) for f in dashboard]]:
+                           ("level_editor.html", "rust/roadstyle-assets/files/static/level_editor.html"),
+                           *[(f.removeprefix("rust/roadstyle-assets/files/static/"), f) for f in dashboard]]:
         want = subprocess.run(["git", "-C", str(clone), "show", f"{pin}:{source}"], capture_output=True, check=True).stdout
         got = page.request.get(url.split("index.html")[0] + "map/roadstyle/" + served).body()
         got = re.sub(rb"\?v=[\w.-]+", b"", got)      # a copy with versions (--www): the file without them

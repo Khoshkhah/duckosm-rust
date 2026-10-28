@@ -1330,7 +1330,7 @@ $("run").onclick = async () => {
 // ---- step 5: the roads on the map, in roadstyle's style (map/): its sources, images and layers with the prefix rs-, over the base
 // map and under the area line, the matches, the extracts and the drawn shapes (as GeoLibre's roadstyle plugin adds a style) ----
 let roadsRun = 0;
-const ROAD_KEYS = ["name", "edge_id", "osm_id", "highway", "edge_ref", "lanes", "bridge", "tunnel", "access"];   // kept in the tiles
+const ROAD_KEYS = ["name", "edge_id", "osm_id", "highway", "edge_ref", "lanes", "bridge", "tunnel", "access"];   // the popup's fields in the road table (contract 2: not in the tiles)
 // the roads of the base map (OpenFreeMap's transportation layers) go away while the duckOSM roads show, so the two do not compete
 let roadsShown = false;
 function removeRoads() {
@@ -1384,9 +1384,9 @@ const tooLarge = (n) => `This map has ${num(n)} roads; on this device the map ca
 async function addRoadStyle(style) {
   const own = style.metadata?.["roadstyle:images"] || {};
   await addImages(Object.fromEntries(Object.entries(own).map(([n, v]) => ["rs-" + n, v])));
-  // the one vector source "roads" (its source layers: roads, simple, slots, ov<i>); promoteId: a road's pieces have the road's id,
+  // the one vector source "roads" (its source layers: simple, slots, ov<i>): a road's pieces have the road's row as the feature id (contract 2),
   // so the dashboard lights them all with one feature state
-  for (const [id, src] of Object.entries(style.sources)) map.addSource("rs-" + id, id === "roads" ? { ...src, promoteId: { simple: "__rs_edge" } } : src);
+  for (const [id, src] of Object.entries(style.sources)) map.addSource("rs-" + id, src);
   for (const l of style.layers) {
     let json = JSON.stringify(l);
     for (const n of Object.keys(own)) json = json.replaceAll(`"${n}"`, `"rs-${n}"`);   // the image names in the layout

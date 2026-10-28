@@ -11,7 +11,7 @@
 #                     (aba5884, crates/duckosm-build/Cargo.toml): at this commit they are the crate roadstyle-levels.
 set -e
 NIGHTLY=nightly-2026-10-15
-ROADSTYLE_COMMIT=cb634323558913697be959a68af1f5c0014bcb7f   # the full SHA: a fetch by SHA needs it
+ROADSTYLE_COMMIT=2fc847776bf16dbb4019aa2222031922bf062f76   # the full SHA: a fetch by SHA needs it
 ROADSTYLE_REPO=${ROADSTYLE_REPO:-https://github.com/Khoshkhah/roadstyle.git}
 cargo build --release --target wasm32-unknown-unknown -p duckosm-wasm
 wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/pkg target/wasm32-unknown-unknown/release/duckosm_wasm.wasm
@@ -37,14 +37,14 @@ fi
 cargo build --release --target wasm32-unknown-unknown --manifest-path $R/rust/Cargo.toml -p roadstyle-wasm
 rm -rf crates/duckosm-wasm/www/map/pkg
 # roadstyle's files, as they are at ROADSTYLE_COMMIT (no copy in git; e2e.py checks that the served files equal them): the map's
-# dashboard (src/roadstyle/static/dashboard/: the buttons, Street View, Google 3D, the popup, the glow; dashboard/editor/: the level
-# editor), the popup's look and text and the level editor's panel (src/roadstyle/static/), and the SQL that makes the map module's input
+# dashboard (rust/roadstyle-assets/files/static/dashboard/: the buttons, Street View, Google 3D, the popup, the glow; dashboard/editor/: the level
+# editor), the popup's look and text and the level editor's panel (rust/roadstyle-assets/files/static/), and the SQL that makes the map module's input
 # (rust/roadstyle-wasm/js/, its only copy)
 mkdir -p crates/duckosm-wasm/www/map/roadstyle
-cp $R/src/roadstyle/static/popup.css $R/src/roadstyle/static/popup.js $R/src/roadstyle/static/level_editor.html \
+cp $R/rust/roadstyle-assets/files/static/popup.css $R/rust/roadstyle-assets/files/static/popup.js $R/rust/roadstyle-assets/files/static/level_editor.html \
   crates/duckosm-wasm/www/map/roadstyle/
 cp $R/rust/roadstyle-wasm/js/roads_sql.js $R/rust/roadstyle-wasm/js/features_sql.js crates/duckosm-wasm/www/map/roadstyle/
 rm -rf crates/duckosm-wasm/www/map/roadstyle/dashboard crates/duckosm-wasm/www/map/roadstyle/windows.js
-cp -r $R/src/roadstyle/static/dashboard crates/duckosm-wasm/www/map/roadstyle/
+cp -r $R/rust/roadstyle-assets/files/static/dashboard crates/duckosm-wasm/www/map/roadstyle/
 wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/map/pkg \
   $R/rust/target/wasm32-unknown-unknown/release/roadstyle_wasm.wasm

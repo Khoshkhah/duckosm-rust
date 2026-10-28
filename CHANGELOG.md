@@ -7,6 +7,7 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ### Changed
 
+- The page uses roadstyle `2fc8477` (branch `rust-engine`): tile contract 2. A piece has the road's row as its feature id, so the source has no `promoteId`. The keys `__rs_edge`, `__rs_edge2` and `__rs_s` and the colour text are not in the tiles any more. The popup reads the road table by row. The tile handler `rs://` removes the query `?g=` before it reads the tile address. The new dashboard (`overlays.js`, `index.js`, `editor/level_editor.js`) is copied from `rust/roadstyle-assets/files/static/`. The 20 tiles of a Burnaby view (driving, pitch 60) are 1.54 MB, not 3.35 MB. The wasm function `makeSources` is now `styleSources`.
 - The level editor draws on the page's own map (roadstyle `f0a161b`, host mode): the same colours and profile as the roads of the page. The map worker keeps a `LiveMap`, and a change of the editor redraws only the changed edges.
 - `duckosm-build` and `duckosm-parquet` take the levels from the crate `roadstyle-levels` at roadstyle `f0a161b` (the crossing rule). The values of `edge_levels` change; the columns do not.
 - The page uses roadstyle `fc59e6c` (branch `rust-engine`): the base map has the theme "liberty" and stops at the area's boundary. `node crates/duckosm-wasm/make_look.mjs` makes `map/look.json` again after each pin.

@@ -288,7 +288,7 @@ async function roadInputs(mode, lap) {
       levels = JSON.parse(rs.duckosmSubsetLevels(meta?.source, meta ? Number(meta.n_edges) : undefined, meta?.edge_hash, Number(missing),
         example == null ? undefined : BigInt(example), ids));
     }
-    // makeSources takes Parquet bytes (roadstyle-wasm), so the file stays: the COPY is in memory (Burnaby 0.25 s) and copyFileToBuffer 0.03 s
+    // styleSources takes Parquet bytes (roadstyle-wasm), so the file stays: the COPY is in memory (Burnaby 0.25 s) and copyFileToBuffer 0.03 s
     await conn.query(`COPY (${plan.select}) TO 'roads.parquet' (FORMAT parquet)`);
     lap("SQL: COPY to roads.parquet");
     roads = await db.copyFileToBuffer("roads.parquet");
@@ -366,9 +366,9 @@ const ask = (msg, none) => !mapWorker ? Promise.resolve(none) : new Promise((don
   tileCalls.set(id, done);
   mapWorker.postMessage({ ...msg, id });
 });
-// a tile of the roads map (MapLibre's request for rs://<generation>/<source>/<z>/<x>/<y>); a tile of an older style is empty
+// a tile of the roads map (MapLibre's request for rs://<generation>/<source>/<z>/<x>/<y>[?g=<road generation>]); a tile of an older style is empty
 export function tile(url) {
-  const [gen, source, z, x, y] = url.slice("rs://".length).split("/");
+  const [gen, source, z, x, y] = url.slice("rs://".length).split("?")[0].split("/");
   const t = performance.now();
   return +gen !== generation ? Promise.resolve(new ArrayBuffer(0)) : ask({ tile: [source, +z, +x, +y] }, {}).then((r) => {
     tileStats.push([+z, +((performance.now() - t) / 1000).toFixed(3), +((r.ms ?? 0) / 1000).toFixed(3), source]);
