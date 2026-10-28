@@ -118,6 +118,12 @@ gives the same advice. `?maxroads=N` in the address changes the limit (`?maxroad
 memory can try. Burnaby on a phone: the build, SQL and the downloads work; its map (151,770 roads, or 62,453 for
 "Driving") is over the limit.
 
+**Size and held bytes.** The map worker reports two numbers. `memoryMiB` is the size of the WebAssembly memory. It never gets smaller, and
+roadstyle's allocator grows it ahead in steps of a quarter (16 to 64 MiB), so it can rise when the program holds less. `liveMiB` is
+`[held now, most held]` (`liveBytes()`). The step table of the page shows the held value. Burnaby, "Driving", 64,221 roads, after the
+tile index: tile contract 1 had a size of 210 MiB and 154 MiB held; tile contract 2 has 232 MiB and 143 MiB held (peak 161 and 150 MiB).
+After 28 tiles at zoom 14 with pitch 60, the size is 263 MiB with contract 1 and 232 MiB with contract 2.
+
 Not done: the map worker's memory (roadstyle's engine: about 5 KB for each road, with the base map), and the page's own
 copy of each Parquet file for the downloads (75 MiB for Burnaby; DuckDB can write them again, but the files of the
 downloads must stay equal to the native build's).

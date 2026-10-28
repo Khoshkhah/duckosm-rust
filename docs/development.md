@@ -169,6 +169,13 @@ download, Close. It writes `editor.png` and `editor-dark.png` and prints the tim
 python crates/duckosm-wasm/www/editor_e2e.py out-editor
 ```
 
+Check the generation of the tiles (the dashboard's red message and the hidden vector layers when the tiles are of another road set,
+and the normal path):
+
+```bash
+python crates/duckosm-wasm/www/generation_e2e.py
+```
+
 Check the page on a phone (390 × 664, touch): the map at the top, the panel's fold, and the level editor with its bar
 ([app.md](app.md), "On a phone"). It writes `phone-*.png`:
 
