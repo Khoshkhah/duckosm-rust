@@ -6,7 +6,7 @@
 // makeRoads)}. Out: {style: JSON text, tableBytes: the road table as JSON bytes (each road's fields, middle, box and line), seconds, memoryMiB} or
 // {error}. Then in: {tile: [source, z, x, y], id}. Out: {id, data: ArrayBuffer} (empty when nothing is in the tile).
 // The page starts a new worker for each style: WebAssembly memory only grows, and a worker that ends gives it back.
-import init, { Look, makeSources, LiveMap, memoryBytes } from "./pkg/roadstyle_wasm.js";
+import init, { Look, styleSources, LiveMap, memoryBytes } from "./pkg/roadstyle_wasm.js";
 
 let tiler = null;   // a LiveMap: the tiles, and relevel (the level editor's changes) with no new style
 
@@ -49,8 +49,8 @@ onmessage = async ({ data }) => {
     // stage 1 (the sources and the road table), then the vector tiles of stage 2
     const laps = [];
     const lap = (n) => laps.push([n, +((performance.now() - t) / 1000).toFixed(2)]);   // seconds since the start, for the page's step table
-    const sources = makeSources(data.roads, l, data.features, undefined, data.name);
-    lap("worker: makeSources (stage 1)");
+    const sources = styleSources(data.roads, l, data.features, undefined, data.name);
+    lap("worker: styleSources (stage 1)");
     // the road table with only the fields that the page and roadstyle's dashboard read (data.tableFields): the popup's (keep), and the
     // dashboard's own (lvl, oneway, length and the engine's __rs_* fields). The bytes go to the page, which parses them after the first tiles.
     const tableBytes = sources.roadTable(data.tableFields);

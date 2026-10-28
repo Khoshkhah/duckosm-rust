@@ -342,11 +342,11 @@ map of one mode, the duckOSM base-map layers while the editor is open, and Close
   draw is 2,570 MiB (before 3,002 MiB).
 - **roadstyle's dashboard** (2026-10-23, Kaveh: "go") does the map's interaction: the 2D/3D button, Street View with
   its marker, Google 3D, the road popup, the hover tooltip, the purple glow of the selected road, and the legend of a
-  `color_by`. It is roadstyle's one module `src/roadstyle/static/dashboard/`, which `build.sh` takes at
+  `color_by`. It is roadstyle's one module `rust/roadstyle-assets/files/static/dashboard/`, which `build.sh` takes at
   `ROADSTYLE_COMMIT` into `www/map/roadstyle/dashboard/` (not in git; `e2e.py` checks that the served files are
   roadstyle's). The page calls `rsDashboard(map, {prefix: "rs-", tiles: true, simple: "roads-simple"})`
   once, before the roads; after each build or network change, `showRoads` adds the roads style's sources and layers
-  with the prefix (the one vector source `rs-roads`, with `promoteId: {simple: "__rs_edge"}` for the glow) and gives the
+  with the prefix (the one vector source `rs-roads`, with no `promoteId`: since tile contract 2 the id of each piece is the road's row in the road table, and one feature state lights all pieces of a road) and gives the
   style to `rs.setStyle`. The map worker sends the road table (the fields of each road) with the style, and the page
   puts it in `window.RS_SIDE`, where the dashboard reads the fields of a clicked road. (Until roadstyle `aba5884`, the
   dashboard asked the map worker for each road with `engine.props`; roadstyle removed that option.) The page removes the
