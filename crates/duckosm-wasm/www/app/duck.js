@@ -1,11 +1,11 @@
 // The build side of the app (docs/app.md): duckdb-wasm, the build worker (../build_worker.js), the load of the tables, the style of
 // the roads map (../map/), SQL, load.sql, and the data of an area from the Overpass API. The page (../index.html) calls it.
 // roadstyle's SQL for the map module's input (rust/roadstyle-wasm/js/ at ROADSTYLE_COMMIT, copied by build.sh)
-import { readCatalog } from "../map/roadstyle/roads_sql.js?v=check";
-import { writeFeatures } from "../map/roadstyle/features_sql.js?v=check";
+import { readCatalog } from "../map/roadstyle/roads_sql.js";
+import { writeFeatures } from "../map/roadstyle/features_sql.js";
 // roadstyle's Rust module in the page (map/pkg/): roads_sql.js and features_sql.js ask it for their SQL, and the level editor solves with
 // it. It loads the first time that the page needs it.
-import init, * as roadstylePkg from "../map/pkg/roadstyle_wasm.js?v=check";
+import init, * as roadstylePkg from "../map/pkg/roadstyle_wasm.js";
 let roadstyleReady = null;
 export const roadstyle = () => (roadstyleReady ??= init().then(() => roadstylePkg));
 
@@ -76,7 +76,7 @@ export const duckReady = (async () => {
 // memory (it only grows: about 400 MiB after a city of 150,000 roads) goes back to the browser, which a phone needs for the map. The
 // files are then in DuckDB and in the page. A panic or an out-of-memory error of one build cannot stop the next one.
 export function build(msg, onStep) {
-  const worker = new Worker(new URL("../build_worker.js?v=check", import.meta.url), { type: "module" });
+  const worker = new Worker(new URL("../build_worker.js", import.meta.url), { type: "module" });
   return new Promise((resolve, reject) => {
     worker.onmessage = ({ data }) => {
       if (data.step) return onStep(data.step);
@@ -295,7 +295,7 @@ async function roadInputs(mode, lap) {
     lap(`SQL: copyFileToBuffer (${(roads.byteLength / 2 ** 20).toFixed(1)} MB)`);
     // the base-map layers, when the build made them: features.parquet, the rows of the look's layers (map/roadstyle/features_sql.js)
     if (tables.some((t) => t.mode === "features")) {
-      look ??= fetch(new URL("../map/look.json?v=check", import.meta.url)).then((r) => r.json());
+      look ??= fetch(new URL("../map/look.json", import.meta.url)).then((r) => r.json());
       if (await writeFeatures(q, "memory", (await look).base_map.layers_yaml.layers)) features = await db.copyFileToBuffer("features.parquet");
     }
   } finally {
@@ -331,7 +331,7 @@ export async function roadsStyle(mode, name, keep = []) {
   const roadsSeconds = (performance.now() - t) / 1000;
   lap("SQL and features, all");
   endMapWorker();
-  const w = (mapWorker = new Worker(new URL("../map/map_worker.js?v=check", import.meta.url), { type: "module" }));
+  const w = (mapWorker = new Worker(new URL("../map/map_worker.js", import.meta.url), { type: "module" }));
   const prefix = `rs://${++generation}/`;
   const out = await new Promise((ok, fail) => {
     w.onmessage = ({ data }) => {
