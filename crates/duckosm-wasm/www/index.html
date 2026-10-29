@@ -509,6 +509,10 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
     <label for="mapmode" class="small" id="mapmode-label" hidden>Network</label>
     <select id="mapmode" hidden></select>
   </div>
+  <div class="grid2" style="margin-top:6px">
+    <label for="tilefmt" class="small">Map tiles</label>
+    <select id="tilefmt"><option value="mvt">MVT (default)</option><option value="mlt">MLT (smaller tiles)</option></select>
+  </div>
   <div class="row" id="showrow" style="margin-top:10px" hidden><button id="show" class="btn primary">Show on map</button></div>
   <p id="mapnote" class="progress" aria-live="polite"></p>
   <details style="margin-top:10px"><summary>Google 3D: your Google Maps key</summary>
@@ -1414,6 +1418,14 @@ function addOverview(style) {
     if (opaque) map.addLayer({ ...l, id: "rs-low-" + l.id, source: "rs-low" }, "rs-" + first.id);
   }
 }
+// A new style for the roads that show (the editor's redraw, a change of the tile format): the old layers and sources go, the new ones come
+async function useStyle(style) {
+  removeRoads();
+  await addRoadStyle(style);
+  roadsShown = true;
+  setBase();
+  rs.setStyle(style);
+}
 async function drawRoads() {
   const run = ++roadsRun, isFresh = fresh;
   fresh = false;
@@ -1573,6 +1585,37 @@ $("ownlayers").onchange = () => loaded.then(setBase);
 $("bbld").onclick = () => { view.buildings = !view.buildings; keep("duckosm.buildings", view.buildings ? "1" : "0"); loaded.then(setBase); };
 loaded.then(setBase);
 
+// The tile format of the roads map (MVT or MLT), kept for the next visit. A change gives the roads that show the style of the new format
+// (the worker keeps its tiles; each tile address has the format, so no tile of the other format is reused).
+duck.setTileFormat(kept("duckosm.tileformat"));
+$("tilefmt").value = duck.tileFormat;
+$("tilefmt").onchange = async () => {
+  const f = $("tilefmt").value;
+  keep("duckosm.tileformat", f);
+  if (!roadsShown) return duck.setTileFormat(f);   // the next draw has it
+  try {
+    await useStyle(await duck.styleIn(f));
+  } catch (e) {
+    $("mapnote").textContent = "The tile format did not change: " + e.message;
+  }
+};
+// The prefetch: when the view settles, the tiles two zooms up (the parents of the visible tiles) are cut at the lowest priority, so that a
+// zoom out finds a tile of its own near the new zoom (MapLibre draws a missing tile from loaded parents only). Not below the source's
+// minzoom: the overview source (rs-low) covers the zooms under it.
+const PREFETCH_UP = 2;
+map.on("idle", () => {
+  const roads = roadsShown && map.getSource("rs-roads");
+  if (!roads) return;
+  const z = Math.min(Math.floor(map.getZoom()), roads.maxzoom ?? 18) - PREFETCH_UP;
+  if (z < (roads.minzoom ?? 0)) return;
+  const b = map.getBounds(), n = 2 ** z, col = (lon) => Math.floor((lon + 180) / 360 * n);
+  const row = (lat) => Math.floor((1 - Math.asinh(Math.tan(Math.max(-85, Math.min(85, lat)) * Math.PI / 180)) / Math.PI) / 2 * n);
+  const list = [];
+  for (let x = Math.max(0, col(b.getWest())); x <= Math.min(n - 1, col(b.getEast())); x++)
+    for (let y = Math.max(0, row(b.getNorth())); y <= Math.min(n - 1, row(b.getSouth())); y++) list.push([z, x, y]);
+  duck.prefetch(list.slice(0, 16));
+});
+
 // A line layer after a fill-extrusion layer is drawn over the 3D buildings (lines have no depth test against them), so a road behind a
 // building shows through it. The extrusion layers go after the last line layer (the page's roads, the editor's, the base map's), before
 // the first label after it. Every draw (rs.setStyle) and the editor add layers on top, so this runs again when the map is idle.
@@ -1718,11 +1761,7 @@ async function replaceRoads(rows) {
   editedMap = true;
   t = performance.now();
   if (r.style) {
-    removeRoads();
-    await addRoadStyle(JSON.parse(r.style));
-    roadsShown = true;
-    setBase();
-    rs.setStyle(JSON.parse(r.style));
+    await useStyle(r.style);
   } else {
     for (const id of Object.keys(map.getStyle().sources)) if (id.startsWith("rs-")) map.getSource(id).reload?.();
   }

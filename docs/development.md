@@ -176,6 +176,13 @@ and the normal path):
 python crates/duckosm-wasm/www/generation_e2e.py
 ```
 
+Check the tile format and the prefetch (Monaco): MVT is the default, the style and the tile address have the format, MLT gives
+the same picture, the choice is kept, and the prefetch cuts the tiles two zooms up:
+
+```bash
+python crates/duckosm-wasm/www/tile_format_e2e.py out-tile-format
+```
+
 Check the page on a phone (390 × 664, touch): the map at the top, the panel's fold, and the level editor with its bar
 ([app.md](app.md), "On a phone"). It writes `phone-*.png`:
 

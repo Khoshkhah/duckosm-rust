@@ -3,8 +3,9 @@
 // base-map layers (features.parquet, map/roadstyle/features_sql.js; optional) and the look (map/look.json), and then makes each tile when
 // the map asks for it.
 // In: {roads: Uint8Array, features: Uint8Array or undefined, name, prefix, keep, levels: the look's keyword levels (roads_sql.js
-// makeRoads)}. Out: {style: JSON text, tableBytes: the road table as JSON bytes (each road's fields, middle, box and line), seconds, memoryMiB: the size of the WebAssembly memory, liveMiB: [held now, most held]} or
-// {error}. Then in: {tile: [source, z, x, y], id}. Out: {id, data: ArrayBuffer} (empty when nothing is in the tile).
+// makeRoads), format: "mvt" or "mlt", the format of the style}. Out: {style: JSON text, tableBytes: the road table as JSON bytes (each road's fields, middle, box and line), seconds, memoryMiB: the size of the WebAssembly memory, liveMiB: [held now, most held]} or
+// {error}. Then in: {tile: [source, z, x, y, format], id}. Out: {id, data: ArrayBuffer} (empty when nothing is in the tile).
+// {style: format, id}: the same style in another tile format. Out: {id, style: JSON text}.
 // The page starts a new worker for each style: WebAssembly memory only grows, and a worker that ends gives it back.
 import init, { Look, styleSources, LiveMap, memoryBytes, liveBytes } from "./pkg/roadstyle_wasm.js";
 
@@ -24,20 +25,24 @@ onmessage = async ({ data }) => {
     }
     return;
   }
+  if (data.style) {
+    postMessage({ id: data.id, style: tiler.style(data.style) });
+    return;
+  }
   if (data.relevel) {
     // {relevel: rows, id}: the rows of the editor's replaceRoads. Out: {id, counts: {edges, pieces_gone, sources, style_changed}} or {id, error}
     try {
       const counts = JSON.parse(tiler.relevel(JSON.stringify(data.relevel)));
-      postMessage({ id: data.id, counts, style: counts.style_changed ? tiler.style() : undefined });
+      postMessage({ id: data.id, counts, style: counts.style_changed ? tiler.style(data.format) : undefined });
     } catch (e) {
       postMessage({ id: data.id, error: String((e && e.message) || e) });
     }
     return;
   }
   if (data.tile) {
-    const [source, z, x, y] = data.tile;
+    const [source, z, x, y, format] = data.tile;
     const t = performance.now();
-    const bytes = tiler.tile(source, z, x, y);
+    const bytes = tiler.tile(source, z, x, y, format);
     postMessage({ id: data.id, data: bytes.buffer, ms: performance.now() - t }, [bytes.buffer]);
     return;
   }
@@ -57,7 +62,7 @@ onmessage = async ({ data }) => {
     lap("worker: road table bytes");
     tiler = new LiveMap(sources, l, data.prefix, data.keep);   // takes the sources
     lap("worker: LiveMap (tile index)");
-    postMessage({ style: tiler.style(), tableBytes, laps, seconds: (performance.now() - t) / 1000, memoryMiB: Math.round(memoryBytes() / 2 ** 20),
+    postMessage({ style: tiler.style(data.format), tableBytes, laps, seconds: (performance.now() - t) / 1000, memoryMiB: Math.round(memoryBytes() / 2 ** 20),
       liveMiB: [...liveBytes()].map((b) => Math.round(b / 2 ** 20)) }, [tableBytes.buffer]);
   } catch (e) {
     postMessage({ error: String((e && e.message) || e) });
