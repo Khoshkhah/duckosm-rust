@@ -6,7 +6,7 @@
 // makeRoads)}. Out: {style: JSON text, tableBytes: the road table as JSON bytes (each road's fields, middle, box and line), seconds, memoryMiB: the size of the WebAssembly memory, liveMiB: [held now, most held]} or
 // {error}. Then in: {tile: [source, z, x, y], id}. Out: {id, data: ArrayBuffer} (empty when nothing is in the tile).
 // The page starts a new worker for each style: WebAssembly memory only grows, and a worker that ends gives it back.
-import init, { Look, styleSources, LiveMap, memoryBytes, liveBytes } from "./pkg/roadstyle_wasm.js?v=check";
+import init, { Look, styleSources, LiveMap, memoryBytes, liveBytes } from "./pkg/roadstyle_wasm.js";
 
 let tiler = null;   // a LiveMap: the tiles, and relevel (the level editor's changes) with no new style
 
@@ -42,7 +42,7 @@ onmessage = async ({ data }) => {
     return;
   }
   try {
-    const [, look] = await Promise.all([init(), fetch(new URL("./look.json?v=check", import.meta.url)).then((r) => r.text())]);
+    const [, look] = await Promise.all([init(), fetch(new URL("./look.json", import.meta.url)).then((r) => r.text())]);
     const t = performance.now();
     // levels: "tags", or the stored levels' {edge_hash, n_edges}, which the engine checks
     const l = Look.fromJson(look).withArg("levels", JSON.stringify(data.levels));

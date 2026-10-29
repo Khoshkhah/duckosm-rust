@@ -17,7 +17,7 @@ onmessage = async ({ data }) => {
     if (!wasm) {
       postMessage({ step: "loading the WebAssembly module" });
       const isolated = self.crossOriginIsolated;
-      pkg = await import(isolated ? "./pkg-threads/duckosm_wasm.js?v=check" : "./pkg/duckosm_wasm.js?v=check");
+      pkg = await import(isolated ? "./pkg-threads/duckosm_wasm.js" : "./pkg/duckosm_wasm.js");
       wasm = await pkg.default();
       if (isolated) {
         // more than 8 threads gave no more speed on Tartu from the Estonia file, only more memory

@@ -42,6 +42,8 @@ def files(folder):
 def main():
     folder, v = sys.argv[1], sys.argv[2]
     if v != "--check":
+        if pathlib.Path(folder).resolve() == pathlib.Path(__file__).resolve().parent:     # PR #27 got ?v=check in its sources this way
+            raise SystemExit("version_refs: this is the page's own folder, which git keeps without versions. Change a copy, or use --check to only read.")
         if not re.fullmatch(r"[\w.-]+", v):
             raise SystemExit(f"version_refs: the version must be letters, digits, '.', '_' or '-', not {v!r}")
         for p in files(folder):

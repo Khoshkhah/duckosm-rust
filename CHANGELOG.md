@@ -5,6 +5,10 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ## Not released
 
+### Fixed
+
+- The source files `app/duck.js`, `build_worker.js`, `index.html` and `map/map_worker.js` had the version `?v=check` in their references (PR #27: `version_refs.py` was run in the work folder with the version `check`, not with `--check`). The deploy script adds a version only to a reference that has none, so the deployed page kept `?v=check` and a browser could take an old file from its cache after a deploy. The references have no version in the source again; the deploy adds it. `version_refs.py` now refuses to change the page's own folder (use a copy; `--check` only reads).
+
 ### Changed
 
 - The page uses roadstyle `71af6fe` (branch `rust-engine`). The tiles hold no colour text: the colours of a piece are places in two tables of the style. The new dashboard module `generation.js` compares `roadstyle:generation` of the style with the `?g=` of the tile URL. If they differ, it shows a red message and hides the vector layers. The page keeps the `?g=` on the tile URL and does not hide the message. The page reads no colour text of a tile. `generation_e2e.py` checks the normal path and a stale generation.
