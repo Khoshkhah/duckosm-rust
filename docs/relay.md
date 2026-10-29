@@ -51,7 +51,28 @@ The relay is not an open proxy:
 - It identifies itself to Geofabrik with the `User-Agent` `duckosm-relay (+https://github.com/Khoshkhah/duckOSM)`.
   It sends no personal data.
 - Geofabrik answers `<region>-latest.osm.pbf` with a redirect (307) to the file of the day, for example
-  `monaco-261020.osm.pbf`. The relay follows it (the default of `fetch` in a Worker), on the same host.
+  `monaco-261020.osm.pbf`. The relay follows it (the default of `fetch` in a Worker), on the same host. It gives
+  the address of the dated file in the header `Content-Location`. The relay accepts `-latest` and `-<yymmdd>` files.
+- It passes one `Range` header (`bytes=<from>-<to>`) to Geofabrik. The answer is `206` with `Content-Range`.
+  Any other `Range` gets `416`. `Content-Range`, `Accept-Ranges` and `Content-Location` are in
+  `Access-Control-Expose-Headers`, and `Range` is in `Access-Control-Allow-Headers` of the preflight.
+
+## The parallel download
+
+One request through the relay can be slow (2026-10-29, from Vancouver: 9 MB/s down to 0.09 MB/s for the same
+path, while a direct download from Geofabrik is always 6 to 10 MB/s). `download()` in `regions.js` therefore reads
+the file in parts:
+
+1. `HEAD` of the `-latest` file: the size (`Content-Length`), the dated file (`Content-Location`) and the `ETag`.
+2. Up to 8 parts of equal size (not less than 4 MB each) are read at the same time from the dated file, so all
+   parts are of one version. Each part has a `Range` header and is written at its place in the stored file
+   (`write({type: "write", position, data})`).
+3. A part that fails starts again at the first byte that it did not write. After 4 tries, all parts stop and the
+   download fails. A part with a different `ETag` is an error. **Cancel** stops all parts.
+4. The page compares the bytes written with the size. One progress value shows the sum of all parts.
+
+When the relay gives no `Accept-Ranges: bytes` and no `Content-Location` (an old deploy), or the file is smaller than
+8 MB, the page reads the file in one stream, as before.
 
 ## The page
 
@@ -113,7 +134,7 @@ To change the allowed pages later, change `ALLOWED_ORIGINS` and run `npx wrangle
 ## Local work and checks
 
 - `node crates/duckosm-wasm/relay/check.mjs`: the rules (403, 400, 405, the preflight) and the Monaco extract
-  through the relay, compared with its `Content-Length`.
+  through the relay, compared with its `Content-Length`; two `Range` parts that join to the whole file.
 - `python3 crates/duckosm-wasm/www/serve.py 8000`, then <http://localhost:8000/?relay=relay>: the page with the
   relay of `serve.py`.
 - `e2e.py --relay`: the browser test gets the Monaco extract through the relay of `serve.py`, keeps it, and
@@ -143,3 +164,14 @@ To change the allowed pages later, change `ALLOWED_ORIGINS` and run `npx wrangle
   Geofabrik 400.
 - The page on `localhost` with the deployed relay (no `?relay=`): Get, the kept file after a reload, Delete.
 
+
+## The parallel download: results (2026-10-29)
+
+- `check.mjs`: the `Range` rules, and two parts of the Monaco file that join to the whole file.
+- `serve.py` relay, Estonia (124 MB, curl, from this computer): 8 parts at the same time 3.7 s; one stream 10.5 s.
+  The parts joined are equal to the direct file.
+- Headless Chromium, `download()` through `serve.py` (`?relay=relay`), Estonia: 7.4 s, the SHA-256 of the stored
+  file is equal to the direct file.
+- Not measured: the gain on the deployed relay. It needs `npx wrangler deploy` (the deployed Worker does not pass
+  `Range` yet). Then measure `europe/estonia` and `europe/lithuania` through the relay with
+  `Origin: http://localhost:8000`, one stream and 8 parts.

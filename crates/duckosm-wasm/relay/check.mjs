@@ -6,8 +6,8 @@ import worker from "./worker.js";
 
 const env = { ALLOWED_ORIGINS: "https://khoshkhah.github.io" };
 const MONACO = "https://download.geofabrik.de/europe/monaco-latest.osm.pbf";
-const ask = (url, origin, method = "GET") =>
-  worker.fetch(new Request(`https://relay.example/?url=${encodeURIComponent(url)}`, { method, headers: origin ? { Origin: origin } : {} }), env);
+const ask = (url, origin, method = "GET", extra = {}) =>
+  worker.fetch(new Request(`https://relay.example/?url=${encodeURIComponent(url)}`, { method, headers: { ...(origin ? { Origin: origin } : {}), ...extra } }), env);
 
 assert.equal((await ask(MONACO, "https://evil.example")).status, 403, "another page");
 assert.equal((await ask(MONACO, null)).status, 403, "no Origin (not a browser page)");
@@ -28,4 +28,18 @@ assert.equal(r.headers.get("Cross-Origin-Resource-Policy"), "cross-origin");
 const bytes = new Uint8Array(await r.arrayBuffer());
 assert.equal(bytes.length, size, "the whole file");
 assert.equal(new TextDecoder().decode(bytes.slice(6, 15)), "OSMHeader", "a PBF file");
+
+// Range: the dated file of "latest" (Content-Location) answers 206 with Content-Range; the parts join to the whole file
+assert.equal((await ask(MONACO, "http://localhost:8000", "GET", { Range: "bytes=0-1,5-9" })).status, 416, "more than one range");
+assert.match(pre.headers.get("Access-Control-Allow-Headers"), /Range/);
+const dated = head.headers.get("Content-Location");
+assert.match(dated, /monaco-\d{6}\.osm\.pbf$/, "Content-Location");
+assert.equal(head.headers.get("Accept-Ranges"), "bytes");
+const half = Math.floor(size / 2);
+const [p1, p2] = await Promise.all([[0, half - 1], [half, size - 1]].map(([a, b]) => ask(dated, "https://khoshkhah.github.io", "GET", { Range: `bytes=${a}-${b}` })));
+assert.equal(p1.status, 206);
+assert.equal(p1.headers.get("Content-Range"), `bytes 0-${half - 1}/${size}`);
+assert.equal(p1.headers.get("ETag"), head.headers.get("ETag"), "the same version");
+const joined = Buffer.concat([Buffer.from(await p1.arrayBuffer()), Buffer.from(await p2.arrayBuffer())]);
+assert.ok(joined.equals(Buffer.from(bytes)), "the parts equal the whole file");
 console.log(`relay: ok (Monaco ${size} bytes, ${r.headers.get("Last-Modified")})`);

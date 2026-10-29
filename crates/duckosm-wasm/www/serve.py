@@ -18,7 +18,7 @@ import urllib.parse
 import urllib.request
 
 WWW = pathlib.Path(__file__).resolve().parent
-GEOFABRIK = re.compile(r"^https://download\.geofabrik\.de/[a-z0-9/_-]+-latest\.osm\.pbf$")
+GEOFABRIK = re.compile(r"^https://download\.geofabrik\.de/[a-z0-9/_-]+-(latest|\d{6})\.osm\.pbf$")
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -36,18 +36,32 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self.relay()
         super().do_GET()
 
-    def relay(self):
+    def do_HEAD(self):
+        if self.path.startswith("/relay?"):
+            return self.relay(head=True)
+        super().do_HEAD()
+
+    def relay(self, head=False):
         """relay/worker.js on this computer: a Geofabrik .osm.pbf file, streamed (the page is on the same site, so no CORS)."""
         url = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("url", [""])[0]
         if not GEOFABRIK.match(url):
             return self.send_error(400, "Only the .osm.pbf files of download.geofabrik.de")
-        req = urllib.request.Request(url, headers={"User-Agent": "duckosm-relay (+https://github.com/Khoshkhah/duckOSM)"})
+        headers = {"User-Agent": "duckosm-relay (+https://github.com/Khoshkhah/duckOSM)"}
+        rng = self.headers.get("Range", "")
+        if rng and not re.match(r"^bytes=\d+-\d*$", rng):
+            return self.send_error(416, "Only one range, bytes=<from>-<to>")
+        if rng:
+            headers["Range"] = rng
+        req = urllib.request.Request(url, headers=headers, method="HEAD" if head else "GET")
         with urllib.request.urlopen(req) as r:
-            self.send_response(200)
-            for k in ("Content-Type", "Content-Length", "Last-Modified", "ETag"):
+            self.send_response(r.status)
+            for k in ("Content-Type", "Content-Length", "Last-Modified", "ETag", "Content-Range", "Accept-Ranges"):
                 if r.headers.get(k):
                     self.send_header(k, r.headers[k])
+            self.send_header("Content-Location", r.geturl())
             self.end_headers()
+            if head:
+                return
             try:
                 shutil.copyfileobj(r, self.wfile, 1 << 20)
             except (BrokenPipeError, ConnectionResetError):
