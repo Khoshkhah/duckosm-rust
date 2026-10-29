@@ -623,9 +623,9 @@ map.addControl(new maplibregl.NavigationControl(), "top-right");
 // each new roads style to rs.setStyle), and a click reads the road's fields in the road table of the style (window.RS_SIDE). The page's
 // base map stays its own.
 const googleKey = (() => { try { return localStorage.getItem("duckosm.googleKey") || ""; } catch (e) { return ""; } })();
-// pick: the layers of the hover, the tooltip and the click (roadstyle f57d388 reads only this option; the page's style has no
-// interaction contract that would give it, so without it no road is picked: no hover, no Street View)
-const rs = rsDashboard(map, { style: null, prefix: "rs-", tiles: true, pick: ["roads-simple"],
+// no `pick` option: roadstyle picks the road layers of the style (RS_LEANS: roads-simple and one layer for each band of zooms),
+// so the hover, the tooltip and the click work at every zoom
+const rs = rsDashboard(map, { style: null, prefix: "rs-", tiles: true,
   select_color: "#7c4dff",   // the look's theme.selection.select
   street_view: "window", street_view_key: googleKey, google_3d: !!googleKey });
 // the page's 3D buildings switch right after the dashboard's 2D/3D button, and its base map last, as in roadstyle

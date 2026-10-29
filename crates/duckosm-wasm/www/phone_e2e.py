@@ -167,7 +167,7 @@ with sync_playwright() as p:
     point = page.evaluate("""(top) => { const m = window.duckMap, t = window.RS_SIDE, bottom = document.getElementById('lv').getBoundingClientRect().top;
         for (const c of t.mids) { if (!c) continue; const p = m.project(c), y = p.y + top;
           if (p.x > 30 && p.x < innerWidth - 70 && y > top + 20 && y < bottom - 20 &&
-            m.queryRenderedFeatures([[p.x - 4, p.y - 4], [p.x + 4, p.y + 4]], {layers: ['rs-roads-simple']}).length) return [p.x, y]; } return null; }""", mp[1])
+            m.queryRenderedFeatures([[p.x - 4, p.y - 4], [p.x + 4, p.y + 4]], {layers: window.duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id)}).length) return [p.x, y]; } return null; }""", mp[1])
     assert point, "a road above the sheet"
     page.touchscreen.tap(*point)
     page.wait_for_selector("#lv-cards [data-hroad]", timeout=30_000)
