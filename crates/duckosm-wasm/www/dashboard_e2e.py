@@ -82,6 +82,10 @@ with sync_playwright() as p:
     page.click("#sb-hide")
     page.wait_for_timeout(500)
     assert page.is_hidden("#sb") and page.is_visible("#sb-show") and page.evaluate(BOX, "#rs-toolbar")[0] < 20, "the panel hides"
+    # the show button has the icon of roadstyle's template (an outline, not a filled square), at the corner, 32 px
+    icon = page.evaluate("(() => { const b = document.getElementById('sb-show'), r = b.getBoundingClientRect(), c = getComputedStyle(b.querySelector('svg')); return [Math.round(r.left), Math.round(r.top), Math.round(r.width), c.fill, c.width, c.strokeWidth]; })()")
+    assert icon == [10, 10, 32, "none", "18px", "1.8px"], icon
+    shot("1b-panel-hidden")
     page.click("#sb-show")
     page.wait_for_timeout(500)
     assert page.is_visible("#sb") and page.evaluate(BOX, "#rs-toolbar")[0] >= sb[2] - 12, "the panel shows again"
