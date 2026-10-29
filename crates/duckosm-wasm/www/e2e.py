@@ -91,7 +91,10 @@ with sync_playwright() as p:
         box.set_checked(box.get_attribute("value") in args.modes.split(","))
     page.set_checked("#features", not args.no_features)
     assert page.input_value("#levels") == "solve", "the drawing order of a new page is Optimized (Kaveh, 2026-10-24)"
-    page.select_option("#levels", args.levels)
+    # the list is roadstyle's (selectbox.js: a button and a list in place of the select)
+    page.locator(".rs-sel:has(#levels) .rs-sel-btn").click()
+    page.locator(".rs-sel-opt", has_text={"tags": "From the tags", "solve": "Optimized"}[args.levels]).first.click()
+    assert page.input_value("#levels") == args.levels
     page.click("#run")
     page.wait_for_function("!document.getElementById('step5-card').hidden || document.getElementById('buildstatus').textContent.startsWith('Error')",
                            timeout=1_800_000)

@@ -299,20 +299,21 @@ with sync_playwright() as p:
     page.evaluate("window.rsSelect(200)")          # a road picked, as a click on it does: the panel shows its card
     page.wait_for_function("window.duckMap.loaded()", timeout=120_000)
     page.screenshot(path=str(out / "editor.png"))
-    # the dark theme of the page's button (data-theme): the panel follows it
-    page.evaluate("document.documentElement.dataset.theme = 'dark'")
+    # the dark theme (the theme tool of roadstyle's bar sets data-rs-theme; the page copies it to data-theme): the editor's panel follows it
+    page.locator("#rs-toolbar button").first.click()   # the theme tool (roadstyle's tip.js takes the title attribute)
     page.wait_for_timeout(500)
+    assert page.evaluate("document.documentElement.dataset.theme") == "dark" == page.evaluate("document.documentElement.dataset.rsTheme")
     assert page.evaluate("getComputedStyle(document.getElementById('lv')).backgroundColor") != "rgb(246, 247, 249)", "the dark panel"
     page.screenshot(path=str(out / "editor-dark.png"))
-    page.evaluate("document.documentElement.dataset.theme = 'light'")
+    page.locator("#rs-toolbar button").first.click()   # the theme tool (roadstyle's tip.js takes the title attribute)
     # the page's panel collapses and opens while the editor is open: the editor's panel stays on the right and works (Kaveh, 2026-10-25:
     # "when I collapse duckosm side panel, the level editor convert totally white": a transform on the page's panel took it away)
     lv_box = lambda: page.evaluate(BOX, "lv")  # noqa: E731
-    for click, collapsed in [("#collapse", True), ("#open", False)]:
+    for click, collapsed in [("#sb-hide", True), ("#sb-show", False)]:
         page.click(click)
         page.wait_for_timeout(400)
         assert page.evaluate("document.body.classList.contains('collapsed')") == collapsed
-        assert page.evaluate(BOX, "panel")[2] <= 0 if collapsed else page.evaluate(BOX, "panel")[0] == 0, page.evaluate(BOX, "panel")
+        assert page.is_hidden("#sb") if collapsed else page.is_visible("#sb"), "the page's panel hides and shows"
         assert lv_box()[0] >= 900 and lv_box()[2] == 1400, ("the editor's panel on the right", collapsed, lv_box())
         page.click("#lv-tabs [data-t=history]")
         page.wait_for_function("document.querySelector('#lv-tabs [data-t=history]').classList.contains('on')", timeout=5_000)
@@ -358,11 +359,11 @@ with sync_playwright() as p:
     print(f"tables: {after} edge(s) with a 7 m head of {edges}; edge_levels_meta.source = 'area'; level_heads has the edit")
 
     # a map of one mode reads the stored levels of all modes (roadstyle's subset check)
-    page.select_option("#mapmode", "driving")
+    page.evaluate("(v) => { const s = document.getElementById('mapmode'); s.value = v; s.dispatchEvent(new Event('change', {bubbles: true})); }", "driving")   # the select is roadstyle's list (selectbox.js)
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && window.duckMap.loaded()", timeout=300_000)
     print("driving map:", page.inner_text("#mapnote"))
     assert "drawn" in page.inner_text("#mapnote")
-    page.select_option("#mapmode", "all")
+    page.evaluate("(v) => { const s = document.getElementById('mapmode'); s.value = v; s.dispatchEvent(new Event('change', {bubbles: true})); }", "all")   # the select is roadstyle's list (selectbox.js)
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && window.duckMap.loaded()", timeout=300_000)
 
     # the .duckdb download has the same

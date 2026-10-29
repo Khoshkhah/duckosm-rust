@@ -17,94 +17,108 @@
   "polyclip-ts": "https://cdn.jsdelivr.net/npm/polyclip-ts@0.16.8/+esm"
 } }
 </script>
+<script>
+/* roadstyle's dashboard, as the Rust page writer gives it to a page (roadstyle::dashboard::Template::Dashboard, layout overlay; docs/app.md):
+   this object is the page's `dashboard` option, and the classes of <html> are Dashboard::first_paint, so that no frame shows another form. The
+   panel is at the left (the level editor's panel is at the right) and the bar beside it. The panel hides none of roadstyle's own sections:
+   the page has none of them (the template's `hide` list would fail on a section that is not there). */
+window.DASHBOARD = {
+  template: "dashboard", layout: "overlay",
+  panel: { side: "left", width_px: 370, look: "frame", sections: [], hide: [] },
+  toolbar: { position: "left", settings: true, hold: true },
+  windows: { clamp: true, recenter_map: false, restore_open: true, remember: true },
+  boundary: { dim: false, limit: false, dim_light: 0.16, dim_dark: 0.4, limit_pad: 2.0, zoom_out: 3.0 },
+  google_3d: { fov_deg: null, follow: true, min_alt_m: 80.0, min_zoom_drawn: 17.0, mesh_altitude_m: 1.5,
+    selection_style: { color: "#22d3ee", width: 8.0, outline: "#0b1020", outline_width: 2.0, arrow_color: "#ffffff", arrow_width: 5.0, arrow_every: 25.0, fill: "rgba(34,211,238,0.35)" },
+    layers: [] },
+  legend: { rows: [] },
+  scale_box: false,
+  phone: { max_width_px: 700, toolbar: "top" },
+};
+(function () {
+  var d = window.DASHBOARD, c = document.documentElement.classList;
+  c.add("rs-tpl-dashboard", "rs-overlay", "rs-has-toolbar", "rs-tb-" + d.toolbar.position, "rs-panel-left", "rs-hide-scale");
+  document.documentElement.style.setProperty("--rs-panel-w", d.panel.width_px + "px");
+  if (matchMedia("(max-width:" + d.phone.max_width_px + "px)").matches) c.add("rs-phone");
+})();
+</script>
 <style>
+  /* The page is roadstyle's dashboard (docs/app.md): the map fills the window, the panel (#sb, with the frame look) floats over it, and
+     roadstyle's toolbar (#rs-toolbar) holds the map buttons. The layout, the bar, the boxes, the windows and the phone's sheet are
+     map/roadstyle/dashboard/dashboard.css. Here: the colors of the page outside the panel, the panel's shell (the rules of roadstyle's
+     templates/dashboard.html that a host page needs), and the content of the cards. */
   :root {
     --bg: #ffffff; --surface: #f6f7f9; --fg: #111827; --muted: #6b7280; --line: #e5e7eb;
     --accent: #2563eb; --accent-fg: #ffffff; --accent-soft: #dbeafe; --warn: #b45309; --warn-soft: #fef3c7;
     --error: #b91c1c; --shadow: 0 10px 30px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.08);
   }
-  /* the theme of the system, unless the user selected one (the button in the header sets data-theme) */
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme=light]) {
-      --bg: #17181c; --surface: #22242a; --fg: #f3f4f6; --muted: #9ca3af; --line: #33363d;
-      --accent: #60a5fa; --accent-fg: #0b1220; --accent-soft: #1e3a5f; --warn: #fbbf24; --warn-soft: #3b2f12;
-      --error: #f87171; --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    }
-  }
-  :root[data-theme=dark] {
+  /* the one theme value of the dashboard: roadstyle's theme button sets data-rs-theme on <html> */
+  :root[data-rs-theme=dark] {
     --bg: #17181c; --surface: #22242a; --fg: #f3f4f6; --muted: #9ca3af; --line: #33363d;
     --accent: #60a5fa; --accent-fg: #0b1220; --accent-soft: #1e3a5f; --warn: #fbbf24; --warn-soft: #3b2f12;
     --error: #f87171; --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   }
+  /* in the panel the colors are the panel's (--bg, --ink, --mut, --line, --card, --accent: set on #sb and flipped by its data-theme) */
+  #sb {
+    --fg: var(--ink); --muted: var(--mut); --surface: var(--card); --accent-fg: #ffffff;
+    --accent-soft: color-mix(in srgb, var(--accent) 16%, var(--bg)); --warn: #b45309; --warn-soft: #fef3c7; --error: #b91c1c;
+  }
+  #sb[data-theme=dark] { --accent-fg: #0b1220; --warn: #fbbf24; --warn-soft: #3b2f12; --error: #f87171; }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body { font: 14px/1.45 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--fg); background: var(--bg); }
   #map { position: fixed; inset: 0; }
+  /* the part of the map that the panel and the bar leave free (freeInsets() in the script sets --free-l, --free-r, --free-b) */
   /* the map while a draw runs: a light veil and a spinner with the draw's step (showRoads), over the part of the map that the panel
      or the phone's sheet leaves free */
-  #mapbusy { position: fixed; inset: 0 0 var(--sheet-px, 0px) 0; z-index: 1; display: flex; flex-direction: column; align-items: center;
+  #mapbusy { position: fixed; inset: var(--free-t, 0px) var(--free-r, 0px) var(--free-b, 0px) var(--free-l, 0px); z-index: 1; display: flex; flex-direction: column; align-items: center;
     justify-content: center; gap: 10px; background: color-mix(in srgb, var(--bg) 40%, transparent); pointer-events: none; }
   #mapbusy[hidden] { display: none; }
   #mapbusy .spin { width: 34px; height: 34px; border-radius: 50%; border: 4px solid var(--line); border-top-color: var(--fg); animation: spin 0.8s linear infinite; }
   #mapbusy span { background: var(--bg); color: var(--fg); padding: 6px 12px; border-radius: 99px; font-size: 13px; box-shadow: var(--shadow); }
   @keyframes spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { #mapbusy .spin { animation-duration: 3s; } }
-  /* the map buttons under the zoom buttons: 3D and the base map (a list that opens to the left) */
-  .mapctl { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
-  .mapctl > .maplibregl-ctrl-group { margin: 0; position: relative; }
-  /* roadstyle's map buttons (web_template.html, 2bccdcb): the text of 3D, the base map's ▦ character */
-  /* every map button is white in both themes: its icon dark (roadstyle's map has no dark theme; its Street View and
-     Google 3D icons are currentColor, which the page's dark theme made white) */
-  .maplibregl-ctrl-group button { color: #333; }
-  .mapctl button { display: grid; place-items: center; font: 700 11px/1 system-ui, sans-serif; letter-spacing: .03em; color: #333; }
-  .mapctl button.bm-icon { font: 16px/1 system-ui, sans-serif; letter-spacing: 0; color: #5b616b; }
-  .mapctl button.bm-icon:hover { color: #334155; }
-  .mapctl button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; }
-  .mapctl button[aria-pressed="true"] { color: #fff; background-color: #2563eb !important; }
-  .basepop { position: absolute; top: 0; right: 38px; width: 180px; padding: 8px; display: grid; gap: 2px; border-radius: 8px;
-    background: var(--bg); color: var(--fg); box-shadow: 0 2px 10px rgb(0 0 0 / 20%); font-size: 12.5px; }
-  .basepop[hidden] { display: none; }
-  .basepop .h { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin: 2px 4px 4px; }
-  .basepop label { display: flex; align-items: center; gap: 8px; padding: 4px; border-radius: 6px; cursor: pointer; }
-  .basepop label:hover { background: var(--surface); }
-  .basepop .sw { width: 22px; height: 16px; border-radius: 3px; border: 1px solid var(--line); flex: none; }
-  .basepop hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; width: 100%; }
-  .basepop #ownbox[hidden], .basepop #ownsep[hidden] { display: none; }
-  #panel {
-    position: fixed; top: 0; left: 0; bottom: 0; width: 370px; z-index: 2; transition: transform 0.25s ease;
-    display: flex; flex-direction: column; background: var(--bg); border-right: 1px solid var(--line); box-shadow: 4px 0 18px rgba(15, 23, 42, 0.12);
+  /* the page's two bar tools: the base map box (the look of roadstyle's boxes) and the 3D buildings switch */
+  #basebox { padding: 8px; }
+  #basebox label { display: flex; align-items: center; gap: 8px; }
+  #basebox #ownbox[hidden], #basebox #ownsep[hidden] { display: none; }
+  /* the panel's shell: roadstyle's templates/dashboard.html (position, tokens, the title row, the hide and show buttons). dashboard.css has the
+     frame and card looks, the sides and the phone's sheet */
+  #sb {
+    position: fixed; top: 0; right: 0; bottom: 0; width: var(--rs-panel-w, 340px); box-sizing: border-box; overflow: auto; padding: 14px 15px;
+    font: 13px/1.5 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --bg: #fff; --ink: #16181d; --mut: #767c88; --line: #e6e8ec; --card: #f7f8fa; --accent: #1a6bd6;
+    background: var(--bg); color: var(--ink); border-left: 1px solid var(--line);
   }
-  body.collapsed #panel { transform: translateX(-100%); box-shadow: none; }
+  #sb[data-theme=dark] { --bg: #14171c; --ink: #e9ecf1; --mut: #8b93a1; --line: #272b33; --card: #1c2026; --accent: #5aa9f8; }
+  #sb.hidden { display: none; }
+  .sb-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .sb-top h1 { margin: 0; font-size: 16px; letter-spacing: -0.01em; }
+  .sb-top p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+  #sb-hide, #sb-show { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; line-height: 1; cursor: pointer; flex: none; }
+  #sb-show { position: fixed; top: 10px; right: 10px; z-index: 3; display: none; width: 32px; height: 32px; }
+  #sb-hide svg, #sb-show svg { width: 16px; height: 16px; stroke-width: 1.8; }
+  .sb-body { display: flex; flex-direction: column; gap: 12px; }
+  /* the panel's type: the cards' own sizes (roadstyle's template sets 13px for its controls) */
+  :where(#sb) h2 { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 10px; }
+  :where(#sb, #editbar) button { font: inherit; color: inherit; cursor: pointer; }
+  /* a step is a section of the panel: one neutral box that follows the panel's theme (the colors of the old cards went with the old panel) */
+  .step { border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .step > h2:first-child { margin: 0 0 12px; color: var(--fg); cursor: pointer; }
   h2 .icon-btn { margin: -8px -6px -8px auto; text-transform: none; }
   .icon-btn:disabled { visibility: hidden; }
   .icon-btn { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 8px; background: none; color: var(--muted); flex: none; }
-  .icon-btn:hover { background: var(--surface); color: var(--fg); }
-  #open { position: fixed; top: 10px; left: 10px; z-index: 2; display: none; align-items: center; gap: 6px; height: 36px; padding: 0 12px 0 8px;
-          border: 0; border-radius: 9px; background: var(--bg); color: var(--fg); box-shadow: var(--shadow); font-weight: 500; }
-  body.collapsed #open { display: flex; }
-  .scroll { overflow-y: auto; padding: 0 12px 12px; flex: 1; }
-  header { display: flex; align-items: center; gap: 10px; padding: 14px 10px 12px 18px; }
-  header > div:nth-child(2) { flex: 1; min-width: 0; }
-  header .logo { width: 34px; height: 34px; border-radius: 9px; background: var(--accent); color: var(--accent-fg); display: grid; place-items: center; flex: none; }
-  header h1 { font-size: 16px; margin: 0; letter-spacing: -0.01em; }
-  header p { margin: 0; color: var(--muted); font-size: 12.5px; }
-  h2 { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 18px 0 10px; }
-  /* each of the three steps is a card on the gray background of the panel */
-  .scroll { background: var(--surface); border-top: 1px solid var(--line); }
-  .step { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-top: 12px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05); }
-  .step > h2:first-child { margin: 0 0 12px; color: var(--fg); }
-  /* the number of each step has the color of its line on the map: a match, the area, an extract */
-  .step h2 .n { background: var(--c); color: #fff; }
+  .icon-btn:hover { background: var(--bg); color: var(--fg); }
   /* each card folds (a click on its heading or on the chevron); a folded card keeps only its heading */
-  .step > h2:first-child { cursor: pointer; }
   .step .fold { display: grid; place-items: center; width: 28px; height: 28px; margin: -6px -6px -6px auto; border: 0; border-radius: 8px;
                 background: none; color: var(--muted); flex: none; }
   .step .icon-btn + .fold { margin-left: 0; }
-  .step .fold:hover { background: var(--surface); color: var(--fg); }
+  .step .fold:hover { background: var(--bg); color: var(--fg); }
   .step .fold svg { transform: rotate(-90deg); transition: transform 0.15s ease; }
   .step.folded .fold svg { transform: rotate(180deg); }
   .step.folded > :not(h2:first-child) { display: none !important; }
   .step.folded > h2:first-child { margin-bottom: 0; }
+  h2 .n { width: 20px; height: 20px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 11px; }
   /* card 5: one line of the build, the folded SQL and table downloads, the two downloads on one row */
   .step .line { margin: 0; }
   .step h3 { display: inline; margin: 0; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
@@ -112,15 +126,13 @@
   .dl { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
   .dl .btn { padding: 0 8px; font-size: 12.5px; white-space: nowrap; }
   #sql-box .row { margin-top: 6px; }
-  #step1-card { --c: #7c3aed; } #step2-card { --c: #2563eb; } #extracts-box { --c: #ea580c; }
-  h2 .n { width: 20px; height: 20px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 11px; }
-  /* the panel's icons; not the map's and the floating windows' own SVGs (roadstyle's Street View marker and icons) */
-  svg:not(.maplibregl-map svg):not(.rs-svw svg) { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  /* the panel's icons; not the map's, the bar's and the floating windows' own SVGs (roadstyle's) */
+  :is(#sb, #editbar, #mapbusy) svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  #sb .field input[type=search] { padding-left: 36px; }
+  #sb .sb-top svg { width: 16px; height: 16px; stroke-width: 1.8; }
   a { color: var(--accent); }
   .muted { color: var(--muted); }
   .small { font-size: 12.5px; }
-
-  button { font: inherit; color: inherit; cursor: pointer; }
   .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: 9px;
          border: 1px solid var(--line); background: var(--bg); font-weight: 500; }
   .btn:hover:not(:disabled) { background: var(--surface); }
@@ -169,7 +181,6 @@
   .toolbox button:disabled { opacity: 0.4; cursor: default; }
   kbd { font: 600 10.5px ui-monospace, monospace; color: var(--muted); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; }
   #hint { margin: 0; padding: 9px 11px; background: var(--bg); border-radius: 9px; font-size: 12.5px; color: var(--muted); }
-  body.collapsed .maplibregl-ctrl-top-left { top: 46px; }
 
   #drop { display: grid; place-items: center; gap: 6px; text-align: center; padding: 26px 14px; border: 2px dashed var(--line); border-radius: 12px; color: var(--muted); cursor: pointer; }
   #drop:hover, body.dragging #drop { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
@@ -205,10 +216,9 @@
   #kept .k { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
   #kept .k span { flex: 1; min-width: 0; }
 
-  footer { display: grid; grid-template-columns: 1fr 1.5fr; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--line); background: var(--bg); }
+  .sb-foot { flex: none; display: grid; grid-template-columns: 1fr 1.5fr; gap: 8px; padding: 12px 15px 14px; border-top: 1px solid var(--line); }
 
   /* steps 3 to 5: the data, the build, the result (docs/app.md) */
-  #step4-card { --c: #059669; } #step5-card { --c: #0f766e; } #step6-card { --c: #c026d3; } #step7-card { --c: #4f46e5; }
   #step7-card [hidden] { display: none; }
   /* the level editor's panel (roadstyle's level_editor.html): the page's rules for header and .row are not for it */
   #lv header { display: block; } #lv .row { margin-top: 0; }
@@ -236,7 +246,7 @@
   .steplog tr.group td { padding-top: 9px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; border-bottom: 0; }
   .steplog tr.total td { font-weight: 600; border-bottom: 0; }
   /* the time cell: a bar for the share of the slowest step */
-  .steplog td.t { background: linear-gradient(to left, color-mix(in srgb, var(--c, #2563eb) 22%, transparent) var(--w), transparent var(--w)); }
+  .steplog td.t { background: linear-gradient(to left, color-mix(in srgb, var(--accent) 22%, transparent) var(--w), transparent var(--w)); }
   .grid2 { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; }
   select, textarea { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 9px; }
   select { height: 34px; padding: 0 8px; }
@@ -257,60 +267,29 @@
   #files .layers a:hover { outline: 1px solid var(--line); }
   #files .layers a span { color: var(--muted); font-size: 11.5px; }
 
-  #status { position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 3; background: var(--fg); color: var(--bg); padding: 7px 14px; border-radius: 99px; font-size: 13px; box-shadow: var(--shadow); }
+  #status { position: fixed; left: calc(var(--free-l, 0px) + (100% - var(--free-l, 0px) - var(--free-r, 0px)) / 2); top: 14px; transform: translateX(-50%); z-index: 9; background: var(--fg); color: var(--bg); padding: 7px 14px; border-radius: 99px; font-size: 13px; box-shadow: var(--shadow); }
   #status:empty { display: none; }
   body.picking #map canvas { cursor: crosshair; }
-
-  /* roadstyle's zoom read-out beside the scale bar (the page moves it into the map's bottom-left box) */
-  .maplibregl-ctrl-bottom-left .rs-zoom { position: static; float: left; margin: 0 0 10px 6px; pointer-events: none; }
-  @media (min-width: 701px) {
-    .maplibregl-ctrl-top-left, .maplibregl-ctrl-bottom-left { left: 370px; transition: left 0.25s ease; }
-    body.collapsed .maplibregl-ctrl-top-left, body.collapsed .maplibregl-ctrl-bottom-left { left: 0; }
-    /* roadstyle's legend (dashboard.css: left 10px) beside the panel, not under it, and above the scale bar */
-    .co-lg { left: 380px; bottom: 36px; transition: left 0.25s ease; }
-    body.collapsed .co-lg { left: 10px; }
-    #status { left: calc(50% + 185px); }
-    body.collapsed #status { left: 50%; }
-    #mapbusy { left: 370px; transition: left 0.25s ease; }
-    body.collapsed #mapbusy { left: 0; }
-  }
   #editbar { display: none; }
-  #sheet-handle { display: none; }
   @media (max-width: 700px) {
-    /* a phone: the map fills the screen and the page's panel is a sheet at its bottom (the pattern of the level editor's sheet). The
-       handle taps through one row (the title and the Build bar), half the height and the full height; the cards scroll inside the
-       sheet, the page itself never scrolls. The map's padding follows the sheet (sheet() in the script), so the area stays above it. */
+    /* a phone: roadstyle's phone form (the bar at the top, the panel as a bottom sheet with three heights: closed, 40 %, full). The page itself
+       never scrolls. The map's padding follows the sheet (padMap() in the script), so the area stays above it. */
     html, body { overflow: hidden; overscroll-behavior: none; }
-    #map { position: fixed; inset: 0; }
-    #panel { position: fixed; top: auto; left: 0; right: 0; bottom: 0; width: auto; height: 50dvh; z-index: 4; border-right: 0;
-             border-top: 1px solid var(--line); border-radius: 14px 14px 0 0; box-shadow: 0 -4px 18px rgba(0, 0, 0, 0.14); transition: height 0.2s ease; }
-    body[data-sheet=full] #panel { height: calc(100dvh - 40px); }
-    body[data-sheet=fold] #panel { height: auto; }
-    body[data-sheet=fold] #panel > .scroll { display: none; }
-    body.collapsed #panel { transform: none; }
-    /* the background 1 % transparent: with an opaque scroll box over the map's canvas, Chromium (2026-10, also headless) leaves a
-       band of the canvas undrawn at the wrong place (the box's size, as if the sheet were at the top of the screen) */
-    #panel > .scroll { overflow-y: auto; overscroll-behavior: contain; background: color-mix(in srgb, var(--surface) 99%, transparent); }
-    #sheet-handle { display: flex; align-items: center; justify-content: center; flex: none; width: 100%; height: 22px; border: 0; padding: 0;
-                    background: none; touch-action: none; }
-    #sheet-handle::before { content: ""; width: 44px; height: 5px; border-radius: 3px; background: var(--line); }
-    header { padding-top: 2px; }
-    header p { display: none; }
-    #collapse, #open, body.collapsed #open { display: none; }
-    .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { bottom: var(--sheet-px, 0px); }
-    .maplibregl-ctrl-scale { display: none; }
+    #status { top: calc(var(--rs-top, 52px) + 6px); }
+    #sb .sb-body { overscroll-behavior: contain; }
+    .sb-top p { display: none; }
     .btn, .segmented [role=tab] { height: 44px; }
     .shapes button { height: 44px; }
-    /* the level editor on a phone: one panel at a time. The page's panel goes away, a fixed bar at the top keeps the counts, Apply and
-       Close, and the map fills the rest of the screen. The editor's panel is roadstyle's sheet at the bottom (its layout "auto"), and
-       the editor keeps the roads above the sheet (the map's padding). */
-    body.editing #editbar { display: flex; position: fixed; top: 0; left: 0; right: 0; z-index: 8; height: 48px; align-items: center;
+    /* the level editor on a phone: one panel at a time. The page's panel goes away, a fixed bar under roadstyle's bar keeps the counts, Apply
+       and Close, and the map fills the rest of the screen. The editor's panel is roadstyle's sheet at the bottom (its layout "auto"), and the
+       editor keeps the roads above the sheet (the map's padding). */
+    body.editing #editbar { display: flex; position: fixed; top: var(--rs-top, 52px); left: 0; right: 0; z-index: 8; height: 48px; align-items: center;
                             gap: 8px; padding: 0 10px; background: var(--bg); border-bottom: 1px solid var(--line); }
     #editbar span { flex: 1; min-width: 0; font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #editbar .btn { height: 40px; }
-    body.editing #panel > * { display: none; }
-    body.editing #panel { height: 0; border: 0; box-shadow: none; }
-    body.editing #map, body.editing.lv-open #map { position: fixed; top: 48px; left: 0; right: 0; bottom: 0; height: auto; }
+    body.editing #sb, body.editing .rs-grip { display: none !important; }
+    /* the editor's full sheet (roadstyle: the window less 48 px) ends under the page's bar, so that its handle is not under roadstyle's bar */
+    html body.lv-sheet[data-lv-sheet=full] { --lv-sheet-h: calc(100% - var(--rs-top, 52px) - 48px); }
   }
 </style>
 </head>
@@ -345,36 +324,29 @@
 <!-- the level editor's bar on a phone (card 7): the counts, Apply and Close stay in view -->
 <div id="editbar"><span id="editbar-note"></span><button class="btn primary" data-for="edit-apply">Apply</button>
   <button class="btn" data-for="edit-close">Close</button></div>
-<div id="mapctl" class="maplibregl-ctrl mapctl">
-  <div class="maplibregl-ctrl-group"><button id="bbld" type="button" title="3D buildings" aria-label="3D buildings" aria-pressed="false"><svg><use href="#i-building"/></svg></button></div>
-</div>
-<div id="basectl" class="maplibregl-ctrl mapctl">
-  <div class="maplibregl-ctrl-group"><button id="bbase" class="bm-icon" type="button" title="Base map" aria-label="Base map" aria-expanded="false" aria-controls="basepop">&#9638;</button>
-    <div id="basepop" class="basepop" role="group" aria-label="Base map" hidden>
-      <div class="h">Base map</div>
-      <label><input type="radio" name="base" value=""><span class="sw" style="background:#f2efe9"></span>OpenFreeMap</label>
-      <label><input type="radio" name="base" value="esri_gray"><span class="sw" style="background:#e4e4e4"></span>Light gray</label>
-      <label><input type="radio" name="base" value="satellite"><span class="sw" style="background:linear-gradient(135deg,#3d5a3a,#7b8a5c 50%,#a09a7c)"></span>Satellite</label>
-      <label><input type="radio" name="base" value="blank"><span class="sw" style="background:#efede8"></span>Blank</label>
-      <label><input type="radio" name="base" value="blank_dark"><span class="sw" style="background:#14181d"></span>Blank dark</label>
-      <hr id="ownsep" hidden>
-      <label id="ownbox" hidden><input type="checkbox" id="ownlayers" checked>duckOSM layers</label>
-    </div></div>
+<div id="toolhold" hidden>
+  <!-- the page's base-map box: a tool of roadstyle's bar (setupBarTools() in the script moves it into the bar), in the look of roadstyle's boxes -->
+  <div id="basebox" class="bm-menu rs-bm-box" role="group" aria-label="Base map">
+    <div class="rs-bm-h">Base map</div>
+    <label class="rs-bm-row"><input type="radio" name="base" value=""><span class="rs-bm-sw" style="background:#f2efe9"></span><span class="rs-bm-n">OpenFreeMap</span></label>
+    <label class="rs-bm-row"><input type="radio" name="base" value="esri_gray"><span class="rs-bm-sw" style="background:#e4e4e4"></span><span class="rs-bm-n">Light gray</span></label>
+    <label class="rs-bm-row"><input type="radio" name="base" value="satellite"><span class="rs-bm-sw" style="background:linear-gradient(135deg,#3d5a3a,#7b8a5c 50%,#a09a7c)"></span><span class="rs-bm-n">Satellite</span></label>
+    <label class="rs-bm-row"><input type="radio" name="base" value="blank"><span class="rs-bm-sw" style="background:#efede8"></span><span class="rs-bm-n">Blank</span></label>
+    <label class="rs-bm-row"><input type="radio" name="base" value="blank_dark"><span class="rs-bm-sw" style="background:#14181d"></span><span class="rs-bm-n">Blank dark</span></label>
+    <hr id="ownsep" hidden>
+    <label id="ownbox" class="rs-bm-row" hidden><input type="checkbox" id="ownlayers" checked><span class="rs-bm-n">duckOSM layers</span></label>
+  </div>
 </div>
 
 <div id="status" role="status" aria-live="polite"></div>
 
-<button id="open" title="Open the panel" aria-label="Open the panel" aria-controls="panel"><svg style="transform:rotate(180deg)"><use href="#i-chevron"/></svg>duckOSM</button>
-<main id="panel">
-<button id="sheet-handle" title="Fold or open the panel" aria-label="Fold or open the panel"></button>
-<header>
-  <div class="logo"><svg><use href="#i-poly"/></svg></div>
+<div id="sb" data-theme="light" role="complementary" aria-label="duckOSM">
+<div class="sb-card">
+<div class="sb-top">
   <div><h1>duckOSM in the browser</h1><p>Build the road network of an area in your browser</p></div>
-  <button id="theme" class="icon-btn" title="Light or dark theme" aria-label="Light or dark theme"><svg><use href="#i-sun"/></svg></button>
-  <button id="collapse" class="icon-btn" title="Collapse the panel" aria-label="Collapse the panel" aria-expanded="true" aria-controls="panel"><svg><use href="#i-chevron"/></svg></button>
-</header>
-
-<div class="scroll">
+  <button id="sb-hide" title="Hide the panel" aria-label="Hide the panel" aria-controls="sb"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/><path d="m8.5 9.5 2.5 2.5-2.5 2.5"/></svg></button>
+</div>
+<div class="sb-body">
 <section id="step1-card" class="step" aria-labelledby="step1">
 <h2 id="step1"><span class="n">1</span>Choose an area</h2>
 <div class="segmented" role="tablist" aria-label="The ways to make an area">
@@ -505,9 +477,9 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
 
 <section id="step6-card" class="step" aria-labelledby="step6">
   <h2 id="step6"><span class="n">6</span>Visualization</h2>
-  <div class="grid2">
-    <label for="mapmode" class="small" id="mapmode-label" hidden>Network</label>
-    <select id="mapmode" hidden></select>
+  <div class="grid2" id="mapmode-row" style="display:none">
+    <label for="mapmode" class="small" id="mapmode-label">Network</label>
+    <select id="mapmode"></select>
   </div>
   <div class="grid2" style="margin-top:6px">
     <label for="tilefmt" class="small">Map tiles</label>
@@ -515,13 +487,10 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
   </div>
   <div class="row" id="showrow" style="margin-top:10px" hidden><button id="show" class="btn primary">Show on map</button></div>
   <p id="mapnote" class="progress" aria-live="polite"></p>
-  <details style="margin-top:10px"><summary>Google 3D: your Google Maps key</summary>
-    <p class="small muted" style="margin:6px 0">Google's 3D view needs a Google Maps JavaScript API key. The key stays only in this browser.
-      <a href="https://khoshkhah.github.io/roadstyle/guides/google-key/" target="_blank" rel="noopener">How to get a key</a></p>
-    <div class="row" style="margin-top:0"><input id="gkey" type="password" autocomplete="off" placeholder="The key" aria-label="Google Maps key" style="flex:1;min-width:0">
-      <button id="gkey-save" class="btn">Save</button><button id="gkey-del" class="btn">Remove</button></div>
-    <p id="gkey-note" class="small muted" aria-live="polite" style="margin:6px 0 0"></p>
-  </details>
+  <p class="small muted" style="margin:10px 0 0">Street View (Linked) and Google 3D need a Google Maps JavaScript API key.
+    The key stays only in this browser: the gear button of the map bar opens its settings.
+    <a href="https://khoshkhah.github.io/roadstyle/guides/google-key/" target="_blank" rel="noopener">How to get a key</a></p>
+  <div class="row" style="margin-top:6px"><button id="gkey-open" class="btn">Open the settings</button></div>
 </section>
 
 <section id="step7-card" class="step" aria-labelledby="step7" hidden>
@@ -539,12 +508,14 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
 
 </div>
 
-<footer>
+<footer class="sb-foot">
   <button id="save" class="btn" disabled><svg><use href="#i-download"/></svg>GeoJSON</button>
   <button id="run" class="btn primary" disabled>Build<svg><use href="#i-arrow"/></svg></button>
 </footer>
-</main>
-<!-- the level editor's panel (card 7): out of the page's panel, so that the panel's collapse (its move and inert) does not take it -->
+</div>
+</div>
+<button id="sb-show" title="Show the panel" aria-label="Show the panel" aria-controls="sb"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/><path d="m10.5 9.5-2.5 2.5 2.5 2.5"/></svg></button>
+<!-- the level editor's panel (card 7): out of the page's panel, so that the panel's hiding does not take it -->
 <div id="lvhost"></div>
 
 <script type="module">
@@ -555,6 +526,8 @@ import * as duck from "./app/duck.js";
 window.duckApi = duck;   // for the tests (drawLaps, tileStats)
 import * as regions from "./app/regions.js";
 import { rsDashboard } from "./map/roadstyle/dashboard/index.js";   // roadstyle's map dashboard (copied by build.sh at ROADSTYLE_COMMIT)
+import { LAYERS_ICON, BUILDINGS_ICON } from "./map/roadstyle/dashboard/tools.js";   // the icons of roadstyle's base-map and 3D-buildings tools
+import { setSheet } from "./map/roadstyle/dashboard/template.js";   // the phone sheet's height (0 closed, 1 40 %, 2 full): roadstyle has no rs call for it yet
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
@@ -616,22 +589,27 @@ async function covering(polys) {
 // ---- the map ----
 const empty = { type: "FeatureCollection", features: [] };
 maplibregl.setWorkerCount(Math.min(4, navigator.hardwareConcurrency || 1));   // MapLibre has one worker by default; the dense road tiles parse in parallel with more (before the first map)
+const keep = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* no storage */ } };
+const kept = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
 const map = new maplibregl.Map({ container: "map", style: "https://tiles.openfreemap.org/styles/liberty", center: [10, 50], zoom: 3 });
+// the zoom buttons and the compass become tools of roadstyle's bar, the scale bar goes into its corner box with the zoom number: both before rsDashboard
 map.addControl(new maplibregl.NavigationControl(), "top-right");
-// roadstyle's dashboard (docs/app.md), made once, before the roads: the 2D/3D button, Street View with its marker, Google 3D (with the
-// user's key), the road popup and the hover and select glow. The roads come later as vector tiles (the prefix rs-; showRoads gives
-// each new roads style to rs.setStyle), and a click reads the road's fields in the road table of the style (window.RS_SIDE). The page's
-// base map stays its own.
-const googleKey = (() => { try { return localStorage.getItem("duckosm.googleKey") || ""; } catch (e) { return ""; } })();
+map.addControl(new maplibregl.ScaleControl(), "bottom-left");
+// The Google key is the one of roadstyle's settings button (the gear in the bar): the browser keeps it, no file has it. The card of an earlier
+// version kept it under another name: the first visit moves it.
+try {
+  const old = localStorage.getItem("duckosm.googleKey");
+  if (old) { if (!localStorage.getItem("rs-key:google")) localStorage.setItem("rs-key:google", old); localStorage.removeItem("duckosm.googleKey"); }
+} catch (e) { /* no storage */ }
+// roadstyle's dashboard (docs/app.md), made once, before the roads: the bar and its tools, the panel's look, the 2D/3D button, Street View with
+// its marker, Google 3D (the key is the person's, in the settings), the road popup and the hover and select glow. The roads come later as
+// vector tiles (the prefix rs-; showRoads gives each new roads style to rs.setStyle), and a click reads the road's fields in the road table of
+// the style (window.RS_SIDE). The page's base map stays its own (setBase), as a tool of the bar.
 // no `pick` option: roadstyle picks the road layers of the style (RS_LEANS: roads-simple and one layer for each band of zooms),
 // so the hover, the tooltip and the click work at every zoom
 const rs = rsDashboard(map, { style: null, prefix: "rs-", tiles: true,
   select_color: "#7c4dff",   // the look's theme.selection.select
-  street_view: "window", street_view_key: googleKey, google_3d: !!googleKey });
-// the page's 3D buildings switch right after the dashboard's 2D/3D button, and its base map last, as in roadstyle
-map.addControl({ onAdd: () => $("mapctl"), onRemove: () => {} }, "top-right");
-map.addControl({ onAdd: () => $("basectl"), onRemove: () => {} }, "top-right");
-[...$("mapctl").parentElement.children].find((c) => /^[23]D$/.test(c.querySelector("button")?.textContent ?? ""))?.after($("mapctl"));
+  street_view: "window", google_3d: true, dashboard: window.DASHBOARD });
 // no road popup or selection while the user draws a shape or picks a point (the dashboard has its own click on the roads)
 document.addEventListener("rs:select", () => {
   if ($("draw").hidden && $("here").getAttribute("aria-pressed") !== "true") return;
@@ -639,12 +617,7 @@ document.addEventListener("rs:select", () => {
 });
 // the tiles of the roads map: roadstyle's module makes each one when the map asks for it (app/duck.js tile())
 maplibregl.addProtocol("rs", async (params, abort) => ({ data: await duck.tile(params.url, abort.signal) }));
-map.addControl(new maplibregl.ScaleControl(), "bottom-left");
-// roadstyle's zoom read-out ("z 13.8", .rs-zoom) sits at a fixed place of the window, which is under this page's panel: it goes beside
-// the scale bar, in the map's bottom-left box, which moves with the panel
-document.querySelector(".maplibregl-ctrl-bottom-left").append(...document.querySelectorAll(".rs-zoom"));
 const loaded = new Promise((ok) => map.on("load", ok));
-loaded.then(() => { if (matchMedia("(max-width: 700px)").matches) document.querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show"); });
 // OpenFreeMap's layers (the style before the page adds its own), and which of them are roads
 const baseLayers = [];
 loaded.then(() => map.getStyle().layers.forEach((l) => baseLayers.push({ id: l.id, road: /^transportation/.test(l["source-layer"] ?? "") })));
@@ -717,38 +690,84 @@ function pin() {
   setData("pin", small ? { type: "Point", coordinates: [(w + e) / 2, (s + n) / 2] } : null);
 }
 
+// ---- the free part of the map: the panel, the bar and the phone's sheet cover a part of the full-window map (roadstyle's overlay layout) ----
+const phone = matchMedia("(max-width: 700px)");   // roadstyle's phone width (dashboard.phone.max_width_px)
+const seen = (e) => !!e && getComputedStyle(e).display !== "none" && e.getBoundingClientRect().width > 0;
+// the insets from the edges of the window of what the panel and the bar cover (roadstyle's windows.js freeArea does the same for its windows)
+function freeInsets() {
+  const f = { top: 0, right: 0, bottom: 0, left: 0 }, bar = $("rs-toolbar"), sb = $("sb");
+  if (phone.matches) {
+    const grip = document.querySelector(".rs-grip");                  // the sheet's grip is its upper edge; a closed sheet has the grip alone
+    const edge = seen(grip) ? grip : seen(sb) ? sb : null;
+    f.bottom = edge ? Math.max(0, Math.round(innerHeight - edge.getBoundingClientRect().top)) : 0;
+    if (seen(bar)) f.top = Math.ceil(bar.getBoundingClientRect().bottom) + 8;
+    return f;
+  }
+  if (seen(sb)) { const r = sb.getBoundingClientRect(); if (r.left + r.right < innerWidth) f.left = Math.round(r.right); else f.right = Math.round(innerWidth - r.left); }
+  if (seen(bar)) {
+    const r = bar.getBoundingClientRect(), e = bar.dataset.edge;
+    if (e === "left") f.left = Math.max(f.left, Math.ceil(r.right) + 8);
+    else if (e === "right") f.right = Math.max(f.right, Math.ceil(innerWidth - r.left) + 8);
+    else if (e === "top") f.top = Math.ceil(r.bottom) + 8;
+    else if (e === "bottom") f.bottom = Math.ceil(innerHeight - r.top) + 8;
+  }
+  return f;
+}
+// the map's bottom padding on a phone is the sheet, so that the area and the roads stay above it (the level editor has its own sheet: while it is
+// open, the editor sets the padding). --free-* are for the veil and the message.
+function padMap() {
+  const f = freeInsets(), st = document.documentElement.style;
+  for (const [k, v] of Object.entries(f)) st.setProperty("--free-" + k[0], v + "px");
+  if (document.body.classList.contains("editing")) return;
+  const b = phone.matches ? f.bottom : 0;
+  if (map.getPadding().bottom !== b) map.setPadding({ ...map.getPadding(), bottom: b });
+}
+
 // zoom the map to a geometry of any type; with `ifHidden`, only when a part of it is out of the view
 const fitTo = (g, { ifHidden = false } = {}) => loaded.then(() => {
   const c = g.coordinates.flat(Infinity), xs = c.filter((_, i) => i % 2 === 0), ys = c.filter((_, i) => i % 2 === 1);
   const sw = [Math.min(...xs), Math.min(...ys)], ne = [Math.max(...xs), Math.max(...ys)], view = map.getBounds();
   if (ifHidden && view.contains(sw) && view.contains(ne)) return;
-  map.fitBounds([sw, ne], { padding: { top: 60, bottom: 60, right: 60, left: innerWidth > 700 && !document.body.classList.contains("collapsed") ? 410 : 60 }, maxZoom: 15, duration: 600 });
+  const f = freeInsets();
+  map.fitBounds([sw, ne], { padding: { top: 60 + f.top, bottom: 60 + (phone.matches ? 0 : f.bottom), right: 60 + f.right, left: 60 + f.left }, maxZoom: 15, duration: 600 });
 });
 const showExtract = (f) => { setData("extract", f); if (f) fitTo(f.geometry); };
 const zoomToArea = () => area && fitTo(geometry(area.polys));
 $("zoom-area").onclick = zoomToArea;
 
-// ---- the panel: the theme and the collapse; both kept in the storage of the browser ----
-const keep = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* no storage */ } };
-const kept = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
-const dark = () => (document.documentElement.dataset.theme ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark";
-function theme(t) {
-  if (t) document.documentElement.dataset.theme = t;
-  $("theme").querySelector("use").setAttribute("href", dark() ? "#i-sun" : "#i-moon");
-  $("theme").title = $("theme").ariaLabel = dark() ? "Light theme" : "Dark theme";
+// ---- the panel and the theme; both kept in the storage of the browser ----
+// The theme is roadstyle's one value (data-rs-theme on <html>, set by the theme button of the bar). The page keeps it for the next visit, and
+// copies it to data-theme, which the level editor's panel reads.
+const root = document.documentElement;
+const dark = () => root.dataset.rsTheme === "dark";
+window.rsSetTheme(kept("duckosm.theme") ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
+root.dataset.theme = root.dataset.rsTheme;
+document.addEventListener("rs:themechange", (e) => { root.dataset.theme = e.detail.theme; keep("duckosm.theme", e.detail.theme); loaded.then(setBase); });
+// the panel hides (the map keeps its place: it is under the panel) and the button at the corner shows it again; the bar slides to the edge.
+// A phone has the sheet (roadstyle's grip) in place of the two buttons.
+function showPanel(on, remember = true) {
+  $("sb").classList.toggle("hidden", !on);
+  $("sb-show").style.display = on ? "none" : "flex";
+  document.body.classList.toggle("collapsed", !on);
+  if (remember) keep("duckosm.panel", on ? "open" : "collapsed");
 }
-theme(kept("duckosm.theme"));
-$("theme").onclick = () => { const t = dark() ? "light" : "dark"; theme(t); keep("duckosm.theme", t); loaded.then(setBase); };
-function collapse(on) {
-  document.body.classList.toggle("collapsed", on);
-  $("panel").inert = on && innerWidth > 700;  // out of the view on a computer; on a phone the header stays
-  $("collapse").setAttribute("aria-expanded", !on);
-  $("collapse").title = $("collapse").ariaLabel = on ? "Open the panel" : "Collapse the panel";
-  keep("duckosm.panel", on ? "collapsed" : "open");
+if (kept("duckosm.panel") === "collapsed" && !phone.matches) showPanel(false);
+phone.addEventListener("change", () => { if (phone.matches) showPanel(true, false); });
+$("sb-hide").onclick = () => showPanel(false);
+$("sb-show").onclick = () => { showPanel(true); $("sb-hide").focus(); };
+// the sheet and the panel move in a transition (0.15 s): each frame of it gives the padding, and its end gives the last one, also when the main
+// thread is busy
+const padSoon = () => { const t0 = performance.now(); (function f() { padMap(); if (performance.now() - t0 < 400) requestAnimationFrame(f); })(); };
+new ResizeObserver(padMap).observe($("sb"));
+for (const [el, attrs] of [[$("sb"), ["class"]], [root, ["class"]], [$("rs-toolbar"), ["class", "data-edge", "style"]]]) {
+  new MutationObserver(padSoon).observe(el, { attributes: true, attributeFilter: attrs });
 }
-if (kept("duckosm.panel") === "collapsed") collapse(true);
-$("collapse").onclick = () => collapse(!document.body.classList.contains("collapsed"));
-$("open").onclick = () => { collapse(false); $("collapse").focus(); };
+new ResizeObserver(padMap).observe($("rs-toolbar"));
+for (const ev of ["rs:sheetchange", "rs:layoutchange"]) document.addEventListener(ev, padSoon);
+document.addEventListener("transitionend", padMap, true);
+phone.addEventListener("change", padSoon);
+addEventListener("resize", padMap);
+loaded.then(padMap);
 
 // ---- the tabs ----
 const tabs = [...document.querySelectorAll("#step1-card [role=tab]")];
@@ -1319,8 +1338,8 @@ $("run").onclick = async () => {
     $("step5-card").hidden = false;
     unfold("step5-card");
     if (phone.matches) {                          // a phone: the result shows in the sheet (its cards scroll, the page does not)
-      if (document.body.dataset.sheet === "fold") sheet("half");
-      const cards = document.querySelector("#panel > .scroll");
+      if (root.classList.contains("rs-sheet-0")) setSheet(1);
+      const cards = document.querySelector(".sb-body");
       cards.scrollTop += $("step5-card").getBoundingClientRect().top - cards.getBoundingClientRect().top - 8;
     }
     await visualization();
@@ -1490,7 +1509,8 @@ async function visualization() {
   for (const m of modes) roadCount[m] = await count([m]);
   const options = (modes.length > 1 ? ["all", ...modes] : modes).map((m) => `<option value="${m}">${m === "all" ? "All" : m[0].toUpperCase() + m.slice(1)}</option>`);
   $("mapmode").innerHTML = options.join("");
-  $("mapmode").hidden = $("mapmode-label").hidden = modes.length < 2;
+  $("mapmode").value = $("mapmode").value;      // the list in roadstyle's look shows the new first option
+  $("mapmode-row").style.display = modes.length < 2 ? "none" : "";
   $("ownbox").hidden = $("ownsep").hidden = !duck.tables.some((t) => t.mode === "features");
   $("showrow").hidden = false;
   $("step7-card").hidden = !duck.tables.some((t) => t.mode === "visualization" && t.table === "edge_levels");
@@ -1514,19 +1534,8 @@ function freshMap() {
   return showRoads();
 }
 $("show").onclick = freshMap;
-// the Google Maps key of Google 3D: only in this browser's storage, never in the address or the page's code
-$("gkey").value = kept("duckosm.googleKey") ?? "";
-$("gkey-save").onclick = () => {
-  const k = $("gkey").value.trim();
-  if (!k) return;
-  keep("duckosm.googleKey", k);
-  $("gkey-note").textContent = "Saved. Open the page again to use it: then the Google 3D button and Street View's Linked mode are on the map.";
-};
-$("gkey-del").onclick = () => {
-  try { localStorage.removeItem("duckosm.googleKey"); } catch (e) { /* no storage */ }
-  $("gkey").value = "";
-  $("gkey-note").textContent = "Removed. The Google 3D button goes away the next time the page opens.";
-};
+// the Google Maps key of Street View and Google 3D: only in this browser's storage (roadstyle's settings), never in the address or the page's code
+$("gkey-open").onclick = () => window.rsOpenSettings?.();
 // a network: drawn at once when the map shows roads; else the note says how many roads it has (or the limit of the device)
 $("mapmode").onchange = () => {
   if (roadsShown) return showRoads();
@@ -1569,11 +1578,52 @@ function setBase() {
     map.addLayer({ id: "base-over", type: "raster", source: "base-over" }, bottom);
   }
   for (const r of document.querySelectorAll("input[name=base]")) r.checked = r.value === v;
-  $("bbld").ariaPressed = String(view.buildings);
+  buildingsTool.ariaPressed = String(view.buildings);
+  buildingsTool.classList.toggle("rs-on", view.buildings);
 }
-const popBase = (open) => { $("basepop").hidden = !open; $("bbase").ariaExpanded = String(open); };
-$("bbase").onclick = () => popBase($("basepop").hidden);
-document.addEventListener("click", (e) => { if (!$("basepop").hidden && !e.target.closest("#bbase, #basepop")) popBase(false); });
+// The page's two tools in roadstyle's bar, put before the settings and the attribution as roadstyle's own base-map and buildings tools are: the
+// base map (a button that opens the page's box, with roadstyle's rules for a box: one open at a time, a click outside or the Escape key
+// closes it, it stays 12 px inside the window) and the 3D buildings switch.
+const barTool = (id, title) => {
+  const btn = document.querySelector(`#rs-toolbar button[title="${title}"]`), wrap = btn.closest(".maplibregl-ctrl");
+  btn.id = id; btn.ariaLabel = title;
+  wrap.parentElement.insertBefore(wrap, document.querySelector("#rs-toolbar .rs-set-ctrl") ?? document.querySelector("#rs-toolbar .rs-attr-ctrl"));
+  return btn;
+};
+rs.tools.add({ id: "basemap", kind: "box", title: "Base map", icon: LAYERS_ICON });
+rs.tools.add({ id: "buildings", kind: "toggle", title: "3D buildings", icon: BUILDINGS_ICON });
+const baseTool = barTool("bbase", "Base map"), buildingsTool = barTool("bbld", "3D buildings");
+// A box stays 12 px inside the window at each side: roadstyle's boxes move up or down (toolbar.js keepInside), and not sideways, so a bar at the top
+// (the phone) opens a box under its button, which can be at the far right or left (Attribution at the left of the second row). The page moves
+// each box that it finds: its own, and roadstyle's attribution and settings boxes.
+// ponytail: this stays until roadstyle's keepInside moves a box sideways too.
+function keepInside(box) {
+  const fit = () => {
+    if (box.hidden || (box.classList.contains("bm-menu") && !box.classList.contains("open"))) return;
+    box.style.translate = "0 0";           // not a margin: a box fixed by its right or bottom edge ignores the margin on the other side
+    const r = box.getBoundingClientRect(), over = r.bottom - (innerHeight - 12), under = 12 - r.top, right = r.right - (innerWidth - 12), left = 12 - r.left;
+    box.style.translate = `${right > 0 ? -right : left > 0 ? left : 0}px ${over > 0 ? -over : under > 0 ? under : 0}px`;
+  };
+  new MutationObserver(fit).observe(box, { attributes: true, attributeFilter: ["hidden", "class"] });
+  new ResizeObserver(fit).observe(box);
+  addEventListener("resize", fit);
+}
+{
+  const box = $("basebox"), wrap = baseTool.closest(".maplibregl-ctrl");
+  wrap.classList.add("bm-ctrl");
+  wrap.append(box);
+  const popBase = (open) => {
+    if (open) for (const t of rs.tools.list()) if (t.open) rs.tools.close(t.id);
+    box.classList.toggle("open", open);
+    baseTool.ariaExpanded = String(open);
+  };
+  baseTool.ariaExpanded = "false";
+  baseTool.addEventListener("click", () => popBase(!box.classList.contains("open")));
+  document.addEventListener("click", (e) => { if (box.classList.contains("open") && !wrap.contains(e.target)) popBase(false); }, true);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") popBase(false); }, true);
+  for (const b of [box, ...document.querySelectorAll("#rs-attr-box, #rs-settings-box")]) keepInside(b);
+}
+rs.tools.ready();   // the bar was held back until these tools were in (toolbar.hold)
 for (const r of document.querySelectorAll("input[name=base]")) r.onchange = () => {
   baseChosen = true;                              // the next draws keep it (freshMap)
   view.base = r.value;
@@ -1582,7 +1632,7 @@ for (const r of document.querySelectorAll("input[name=base]")) r.onchange = () =
   loaded.then(setBase);
 };
 $("ownlayers").onchange = () => loaded.then(setBase);
-$("bbld").onclick = () => { view.buildings = !view.buildings; keep("duckosm.buildings", view.buildings ? "1" : "0"); loaded.then(setBase); };
+buildingsTool.addEventListener("click", () => { view.buildings = !view.buildings; keep("duckosm.buildings", view.buildings ? "1" : "0"); loaded.then(setBase); });
 loaded.then(setBase);
 
 // The tile format of the roads map (MVT or MLT), kept for the next visit. A change gives the roads that show the style of the new format
@@ -1629,27 +1679,9 @@ for (const name of ["setPadding", "resize"]) {
   };
 }
 
-// the page's sheet on a phone (the CSS at 700 px): its state (fold: one row, half, full; the page keeps it), and the map's padding at
-// the bottom, the sheet's height, so that the area and the roads stay above the sheet. The level editor has its own sheet: while it is
-// open, the page's sheet is away and the editor sets the padding.
-const phone = matchMedia("(max-width: 700px)");
-const NEXT_SHEET = { fold: "half", half: "full", full: "fold" };
-function sheet(state) {
-  if (state) {
-    document.body.dataset.sheet = state;
-    keep("duckosm.sheet", state);
-  }
-  if (document.body.classList.contains("editing")) return;
-  const h = phone.matches ? Math.round($("panel").getBoundingClientRect().height) : 0;
-  document.body.style.setProperty("--sheet-px", `${h}px`);
-  map.setPadding({ ...map.getPadding(), bottom: h });
-}
-// the sheet's height changes in a transition (0.2 s): each step of it gives the padding, also when the main thread is busy
-new ResizeObserver(() => sheet()).observe($("panel"));
-document.body.dataset.sheet = NEXT_SHEET[kept("duckosm.sheet")] ? kept("duckosm.sheet") : "half";
-$("sheet-handle").onclick = () => sheet(NEXT_SHEET[document.body.dataset.sheet]);
-phone.addEventListener("change", () => sheet());
-loaded.then(() => sheet());
+// the sheet on a phone is roadstyle's (template.js: a grip and three heights, closed, 40 % and full; the CSS at 700 px). The map's padding
+// follows it (padMap). The level editor has its own sheet: while it is open, the page's sheet is away and the editor sets the padding.
+loaded.then(() => padMap());
 
 // ---- each numbered card folds: a click on its heading or on its chevron (a button, with aria-expanded). The page keeps the fold of each
 // card (duckosm.card.<n>); a card opens again when its step becomes active (unfold). ----
@@ -1708,12 +1740,12 @@ const workerStopped = (e) => {
 window.addEventListener("unhandledrejection", workerStopped);
 let panelScroll = 0;                              // where the panel's cards were when the editor opened (a phone: the panel goes away)
 function editing(on) {
-  const cards = document.querySelector("#panel > .scroll");
+  const cards = document.querySelector(".sb-body");
   if (on) panelScroll = cards.scrollTop;
   document.body.classList.toggle("editing", on);
   if (!on) {
     cards.scrollTop = panelScroll;
-    sheet();                                      // the page's sheet in its state again, and the map's padding for it
+    padMap();                                     // the page's sheet in its state again, and the map's padding for it
   }
   $("edit-open").hidden = on;
   $("edit-apply").hidden = $("edit-close").hidden = $("edit-dl").hidden = !on;

@@ -1,9 +1,10 @@
 """The page on a phone in headless Chromium (Playwright's "iPhone 13": 390 x 664 page, touch, scale 3; docs/app.md, "On a phone"):
-the page's sheet (its handle: half, full, one row; the map's padding), Build from one row, a scroll in the sheet, the limit of the
+roadstyle's sheet (its grip: 40 %, full, closed; the map's padding), Build from the 40 % sheet, a scroll in the sheet, the limit of the
 map, and the level editor with taps: roadstyle's sheet at the bottom of the map, a tap
 on a road, its end head, "Apply and solve", Apply in the page's bar, the sheet's handle, Close. It checks that the map stays at the
-top while the cards scroll, that the editor's bar (the counts, Apply, Close) is in view above the map and the sheet, and that the
-page's panel comes back at its place after Apply and Close. It writes phone-*.png for each state.
+top while the cards scroll, that the editor's bar (the counts, Apply, Close) is in view under roadstyle's bar and above the sheet, and that the
+page's panel comes back at its place after Apply and Close. It writes phone-*.png for each state. dashboard_e2e.py checks the phone
+form of the bar, the boxes and the windows at 390 x 844.
 
     python crates/duckosm-wasm/www/phone_e2e.py [out folder] [page folder]
 
@@ -35,61 +36,61 @@ with sync_playwright() as p:
     page.wait_for_function("window.mapReady && window.timings && window.timings.duckdbStart", timeout=120_000)
     page.evaluate("localStorage.clear()")
     H = page.evaluate("innerHeight")
-    state = lambda: page.evaluate("document.body.dataset.sheet")  # noqa: E731
-    sheet_h = lambda: (lambda b: b[3] - b[1])(page.evaluate(BOX, "panel"))  # noqa: E731
+    # roadstyle's sheet: three heights (0 closed, 1 40 %, 2 full); the map's padding at the bottom is the part of the screen under its grip
+    state = lambda: page.evaluate("[0, 1, 2].find((n) => document.documentElement.classList.contains('rs-sheet-' + n))")  # noqa: E731
+    grip = lambda: page.evaluate(BOX, "grip")  # noqa: E731
+    page.evaluate("document.querySelector('.rs-grip').id = 'grip'")
+    sheet_h = lambda: (lambda b: b[3] - b[1])(page.evaluate(BOX, "sb")) if page.is_visible("#sb") else 0  # noqa: E731
     padding = lambda: page.evaluate("window.duckMap.getPadding().bottom")  # noqa: E731
+    under_grip = lambda: H - grip()[1]  # noqa: E731
     page.wait_for_function("window.duckMap.getPadding().bottom > 0", timeout=30_000)   # the sheet's padding: after the map's load
 
-    # the page's panel is a sheet at the bottom: half the height at first; the map fills the screen, its padding is the sheet's height
-    mp, pn = page.evaluate(BOX, "map"), page.evaluate(BOX, "panel")
-    assert state() == "half" and mp[1] == 0 and abs(mp[3] - H) < 1, (state(), mp, H)
-    assert abs(pn[3] - H) < 1 and abs(sheet_h() - H / 2) < 2 and abs(padding() - sheet_h()) < 2, (pn, padding(), H)
-    shot("1-half")
-    # the handle: full, one row (the title and the Build bar), half again
-    for want in ("full", "fold", "half"):
-        page.tap("#sheet-handle")
-        page.wait_for_timeout(400)
+    # the panel is a sheet at the bottom: 40 % of the height at first; the map fills the screen, its padding is the sheet and its grip
+    mp, pn = page.evaluate(BOX, "map"), page.evaluate(BOX, "sb")
+    assert state() == 1 and mp[1] == 0 and abs(mp[3] - H) < 1, (state(), mp, H)
+    assert abs(pn[3] - H) < 1 and abs(sheet_h() - H * 0.4) < 6 and abs(padding() - under_grip()) < 2, (pn, padding(), H)
+    shot("1-40")
+    # the grip: full, closed, 40 % again
+    for want in (2, 0, 1):
+        page.tap(".rs-grip")
+        page.wait_for_timeout(500)
         assert state() == want, (want, state())
-        assert abs(padding() - sheet_h()) < 2 and abs(page.evaluate(BOX, "panel")[3] - H) < 1, (want, padding(), sheet_h())
-        if want == "fold":
-            assert not page.is_visible("#step1-card") and page.is_visible("#run") and sheet_h() < 200, (sheet_h(),)
-        if want == "full":
-            assert page.evaluate(BOX, "panel")[1] < 60
+        assert abs(padding() - under_grip()) < 2, (want, padding(), grip())
+        if want == 2:
+            assert page.evaluate(BOX, "rs-toolbar")[3] - 1 <= page.evaluate(BOX, "sb")[1] < 170, "the full sheet is under the bar"
+        if want == 0:
+            assert not page.is_visible("#sb") and page.is_visible(".rs-grip"), "closed: the grip alone"
         shot(f"2-{want}")
-        # the map's buttons are in view above the sheet when it is one row or half
-        if want != "full":
-            assert page.evaluate("document.querySelector('.maplibregl-ctrl-top-right').getBoundingClientRect().bottom") < H - sheet_h()
 
-    # the area and the region file in the half sheet, then Build from one row; after the build the sheet is half again (the result)
+    # the area and the region file in the 40 % sheet, then Build (the Build bar is at the sheet's bottom edge)
     page.set_input_files("#file", str(ROOT / "tests/data/monaco.geojson"))
     page.wait_for_function("window.areas >= 1", timeout=60_000)
     page.tap("#tab-region")
     page.set_input_files("#region", str(ROOT / "tests/data/monaco_sample.osm.pbf"))
-    page.tap("#sheet-handle")
-    page.tap("#sheet-handle")
-    assert state() == "fold"
+    assert page.evaluate(BOX, "run")[3] <= H, "Build is in view in the sheet"
     page.tap("#run")
     # first the loading veil over the map that the sheet leaves free (the base map of before), then the blank base and the area in view
     page.wait_for_function("!document.getElementById('mapbusy').hidden", timeout=600_000, polling=50)
     assert page.evaluate("document.querySelector('input[name=base]:checked')?.value") != "blank", "the old base map under the veil"
-    page.wait_for_timeout(300)                      # the sheet's height (a transition of 0.2 s)
+    page.wait_for_timeout(300)                      # the sheet's height (a transition)
     if page.evaluate("!document.getElementById('mapbusy').hidden"):
-        busy, pn = page.evaluate(BOX, "mapbusy"), page.evaluate(BOX, "panel")
-        assert busy[1] == 0 and abs(busy[3] - pn[1]) <= 1, ("the veil above the sheet", busy, pn)
+        busy, pn = page.evaluate(BOX, "mapbusy"), page.evaluate(BOX, "sb")
+        assert abs(busy[3] - grip()[1]) <= 1 and busy[1] >= 40, ("the veil above the sheet and under the bar", busy, grip())
         shot("3a-drawing")
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && window.duckMap.loaded() && "
                            "document.getElementById('mapbusy').hidden", timeout=600_000)
     assert "drawn" in page.inner_text("#mapnote"), page.inner_text("#mapnote")
-    assert state() == "half", state()
+    assert state() == 1, state()
     page.wait_for_timeout(400)
-    card5, pn = page.evaluate(BOX, "step5-card"), page.evaluate(BOX, "panel")
+    card5, pn = page.evaluate(BOX, "step5-card"), page.evaluate(BOX, "sb")
     assert pn[1] < card5[1] < H - 100, ("card 5 (the result) in view in the sheet", card5, pn)
-    # the draw after the build: the blank base map and the area in view above the sheet (the map's padding)
+    # the draw after the build: the blank base map and the area in view above the sheet and under the bar (the map's padding)
     page.wait_for_function("!window.duckMap.isMoving()", timeout=30_000)
     assert page.evaluate("document.querySelector('input[name=base]:checked')?.value") == "blank"
-    area = page.evaluate("""() => { const c = window.duckMap.getContainer().getBoundingClientRect(), m = window.duckMap;
-        const b = [m.unproject([0, 0]), m.unproject([c.width, c.height - document.body.style.getPropertyValue('--sheet-px').replace('px', '')])];
-        return [b[0].lng, b[1].lat, b[1].lng, b[0].lat]; }""")
+    barb = page.evaluate(BOX, "rs-toolbar")[3]
+    area = page.evaluate("""(top) => { const c = window.duckMap.getContainer().getBoundingClientRect(), m = window.duckMap;
+        const b = [m.unproject([0, top]), m.unproject([c.width, c.height - window.duckMap.getPadding().bottom])];
+        return [b[0].lng, b[1].lat, b[1].lng, b[0].lat]; }""", barb)
     rings = [r for f in json.loads((ROOT / "tests/data/monaco.geojson").read_text())["features"] for r in
              (f["geometry"]["coordinates"] if f["geometry"]["type"] == "Polygon" else [r for poly in f["geometry"]["coordinates"] for r in poly])]
     w, s_, e, n = (min(x for r in rings for x, _ in r), min(y for r in rings for _, y in r), max(x for r in rings for x, _ in r),
@@ -102,9 +103,8 @@ with sync_playwright() as p:
     page.mouse.move(195, H - 120)
     page.mouse.wheel(0, 700)
     page.wait_for_timeout(500)
-    assert page.evaluate("document.querySelector('#panel > .scroll').scrollTop") > 0, "the cards scroll"
+    assert page.evaluate("document.querySelector('.sb-body').scrollTop") > 0, "the cards scroll"
     assert page.evaluate("scrollY") == 0 and page.evaluate("window.duckMap.getCenter().toArray()") == centre, "the map and the page stay"
-    assert not page.evaluate("document.querySelector('.maplibregl-ctrl-attrib').classList.contains('maplibregl-compact-show')")
     shot("4-cards")
 
     # the largest map on a small device (a touch screen: 40,000 roads): with a limit of 10,000 for Monaco's 13,298 roads, the note says
@@ -113,12 +113,12 @@ with sync_playwright() as p:
     page.evaluate("window.mapMaxRoads = 10000; document.getElementById('show').click()")
     page.wait_for_function("/on this device the map can show up to 10,000/.test(document.getElementById('mapnote').textContent)", timeout=30_000)
     print("limit:", page.inner_text("#mapnote"))
-    page.select_option("#mapmode", "driving")
+    page.evaluate("(v) => { const s = document.getElementById('mapmode'); s.value = v; s.dispatchEvent(new Event('change', {bubbles: true})); }", "driving")   # the select is roadstyle's list (selectbox.js)
     page.wait_for_function("/drawn|failed|on this device/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing "
                            "&& window.duckMap.loaded()", timeout=300_000)
     assert "drawn" in page.inner_text("#mapnote"), page.inner_text("#mapnote")
     page.evaluate("window.mapMaxRoads = 40000")
-    page.select_option("#mapmode", "all")
+    page.evaluate("(v) => { const s = document.getElementById('mapmode'); s.value = v; s.dispatchEvent(new Event('change', {bubbles: true})); }", "all")   # the select is roadstyle's list (selectbox.js)
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing && window.duckMap.loaded()",
                            timeout=300_000)
     assert "drawn" in page.inner_text("#mapnote"), page.inner_text("#mapnote")
@@ -139,9 +139,9 @@ with sync_playwright() as p:
         same("closed")
         assert page.is_visible("#step7-card") and page.is_visible("footer") and not page.is_visible("#editbar")
         # the page's sheet again, in the state it had, with the map's padding for it, and card 7 in view in it
-        assert state() == before and abs(page.evaluate(BOX, "panel")[3] - H) < 1 and abs(padding() - sheet_h()) < 2, (state(), padding(), sheet_h())
-        top, card = page.evaluate(BOX, "panel")[1], page.evaluate(BOX, "step7-card")
-        assert top - 1 <= card[1] < H - 100, ("card 7 in view again", top, card)
+        assert state() == before and abs(page.evaluate(BOX, "sb")[3] - H) < 1 and abs(padding() - under_grip()) < 2, (state(), padding(), under_grip())
+        top, card = page.evaluate(BOX, "sb")[1], page.evaluate(BOX, "step7-card")
+        assert min(card[3], H) - max(card[1], top) >= 100, ("card 7 in view again (100 px of it in the sheet)", top, card)
         assert page.evaluate("scrollY") == 0
 
     ref = page.evaluate("(() => { const c = window.duckMap.getCenter(); return [c.lng + 0.001, c.lat + 0.001]; })()")
@@ -151,10 +151,10 @@ with sync_playwright() as p:
         assert max(abs(x - y) for x, y in zip(at(), pos0)) <= 2, (f"the view moved when the editor {what}", pos0, at())
     before = state()
     open_editor()
-    bar, mp, lv = (page.evaluate(BOX, i) for i in ("editbar", "map", "lv"))
+    bar, mp, lv, rsbar = (page.evaluate(BOX, i) for i in ("editbar", "map", "lv", "rs-toolbar"))
     height = page.evaluate("innerHeight")
     assert page.evaluate("document.body.classList.contains('lv-sheet')"), "roadstyle's sheet"
-    assert bar[1] == 0 and abs(mp[1] - bar[3]) < 1 and abs(mp[3] - height) < 1, ("the map under the bar", bar, mp, height)
+    assert abs(bar[1] - rsbar[3]) < 12 and mp == [0, 0, 390, height], ("the page's bar under roadstyle's bar, the map under both", bar, rsbar, mp, height)
     assert abs(lv[3] - height) < 1 and bar[3] < lv[1] < height * 0.6, ("the sheet at the bottom, half the height", lv, height)
     assert not page.is_visible("#step1-card") and not page.is_visible("footer") and sheet_h() < 1, "the page's sheet is away"
     for b in page.query_selector_all("#editbar button"):
@@ -166,8 +166,8 @@ with sync_playwright() as p:
     # a tap on a road in the part of the map above the sheet: the sheet shows its card
     point = page.evaluate("""(top) => { const m = window.duckMap, t = window.RS_SIDE, bottom = document.getElementById('lv').getBoundingClientRect().top;
         for (const c of t.mids) { if (!c) continue; const p = m.project(c), y = p.y + top;
-          if (p.x > 30 && p.x < innerWidth - 70 && y > top + 20 && y < bottom - 20 &&
-            m.queryRenderedFeatures([[p.x - 4, p.y - 4], [p.x + 4, p.y + 4]], {layers: window.duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id)}).length) return [p.x, y]; } return null; }""", mp[1])
+          if (p.x > 30 && p.x < innerWidth - 70 && y > document.getElementById('editbar').getBoundingClientRect().bottom + 20 && y < bottom - 20 &&
+            m.queryRenderedFeatures([[p.x - 4, p.y - 4], [p.x + 4, p.y + 4]], {layers: window.duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id)}).length) return [p.x, y]; } return null; }""", 0)
     assert point, "a road above the sheet"
     page.touchscreen.tap(*point)
     page.wait_for_selector("#lv-cards [data-hroad]", timeout=30_000)
@@ -196,7 +196,7 @@ with sync_playwright() as p:
     assert "drawn" in page.inner_text("#mapnote"), page.inner_text("#mapnote")
     shot("7-applied")
 
-    # the sheet's handle: half, full, one row; then Close, and the page's panel back
+    # the editor's sheet handle: half, full, one row; then Close, and the page's panel back
     open_editor()
     for lv_state in ("full", "fold"):
         page.tap("#lv-handle")
@@ -207,7 +207,7 @@ with sync_playwright() as p:
     back_at(before)
     shot("9-closed")
     assert not errors, errors
-    print("phone: the sheet (half, full, one row), Build from one row, a scroll in the sheet; the editor: the sheet, a tap on a road, a head, Apply, the handle, Close; "
+    print("phone: the sheet (40 %, full, closed), Build from the sheet, a scroll in the sheet; the editor: the sheet, a tap on a road, a head, Apply, the handle, Close; "
           "the page's panel comes back; no page errors")
     browser.close()
 server.shutdown()

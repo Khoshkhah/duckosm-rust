@@ -14,6 +14,57 @@ the user makes the area, builds it, and sees the roads on the same map, with no 
 - The map is one map: the base map (OpenFreeMap), the area, the search matches, the extracts, the drawn shapes,
   and after the build the roads.
 
+## roadstyle's dashboard look
+
+Since 2026-10-29 (Kaveh's request), the page has the look of roadstyle's dashboard (roadstyle `docs/design/dashboard_templates.md`
+and `docs/guides/dashboard-layout.md`). The page uses the template `dashboard` with the layout `overlay`.
+
+- **The map fills the window.** The panel floats over it, at the left, in roadstyle's frame look. The panel does not change the size
+  of the map. The panel hides with the button in its title row (the button at the corner shows it again); the page keeps the choice
+  (`duckosm.panel`).
+- **The bar.** roadstyle's toolbar holds the map buttons, in this order: theme, zoom in, zoom out, compass, 2D/3D, Street View,
+  Google 3D, base map, 3D buildings, settings, attribution. The bar is next to the panel. It goes to the edge of the window when the
+  panel is hidden. The settings button lets the person move the bar and the panel, change the transparency, and save the Google key.
+- **The page's own tools.** The base map and the 3D buildings are tools that the page adds to the bar with `rs.tools.add`, and it puts
+  them before the settings, as roadstyle's own base-map and buildings tools would be. The base-map box has the rules of roadstyle's
+  boxes: one box is open at a time, a click outside and the Escape key close it, and it stays 12 px inside the window. The page keeps
+  its own base-map code (`setBase`). It hides OpenFreeMap's layers under the Esri and blank base maps, and it shows the layers of the
+  build. roadstyle's base-map module is for a page whose style is its own roads style, so the page cannot use it.
+- **The cards.** The seven cards are in the panel's body. A card has no color of its own: all cards have one neutral look (a line
+  around the card, a number in the theme's accent color) that follows the light and the dark theme of the panel. Before, each card
+  had a color (the number of a step had the color of its line on the map). Each card still folds (see "The cards fold").
+  The cards are not `rs.sections`: a section of roadstyle sets the text style of its content (size, color, the tables, the details),
+  and the cards are forms with their own style.
+- **The theme** is one value: `data-rs-theme` on `<html>`. The theme tool of the bar sets it, and the panel, the bar, the boxes, the
+  popup and the tooltip read it. The page keeps the choice (`duckosm.theme`; the system's theme if there is none) and copies it to
+  `data-theme`, which the level editor's panel reads.
+- **The Google key** is in roadstyle's settings (the gear button), in the browser's storage (`rs-key:google`) and never in a file.
+  Card 6 has a text and a button that opens the settings. The Google 3D tool is always on the bar. Without a key, its window says
+  so and has a button for the settings. The key that the card of an earlier version saved (`duckosm.googleKey`) moves to the new
+  place at the first visit.
+- **A select** is roadstyle's list (`selectbox.js`). The `<select>` stays in the page, hidden, and a button and a list take its place.
+  The page reads and sets `select.value` and the `change` event as before. A test that uses a select must click the list, or set the
+  value in the page.
+- **The options of the dashboard** are in `window.DASHBOARD`, at the top of `index.html`, with the classes of `<html>` that
+  roadstyle's page writer gives to its pages (`Dashboard::first_paint`). The page writer is Rust code, and the page uses the
+  JavaScript module only, so the page has a copy of the defaults of `Template::Dashboard` with the layout `overlay` and these
+  changes: the panel at the left, 370 px wide, with no hidden section (the page has none of roadstyle's own sections), the bar at the left, no scale box, and `toolbar.hold` (the bar waits for the two tools of the page).
+  A new roadstyle version can change the defaults. The panel's HTML and its shell rules (position, tokens, title row) are copies of
+  `templates/dashboard.html` too.
+- **The free part of the map.** The panel and the bar cover a part of the full-window map. `freeInsets()` in the script gives the
+  insets of that part, for the zoom to an area (`fitTo`), the veil of a draw (`#mapbusy`), the message (`#status`) and, on a phone, the
+  map's bottom padding. roadstyle's windows (Street View, Google 3D) use their own rule (`windows.clamp`) and stay in the free part.
+- The page moves each box 12 px inside the window at each side (`keepInside`). roadstyle's boxes move up or down only, so the
+  attribution box at the left of a phone's second row was 53 px outside the screen.
+
+The check: `dashboard_e2e.py` (no build needed). On a computer (1400 × 900) it checks the classes of `<html>`, the tools and their
+order, the places of the bar and the panel, the panel that hides and shows, the seven cards in both themes (the same colors, no
+`--c`), the base-map box (opens inside the window; the Escape key, a click outside and another box close it), the 3D buildings
+switch, the Google key (saved and cleared in the settings, the key of an earlier version moves) and the Street View window in the
+free part of the map. On a phone (390 × 844, touch) it checks that the page does not scroll sideways, the bar at the top, each tool
+32 px or more and reachable, the three heights of the sheet and the map's padding for each, that the full sheet does not cover the
+bar, that each box is inside the screen, and that a window is a bottom sheet that closes the panel's sheet. It writes `dashboard-*.png`.
+
 ## The panel
 
 ```
@@ -41,26 +92,27 @@ the user makes the area, builds it, and sees the roads on the same map, with no 
 Kaveh tests the page on his phone (2026-10-24: "I couldn't test editing dashboard. It's not workable on mobile phone").
 On a screen of 700 px or less:
 
-- **The page's panel is a sheet** (2026-10-25, Kaveh: "The mechanism of side panel scroll is not right"). The map fills
-  the screen, and the panel (the header and the seven cards) is a sheet at its bottom, as the level editor's sheet. Its
-  handle taps through three states: half the height (the first state), the full height, and one row (the title and the
-  Build bar). The page keeps the state. The cards scroll inside the sheet; the page itself does not scroll, so a scroll
-  in the sheet does not move the map. The Build bar (GeoJSON, Build) is at the sheet's bottom edge in every state.
-- The map's padding at the bottom is the sheet's height, so the area and the roads stay above the sheet, and the map's
-  buttons are in view in the half and one-row states. The padding follows each step of the sheet's height change (a
-  `ResizeObserver` on the panel). Before, the page read the height 220 ms after the change; when a draw kept the main
-  thread busy, the height was not at its end value yet (the check got a padding of 290 px for a sheet of 332 px). The zoom read-out and the attribution are above the sheet; the
-  scale bar does not show, and the attribution starts folded (an "i" button).
+- **The panel is roadstyle's sheet** (2026-10-29; before it was the page's own sheet, 2026-10-25, Kaveh: "The mechanism of side panel
+  scroll is not right"). The map fills the screen, and the panel (the title and the seven cards) is a sheet at its bottom. A grip
+  above the sheet taps through three heights: 40 % of the screen (the first height), the full height (under the bar), and closed (the
+  grip alone). The page does not keep the height. The cards scroll inside the sheet; the page itself does not scroll, so a scroll
+  in the sheet does not move the map. The Build bar (GeoJSON, Build) is at the sheet's bottom edge.
+- The bar is at the top, in two rows (eleven tools at 390 px). Each tool is 32 px or more. The settings box has no layout choices on a
+  phone.
+- The map's padding at the bottom is the part of the screen under the grip, so the area and the roads stay above the sheet. The sheet
+  moves in a transition of 0.15 s, so `padMap()` runs at each frame of it and at its end. (Before, the page read the height 220 ms after
+  the change; when a draw kept the main thread busy, the height was not at its end value yet.) The scale bar and the zoom number do not
+  show, and the attribution is the tool at the end of the bar.
 - The view stays still when the map's box or padding changes (the editor's panel or sheet opens or closes, the page's sheet moves): the page keeps the same point at the same screen position, with no animation, and the editor does not fit the map to the area. `editor_e2e.py` and `phone_e2e.py` check this within 2 px.
 - The 3D building layers are after every road layer (a line over an extrusion is not hidden by it) and before the labels; `editor_e2e.py` checks the order in 3D.
 - OpenFreeMap's own layers stay as served (no hidden road, no 3D heights, no zoom range); inside the area our base-map layers are above them. The 3D switch acts on our buildings only. Esri and the blank base map hide OpenFreeMap under them. `editor_e2e.py` compares them with the served liberty style.
-- After a build, the sheet shows card 5 (the result); from the one-row state it opens to half the height.
+- After a build, the sheet shows card 5 (the result); from the closed state it opens to 40 %.
 - The cards' scroll box has a background that is 1 % transparent. With an opaque one over the map's canvas, Chromium
   (2026-10, also headless) left a band of the map undrawn, at the size of the scroll box but near the top of the screen.
 - Before (2026-10-24), the map was at the top (42 %) and the cards scrolled with the page under it; the map then had
   less room, and a scroll in the cards moved the page.
-- **The level editor: one panel at a time.** The page's panel goes away. A bar at the top keeps the counts, **Apply** and
-  **Close** in view, and the map fills the rest of the screen. The editor's panel is roadstyle's sheet at the bottom of
+- **The level editor: one panel at a time.** The page's panel goes away. A bar under roadstyle's bar keeps the counts, **Apply** and
+  **Close** in view, and the map fills the screen under the two bars. The editor's panel is roadstyle's sheet at the bottom of
   the map (since roadstyle `d25601e`, its layout `"auto"` up to 700 px): half the height, and its handle changes it to
   the full height or to one row. The editor keeps the roads above the sheet, a finger can pick a road (a wide line that
   takes the taps), and the buttons are 44 px high. After Apply or Close, the page's sheet comes back in the state it had,
@@ -68,8 +120,8 @@ On a screen of 700 px or less:
 - Before 2026-10-24 the editor's panel (400 px wide) covered the whole screen of a phone, and Apply and Close were
   under it.
 
-The check: `phone_e2e.py` (Playwright's "iPhone 13": a 390 × 664 page, touch). It taps the page's sheet through its three
-states (the map's padding each time), builds Monaco from the one-row state, and checks that a scroll in the sheet moves
+The check: `phone_e2e.py` (Playwright's "iPhone 13": a 390 × 664 page, touch). It taps the sheet's grip through its three
+heights (the map's padding each time), builds Monaco from the 40 % sheet, and checks that a scroll in the sheet moves
 neither the map nor the page. Then, with taps, it opens the editor, picks a road above the sheet, makes its end head shorter
 (the editor saves and draws it at once, with no solve, since roadstyle `6be68c2`), applies in the page's bar, opens the editor again, moves the sheet with its handle and
 closes it. It checks the places of the bar, the map and the sheets, and that the page's sheet comes back in its state,
@@ -236,9 +288,9 @@ and the two download buttons between them. With three modes, the line takes thre
   - Since roadstyle `bcea0ae` the temporary tables of each reading have names of their own (its "run"), and the page
     drops them after the draw ("drop"). Two readings at the same time thus do not meet either; the page keeps its one
     draw at a time, because the draws also share `roads.parquet`.
-- roadstyle's zoom read-out ("z 13.8") is beside the scale bar of the map. roadstyle puts it at a fixed place, which on
-  this page is under the side panel, next to the Build bar.
-- The base map and the layers are buttons on the map (see "The map"). For one commit they were in this card; Kaveh
+- roadstyle's zoom read-out ("z 13.8") is in the scale box with the scale bar. Since 2026-10-29 the box is in the corner of the map
+  that is opposite to the panel, and it is hidden at the start (the settings button shows it).
+- The base map and the layers are tools of the bar (see "The map"). For one commit they were in this card; Kaveh
   wants them on the map ("it has a good design").
 
 ### Map tiles: MVT or MLT
@@ -319,11 +371,11 @@ How the editor shares the map:
   open. (Until roadstyle `8208486`, the editor needed the name `rs-roads`, and the base-map layers went away.)
 - The editor's tiles come from the protocol `lv://`, from roadstyle's module in the editor's own worker (`pkgUrl`: the URL of
   `map/pkg/roadstyle_wasm.js`), not in the map worker.
-- The panel follows the page's theme (the theme button and the system's theme): its colors are variables, with a dark set
+- The panel follows the page's theme (the theme tool of the bar and the system's theme): its colors are variables, with a dark set
   for `:root[data-theme=dark]` and for the system's dark theme.
 - The editor's panel is in `#lvhost`, out of the page's panel. Before 2026-10-25 it was in the page's panel. A collapse of
   the page's panel then moved the editor's panel off the screen and made it inert (Kaveh: "when I collapse duckosm side
-  panel, the level editor convert totally white! like disable"). Now the page's panel collapses and opens while the
+  panel, the level editor convert totally white! like disable"). Now the page's panel hides and shows while the
   editor stays on the right and works (`editor_e2e.py` clicks its tabs in both states).
 - The dashboard checks the interaction contract of each roads style (`roadstyle:contract`, since `6be68c2`). The page's
   look is not "live", so its styles have no contract. The dashboard reads them as version 1 and writes an info line in
@@ -386,14 +438,14 @@ map of one mode, the duckOSM base-map layers while the editor is open, and Close
   puts it in `window.RS_SIDE`, where the dashboard reads the fields of a clicked road. (Until roadstyle `aba5884`, the
   dashboard asked the map worker for each road with `engine.props`; roadstyle removed that option.) The page removes the
   popup and the selection while the user draws or uses **What is here?**. The legend sits beside the panel.
-- The buttons under the zoom buttons (Kaveh's design of 2026-10-23, from roadstyle's map: the same icons, sizes and
-  spacing): 3D, the 3D buildings switch, Street View, Google 3D (only with a key), and the base map (▦) last:
+- The tools of the map (since 2026-10-29 in roadstyle's bar, see "roadstyle's dashboard look"; before, the buttons under the zoom
+  buttons, Kaveh's design of 2026-10-23, from roadstyle's map): 2D/3D, Street View, Google 3D, the base map and the 3D buildings switch:
   - **3D** (roadstyle's 2D/3D button) tilts the map; it then shows "2D", which makes it flat again. It does not change
     the buildings.
   - **3D buildings** (the building icon, Kaveh's choice A of 2026-10-23) gives the footprints that show their height.
     Off (the default), they stay flat. So the map can be tilted with flat buildings, or flat with 3D buildings. The
     page keeps the switch (`duckosm.buildings`).
-  - **Base map** (▦) opens a list: OpenFreeMap, Light gray (Esri), Satellite (Esri World Imagery), Blank (`#efede8`)
+  - **Base map** (the layers icon) opens a box: OpenFreeMap, Light gray (Esri), Satellite (Esri World Imagery), Blank (`#efede8`)
     and Blank dark (`#14181d`): roadstyle's two blank base maps, which do not follow the page's theme. All except
     OpenFreeMap hide all of
     OpenFreeMap's layers, also its labels (with 3D buildings on and without the duckOSM 3D buildings, its 3D buildings stay). After a
@@ -404,10 +456,10 @@ map of one mode, the duckOSM base-map layers while the editor is open, and Close
     key is needed; it loads only in a page served over http(s). Open (at roadstyle `aba5884`): with tiles, the
     dashboard does not find the clicked road's line (`_svFeat` in `svspot.js` does not use `_svTiled`), so Street View
     stands at the click and looks north, and the map has no marker. The fix is in roadstyle's dashboard.
-  - **Your Google Maps key** (card 6, "Google 3D: your Google Maps key"): the key stays in this browser
-    (`localStorage`), never in the address or the code. The dashboard reads it when the page opens; with it, the
-    Street View window has roadstyle's **Linked** mode beside **Classic**, and the **Google 3D** button comes before
-    the base map (its camera and the map's linked both ways).
+  - **Your Google Maps key** (the gear button of the bar, or the button in card 6): the key stays in this browser
+    (`localStorage`, `rs-key:google`), never in the address or the code. The dashboard reads it when the page opens (the settings box
+    has a **Reload** button); with it, the Street View window has roadstyle's **Linked** mode beside **Classic**, and the
+    **Google 3D** window works (its camera and the map's linked both ways). Without a key, the Google 3D window asks for one.
   - No button hides the footprints: the style alone decides if they show (Kaveh's rule).
 - Only one 3D building layer shows: roadstyle's own when the duckOSM layers show (from the zoom of their buildings,
   15; below it OpenFreeMap's), else OpenFreeMap's. Before, the

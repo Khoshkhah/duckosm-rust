@@ -48,7 +48,9 @@ with sync_playwright() as p:
 
     def picture(name):
         settle()
-        png = page.locator("#map").screenshot(path=str(out / f"{name}.png"))
+        # the part of the map that the panel and the bar leave free: the panel's list shows another text for each format
+        left = page.evaluate("Math.ceil(Math.max(document.getElementById('sb').getBoundingClientRect().right, document.getElementById('rs-toolbar').getBoundingClientRect().right)) + 8")
+        png = page.screenshot(path=str(out / f"{name}.png"), clip={"x": left, "y": 0, "width": 1000 - left, "height": 700})
         return np.asarray(Image.open(io.BytesIO(png)).convert("RGB")).astype(int)
 
     def addresses():
@@ -61,10 +63,15 @@ with sync_playwright() as p:
     mvt = picture("mvt")
     print(f"MVT: {len(a)} source address(es), e.g. {a[0]}")
 
+    def choose(page, id, text):
+        """A choice in roadstyle's list (selectbox.js shows a button and a list in place of the select)."""
+        page.locator(f".rs-sel:has(#{id}) .rs-sel-btn").click()
+        page.locator(".rs-sel-opt", has_text=text).first.click()
+
     def diff(x, y):
         return float((np.abs(x - y).max(axis=2) > 8).mean())
 
-    page.select_option("#tilefmt", "mlt")
+    choose(page, "tilefmt", "MLT")
     page.wait_for_function("window.duckApi.tileFormat === 'mlt'")
     page.wait_for_function(f"{SOURCES}.every((s) => s.encoding === 'mlt' && s.tiles.every((u) => u.includes('&f=mlt')))")
     mlt = picture("mlt")
@@ -74,7 +81,7 @@ with sync_playwright() as p:
     print(f"MLT: encoding mlt, f=mlt in the address, {d * 100:.3f} % of the pixels differ from MVT")
     assert d < 0.005, d
 
-    page.select_option("#tilefmt", "mvt")
+    choose(page, "tilefmt", "MVT")
     page.wait_for_function(f"{SOURCES}.every((s) => !s.encoding && s.tiles.every((u) => u.includes('&f=mvt')))")
     d = diff(mvt, picture("mvt-again"))
     print(f"MVT again: {d * 100:.3f} % of the pixels differ from the first MVT picture")

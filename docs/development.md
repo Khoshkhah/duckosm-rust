@@ -183,11 +183,19 @@ the same picture, and the page keeps the choice:
 python crates/duckosm-wasm/www/tile_format_e2e.py out-tile-format
 ```
 
-Check the page on a phone (390 × 664, touch): the map at the top, the panel's fold, and the level editor with its bar
-([app.md](app.md), "On a phone"). It writes `phone-*.png`:
+Check the page on a phone (390 × 664, touch): roadstyle's sheet with its three heights, the map's padding, and the level editor with
+its bar ([app.md](app.md), "On a phone"). It writes `phone-*.png`:
 
 ```bash
 python crates/duckosm-wasm/www/phone_e2e.py out-phone
+```
+
+Check the form of roadstyle's dashboard (the bar and its tools, the panel, one look for the cards in both themes, the boxes, the settings
+and the Google key, the windows; and the phone form at 390 × 844). The test needs no build of an area. It writes `dashboard-*.png`
+([app.md](app.md), "roadstyle's dashboard look"):
+
+```bash
+python crates/duckosm-wasm/www/dashboard_e2e.py out-dashboard
 ```
 
 ### The deployed page: a version on each file
