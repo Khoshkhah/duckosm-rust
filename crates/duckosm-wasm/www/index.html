@@ -8,6 +8,7 @@
 <!-- roadstyle's dashboard and popup look (src/roadstyle/static/, copied by build.sh from roadstyle at ROADSTYLE_COMMIT) -->
 <link rel="stylesheet" href="map/roadstyle/dashboard/dashboard.css">
 <link rel="stylesheet" href="map/roadstyle/popup.css">
+<link rel="preload" href="map/roadstyle/host_options.json" as="fetch" crossorigin>
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js" crossorigin></script>
 <script src="coi-serviceworker.js"></script>   <!-- the COOP and COEP headers on GitHub Pages, for threads -->
 <script type="importmap">
@@ -472,7 +473,6 @@ window.duckApi = duck;   // for the tests (drawLaps, tileStats)
 import * as regions from "./app/regions.js";
 import { rsDashboard } from "./map/roadstyle/dashboard/index.js";   // roadstyle's map dashboard (copied by build.sh at ROADSTYLE_COMMIT)
 import { rsFirstPaint } from "./map/roadstyle/dashboard/template.js";   // the classes of <html> before the first paint
-import initRoadstyle, { Look, hostOptions } from "./map/pkg/roadstyle_wasm.js";   // roadstyle's module (the map's worker has its own copy)
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
@@ -536,14 +536,18 @@ const empty = { type: "FeatureCollection", features: [] };
 maplibregl.setWorkerCount(Math.min(4, navigator.hardwareConcurrency || 1));   // MapLibre has one worker by default; the dense road tiles parse in parallel with more (before the first map)
 const keep = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* no storage */ } };
 const kept = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
-// The options of roadstyle's dashboard are roadstyle's (hostOptions of its module: the typed `dashboard`, its first paint, the base maps and the
-// layers on top, by the rules of a page that roadstyle writes). The page gives only what is its own: the panel's width, and no panel section of
-// roadstyle's (the page has none of them). The base map that the person chose stays for the next visit (its light key; the dark twin comes with the theme).
-const host = await (async () => {
-  const [, look] = await Promise.all([initRoadstyle(), fetch("map/look.json").then((r) => r.text())]);
-  const ask = (basemap) => JSON.parse(hostOptions(Look.fromJson(look), JSON.stringify({ basemap, dashboard: { panel: { width_px: 370, hide: [] } } })));
-  try { return ask(kept("duckosm.basemap") ?? "ofm_liberty"); } catch (e) { return ask("ofm_liberty"); }   // a key that the list lost
-})();
+// The options of roadstyle's dashboard are roadstyle's (data/host_options.json, copied by build.sh: the typed `dashboard`, its first paint, the base
+// maps and the layers on top, as a page that roadstyle writes has them). The page gives only what is its own: the panel's width, no panel section
+// of roadstyle's (the page has none of them), and the base map that the person chose for the next visit (its light key; the dark twin comes with the
+// theme). The active base map is the first of the list.
+const host = await (await fetch("map/roadstyle/host_options.json")).json();
+host.dashboard.panel = { ...host.dashboard.panel, width_px: 370, hide: [] };
+host.first_paint.panel_width_px = 370;
+{
+  const key = (k) => host.basemaps.some((b) => b.key === k) ? k : "ofm_liberty";
+  const active = key(kept("duckosm.basemap"));
+  host.basemaps.sort((a, b) => (b.key === active) - (a.key === active));   // a stable sort: the others keep their order
+}
 rsFirstPaint(host.first_paint);
 const basemaps = host.basemaps;
 // the map starts with the backdrop that roadstyle's base-map module changes: the layers `bg` and `basemap` (OpenFreeMap's glyphs are for the page's labels)

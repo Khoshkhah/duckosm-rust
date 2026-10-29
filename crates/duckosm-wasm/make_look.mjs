@@ -11,6 +11,9 @@ const args = {
   casing_start_col: "casing_start", casing_level_col: "casing_level", casing_end_col: "casing_end", fill_level_col: "fill_level",
   head_start_m_col: "head_start_m", head_end_m_col: "head_end_m", cap_start_col: "cap_start", cap_end_col: "cap_end",
   directed_col: "is_directed", driving_col: "has_arrows", arrows: false, labels: false, view_3d: false,
+  // a dashboard page has a live look (as the CLI, the MCP server and roadstyle's page writer make it): the style has the controls of the
+  // dashboard (the layers of the base map for its Layers box and its 3D switch, the colour options for "Colour by")
+  state: "live", color_options: { "Road class": {} },
 };
 const look = resolveLook(JSON.stringify({
   args,

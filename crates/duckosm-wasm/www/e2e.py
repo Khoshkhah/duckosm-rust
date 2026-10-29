@@ -141,13 +141,26 @@ with sync_playwright() as p:
     # the draw after a build or "Show on map" with no base map chosen in this page: the blank base map (Kaveh, 2026-10-26: it did not change)
     assert page.evaluate("document.querySelector('input[name=rs-bm]:checked')?.value") == "blank", "the first draw sets the blank base map"
     page.wait_for_function("window.duckMap && window.duckMap.loaded()", timeout=600_000)   # the tiles are cut and drawn
-    # roadstyle's standard tools read each roads style that comes after the start (rs.setStyle). The style of the map worker has no
-    # `roadstyle:color_options` and no entry of `roadstyle:controls.overlays` for the area's layers (ov<i>), so "Colour by and legend" stays
-    # greyed out and the Layers box has no row for the duckOSM layers: gaps 12 and 13 in docs/app.md. They are printed, not asserted.
-    if page.evaluate("rs.tools.list().find((t) => t.id === 'legend').disabled"):
-        print("GAP, 'Colour by and legend' is greyed out after the roads are drawn (the style has no color_options)")
-    if not page.query_selector(".ov-ctrl"):
-        print("GAP, the Layers box has no row for the duckOSM layers (the style has no controls.overlays)")
+    # roadstyle's standard tools read each roads style that comes after the start (rs.setStyle): "Colour by and legend" is on, and the Layers box has a
+    # row for each layer of the area (the duckOSM layers) and the 3D row. A row that is turned off hides its layers, and the next draw keeps it off.
+    assert not page.evaluate("rs.tools.list().find((t) => t.id === 'legend').disabled"), "Colour by and legend is on after the roads are drawn"
+    rows = page.evaluate("[...document.querySelectorAll('.ov-ctrl label')].map((l) => l.textContent.trim())")
+    print("layers box:", rows)
+    assert "buildings" in rows and rows[rows.index("buildings") + 1] == "Buildings 3D", rows   # the 3D row is under the buildings row
+    first = rows[0]
+    ov = lambda: page.evaluate("duckMap.getStyle().layers.filter((l) => /^rs-ov\\d/.test(l.id) && l.type !== 'fill-extrusion').map((l) => l.layout?.visibility ?? 'visible')")  # noqa: E731
+    assert "visible" in ov(), "the area's layers show"
+    page.evaluate("(l) => rs.setOverlay(l, false)", first)
+    assert not page.evaluate("document.querySelector('.ov-ctrl input').checked")
+    page.evaluate("document.getElementById('show').click()")        # a new draw: the switch that is off stays off
+    page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=600_000)
+    assert not page.evaluate("document.querySelector('.ov-ctrl input').checked"), "the switch stays off after a draw"
+    page.evaluate("(l) => rs.setOverlay(l, true)", first)
+    page.wait_for_function("window.duckMap.loaded()", timeout=600_000)
+    # the colours of the roads are the look's (Colour by: Road class): the legend box has its rows
+    page.evaluate("rs.tools.open('legend')")
+    assert page.is_visible("#rs-color-box"), "the colour box opens"
+    page.evaluate("rs.tools.close('legend')")
     # a base map chosen before: "Show on map" (a fresh map) sets the blank one again (Kaveh, 2026-10-26)
     page.click("#rs-toolbar .bm-ctrl .bm-icon"); page.click("input[name=rs-bm][value='ofm_liberty']"); page.wait_for_timeout(500)
     assert page.evaluate("document.querySelector('input[name=rs-bm]:checked')?.value") == "ofm_liberty", "OpenFreeMap chosen"
