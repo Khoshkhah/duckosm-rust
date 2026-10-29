@@ -51,11 +51,10 @@ jobs:
           fi
           echo "::add-mask::$GOOGLE_MAPS_KEY"
           f=crates/duckosm-wasm/www/index.html
-          # the two places that read the key from the browser's storage: the site's key is their default
-          test "$(grep -c 'localStorage.getItem("duckosm.googleKey") || ""' $f)" = 1
-          test "$(grep -c 'kept("duckosm.googleKey") ?? ""' $f)" = 1
-          sed -i "s#localStorage.getItem(\"duckosm.googleKey\") || \"\"#localStorage.getItem(\"duckosm.googleKey\") || \"$GOOGLE_MAPS_KEY\"#; s#kept(\"duckosm.googleKey\") ?? \"\"#kept(\"duckosm.googleKey\") ?? \"$GOOGLE_MAPS_KEY\"#" $f
-          test "$(grep -c "$GOOGLE_MAPS_KEY" $f)" = 2
+          # the one place: the dashboard's street_view_key (a key that the person saves in the settings is used first)
+          test "$(grep -c 'street_view_key: ""' $f)" = 1
+          sed -i "s#street_view_key: \"\"#street_view_key: \"$GOOGLE_MAPS_KEY\"#" $f
+          test "$(grep -c "$GOOGLE_MAPS_KEY" $f)" = 1
           echo "The page has the key."
       - name: Put the version on the page's own file references
         # Pages sends max-age=600: without a version, a browser can get the new index.html with an old app/duck.js.
