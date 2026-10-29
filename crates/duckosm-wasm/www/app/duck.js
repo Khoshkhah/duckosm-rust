@@ -240,7 +240,7 @@ export async function zipAll(areaName, boundary) {
 // (map/map_worker.js), with vector-tile sources rs://<generation>/<source>/{z}/{x}/{y}. The worker stays to make the tiles that the
 // map asks for (tile()), until the next style (a worker that ends gives its memory back). keep: the road properties in the tiles, with the
 // ones the style reads. The road table (the fields of each road, for roadstyle's dashboard: the popup) comes with the style.
-let look = null, mapWorker = null, generation = 0, tileId = 0, styleReady = false;   // styleReady: the worker has its tiles
+let look = null, mapWorker = null, generation = 0, tileId = 0;
 // The tile format of the roads map: "mvt" (the default) or "mlt" (roadstyle's second format, smaller tiles). The style has the format (the
 // source's encoding) and each tile address has it (&f=, after the generation's ?g=), so that a tile of the other format is never reused.
 export let tileFormat = "mvt";
@@ -261,7 +261,6 @@ function endMapWorker() {
 const TABLE_FIELDS = ["lvl", "oneway", "length", "highway", "name", "__rs_fill", "__rs_twoway", "__rs_cls", "__rs_edge2", "__rs_dup", "__rs_edge", "__rs_access"];
 export const drawLaps = [];   // [step, seconds since the start] of the last roadsStyle, for the page's step table and the tests
 export const tileStats = [];  // [z, seconds from the request to the answer, seconds in the worker, source] of each tile since the last style
-export const prefetchStats = [];  // [z, seconds in the worker] of each tile that the page asked for itself (prefetch) since the last style
 // The SQL side of a draw: the roads.parquet of a network (the plan's SELECT), the levels and the base-map layers' features.parquet. It is made
 // once for each network after a build (prepareRoads, in the background) and kept; "Show on map" then does no SQL. A new build and Apply
 // (the tables change) drop it. The runs go one after the other (the files have fixed names).
@@ -331,7 +330,7 @@ export function prepareRoads(mode) {
 }
 export async function roadsStyle(mode, name, keep = []) {
   const t = performance.now();
-  drawLaps.length = tileStats.length = prefetchStats.length = 0;
+  drawLaps.length = tileStats.length = 0;
   const lap = (n) => drawLaps.push([n, +((performance.now() - t) / 1000).toFixed(2)]);
   const ready = inputsCache.has(mode);
   const inputs = await prepareRoads(mode);
@@ -341,8 +340,6 @@ export async function roadsStyle(mode, name, keep = []) {
   const roadsSeconds = (performance.now() - t) / 1000;
   lap("SQL and features, all");
   endMapWorker();
-  forgetTiles();
-  styleReady = false;
   const w = (mapWorker = new Worker(new URL("../map/map_worker.js", import.meta.url), { type: "module" }));
   const prefix = `rs://${++generation}/`;
   const out = await new Promise((ok, fail) => {
@@ -362,7 +359,6 @@ export async function roadsStyle(mode, name, keep = []) {
     w.onerror = (e) => { endMapWorker(); fail(new Error(e.message || "the map worker failed")); };
     w.postMessage({ roads, features, name, prefix, keep, levels, format: tileFormat, tableFields: [...new Set([...keep, ...TABLE_FIELDS])] }, [roads.buffer, ...(features ? [features.buffer] : [])]);
   });
-  styleReady = true;
   // the road table is parsed by the page when it asks (after the first tiles): its own step, timed alone
   const roadTable = () => {
     const t = performance.now();
@@ -382,12 +378,11 @@ const ask = (msg, none) => !mapWorker ? Promise.resolve(none) : new Promise((don
 // a tile of the roads map (MapLibre's request for rs://<generation>/<source>/<z>/<x>/<y>?g=<road generation>&f=<format>); a tile of an older style is empty
 // The worker cuts one tile at a time, so the page keeps the waiting requests itself and sends the newest first (the tiles of the zoom
 // that the map shows now), and skips a request that MapLibre aborted (a zoom step that passed). Two stay in flight, so the worker has no gap.
-// The prefetch (below) has the lowest priority: its tiles wait until no request of the map waits, and only one is in flight.
-const tileQueue = [], lowQueue = [];
+const tileQueue = [];
 let tilesInFlight = 0;
 function pumpTiles() {
-  while (tilesInFlight < 2 && (tileQueue.length || (!tilesInFlight && lowQueue.length))) {
-    const job = tileQueue.length ? tileQueue.pop() : lowQueue.shift();
+  while (tilesInFlight < 2 && tileQueue.length) {
+    const job = tileQueue.pop();
     if (job.signal?.aborted || job.gen !== generation) { job.done(new ArrayBuffer(0)); continue; }
     tilesInFlight++;
     ask({ tile: job.tile }, {}).then((r) => {
@@ -397,61 +392,13 @@ function pumpTiles() {
     });
   }
 }
-// The prefetch: the tiles that the page asks for before the map does (the parents of the visible tiles), so that a zoom out finds them cut. The
-// answers wait in `ready` (at most READY_MAX, the oldest go first) until the map asks for the same address; a request of the map for a tile that
-// is still in the low queue takes the job over (it gets the normal priority), and for a tile in flight it waits for it. `seen`: the addresses
-// that the map or the prefetch asked for since the last style; a prefetch asks for none of them again.
-const READY_MAX = 24;
-const ready = new Map(), pending = new Map(), seen = new Set();
-function forgetTiles() {
-  ready.clear(); pending.clear(); seen.clear(); lowQueue.length = 0;
-}
-const addressOf = (source, z, x, y, f) => `${source}/${z}/${x}/${y}/${f}`;
-// list: [z, x, y] of the roads source. A new call drops the queued tiles of the one before.
-export function prefetch(list) {
-  if (!styleReady) return;   // a new style is in the making: its worker has no tiles yet
-  for (const j of lowQueue.splice(0)) pending.delete(j.key);
-  for (const [z, x, y] of list) {
-    const key = addressOf("roads", z, x, y, tileFormat);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const job = { gen: generation, key, tile: ["roads", z, x, y, tileFormat], waiters: [], done: (r) => {
-      pending.delete(key);
-      const data = r.data ?? new ArrayBuffer(0);
-      if (r.data) prefetchStats.push([z, +((r.ms ?? 0) / 1000).toFixed(3)]);
-      if (job.waiters.length) for (const w of job.waiters) w(data);   // the map asked for it while it was in flight
-      else if (r.data) {
-        ready.set(key, data);
-        if (ready.size > READY_MAX) ready.delete(ready.keys().next().value);
-      }
-    } };
-    pending.set(key, job);
-    lowQueue.push(job);
-  }
-  pumpTiles();
-}
 export function tile(url, signal) {
   const [path, query] = url.slice("rs://".length).split("?");
   const [gen, source, z, x, y] = path.split("/");
-  const f = new URLSearchParams(query).get("f") ?? "";
-  const t = performance.now(), key = addressOf(source, z, x, y, f);
-  if (+gen !== generation) return Promise.resolve(new ArrayBuffer(0));
-  seen.add(key);
-  if (ready.has(key)) {
-    const data = ready.get(key);
-    ready.delete(key);
-    tileStats.push([+z, 0, 0, "prefetch"]);
-    return Promise.resolve(data);
-  }
-  const p = pending.get(key);
-  if (p) {
-    const at = lowQueue.indexOf(p);
-    if (at < 0) return new Promise((done) => p.waiters.push((d) => { tileStats.push([+z, +((performance.now() - t) / 1000).toFixed(3), 0, "prefetch"]); done(d); }));
-    lowQueue.splice(at, 1);   // still waiting: the map needs it now
-    pending.delete(key);
-  }
-  return new Promise((done) => {
-    tileQueue.push({ gen: +gen, tile: [source, +z, +x, +y, f || undefined], signal, done: (r) => {
+  const f = new URLSearchParams(query).get("f") || undefined;   // none: the look's own format
+  const t = performance.now();
+  return +gen !== generation ? Promise.resolve(new ArrayBuffer(0)) : new Promise((done) => {
+    tileQueue.push({ gen: +gen, tile: [source, +z, +x, +y, f], signal, done: (r) => {
       if (r instanceof ArrayBuffer) return done(r);
       tileStats.push([+z, +((performance.now() - t) / 1000).toFixed(3), +((r.ms ?? 0) / 1000).toFixed(3), source]);
       done(r.data ?? new ArrayBuffer(0));
@@ -462,8 +409,7 @@ export function tile(url, signal) {
 // The style of the same roads in another tile format (the worker keeps the tiles): the new style, with the format in each tile address
 export async function styleIn(format) {
   setTileFormat(format);
-  forgetTiles();
-  tileStats.length = prefetchStats.length = 0;
+  tileStats.length = 0;
   const r = await ask({ style: tileFormat }, { error: "the map worker is gone" });
   if (r.error) throw new Error(r.error);
   return inFormat(r.style);

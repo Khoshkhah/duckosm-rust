@@ -176,8 +176,8 @@ and the normal path):
 python crates/duckosm-wasm/www/generation_e2e.py
 ```
 
-Check the tile format and the prefetch (Monaco): MVT is the default, the style and the tile address have the format, MLT gives
-the same picture, the choice is kept, and the prefetch cuts the tiles two zooms up:
+Check the tile format (Monaco): MVT is the default, the style and the tile address have the format, MLT gives
+the same picture, and the page keeps the choice:
 
 ```bash
 python crates/duckosm-wasm/www/tile_format_e2e.py out-tile-format

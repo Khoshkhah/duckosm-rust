@@ -120,8 +120,6 @@ memory can try. Burnaby on a phone: the build, SQL and the downloads work; its m
 
 **The tiles in a fast zoom.** The roads source `rs-roads` has the roads and all the layers of the area map (land, water, buildings), so a tile that is not loaded leaves a square of the whole map empty. MapLibre draws such a tile from loaded parents and from loaded children up to 3 zooms deeper (`maxOverzooming`), so a fast zoom out, past zooms that have no loaded tile, showed the background colour for 0.5 to 1.7 s (Burnaby, pitch 60, headless Chromium, software GL). Two changes (`app/duck.js` `tile()`, `index.html` `addOverview()`): the page keeps the waiting tile requests, sends the newest first, two at a time, and skips a request that MapLibre aborted; and a second source `rs-low` (the same tiles, zoom 6 to 9) gives copies of the opaque fill layers under the real layers, so the area always has land and water. The test `tile-lag/zoom/black.py` (not in the repository) measured black time 0 ms in 7 of 8 zoom-out runs (path from zoom 9, zoom 7 and zoom 6.3; one run from zoom 8: 0.4 s), against 0.26 to 1.7 s without. The zoom in was never black in these paths. A tile of zoom 10 to 13 has 0.5 to 0.9 MB, and MapLibre needs 0.4 to 0.7 s to parse it: smaller low-zoom tiles are roadstyle's to make.
 
-**The prefetch.** When the view settles (the map is idle), the page asks the map worker for the tiles two zooms up (`app/duck.js` `prefetch()`): the tiles at the zoom of the view minus 2 that cover the view, not below the source's first zoom. These requests have the lowest priority. The queue sends one only when no request of the map waits, and keeps one in flight at most. The answers wait in the page (24 tiles at most). A request of the map for the same address takes the answer at once; a request for a tile that still waits in the low queue takes the job over. A tile that the map asked for before is not asked for again. Measured on Burnaby with roadstyle `beffdc9` (headless Chromium, software GL, 18 runs in 5 paths): the zoom out had no black time in 17 runs, with the prefetch and without it. The prefetch cut 6 to 12 tiles in each run. In the run that starts at zoom 15 and zooms out, 6 of them replaced a cut of the map. In the other paths, none did. The prefetch has no measured effect on black time. Remove it if a later roadstyle makes the cost larger than the gain.
-
 **Size and held bytes.** The map worker reports two numbers. `memoryMiB` is the size of the WebAssembly memory. It never gets smaller, and
 roadstyle's allocator grows it ahead in steps of a quarter (16 to 64 MiB), so it can rise when the program holds less. `liveMiB` is
 `[held now, most held]` (`liveBytes()`). The step table of the page shows the held value. Burnaby, "Driving", 64,221 roads, after the
@@ -212,10 +210,7 @@ and the two download buttons between them. With three modes, the line takes thre
 
 - **Network**: All, Driving, Walking, Cycling: only the modes of the build, and no list for a build with one mode.
   (It was "Roads of" in step 5; Kaveh did not understand the name.) A change draws the map again when it shows.
-- **Map tiles**: MVT (the default) or MLT, roadstyle's second tile format. MLT tiles have about 40 % of the bytes of MVT
-  tiles (Burnaby). The picture is the same. The page keeps the choice in the browser (`duckosm.tileformat`). A change draws
-  the roads that show again with the style of the new format: the source has the `encoding`, and each tile address has the
-  format (`...?g=<generation>&f=<format>`), so the page never uses a tile of the other format.
+- **Map tiles**: MVT (the default) or MLT. See "Map tiles: MVT or MLT" below.
 - **Show on map** draws the roads of the network. After a build, the page draws them at once only for a small area
   (fewer than 20,000 roads: Monaco has 13,298). A larger area waits for the click (Tartu: 64,828 roads).
 - **Show on map** and the draw after a build set the blank base map (Blank, or Blank dark with the dark theme) and put the
@@ -245,6 +240,32 @@ and the two download buttons between them. With three modes, the line takes thre
   this page is under the side panel, next to the Build bar.
 - The base map and the layers are buttons on the map (see "The map"). For one commit they were in this card; Kaveh
   wants them on the map ("it has a good design").
+
+### Map tiles: MVT or MLT
+
+The map gets its roads as vector tiles. The setting **Map tiles** in step 6 sets the format of these tiles.
+
+- **MVT** (Mapbox Vector Tile) is the default.
+- **MLT** (MapLibre Tile) is the second format of roadstyle. It stores the data of a tile in columns. MLT needs MapLibre 5.12 or newer. The page has MapLibre 5.24.
+
+To switch, choose the format in the list **Map tiles**. If the roads show on the map, the page draws them again with the new format at once. If they do not show, the next draw uses the new format. The page keeps the choice in the browser (`duckosm.tileformat`), so the next visit has it.
+
+A change of format does not build the roads again. The map worker keeps its tiles and gives the style of the new format (`LiveMap.style(format)`: the vector source has `encoding: "mlt"`). The tile address has the format after the generation: `rs://<generation>/roads/{z}/{x}/{y}?g=<generation>&f=<format>`. A tile of the other format has another address, so the page never uses it.
+
+**Measurements.** Burnaby (driving), headless Chromium with software GL, roadstyle `beffdc9`, the blank base map. Each row is the mean over the tiles of the view, in 2 runs for each format. The page set the same view, then changed the format. "Cut" is the time that the map worker needs to make the tile. "Parse" is the time that MapLibre needs to parse the tile and make its layout, from the answer of the page to the loaded tile.
+
+| Zoom | Tiles | KB for each tile, MVT / MLT | Cut (ms), MVT / MLT | Parse (ms), MVT / MLT |
+|---|---|---|---|---|
+| 11 | 14 | 113 / 45 | 0.4 / 5.3 | 128 / 122 |
+| 13 | 10 | 248 / 90 | 1.1 / 12.8 | 173 / 211 |
+| 15 | 9 | 113 / 49 | 0.6 / 7.2 | 133 / 103 |
+
+- An MLT tile has about 40 % of the bytes of an MVT tile.
+- The parse time is about the same. The difference is within the noise of the runs.
+- The worker needs more time to cut an MLT tile. The MVT times are low because the Rust code can keep the MVT tiles it cut before.
+- The picture is the same. On Monaco, with the blank base map, no pixel differs between MVT and MLT (`tile_format_e2e.py`).
+
+**These results can depend on the browser and on the device.** The measurements used one browser (Chromium), software rendering and 2 runs. A phone or another browser can give other times. Kaveh will compare MVT and MLT in several browsers later. MVT stays the default until that comparison.
 
 ### Step 7: edit the levels
 

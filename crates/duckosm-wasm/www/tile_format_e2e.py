@@ -1,8 +1,7 @@
-"""The tile format and the prefetch of the roads map in headless Chromium (Playwright): build Monaco, draw the roads on the blank base map,
+"""The tile format of the roads map in headless Chromium (Playwright): build Monaco, draw the roads on the blank base map,
 and check (1) MVT is the default, the tile address has `f=mvt` and the source has no encoding; (2) the setting "Map tiles" = MLT gives
 the style with the encoding `mlt`, `f=mlt` in the address and the same picture (a small share of pixels may differ); the choice is kept
-in the storage of the browser; MVT again gives the first picture; (3) the prefetch: when the view settles, the tiles two zooms up are
-cut, and a zoom out to that zoom takes them from the prefetch.
+in the storage of the browser; MVT again gives the first picture.
 
     python crates/duckosm-wasm/www/tile_format_e2e.py [out folder]
 
@@ -81,18 +80,6 @@ with sync_playwright() as p:
     print(f"MVT again: {d * 100:.3f} % of the pixels differ from the first MVT picture")
     assert d < 0.005, d
 
-    # the prefetch: at zoom Z the view settles, the tiles at Z - 2 are cut; a zoom out to Z - 2 takes them
-    page.evaluate("window.duckMap.jumpTo({zoom: 14.2})")
-    settle()
-    page.wait_for_function("window.duckApi.prefetchStats.length > 0", timeout=30_000)
-    n = page.evaluate("window.duckApi.prefetchStats.length")
-    zs = sorted({z for z, _ in page.evaluate("window.duckApi.prefetchStats")})
-    assert 12 in zs, zs
-    page.evaluate("window.duckMap.jumpTo({zoom: 12.2})")
-    settle()
-    hits = page.evaluate("window.duckApi.tileStats.filter((t) => t[3] === 'prefetch').length")
-    assert hits > 0, "the zoom out did not use a prefetched tile"
-    print(f"prefetch: {n} tile(s) cut (zoom {zs}) after the settle at zoom 14; the zoom out took {hits} of them")
     assert not errors, errors
     browser.close()
 server.shutdown()
