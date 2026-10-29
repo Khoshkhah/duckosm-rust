@@ -210,6 +210,7 @@ and the two download buttons between them. With three modes, the line takes thre
 
 - **Network**: All, Driving, Walking, Cycling: only the modes of the build, and no list for a build with one mode.
   (It was "Roads of" in step 5; Kaveh did not understand the name.) A change draws the map again when it shows.
+- **Map tiles**: MVT (the default) or MLT. See "Map tiles: MVT or MLT" below.
 - **Show on map** draws the roads of the network. After a build, the page draws them at once only for a small area
   (fewer than 20,000 roads: Monaco has 13,298). A larger area waits for the click (Tartu: 64,828 roads).
 - **Show on map** and the draw after a build set the blank base map (Blank, or Blank dark with the dark theme) and put the
@@ -239,6 +240,32 @@ and the two download buttons between them. With three modes, the line takes thre
   this page is under the side panel, next to the Build bar.
 - The base map and the layers are buttons on the map (see "The map"). For one commit they were in this card; Kaveh
   wants them on the map ("it has a good design").
+
+### Map tiles: MVT or MLT
+
+The map gets its roads as vector tiles. The setting **Map tiles** in step 6 sets the format of these tiles.
+
+- **MVT** (Mapbox Vector Tile) is the default.
+- **MLT** (MapLibre Tile) is the second format of roadstyle. It stores the data of a tile in columns. MLT needs MapLibre 5.12 or newer. The page has MapLibre 5.24.
+
+To switch, choose the format in the list **Map tiles**. If the roads show on the map, the page draws them again with the new format at once. If they do not show, the next draw uses the new format. The page keeps the choice in the browser (`duckosm.tileformat`), so the next visit has it.
+
+A change of format does not build the roads again. The map worker keeps its tiles and gives the style of the new format (`LiveMap.style(format)`: the vector source has `encoding: "mlt"`). The tile address has the format after the generation: `rs://<generation>/roads/{z}/{x}/{y}?g=<generation>&f=<format>`. A tile of the other format has another address, so the page never uses it.
+
+**Measurements.** Burnaby (driving), headless Chromium with software GL, roadstyle `beffdc9`, the blank base map. Each row is the mean over the tiles of the view, in 2 runs for each format. The page set the same view, then changed the format. "Cut" is the time that the map worker needs to make the tile. "Parse" is the time that MapLibre needs to parse the tile and make its layout, from the answer of the page to the loaded tile.
+
+| Zoom | Tiles | KB for each tile, MVT / MLT | Cut (ms), MVT / MLT | Parse (ms), MVT / MLT |
+|---|---|---|---|---|
+| 11 | 14 | 113 / 45 | 0.4 / 5.3 | 128 / 122 |
+| 13 | 10 | 248 / 90 | 1.1 / 12.8 | 173 / 211 |
+| 15 | 9 | 113 / 49 | 0.6 / 7.2 | 133 / 103 |
+
+- An MLT tile has about 40 % of the bytes of an MVT tile.
+- The parse time is about the same. The difference is within the noise of the runs.
+- The worker needs more time to cut an MLT tile. The MVT times are low because the Rust code can keep the MVT tiles it cut before.
+- The picture is the same. On Monaco, with the blank base map, no pixel differs between MVT and MLT (`tile_format_e2e.py`).
+
+**These results can depend on the browser and on the device.** The measurements used one browser (Chromium), software rendering and 2 runs. A phone or another browser can give other times. Kaveh will compare MVT and MLT in several browsers later. MVT stays the default until that comparison.
 
 ### Step 7: edit the levels
 
@@ -352,7 +379,7 @@ map of one mode, the duckOSM base-map layers while the editor is open, and Close
   its marker, Google 3D, the road popup, the hover tooltip, the purple glow of the selected road, and the legend of a
   `color_by`. It is roadstyle's one module `rust/roadstyle-assets/files/static/dashboard/`, which `build.sh` takes at
   `ROADSTYLE_COMMIT` into `www/map/roadstyle/dashboard/` (not in git; `e2e.py` checks that the served files are
-  roadstyle's). The page calls `rsDashboard(map, {prefix: "rs-", tiles: true, simple: "roads-simple"})`
+  roadstyle's). The page calls `rsDashboard(map, {prefix: "rs-", tiles: true})` with no `pick` option: roadstyle picks the road layers of the style (`roads-simple` and one layer for each band of zooms)
   once, before the roads; after each build or network change, `showRoads` adds the roads style's sources and layers
   with the prefix (the one vector source `rs-roads`, with no `promoteId`: since tile contract 2 the id of each piece is the road's row in the road table, and one feature state lights all pieces of a road) and gives the
   style to `rs.setStyle`. The map worker sends the road table (the fields of each road) with the style, and the page

@@ -97,10 +97,10 @@ with sync_playwright() as p:
     page.screenshot(path=str(out / "draw-after.png"))
     # a real hover and a real click on a road (roadstyle's pick layer, rs-roads-simple): the road's hover state, then rs:select
     point = page.evaluate("""() => { const m = window.duckMap, c = m.getCanvas().getBoundingClientRect();
-        for (const f of m.queryRenderedFeatures({layers: ['rs-roads-simple']})) {
+        for (const f of m.queryRenderedFeatures({layers: window.duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id)})) {
           const g = f.geometry.type === 'LineString' ? f.geometry.coordinates : f.geometry.coordinates[0];
           const p = m.project(g[Math.floor(g.length / 2)]);
-          const hit = m.queryRenderedFeatures(p, {layers: ['rs-roads-simple']})[0];
+          const hit = m.queryRenderedFeatures(p, {layers: window.duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id)})[0];
           if (hit && p.x > 420 && p.x < c.width - 80 && p.y > 40 && p.y < c.height - 60) return [p.x + c.left, p.y + c.top, hit.id]; }
         return null; }""")
     assert point, "a road on the map"
@@ -223,10 +223,10 @@ with sync_playwright() as p:
           f"{page.evaluate('window.longTask') / 1000:.2f} s")
     print("first open:", page.inner_text("#editnote"))
     SPOT = """() => { const m = window.duckMap, c = m.getCanvas().getBoundingClientRect();   // left of the editor's panel
-        for (const f of m.queryRenderedFeatures({layers: ['rs-roads-simple']})) {
+        for (const f of m.queryRenderedFeatures({layers: window.duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id)})) {
           const g = f.geometry.type === 'LineString' ? f.geometry.coordinates : f.geometry.coordinates[0];
           const p = m.project(g[Math.floor(g.length / 2)]);
-          if (m.queryRenderedFeatures(p, {layers: ['rs-roads-simple']})[0] && p.x > 420 && p.x < c.width - 450 && p.y > 40 && p.y < c.height - 60) return [p.x + c.left, p.y + c.top]; }
+          if (m.queryRenderedFeatures(p, {layers: window.duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id)})[0] && p.x > 420 && p.x < c.width - 450 && p.y > 40 && p.y < c.height - 60) return [p.x + c.left, p.y + c.top]; }
         return null; }"""
     STATES = """() => { const m = window.duckMap, out = [];
         const layers = [...new Set(m.getStyle().layers.filter((l) => l.source === 'rs-roads' && l['source-layer']).map((l) => l['source-layer']))];
@@ -265,7 +265,7 @@ with sync_playwright() as p:
     assert picked, "a click on a road selects it after the editor"
     page.wait_for_function("window.RS_SIDE._lines && window.RS_SIDE._lines.size > 0", timeout=20_000)   # the picked road's line was loaded (linesOf)
     assert page.evaluate("[...window.RS_SIDE._lines.values()].some((l) => l && l.length >= 2)"), "the line of the picked road"
-    page.mouse.click(*page.evaluate("() => { const m = window.duckMap; for (const [x, y] of [[420, 60], [430, 800], [1000, 70]]) { if (!m.queryRenderedFeatures([[x - 6, y - 6], [x + 6, y + 6]], {layers: ['rs-roads-simple']}).length) return [x, y]; } return [420, 60]; }"))
+    page.mouse.click(*page.evaluate("() => { const m = window.duckMap; for (const [x, y] of [[420, 60], [430, 800], [1000, 70]]) { if (!m.queryRenderedFeatures([[x - 6, y - 6], [x + 6, y + 6]], {layers: window.duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id)}).length) return [x, y]; } return [420, 60]; }"))
     page.wait_for_timeout(700)
     assert not page.evaluate(STATES), "a click on empty map clears the selection"
     print("after Close: no state left, a click selects a road, a click on empty map clears it")
