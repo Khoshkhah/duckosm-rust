@@ -5,6 +5,10 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ## Not released
 
+### Added
+
+- The region download reads the file in up to 8 parts at the same time (HTTP `Range`) through the relay, from the dated file that "latest" points to. The relay passes `Range` and gives `Content-Location`; `serve.py` does the same. The page needs a new deploy of the relay for this; with the old relay it reads one stream, as before (docs/relay.md).
+
 ### Fixed
 
 - The source files `app/duck.js`, `build_worker.js`, `index.html` and `map/map_worker.js` had the version `?v=check` in their references (PR #27: `version_refs.py` was run in the work folder with the version `check`, not with `--check`). The deploy script adds a version only to a reference that has none, so the deployed page kept `?v=check` and a browser could take an old file from its cache after a deploy. The references have no version in the source again; the deploy adds it. `version_refs.py` now refuses to change the page's own folder (use a copy; `--check` only reads).
