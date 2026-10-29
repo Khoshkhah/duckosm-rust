@@ -20,7 +20,8 @@
 <script>
 /* roadstyle's dashboard, as the Rust page writer gives it to a page (roadstyle::dashboard::Template::Dashboard, layout overlay; docs/app.md):
    this object is the page's `dashboard` option, and the classes of <html> are Dashboard::first_paint, so that no frame shows another form. The
-   panel is at the left (the level editor's panel is at the right) and the bar beside it. */
+   panel is at the left (the level editor's panel is at the right) and the bar beside it. The panel hides none of roadstyle's own sections:
+   the page has none of them (the template's `hide` list would fail on a section that is not there). */
 window.DASHBOARD = {
   template: "dashboard", layout: "overlay",
   panel: { side: "left", width_px: 370, look: "frame", sections: [], hide: [] },
@@ -31,11 +32,12 @@ window.DASHBOARD = {
     selection_style: { color: "#22d3ee", width: 8.0, outline: "#0b1020", outline_width: 2.0, arrow_color: "#ffffff", arrow_width: 5.0, arrow_every: 25.0, fill: "rgba(34,211,238,0.35)" },
     layers: [] },
   legend: { rows: [] },
+  scale_box: false,
   phone: { max_width_px: 700, toolbar: "top" },
 };
 (function () {
   var d = window.DASHBOARD, c = document.documentElement.classList;
-  c.add("rs-tpl-dashboard", "rs-overlay", "rs-has-toolbar", "rs-tb-" + d.toolbar.position, "rs-panel-left");
+  c.add("rs-tpl-dashboard", "rs-overlay", "rs-has-toolbar", "rs-tb-" + d.toolbar.position, "rs-panel-left", "rs-hide-scale");
   document.documentElement.style.setProperty("--rs-panel-w", d.panel.width_px + "px");
   if (matchMedia("(max-width:" + d.phone.max_width_px + "px)").matches) c.add("rs-phone");
 })();

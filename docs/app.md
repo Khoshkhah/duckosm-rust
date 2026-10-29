@@ -48,7 +48,7 @@ and `docs/guides/dashboard-layout.md`). The page uses the template `dashboard` w
 - **The options of the dashboard** are in `window.DASHBOARD`, at the top of `index.html`, with the classes of `<html>` that
   roadstyle's page writer gives to its pages (`Dashboard::first_paint`). The page writer is Rust code, and the page uses the
   JavaScript module only, so the page has a copy of the defaults of `Template::Dashboard` with the layout `overlay` and these
-  changes: the panel at the left, 370 px wide, the bar at the left, and `toolbar.hold` (the bar waits for the two tools of the page).
+  changes: the panel at the left, 370 px wide, with no hidden section (the page has none of roadstyle's own sections), the bar at the left, no scale box, and `toolbar.hold` (the bar waits for the two tools of the page).
   A new roadstyle version can change the defaults. The panel's HTML and its shell rules (position, tokens, title row) are copies of
   `templates/dashboard.html` too.
 - **The free part of the map.** The panel and the bar cover a part of the full-window map. `freeInsets()` in the script gives the
@@ -288,9 +288,9 @@ and the two download buttons between them. With three modes, the line takes thre
   - Since roadstyle `bcea0ae` the temporary tables of each reading have names of their own (its "run"), and the page
     drops them after the draw ("drop"). Two readings at the same time thus do not meet either; the page keeps its one
     draw at a time, because the draws also share `roads.parquet`.
-- roadstyle's zoom read-out ("z 13.8") is beside the scale bar of the map. roadstyle puts it at a fixed place, which on
-  this page is under the side panel, next to the Build bar.
-- The base map and the layers are buttons on the map (see "The map"). For one commit they were in this card; Kaveh
+- roadstyle's zoom read-out ("z 13.8") is in the scale box with the scale bar. Since 2026-10-29 the box is in the corner of the map
+  that is opposite to the panel, and it is hidden at the start (the settings button shows it).
+- The base map and the layers are tools of the bar (see "The map"). For one commit they were in this card; Kaveh
   wants them on the map ("it has a good design").
 
 ### Map tiles: MVT or MLT
