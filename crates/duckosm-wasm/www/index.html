@@ -595,8 +595,9 @@ const map = new maplibregl.Map({ container: "map", style: "https://tiles.openfre
 // the zoom buttons and the compass become tools of roadstyle's bar, the scale bar goes into its corner box with the zoom number: both before rsDashboard
 map.addControl(new maplibregl.NavigationControl(), "top-right");
 map.addControl(new maplibregl.ScaleControl(), "bottom-left");
-// The Google key is the one of roadstyle's settings button (the gear in the bar): the browser keeps it, no file has it. The card of an earlier
-// version kept it under another name: the first visit moves it.
+// The Google key: a key that the person saves with roadstyle's settings button (the gear in the bar) is used first; else street_view_key, which
+// is empty in the repository and which pages.yml fills with the site's key. The card of an earlier version kept the key under another name:
+// the first visit moves it.
 try {
   const old = localStorage.getItem("duckosm.googleKey");
   if (old) { if (!localStorage.getItem("rs-key:google")) localStorage.setItem("rs-key:google", old); localStorage.removeItem("duckosm.googleKey"); }
@@ -609,7 +610,7 @@ try {
 // so the hover, the tooltip and the click work at every zoom
 const rs = rsDashboard(map, { style: null, prefix: "rs-", tiles: true,
   select_color: "#7c4dff",   // the look's theme.selection.select
-  street_view: "window", google_3d: true, dashboard: window.DASHBOARD });
+  street_view: "window", street_view_key: "", google_3d: true, dashboard: window.DASHBOARD });
 // no road popup or selection while the user draws a shape or picks a point (the dashboard has its own click on the roads)
 document.addEventListener("rs:select", () => {
   if ($("draw").hidden && $("here").getAttribute("aria-pressed") !== "true") return;
