@@ -141,25 +141,45 @@ with sync_playwright() as p:
     # the draw after a build or "Show on map" with no base map chosen in this page: the blank base map (Kaveh, 2026-10-26: it did not change)
     assert page.evaluate("document.querySelector('input[name=rs-bm]:checked')?.value") == "blank", "the first draw sets the blank base map"
     page.wait_for_function("window.duckMap && window.duckMap.loaded()", timeout=600_000)   # the tiles are cut and drawn
-    # roadstyle's standard tools read each roads style that comes after the start (rs.setStyle): "Colour by and legend" is on, and the Layers box has a
-    # row for each layer of the area (the duckOSM layers) and the 3D row. A row that is turned off hides its layers, and the next draw keeps it off.
+    # roadstyle's standard tools read each roads style that comes after the start (rs.setStyle): the bar has no floating Layers box; the one switch for
+    # all the area's layers (the duckOSM layers: landcover, water, buildings, ...) is in the Base map box; the legend box lists them with their colours;
+    # "Colour by" has the look's option. A switch that is off stays off in the next draw.
     assert not page.evaluate("rs.tools.list().find((t) => t.id === 'legend').disabled"), "Colour by and legend is on after the roads are drawn"
-    rows = page.evaluate("[...document.querySelectorAll('.ov-ctrl label')].map((l) => l.textContent.trim())")
-    print("layers box:", rows)
-    assert "buildings" in rows and rows[rows.index("buildings") + 1] == "Buildings 3D", rows   # the 3D row is under the buildings row
-    first = rows[0]
-    ov = lambda: page.evaluate("duckMap.getStyle().layers.filter((l) => /^rs-ov\\d/.test(l.id) && l.type !== 'fill-extrusion').map((l) => l.layout?.visibility ?? 'visible')")  # noqa: E731
-    assert "visible" in ov(), "the area's layers show"
-    page.evaluate("(l) => rs.setOverlay(l, false)", first)
-    assert not page.evaluate("document.querySelector('.ov-ctrl input').checked")
+    assert page.query_selector(".ov-ctrl") is None, "a page with a bar has no floating Layers box"
+    ov = lambda: page.evaluate("duckMap.getStyle().layers.filter((l) => /^rs-ov\\d/.test(l.id)).map((l) => l.layout?.visibility ?? 'visible')")  # noqa: E731
+    shown = lambda: page.evaluate("(() => { const L = duckMap.getStyle().layers.filter((l) => /^rs-ov\\d/.test(l.id) && !l.id.endsWith('-pattern') && l.layout?.visibility !== 'none').map((l) => l.id); return L.length; })()")  # noqa: E731
+    assert shown() > 0, "the area's layers show"
+    page.click("#rs-toolbar .bm-ctrl .bm-icon")
+    assert page.is_visible(".bm-menu .rs-bm-layers"), "the switch is in the Base map box"
+    print("base map box:", page.inner_text(".bm-menu").replace("\n", " | "))
+    assert page.evaluate("document.querySelector('.rs-bm-layers input').checked")
+    page.click(".bm-menu .rs-bm-layers label")                      # all the area's layers off (the footprints of the buildings too)
+    page.wait_for_function("duckMap.getStyle().layers.filter((l) => /^rs-ov\\d/.test(l.id) && !l.id.endsWith('-pattern') && l.layout?.visibility !== 'none').length === 0")
+    assert not page.evaluate("document.querySelector('.rs-bm-layers input').checked")
+    # the overlay entry of landcover lists ov0-fill and ov0-outline, not its pattern layer ov0-pattern: the switch leaves the pattern on the map (a roadstyle gap)
+    if page.evaluate("duckMap.getStyle().layers.some((l) => /^rs-ov\\d.*-pattern$/.test(l.id) && l.layout?.visibility !== 'none')"):
+        print("GAP, the switch of the area's layers leaves the pattern layer (rs-ov0-pattern) on the map")
+    page.screenshot(path=str(out / "layers-off-basemap-box.png"))
+    page.keyboard.press("Escape")
     page.evaluate("document.getElementById('show').click()")        # a new draw: the switch that is off stays off
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=600_000)
-    assert not page.evaluate("document.querySelector('.ov-ctrl input').checked"), "the switch stays off after a draw"
-    page.evaluate("(l) => rs.setOverlay(l, true)", first)
+    assert shown() == 0, "the switch stays off after a draw"
+    page.click("#rs-toolbar .bm-ctrl .bm-icon")
+    page.click(".bm-menu .rs-bm-layers label")                      # on: each layer as the style starts it
+    page.wait_for_function("duckMap.getStyle().layers.filter((l) => /^rs-ov\\d/.test(l.id) && !l.id.endsWith('-pattern') && l.layout?.visibility !== 'none').length > 0")
+    page.screenshot(path=str(out / "layers-on-basemap-box.png"))
+    page.keyboard.press("Escape")
     page.wait_for_function("window.duckMap.loaded()", timeout=600_000)
-    # the colours of the roads are the look's (Colour by: Road class): the legend box has its rows
+    # the legend box lists the layers with their colours, and has "Colour by"
     page.evaluate("rs.tools.open('legend')")
     assert page.is_visible("#rs-color-box"), "the colour box opens"
+    names = page.evaluate("[...document.querySelectorAll('#rs-color-box .rs-cb-layers .lg-row')].map((r) => r.textContent.trim())")
+    print("legend box layers:", names)
+    assert "water" in names and "buildings" in names and len(names) >= 10, names
+    assert page.evaluate("document.querySelectorAll('#rs-color-box .rs-cb-layers .lg-sw').length") >= 10, "each layer has its colour"
+    print("legend box:", page.inner_text("#rs-color-box").replace("\n", " | ")[:300])
+    assert "Road class" in page.inner_text("#rs-color-box"), "Colour by has the look's option"
+    page.screenshot(path=str(out / "legend-box.png"))
     page.evaluate("rs.tools.close('legend')")
     # a base map chosen before: "Show on map" (a fresh map) sets the blank one again (Kaveh, 2026-10-26)
     page.click("#rs-toolbar .bm-ctrl .bm-icon"); page.click("input[name=rs-bm][value='ofm_liberty']"); page.wait_for_timeout(500)

@@ -34,12 +34,15 @@ and `docs/guides/dashboard-layout.md`). The page uses the template `dashboard` w
   dark. The page starts on OpenFreeMap Liberty and keeps the light key of the choice (`duckosm.basemap`). It does one thing for the
   module: it puts the active map first in the list and keeps the choice. "Show on map" calls `rsSetBasemap("blank")`, and roadstyle gives
   the dark twin in the dark theme.
-- **The duckOSM layers.** The page has no switch of its own for the layers of the area (`ov<i>`). The look of the page is live
-  (`state: "live"`, `make_look.mjs`), so each roads style has `roadstyle:controls.overlays`. With each `rs.setStyle`, roadstyle's Layers
-  box gets one row for each layer of the area (landcover, water, buildings and more), a row **Buildings 3D** under **buildings**, and the
-  3D buildings tool. A switch that the person turned off stays off in the next draw. The rows of the old style go.
+- **The duckOSM layers.** The page has no switch of its own for the layers of the area (`ov<i>`: landcover, water, buildings and more).
+  The look of the page is live (`state: "live"`, `make_look.mjs`), so each roads style has `roadstyle:controls.overlays`, and roadstyle gives:
+  - one switch **Map layers** for all of them (the footprints of the buildings too) in the Base map box. A switch that is off stays off in
+    the next draw. `rsSetOverlays(on)` is the call.
+  - their list in the legend box ("Map layers", each with its colour; a layer that is hidden is dimmed).
+  - the row **Buildings 3D** and the 3D buildings tool, for the 3D layer of the buildings.
+  A page with a bar has no floating Layers box (before, the box was at the bottom right of the map, and the phone's sheet covered it).
 - **Colour by.** The look has the colour option **Road class** (`color_options`), so the tool "Colour by and legend" is on after the roads
-  are drawn. The colours of the roads are the look's (the option has no changes).
+  are drawn: its box has **Colour by** (Road class), the **Legend** of the road classes and the **Map layers**.
 - **The cards.** The seven cards are in the panel's body. A card has no color of its own: all cards have one neutral look (a line
   around the card, a number in the theme's accent color) that follows the light and the dark theme of the panel. Before, each card
   had a color (the number of a step had the color of its line on the map). Each card still folds (see "The cards fold").
@@ -469,8 +472,8 @@ map of one mode, the duckOSM base-map layers while the editor is open, and Close
     has a **Reload** button); with it, the Street View window has roadstyle's **Linked** mode beside **Classic**, and the
     **Google 3D** window works (its camera and the map's linked both ways). Without a key, the Google 3D window asks for one.
   - No button hides the footprints: the style alone decides if they show (Kaveh's rule).
-- The 3D buildings of the area (the duckOSM layers) have a switch: the row **Buildings 3D** of roadstyle's Layers box, under
-  **buildings**, and roadstyle's tool. roadstyle's tool for a vector base map (OpenFreeMap) is replaced by the tool of the area when the
+- The 3D buildings of the area (the duckOSM layers) have a switch: roadstyle's 3D buildings tool (and a row **Buildings 3D** where a page
+  has a Layers box). roadstyle's tool for a vector base map (OpenFreeMap) is replaced by the tool of the area when the
   style has a 3D layer, and comes back when it has none.
 - The height of a building (roadstyle-rs, rule C of mapstyle's `docs/design/buildings_3d.md`): the higher of
   `height` and (`building:levels` + `roof:levels`) × 3.66 m (as OpenMapTiles), or the one that is there, else the
@@ -556,16 +559,18 @@ works in the same tab during the build, and the computer had other load. Not mea
 ## Gaps in roadstyle (2026-10-29)
 
 Kaveh's rule: the page uses the standard dashboard and the standard toolbox, and does not change them. The page does not make its own version
-of what the standard lacks. Since roadstyle `f460335` one gap is open:
+of what the standard lacks. Since roadstyle `dd08231` two gaps are open:
 
 1. **The editor's full sheet on a phone** is `100% - 48px` high, and it starts under roadstyle's top bar (`--rs-top`). The page does not
    correct it, so the handle of the sheet can be under the bar. `phone_e2e.py` prints `GAP` and clicks the handle with a script.
+2. **The switch of the area's layers leaves a pattern layer.** The overlay entry of landcover lists `ov0-fill` and `ov0-outline`, and not its
+   pattern layer `ov0-pattern`, so **Map layers** off leaves that layer on the map. `e2e.py` prints `GAP`.
 
-Fixed in roadstyle `6d37af5` and `f460335` (the page has no adapter for them): a box that leaves a phone's screen sideways; a raster base
+Fixed in roadstyle `6d37af5`, `f460335` and `dd08231` (the page has no adapter for them): a box that leaves a phone's screen sideways; a raster base
 map that goes on top of the roads of a host page; the list of base maps and the typed `dashboard` with its first paint for a JavaScript host
 (`data/host_options.json`, `rsFirstPaint`); `rsSetBasemap("blank")` that gives the dark twin in the dark theme; OpenFreeMap's sprite;
 the panel's shell rules (now in `dashboard.css`); the sheet and the free part of the map (`rs.sheet()`, `rs.freeArea()`); a tool found by
-`data-rs-tool`. The Layers box, the 3D switch and "Colour by and legend" need a live look (`state: "live"`): a page with a dashboard has one.
+`data-rs-tool`. The switch of the area's layers (in the Base map box), their list in the legend box, the 3D switch and "Colour by and legend" need a live look (`state: "live"`): a page with a dashboard has one.
 `dashboard_e2e.py` and `e2e.py` check each of them.
 
 Load time (headless Chromium, 1400 × 900, no CPU throttle, median of 5 runs, local server): the panel has its form after 81 ms (before, with
