@@ -8,6 +8,8 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 ### Fixed
 
 - The source files `app/duck.js`, `build_worker.js`, `index.html` and `map/map_worker.js` had the version `?v=check` in their references (PR #27: `version_refs.py` was run in the work folder with the version `check`, not with `--check`). The deploy script adds a version only to a reference that has none, so the deployed page kept `?v=check` and a browser could take an old file from its cache after a deploy. The references have no version in the source again; the deploy adds it. `version_refs.py` now refuses to change the page's own folder (use a copy; `--check` only reads).
+- A zoom out no longer makes the area black for 0.5 to 1.7 s (Burnaby, pitch 60, headless Chromium): the page draws the opaque fill layers (land, water) also from a second source `rs-low` of the same tiles with the last zoom 9, so MapLibre always has a loaded tile to over-zoom.
+- The page sends the tile requests to the map worker newest first and skips a request that MapLibre aborted (a zoom step that passed): in a fast zoom, 71 tile calls and 4 MB, not 153 to 177 calls and 8 to 9 MB.
 
 ### Changed
 

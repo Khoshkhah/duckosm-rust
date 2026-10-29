@@ -367,12 +367,32 @@ const ask = (msg, none) => !mapWorker ? Promise.resolve(none) : new Promise((don
   mapWorker.postMessage({ ...msg, id });
 });
 // a tile of the roads map (MapLibre's request for rs://<generation>/<source>/<z>/<x>/<y>[?g=<road generation>]); a tile of an older style is empty
-export function tile(url) {
+// The worker cuts one tile at a time, so the page keeps the waiting requests itself and sends the newest first (the tiles of the zoom
+// that the map shows now), and skips a request that MapLibre aborted (a zoom step that passed). Two stay in flight, so the worker has no gap.
+const tileQueue = [];
+let tilesInFlight = 0;
+function pumpTiles() {
+  while (tilesInFlight < 2 && tileQueue.length) {
+    const job = tileQueue.pop();
+    if (job.signal?.aborted || job.gen !== generation) { job.done(new ArrayBuffer(0)); continue; }
+    tilesInFlight++;
+    ask({ tile: job.tile }, {}).then((r) => {
+      tilesInFlight--;
+      job.done(r ?? {});     // undefined: the worker ended (a new style)
+      pumpTiles();
+    });
+  }
+}
+export function tile(url, signal) {
   const [gen, source, z, x, y] = url.slice("rs://".length).split("?")[0].split("/");
   const t = performance.now();
-  return +gen !== generation ? Promise.resolve(new ArrayBuffer(0)) : ask({ tile: [source, +z, +x, +y] }, {}).then((r) => {
-    tileStats.push([+z, +((performance.now() - t) / 1000).toFixed(3), +((r.ms ?? 0) / 1000).toFixed(3), source]);
-    return r.data ?? new ArrayBuffer(0);
+  return +gen !== generation ? Promise.resolve(new ArrayBuffer(0)) : new Promise((done) => {
+    tileQueue.push({ gen: +gen, tile: [source, +z, +x, +y], signal, done: (r) => {
+      if (r instanceof ArrayBuffer) return done(r);
+      tileStats.push([+z, +((performance.now() - t) / 1000).toFixed(3), +((r.ms ?? 0) / 1000).toFixed(3), source]);
+      done(r.data ?? new ArrayBuffer(0));
+    } });
+    pumpTiles();
   });
 }
 // The lines of these rows of the road table (roadstyle's roadLines, in the map worker): a Promise of a list, null for a row with no line
