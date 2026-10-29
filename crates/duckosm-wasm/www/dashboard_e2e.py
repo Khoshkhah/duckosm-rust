@@ -22,9 +22,10 @@ server = start(0, quiet=True, directory=sys.argv[2] if len(sys.argv) > 2 else WW
 url = f"http://127.0.0.1:{server.server_address[1]}/index.html"
 BOX = "(s) => { const r = document.querySelector(s).getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; }"
 # roadstyle's toolbox is fixed: a tool that the page cannot use stays in its place, greyed out (the legend: the page has no colour options)
-TOOLS = ["theme", "zoom_in", "zoom_out", "compass", "view3d", "street_view", "google_3d", "basemap", "buildings", "legend", "settings", "attribution"]
+# (roadstyle's default: one `navigate` button in place of zoom in, zoom out, the compass and 2D/3D; the credits are in the corner box on a computer)
+TOOLS = ["theme", "navigate", "street_view", "google_3d", "basemap", "buildings", "legend", "settings", "attribution"]
 BASEBTN = "#rs-toolbar .bm-ctrl .bm-icon"      # the button of roadstyle's base-map tool
-tool = lambda id: f"#rs-toolbar [data-rs-tool={id}] button, #rs-toolbar button[data-rs-tool={id}]"  # noqa: E731  (a tool is found by its id: its title goes to the tooltip)
+tool = lambda id: f"[data-rs-tool={id}] button, button[data-rs-tool={id}]"  # noqa: E731  (a tool is found by its id: its title goes to the tooltip)
 FAKE = "not-a-key-test-value"
 errors = []
 
@@ -56,6 +57,24 @@ with sync_playwright() as p:
     assert page.evaluate("rs.tools.list().filter((t) => t.disabled).map((t) => t.id)") == ["legend"], "only the legend is greyed out"
     for old in ("theme", "collapse", "open", "mapctl", "basectl", "panel", "sheet-handle"):
         assert page.query_selector(f"#{old}") is None, f"the old #{old} is still in the page"
+    # roadstyle's one `navigate` button (zoom, turn and tilt sliders; no zoom, compass or 2D/3D buttons) and the credits in the corner box (a computer)
+    for gone in ("zoom_in", "zoom_out", "compass", "view3d"):
+        assert page.query_selector(f"[data-rs-tool={gone}]") is None, gone
+    z0 = page.evaluate("duckMap.getZoom()")
+    page.click(tool("navigate"))
+    assert page.is_visible("#rs-nav-box"), "the navigate box opens"
+    page.click("#rs-nav-box button[data-z='1']")
+    page.wait_for_function(f"Math.abs(duckMap.getZoom() - {z0 + 1}) < 0.05")
+    page.fill("#rs-nav-box input[data-k=p]", "40")
+    page.wait_for_function("Math.round(duckMap.getPitch()) === 40")
+    page.click("#rs-nav-box .rs-nb-reset")
+    page.wait_for_function("duckMap.getPitch() === 0 && duckMap.getBearing() === 0")
+    page.keyboard.press("Escape")
+    assert page.query_selector("#rs-toolbar [data-rs-tool=attribution]") is None and page.is_visible("[data-rs-tool=attribution]"), "the credits are in the corner box, not in the bar"
+    page.mouse.move(700, 450)
+    page.keyboard.down("Control"); page.mouse.down(); page.mouse.move(760, 400, steps=6); page.mouse.up(); page.keyboard.up("Control")
+    assert page.evaluate("duckMap.getBearing() !== 0 || duckMap.getPitch() !== 0"), "Ctrl + drag turns and tilts the map"
+    page.evaluate("duckMap.jumpTo({bearing: 0, pitch: 0})")
     # the bar is beside the panel; the panel hides, and the bar goes to the edge; the panel shows again
     bar, sb = page.evaluate(BOX, "#rs-toolbar"), page.evaluate(BOX, "#sb")
     assert sb[0] <= 1 and sb[2] - 12 <= bar[0] < sb[2] + 20, ("the bar beside the panel's card (the frame is 8 px)", bar, sb)
@@ -181,13 +200,14 @@ with sync_playwright() as p:
     bar = page.evaluate(BOX, "#rs-toolbar")
     assert page.evaluate("document.getElementById('rs-toolbar').dataset.edge") == "top" and bar[1] < 20 and bar[2] <= W, bar
     # each tool 32 px or more, and a tap reaches it (nothing covers it)
-    for i, b in enumerate(page.query_selector_all("#rs-toolbar button")):
+    BARBTN = "#rs-toolbar .maplibregl-ctrl > button, #rs-toolbar > button"       # the buttons of the tools (not the buttons inside a box)
+    for i, b in enumerate(page.query_selector_all(BARBTN)):
         r = b.bounding_box() or {"width": 0, "height": 0}
         assert r["width"] >= 32 and r["height"] >= 32, (i, r)
-    reach = page.evaluate("""() => [...document.querySelectorAll('#rs-toolbar button')].filter((b) => {
+    reach = page.evaluate("""(sel) => [...document.querySelectorAll(sel)].filter((b) => {
         const r = b.getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
         return !(e === b || b.contains(e));
-    }).map((b) => (b.closest('[data-rs-tool]') || b).dataset.rsTool)""")
+    }).map((b) => (b.closest('[data-rs-tool]') || b).dataset.rsTool)""", BARBTN)
     assert not reach, ("covered tools", reach)
 
     # the sheet: three heights, closed, 40 %, full; the bar stays in view; the map's padding is the sheet's part (down to the grip)
@@ -213,7 +233,7 @@ with sync_playwright() as p:
             assert page.is_hidden("#sb") and grip()[3] >= H - 1
             shot("8-phone-sheet-closed")
     # a box is inside the screen, sideways too (roadstyle moves a box left or right as well as up or down)
-    for id, sel in (("basemap", ".bm-menu"), ("attribution", "#rs-attr-box"), ("settings", "#rs-settings-box")):
+    for id, sel in (("basemap", ".bm-menu"), ("navigate", "#rs-nav-box"), ("attribution", "#rs-attr-box"), ("settings", "#rs-settings-box")):
         page.tap(tool(id))
         page.wait_for_timeout(400)
         assert inside(page.evaluate(BOX, sel), W, H), (id, page.evaluate(BOX, sel))

@@ -11,7 +11,7 @@
 #                     (aba5884, crates/duckosm-build/Cargo.toml): at this commit they are the crate roadstyle-levels.
 set -e
 NIGHTLY=nightly-2026-10-15
-ROADSTYLE_COMMIT=dd082313998c362659b26339d552fda9db46c808   # the full SHA: a fetch by SHA needs it
+ROADSTYLE_COMMIT=6fdc89373663a00ab837f6d8c519e91505b2d745   # the full SHA: a fetch by SHA needs it
 ROADSTYLE_REPO=${ROADSTYLE_REPO:-https://github.com/Khoshkhah/roadstyle.git}
 cargo build --release --target wasm32-unknown-unknown -p duckosm-wasm
 wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/pkg target/wasm32-unknown-unknown/release/duckosm_wasm.wasm
