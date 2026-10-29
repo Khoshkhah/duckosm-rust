@@ -38,8 +38,8 @@ with sync_playwright() as p:
     page.click("#run")
     page.wait_for_function("!document.getElementById('step5-card').hidden", timeout=300_000)
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent)", timeout=300_000)
-    page.click("#bbase")
-    page.click("input[name=base][value='blank']")
+    page.click("#rs-toolbar .bm-ctrl .bm-icon")
+    page.click("input[name=rs-bm][value='blank']")
     page.keyboard.press("Escape")
 
     def settle():

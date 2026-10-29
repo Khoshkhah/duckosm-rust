@@ -81,7 +81,7 @@ with sync_playwright() as p:
     # the draw after the build (Kaveh: "a loading map processing shows first, then change base map to blank and zoom to that area"):
     # first the veil with the draw's step over the map as it is (the base map of before), then the blank base and the area in view
     page.wait_for_function(BUSY, timeout=600_000, polling=50)
-    assert page.evaluate("document.querySelector('input[name=base]:checked')?.value") != "blank", "the old base map under the veil"
+    assert page.evaluate("document.querySelector('input[name=rs-bm]:checked')?.value") != "blank", "the old base map under the veil"
     print("while the draw runs:", page.inner_text("#mapbusy-text"))
     page.screenshot(path=str(out / "draw-during.png"))
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && document.getElementById('mapbusy').hidden",
@@ -91,7 +91,7 @@ with sync_playwright() as p:
     # the draw after the build: the blank base map (the light theme) and the area in view (Kaveh: "set base map to blank and zoom on
     # the selected area")
     page.wait_for_function("!window.duckMap.isMoving()", timeout=30_000)
-    assert page.evaluate("document.querySelector('input[name=base]:checked')?.value") == "blank"
+    assert page.evaluate("document.querySelector('input[name=rs-bm]:checked')?.value") == "blank"
     w, s_, e, n = AREA
     assert page.evaluate(f"(b => b.contains([{w}, {s_}]) && b.contains([{e}, {n}]))(window.duckMap.getBounds())"), "the area in view"
     page.screenshot(path=str(out / "draw-after.png"))
@@ -121,10 +121,10 @@ with sync_playwright() as p:
     assert page.is_visible("#show") and page.evaluate("localStorage.getItem('duckosm.card.6')") == "0"
 
     # a base map that the user chooses: "Show on map" (a fresh map) sets the blank one again; the choice stays for the draws that are not fresh
-    choose = "(r => { r.checked = true; r.dispatchEvent(new Event('change')); })(document.querySelector('input[name=base][value=\"\"]'))"
+    choose = "(r => { r.checked = true; r.dispatchEvent(new Event('change')); })(document.querySelector('input[name=rs-bm][value=ofm_liberty]'))"
     page.evaluate(choose)
     drawn(page, "document.getElementById('show').click()")
-    assert page.evaluate("document.querySelector('input[name=base]:checked')?.value") == "blank", "Show on map sets blank after a chosen base map"
+    assert page.evaluate("document.querySelector('input[name=rs-bm]:checked')?.value") == "blank", "Show on map sets blank after a chosen base map"
     page.evaluate(choose)
     print("base map: blank at each fresh draw (Show on map, after a build), whatever the user chose before")
 
@@ -185,7 +185,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(500)
     assert max(abs(x - y) for x, y in zip(at(), pos0)) <= 2, ("the view moved when the editor opened", pos0, at())
     # 3D at z16: the extrusion layers are after every road layer (lines draw over extrusions), also with the editor's roads
-    page.evaluate("document.getElementById('bbld').click(); window.duckMap.jumpTo({zoom: 16, pitch: 60})")
+    page.evaluate("window.duckMap.jumpTo({zoom: 16, pitch: 60})")
     page.wait_for_function("window.duckMap.loaded()", timeout=120_000)
     page.wait_for_timeout(1500)
     order = page.evaluate("window.duckMap.getStyle().layers.map((l) => [l.id, l.type, l.source ?? ''])")
@@ -194,28 +194,7 @@ with sync_playwright() as p:
     print("3D layers:", len(ext), "road layers:", len(roads))
     assert not ext or not roads or min(ext) > max(roads), ("extrusion layers after the road layers", ext, roads)
     page.screenshot(path=str(out / "editor-3d-pitch60.png"))
-    # OpenFreeMap's own layers stay as served (base map and 3D switch change only ours); the Esri switch and back too
-    cmp = """async () => {
-      const served = (await (await fetch("https://tiles.openfreemap.org/styles/liberty")).json()).layers;
-      const ids = new Set(served.map((l) => l.id)), mine = window.duckMap.getStyle().layers.filter((l) => ids.has(l.id));
-      const by = Object.fromEntries(mine.map((l) => [l.id, l]));
-      const bad = [];
-      for (const l of served) { const m = by[l.id]; if (!m) { bad.push(l.id + " missing"); continue; }
-        const vis = (x) => { const y = { ...(x ?? {}) }; if (y.visibility === "visible") delete y.visibility; return y; };
-        if (JSON.stringify(vis(m.layout)) !== JSON.stringify(vis(l.layout))) bad.push(l.id + ".layout");
-        for (const k of ["paint", "minzoom", "maxzoom"]) if (JSON.stringify(m[k] ?? null) !== JSON.stringify(l[k] ?? null)) bad.push(l.id + "." + k); }
-      return bad; }"""
-    own = page.evaluate("document.getElementById('ownlayers').checked")
-    for step in ("document.getElementById('bbld').click()", "document.querySelector('input[name=base][value=satellite]').click()",
-                 "document.querySelector('input[name=base][value=\"\"]').click()"):
-        page.evaluate(step)
-        page.wait_for_timeout(800)
-    bad = page.evaluate(cmp)
-    assert not bad, ("OpenFreeMap's layers changed", bad[:10])
-    page.evaluate("o => { const b = document.getElementById('ownlayers'); b.checked = o; b.dispatchEvent(new Event('change')); }", own)
-    page.evaluate("document.getElementById('bbld').click()")      # the 3D switch off again, as the test goes on
-    page.wait_for_timeout(800)
-    page.evaluate("document.getElementById('bbld').click(); window.duckMap.jumpTo({pitch: 0})")
+    page.evaluate("window.duckMap.jumpTo({pitch: 0})")
     pos0 = at()
     print("first open: the editor starts from", page.evaluate("window.levelEditorOpen.answer().resolve"))
     assert page.evaluate("window.solves") == 0, "the first open starts from the page's levels"

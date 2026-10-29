@@ -23,13 +23,18 @@ and `docs/guides/dashboard-layout.md`). The page uses the template `dashboard` w
   of the map. The panel hides with the button in its title row (the button at the corner shows it again); the page keeps the choice
   (`duckosm.panel`).
 - **The bar.** roadstyle's toolbar holds the map buttons, in this order: theme, zoom in, zoom out, compass, 2D/3D, Street View,
-  Google 3D, base map, 3D buildings, settings, attribution. The bar is next to the panel. It goes to the edge of the window when the
+  Google 3D, base map, 3D buildings, colour and legend, settings, attribution. The toolbox is fixed: a tool that the page cannot use
+  stays in its place, greyed out (the legend: the page has no colour options). The bar is next to the panel. It goes to the edge of the window when the
   panel is hidden. The settings button lets the person move the bar and the panel, change the transparency, and save the Google key.
-- **The page's own tools.** The base map and the 3D buildings are tools that the page adds to the bar with `rs.tools.add`, and it puts
-  them before the settings, as roadstyle's own base-map and buildings tools would be. The base-map box has the rules of roadstyle's
-  boxes: one box is open at a time, a click outside and the Escape key close it, and it stays 12 px inside the window. The page keeps
-  its own base-map code (`setBase`). It hides OpenFreeMap's layers under the Esri and blank base maps, and it shows the layers of the
-  build. roadstyle's base-map module is for a page whose style is its own roads style, so the page cannot use it.
+- **The base map is roadstyle's.** The page has no tool, box or base-map code of its own. It gives the dashboard roadstyle's own list
+  (`map/roadstyle/basemaps.json`, copied by `build.sh` from roadstyle at `ROADSTYLE_COMMIT`) as the `basemaps` and `ontop`
+  options, and a map that has the two layers `bg` and `basemap`. The tool, the box (the rows, **Hillshade**, **Labels**, **3D
+  buildings**), the rules of a box and the 3D buildings tool are roadstyle's. A map with a dark twin is one row, and it follows the
+  theme: the dark theme shows the twin (OpenFreeMap Liberty: Fiord), and the light theme shows the map again. A dark map that the
+  person picks (Satellite) makes the page dark. The page starts on OpenFreeMap Liberty and keeps the light key of the choice
+  (`duckosm.basemap`). It does only three things for the module: it gives each roads style the layer `basemap` (`withBase`), it puts
+  a raster base map back under the page's layers (the module puts it on top when the style has a prefix), and it keeps the choice.
+  "Gaps in roadstyle" below lists what the page needs and the standard does not give.
 - **The cards.** The seven cards are in the panel's body. A card has no color of its own: all cards have one neutral look (a line
   around the card, a number in the theme's accent color) that follows the light and the dark theme of the panel. Before, each card
   had a color (the number of a step had the color of its line on the map). Each card still folds (see "The cards fold").
@@ -48,22 +53,22 @@ and `docs/guides/dashboard-layout.md`). The page uses the template `dashboard` w
 - **The options of the dashboard** are in `window.DASHBOARD`, at the top of `index.html`, with the classes of `<html>` that
   roadstyle's page writer gives to its pages (`Dashboard::first_paint`). The page writer is Rust code, and the page uses the
   JavaScript module only, so the page has a copy of the defaults of `Template::Dashboard` with the layout `overlay` and these
-  changes: the panel at the left, 370 px wide, with no hidden section (the page has none of roadstyle's own sections), the bar at the left, no scale box, and `toolbar.hold` (the bar waits for the two tools of the page).
+  changes: the panel at the left, 370 px wide, with no hidden section (the page has none of roadstyle's own sections), the bar at the left and no scale box.
   A new roadstyle version can change the defaults. The panel's HTML and its shell rules (position, tokens, title row) are copies of
   `templates/dashboard.html` too.
 - **The free part of the map.** The panel and the bar cover a part of the full-window map. `freeInsets()` in the script gives the
   insets of that part, for the zoom to an area (`fitTo`), the veil of a draw (`#mapbusy`), the message (`#status`) and, on a phone, the
   map's bottom padding. roadstyle's windows (Street View, Google 3D) use their own rule (`windows.clamp`) and stay in the free part.
-- The page moves each box 12 px inside the window at each side (`keepInside`). roadstyle's boxes move up or down only, so the
-  attribution box at the left of a phone's second row was 53 px outside the screen.
+- The page does not move the boxes. roadstyle's boxes move up or down only, so on a phone a box can leave the screen: the base-map box
+  by 143 px at the right, the attribution box by 35 px and the settings box by 71 px at the left (see "Gaps in roadstyle").
 
 The check: `dashboard_e2e.py` (no build needed). On a computer (1400 × 900) it checks the classes of `<html>`, the tools and their
 order, the places of the bar and the panel, the panel that hides and shows, the seven cards in both themes (the same colors, no
-`--c`), the base-map box (opens inside the window; the Escape key, a click outside and another box close it), the 3D buildings
-switch, the Google key (saved and cleared in the settings, the key of an earlier version moves) and the Street View window in the
+`--c`), the base-map box (opens inside the window; the Escape key, a click outside and another box close it), the base map that
+follows the theme, the raster base map under the page's layers, the 3D buildings tool of roadstyle, the Google key (saved and cleared in the settings, the key of an earlier version moves) and the Street View window in the
 free part of the map. On a phone (390 × 844, touch) it checks that the page does not scroll sideways, the bar at the top, each tool
 32 px or more and reachable, the three heights of the sheet and the map's padding for each, that the full sheet does not cover the
-bar, that each box is inside the screen, and that a window is a bottom sheet that closes the panel's sheet. It writes `dashboard-*.png`.
+bar, each box (it prints a box that is outside the screen), and that a window is a bottom sheet that closes the panel's sheet. It writes `dashboard-*.png`.
 
 ## The panel
 
@@ -105,7 +110,7 @@ On a screen of 700 px or less:
   show, and the attribution is the tool at the end of the bar.
 - The view stays still when the map's box or padding changes (the editor's panel or sheet opens or closes, the page's sheet moves): the page keeps the same point at the same screen position, with no animation, and the editor does not fit the map to the area. `editor_e2e.py` and `phone_e2e.py` check this within 2 px.
 - The 3D building layers are after every road layer (a line over an extrusion is not hidden by it) and before the labels; `editor_e2e.py` checks the order in 3D.
-- OpenFreeMap's own layers stay as served (no hidden road, no 3D heights, no zoom range); inside the area our base-map layers are above them. The 3D switch acts on our buildings only. Esri and the blank base map hide OpenFreeMap under them. `editor_e2e.py` compares them with the served liberty style.
+- OpenFreeMap is roadstyle's vector base map: its layers have the prefix `vbm-` and are under the roads. Inside the area our base-map layers are above them. An Esri or blank base map hides them.
 - After a build, the sheet shows card 5 (the result); from the closed state it opens to 40 %.
 - The cards' scroll box has a background that is 1 % transparent. With an opaque one over the map's canvas, Chromium
   (2026-10, also headless) left a band of the map undrawn, at the size of the scroll box but near the top of the screen.
@@ -268,7 +273,7 @@ and the two download buttons between them. With three modes, the line takes thre
 - **Show on map** and the draw after a build set the blank base map (Blank, or Blank dark with the dark theme) and put the
   area in view (Kaveh, 2026-10-25: "set base map to blank and zoom on the selected area"). Out of the area, OpenFreeMap's
   own colors (the water, the wetland pattern) made the two sides of the boundary look different. After the user chooses a
-  base map (the ▦ button), the later draws of the page keep that choice. On a phone the area stays above the sheet.
+  base map (the layers button of the bar), the later draws of the page keep that choice. On a phone the area stays above the sheet.
 - The order of a draw (Kaveh, 2026-10-25: "a loading map processing shows first, then change base map to blank and zoom
   to that area"). At the click, a light veil with a spinner and the step of the draw ("drawing: the roads table and the
   style…", then "drawing: the first tiles…") covers the map. The map stays as it is under the veil. When the roads are
@@ -442,15 +447,11 @@ map of one mode, the duckOSM base-map layers while the editor is open, and Close
   buttons, Kaveh's design of 2026-10-23, from roadstyle's map): 2D/3D, Street View, Google 3D, the base map and the 3D buildings switch:
   - **3D** (roadstyle's 2D/3D button) tilts the map; it then shows "2D", which makes it flat again. It does not change
     the buildings.
-  - **3D buildings** (the building icon, Kaveh's choice A of 2026-10-23) gives the footprints that show their height.
-    Off (the default), they stay flat. So the map can be tilted with flat buildings, or flat with 3D buildings. The
-    page keeps the switch (`duckosm.buildings`).
-  - **Base map** (the layers icon) opens a box: OpenFreeMap, Light gray (Esri), Satellite (Esri World Imagery), Blank (`#efede8`)
-    and Blank dark (`#14181d`): roadstyle's two blank base maps, which do not follow the page's theme. All except
-    OpenFreeMap hide all of
-    OpenFreeMap's layers, also its labels (with 3D buildings on and without the duckOSM 3D buildings, its 3D buildings stay). After a
-    build with the base-map layers, the list also has **duckOSM layers**. Satellite turns them off, because they
-    cover the photo. The page keeps the base map.
+  - **3D buildings** (the building icon) is roadstyle's tool. It is on for a vector base map (OpenFreeMap) and greyed out for the
+    others. It switches the 3D buildings of that base map, in the tilted view. The same switch is a row in the base-map box.
+  - **Base map** (the layers icon) opens roadstyle's box: OpenFreeMap (Liberty, Bright, Positron), OpenStreetMap, Esri (Gray, Streets,
+    Satellite) and Blank. A map with a dark twin follows the theme. The box has the rows **Hillshade**, **Labels** and
+    **3D buildings** under "On top". The page keeps the base map.
   - **Street View** (the person) opens roadstyle's floating window. A click on a road shows Google Street View there.
     The window can be dragged and resized, stays inside the map, and the page keeps whether it is open and where. No
     key is needed; it loads only in a page served over http(s). Open (at roadstyle `aba5884`): with tiles, the
@@ -461,10 +462,8 @@ map of one mode, the duckOSM base-map layers while the editor is open, and Close
     has a **Reload** button); with it, the Street View window has roadstyle's **Linked** mode beside **Classic**, and the
     **Google 3D** window works (its camera and the map's linked both ways). Without a key, the Google 3D window asks for one.
   - No button hides the footprints: the style alone decides if they show (Kaveh's rule).
-- Only one 3D building layer shows: roadstyle's own when the duckOSM layers show (from the zoom of their buildings,
-  15; below it OpenFreeMap's), else OpenFreeMap's. Before, the
-  two layers drew over each other at different heights. With 3D buildings off, OpenFreeMap's 3D layer is flat (height 0),
-  so that its footprints stay.
+- The 3D buildings of the area (the duckOSM layers) have no switch: roadstyle's tool is for a vector base map only. The layers of the area
+  show as roadstyle adds them (the 3D layer hidden). See "Gaps in roadstyle".
 - The height of a building (roadstyle-rs, rule C of mapstyle's `docs/design/buildings_3d.md`): the higher of
   `height` and (`building:levels` + `roof:levels`) × 3.66 m (as OpenMapTiles), or the one that is there, else the
   height of its kind. The higher of the two keeps Tartu's buildings correct, where `height` is often an ETAK code.
@@ -546,3 +545,35 @@ Checks in headless Chromium:
 The build of Tartu took 3.1 s in the app, against 1.7 s on the old page; the map (OpenFreeMap's vector tiles)
 works in the same tab during the build, and the computer had other load. Not measured more.
 
+## Gaps in roadstyle (2026-10-29)
+
+Kaveh's rule: the page uses the standard dashboard and the standard toolbox, and does not change them. The page needs these things and
+the standard does not give them. The page does not make its own version of them.
+
+1. **A box can leave a phone's screen.** roadstyle's boxes move up or down only (`toolbar.js`, `keepInside`). On a phone at 390 px, the
+   base-map box is 143 px outside the screen at the right, the attribution box 35 px at the left, and the settings box 71 px at the left.
+   The box must also move sideways.
+2. **Colour by** is missing. `initColorBox` runs once at the start, and the page starts with no roads style, so no colour tool exists.
+   (Kaveh's coordinator sends this fix to roadstyle.)
+3. **The area's own base-map layers** (the duckOSM layers, `ov<i>` in the roads style) have no switch and no 3D switch. They covered
+   a satellite photo inside the area, and the page had a check box for them. The standard Layers box and 3D layer
+   (`overlays.js`, `features.js`) read the layers once at the start, and the page gets them with each build (`rs.setStyle`). The standard
+   3D buildings tool is for a vector base map only.
+4. **A host page with its own roads style.** `basemap.js` reads the layer `basemap` from the roads style, and the page's roads style
+   has the page's prefix `rs-`. The module then puts a raster base map on top of the roads. The page gives each style the layers
+   (`withBase`) and moves the raster layer back. The module must read the prefix, or the host must be able to say which layers are the base.
+5. **The list of base maps for a JavaScript host.** The Rust page writer makes the `basemaps` option (`tiles`, `bg`, the twins) from
+   `data/basemaps.json`. A JavaScript page has no call for it, so the page has a small adapter (`tilesOf`, `solid`, `basemaps` in
+   `index.html`). `roadstyle-wasm` can export the list.
+6. **The base map of the theme after "Show on map".** `rsSetBasemap("blank")` does not choose the dark twin when the theme is dark (the
+   box does). The page chooses the key by the theme.
+7. **OpenFreeMap's sprite.** The module merges the style's sources and layers and not its `sprite`, so the icons of the places
+   (`circle-11`, `circle_11_black`) are missing and MapLibre warns for each one.
+8. **The panel's shell for a host page.** `dashboard.css` has the frame and the card looks, and the shell rules (position, tokens, the
+   title row, the hide and show buttons) are only in `templates/dashboard.html`. The page copies them. The typed defaults (`window.DASHBOARD`
+   and the classes of `<html>`) are copies too.
+9. **The editor's full sheet on a phone** is `100% - 48px` high, and it starts under roadstyle's top bar (`--rs-top`). The page no longer
+   corrects it, so the handle of the sheet can be under the bar.
+10. **The map's padding for the sheet.** `freeArea()` of `windows.js` ignores the sheet of a phone. The page keeps its own `freeInsets()`
+    and `padMap()`, and it imports `setSheet` from `template.js`, because there is no `rs.*` call for the height of the sheet.
+11. **A tool's title is removed after the first hover** (`tip.js`), so a page and a test cannot find the tool by its title.

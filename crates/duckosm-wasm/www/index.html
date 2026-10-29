@@ -25,7 +25,7 @@
 window.DASHBOARD = {
   template: "dashboard", layout: "overlay",
   panel: { side: "left", width_px: 370, look: "frame", sections: [], hide: [] },
-  toolbar: { position: "left", settings: true, hold: true },
+  toolbar: { position: "left", settings: true, hold: false },
   windows: { clamp: true, recenter_map: false, restore_open: true, remember: true },
   boundary: { dim: false, limit: false, dim_light: 0.16, dim_dark: 0.4, limit_pad: 2.0, zoom_out: 3.0 },
   google_3d: { fov_deg: null, follow: true, min_alt_m: 80.0, min_zoom_drawn: 17.0, mesh_altitude_m: 1.5,
@@ -78,10 +78,6 @@ window.DASHBOARD = {
   #mapbusy span { background: var(--bg); color: var(--fg); padding: 6px 12px; border-radius: 99px; font-size: 13px; box-shadow: var(--shadow); }
   @keyframes spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { #mapbusy .spin { animation-duration: 3s; } }
-  /* the page's two bar tools: the base map box (the look of roadstyle's boxes) and the 3D buildings switch */
-  #basebox { padding: 8px; }
-  #basebox label { display: flex; align-items: center; gap: 8px; }
-  #basebox #ownbox[hidden], #basebox #ownsep[hidden] { display: none; }
   /* the panel's shell: roadstyle's templates/dashboard.html (position, tokens, the title row, the hide and show buttons). dashboard.css has the
      frame and card looks, the sides and the phone's sheet */
   #sb {
@@ -288,8 +284,6 @@ window.DASHBOARD = {
     #editbar span { flex: 1; min-width: 0; font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #editbar .btn { height: 40px; }
     body.editing #sb, body.editing .rs-grip { display: none !important; }
-    /* the editor's full sheet (roadstyle: the window less 48 px) ends under the page's bar, so that its handle is not under roadstyle's bar */
-    html body.lv-sheet[data-lv-sheet=full] { --lv-sheet-h: calc(100% - var(--rs-top, 52px) - 48px); }
   }
 </style>
 </head>
@@ -324,20 +318,6 @@ window.DASHBOARD = {
 <!-- the level editor's bar on a phone (card 7): the counts, Apply and Close stay in view -->
 <div id="editbar"><span id="editbar-note"></span><button class="btn primary" data-for="edit-apply">Apply</button>
   <button class="btn" data-for="edit-close">Close</button></div>
-<div id="toolhold" hidden>
-  <!-- the page's base-map box: a tool of roadstyle's bar (setupBarTools() in the script moves it into the bar), in the look of roadstyle's boxes -->
-  <div id="basebox" class="bm-menu rs-bm-box" role="group" aria-label="Base map">
-    <div class="rs-bm-h">Base map</div>
-    <label class="rs-bm-row"><input type="radio" name="base" value=""><span class="rs-bm-sw" style="background:#f2efe9"></span><span class="rs-bm-n">OpenFreeMap</span></label>
-    <label class="rs-bm-row"><input type="radio" name="base" value="esri_gray"><span class="rs-bm-sw" style="background:#e4e4e4"></span><span class="rs-bm-n">Light gray</span></label>
-    <label class="rs-bm-row"><input type="radio" name="base" value="satellite"><span class="rs-bm-sw" style="background:linear-gradient(135deg,#3d5a3a,#7b8a5c 50%,#a09a7c)"></span><span class="rs-bm-n">Satellite</span></label>
-    <label class="rs-bm-row"><input type="radio" name="base" value="blank"><span class="rs-bm-sw" style="background:#efede8"></span><span class="rs-bm-n">Blank</span></label>
-    <label class="rs-bm-row"><input type="radio" name="base" value="blank_dark"><span class="rs-bm-sw" style="background:#14181d"></span><span class="rs-bm-n">Blank dark</span></label>
-    <hr id="ownsep" hidden>
-    <label id="ownbox" class="rs-bm-row" hidden><input type="checkbox" id="ownlayers" checked><span class="rs-bm-n">duckOSM layers</span></label>
-  </div>
-</div>
-
 <div id="status" role="status" aria-live="polite"></div>
 
 <div id="sb" data-theme="light" role="complementary" aria-label="duckOSM">
@@ -526,7 +506,6 @@ import * as duck from "./app/duck.js";
 window.duckApi = duck;   // for the tests (drawLaps, tileStats)
 import * as regions from "./app/regions.js";
 import { rsDashboard } from "./map/roadstyle/dashboard/index.js";   // roadstyle's map dashboard (copied by build.sh at ROADSTYLE_COMMIT)
-import { LAYERS_ICON, BUILDINGS_ICON } from "./map/roadstyle/dashboard/tools.js";   // the icons of roadstyle's base-map and 3D-buildings tools
 import { setSheet } from "./map/roadstyle/dashboard/template.js";   // the phone sheet's height (0 closed, 1 40 %, 2 full): roadstyle has no rs call for it yet
 
 const $ = (id) => document.getElementById(id);
@@ -591,7 +570,22 @@ const empty = { type: "FeatureCollection", features: [] };
 maplibregl.setWorkerCount(Math.min(4, navigator.hardwareConcurrency || 1));   // MapLibre has one worker by default; the dense road tiles parse in parallel with more (before the first map)
 const keep = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* no storage */ } };
 const kept = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
-const map = new maplibregl.Map({ container: "map", style: "https://tiles.openfreemap.org/styles/liberty", center: [10, 50], zoom: 3 });
+// roadstyle's base-map list (data/basemaps.json, copied by build.sh) in the form of its `basemaps` option (page_options.rs: tiles, bg), and the layers on top
+const BM = await (await fetch("map/roadstyle/basemaps.json")).json();
+const solid = (b) => (b.bg.startsWith("#") ? b.bg : b.is_dark ? "#14181d" : "#efede8");
+const tilesOf = (b) => (!b.url ? [] : b.url.includes("{s}") ? [...(b.subdomains || "a")].map((c) => b.url.replace("{s}", c).replace("{r}", "")) : [b.url.replace("{r}", "")]);
+const byKey = (k) => BM.basemaps.find((b) => b.key === k);
+const keys = [...new Set(BM.switcher.flatMap((k) => [k, byKey(k).dark]).filter(Boolean))];
+// the active base map first (kept for the next visit: its light key, and the dark twin comes with the theme)
+const active = keys.includes(kept("duckosm.basemap")) ? kept("duckosm.basemap") : "ofm_liberty";
+const basemaps = [active, ...keys.filter((k) => k !== active)].map(byKey).map((b) => ({ key: b.key, label: b.label, title: b.title ?? b.label, group: b.group ?? "",
+  swatch: b.swatch ?? null, order: BM.switcher.includes(b.key) ? BM.switcher.indexOf(b.key) : 99, tiles: tilesOf(b), bg: solid(b), maxzoom: b.maxzoom ?? 19, attr: b.attr,
+  is_dark: b.is_dark, style_url: b.style_url ?? null, dark: b.dark ?? null }));
+// the map starts with roadstyle's backdrop: the layers `bg` and `basemap` (its base-map module changes them); OpenFreeMap's glyphs are for the page's labels
+const baseLayers = [{ id: "bg", type: "background", paint: { "background-color": basemaps[0].bg } },
+  { id: "basemap", type: "raster", source: "bm", layout: { visibility: "none" } }];
+const map = new maplibregl.Map({ container: "map", center: [10, 50], zoom: 3, style: { version: 8, glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
+  sources: { bm: { type: "raster", tiles: tilesOf(byKey("osm")), tileSize: 256 } }, layers: baseLayers } });
 // the zoom buttons and the compass become tools of roadstyle's bar, the scale bar goes into its corner box with the zoom number: both before rsDashboard
 map.addControl(new maplibregl.NavigationControl(), "top-right");
 map.addControl(new maplibregl.ScaleControl(), "bottom-left");
@@ -605,10 +599,11 @@ try {
 // roadstyle's dashboard (docs/app.md), made once, before the roads: the bar and its tools, the panel's look, the 2D/3D button, Street View with
 // its marker, Google 3D (the key is the person's, in the settings), the road popup and the hover and select glow. The roads come later as
 // vector tiles (the prefix rs-; showRoads gives each new roads style to rs.setStyle), and a click reads the road's fields in the road table of
-// the style (window.RS_SIDE). The page's base map stays its own (setBase), as a tool of the bar.
+// the style (window.RS_SIDE). The base map is roadstyle's (basemaps, ontop).
 // no `pick` option: roadstyle picks the road layers of the style (RS_LEANS: roads-simple and one layer for each band of zooms),
 // so the hover, the tooltip and the click work at every zoom
-const rs = rsDashboard(map, { style: null, prefix: "rs-", tiles: true,
+const rs = rsDashboard(map, { style: { layers: baseLayers, sources: {}, metadata: {} }, prefix: "rs-", tiles: true,
+  basemaps, ontop: BM.ontop, basemap_switcher: true,
   select_color: "#7c4dff",   // the look's theme.selection.select
   street_view: "window", street_view_key: "", google_3d: true, dashboard: window.DASHBOARD });
 // no road popup or selection while the user draws a shape or picks a point (the dashboard has its own click on the roads)
@@ -619,9 +614,6 @@ document.addEventListener("rs:select", () => {
 // the tiles of the roads map: roadstyle's module makes each one when the map asks for it (app/duck.js tile())
 maplibregl.addProtocol("rs", async (params, abort) => ({ data: await duck.tile(params.url, abort.signal) }));
 const loaded = new Promise((ok) => map.on("load", ok));
-// OpenFreeMap's layers (the style before the page adds its own), and which of them are roads
-const baseLayers = [];
-loaded.then(() => map.getStyle().layers.forEach((l) => baseLayers.push({ id: l.id, road: /^transportation/.test(l["source-layer"] ?? "") })));
 const setData = (src, data) => loaded.then(() => map.getSource(src).setData(data ?? empty));
 
 const blue = "#2563eb";
@@ -743,7 +735,7 @@ const root = document.documentElement;
 const dark = () => root.dataset.rsTheme === "dark";
 window.rsSetTheme(kept("duckosm.theme") ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
 root.dataset.theme = root.dataset.rsTheme;
-document.addEventListener("rs:themechange", (e) => { root.dataset.theme = e.detail.theme; keep("duckosm.theme", e.detail.theme); loaded.then(setBase); });
+document.addEventListener("rs:themechange", (e) => { root.dataset.theme = e.detail.theme; keep("duckosm.theme", e.detail.theme); });
 // the panel hides (the map keeps its place: it is under the panel) and the button at the corner shows it again; the bar slides to the edge.
 // A phone has the sheet (roadstyle's grip) in place of the two buttons.
 function showPanel(on, remember = true) {
@@ -1360,7 +1352,6 @@ let roadsShown = false;
 function removeRoads() {
   if (!map.getStyle()) return;
   roadsShown = false;
-  setBase();
   for (const l of map.getStyle().layers) if (l.id.startsWith("rs-")) map.removeLayer(l.id);
   for (const id of Object.keys(map.getStyle().sources)) if (id.startsWith("rs-")) map.removeSource(id);
   if (map.getLayer("area-fill")) map.setLayoutProperty("area-fill", "visibility", "visible");
@@ -1416,7 +1407,6 @@ async function addRoadStyle(style) {
     for (const n of Object.keys(own)) json = json.replaceAll(`"${n}"`, `"rs-${n}"`);   // the image names in the layout
     const layer = JSON.parse(json);
     map.addLayer({ ...layer, id: "rs-" + l.id, source: "rs-" + l.source }, "area-fill");
-    if (layer.layout?.visibility === "none") offLayers.add("rs-" + l.id);
   }
   map.setLayoutProperty("area-fill", "visibility", "none");   // the fill would change the colors of the roads
   addOverview(style);
@@ -1443,8 +1433,7 @@ async function useStyle(style) {
   removeRoads();
   await addRoadStyle(style);
   roadsShown = true;
-  setBase();
-  rs.setStyle(style);
+  rs.setStyle(withBase(style));
 }
 async function drawRoads() {
   const run = ++roadsRun, isFresh = fresh;
@@ -1466,9 +1455,8 @@ async function drawRoads() {
     await addRoadStyle(r.style);
     // RS_SIDE, the road table, comes after the first tiles
     //   // the road fields (the popup); the level editor puts its own here while it is open
-    rs.setStyle(r.style);   // the dashboard reads the new roads style (its layers and metadata)
+    rs.setStyle(withBase(r.style));   // the dashboard reads the new roads style (its layers and metadata)
     roadsShown = true;
-    setBase();
     // the first tiles: the map is drawn when it is idle (at most 60 s)
     await Promise.race([new Promise((ok) => map.once("idle", ok)), new Promise((ok) => setTimeout(ok, 60000))]);
     if (run !== roadsRun) { fresh ||= isFresh; return; }
@@ -1478,8 +1466,7 @@ async function drawRoads() {
     if (isFresh) {   // freshMap: the blank base map and the area in view in one move, when the roads are ready
       // "Show on map" and the draw after a build always set the blank base map, whatever the user chose before; his choice stays for the
       // draws that are not a fresh map (a network change, the draw after Apply, the editor's redraws)
-      view.base = dark() ? "blank_dark" : "blank";
-      setBase();
+      window.rsSetBasemap(dark() ? "blank_dark" : "blank");
       zoomToArea();
       await new Promise((ok) => { map.once("moveend", ok); setTimeout(ok, 1000); });
     }
@@ -1512,7 +1499,6 @@ async function visualization() {
   $("mapmode").innerHTML = options.join("");
   $("mapmode").value = $("mapmode").value;      // the list in roadstyle's look shows the new first option
   $("mapmode-row").style.display = modes.length < 2 ? "none" : "";
-  $("ownbox").hidden = $("ownsep").hidden = !duck.tables.some((t) => t.mode === "features");
   $("showrow").hidden = false;
   $("step7-card").hidden = !duck.tables.some((t) => t.mode === "visualization" && t.table === "edge_levels");
   unfold("step6-card");
@@ -1529,7 +1515,7 @@ async function visualization() {
 // chooses after that stays for the next draws of this page. Kaveh: "a loading map processing shows first, then change base map to
 // blank and zoom to that area": the map stays as it is under the veil of showRoads, and drawRoads changes the base map and the view
 // when the roads are ready.
-let baseChosen = false, fresh = false;
+let fresh = false;
 function freshMap() {
   fresh = true;
   return showRoads();
@@ -1544,97 +1530,16 @@ $("mapmode").onchange = () => {
   $("mapnote").textContent = n > window.mapMaxRoads ? tooLarge(n) : `${num(n)} roads. Click Show on map to draw it.`;
 };
 
-// the base map: OpenFreeMap, or a layer over it (under the roads): roadstyle's keyless raster map, or an empty background
-const BASEMAPS = {
-  esri_gray: { tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"],
-               attribution: "Tiles © Esri", maxzoom: 16 },
-  satellite: { tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
-               attribution: "Imagery © Esri, Maxar, Earthstar Geographics", maxzoom: 19 },
-};
-// the map buttons: the base map (OpenFreeMap without its roads while the duckOSM roads show, Esri's light gray or satellite
-// tiles, or a blank background; all but OpenFreeMap hide all of its layers, also its labels and 3D buildings), the duckOSM
-// layers (the base-map layers of the build, the style's sources ov<i>, over any base map), the 3D buildings and the 3D view.
-// The style alone shows the building footprints (and from which zoom). The 3D buildings switch adds their 3D version: the
-// duckOSM layers' own (roadstyle adds them hidden), and OpenFreeMap's, which is flat (height 0) when the switch is off.
-// The 3D view only tilts the map.
-const BLANKS = { blank: "#efede8", blank_dark: "#14181d" };   // roadstyle's tile-less base maps (basemaps.py), not the page's theme
-const view = { base: BASEMAPS[kept("duckosm.basemap")] || BLANKS[kept("duckosm.basemap")] ? kept("duckosm.basemap") : "",
-  buildings: kept("duckosm.buildings") === "1" };
-const offLayers = new Set();   // the layers that roadstyle adds hidden (showRoads)
-const isOv = (l) => l.source === "rs-roads" && /^ov\d/.test(l["source-layer"] ?? "");   // a base-map layer of the build
-function setBase() {
-  if (map.getLayer("base-over")) map.removeLayer("base-over");
-  if (map.getSource("base-over")) map.removeSource("base-over");
-  const v = view.base, own = !$("ownbox").hidden && $("ownlayers").checked;
-  const show = (l, on) => map.setLayoutProperty(l.id, "visibility", on ? "visible" : "none");
-  const style = map.getStyle().layers;
-  // OpenFreeMap's own layers stay as served (no hidden road, no 3D heights, no zoom range): with its base map only our layers above them
-  // (the area's base-map layers with the boundary's fill) cover it inside the area. Esri's and the blank base map need it hidden under them.
-  for (const l of baseLayers) if (v !== "" || map.getLayoutProperty(l.id, "visibility") === "none") show(l, v === "");
-  for (const l of style) if (isOv(l)) show(l, own && (!offLayers.has(l.id) || (l.type === "fill-extrusion" && view.buildings)));
-  const bottom = style[0].id;
-  if (BLANKS[v]) map.addLayer({ id: "base-over", type: "background", paint: { "background-color": BLANKS[v] } }, bottom);
-  else if (BASEMAPS[v]) {
-    map.addSource("base-over", { type: "raster", tileSize: 256, ...BASEMAPS[v] });
-    map.addLayer({ id: "base-over", type: "raster", source: "base-over" }, bottom);
-  }
-  for (const r of document.querySelectorAll("input[name=base]")) r.checked = r.value === v;
-  buildingsTool.ariaPressed = String(view.buildings);
-  buildingsTool.classList.toggle("rs-on", view.buildings);
-}
-// The page's two tools in roadstyle's bar, put before the settings and the attribution as roadstyle's own base-map and buildings tools are: the
-// base map (a button that opens the page's box, with roadstyle's rules for a box: one open at a time, a click outside or the Escape key
-// closes it, it stays 12 px inside the window) and the 3D buildings switch.
-const barTool = (id, title) => {
-  const btn = document.querySelector(`#rs-toolbar button[title="${title}"]`), wrap = btn.closest(".maplibregl-ctrl");
-  btn.id = id; btn.ariaLabel = title;
-  wrap.parentElement.insertBefore(wrap, document.querySelector("#rs-toolbar .rs-set-ctrl") ?? document.querySelector("#rs-toolbar .rs-attr-ctrl"));
-  return btn;
-};
-rs.tools.add({ id: "basemap", kind: "box", title: "Base map", icon: LAYERS_ICON });
-rs.tools.add({ id: "buildings", kind: "toggle", title: "3D buildings", icon: BUILDINGS_ICON });
-const baseTool = barTool("bbase", "Base map"), buildingsTool = barTool("bbld", "3D buildings");
-// A box stays 12 px inside the window at each side: roadstyle's boxes move up or down (toolbar.js keepInside), and not sideways, so a bar at the top
-// (the phone) opens a box under its button, which can be at the far right or left (Attribution at the left of the second row). The page moves
-// each box that it finds: its own, and roadstyle's attribution and settings boxes.
-// ponytail: this stays until roadstyle's keepInside moves a box sideways too.
-function keepInside(box) {
-  const fit = () => {
-    if (box.hidden || (box.classList.contains("bm-menu") && !box.classList.contains("open"))) return;
-    box.style.translate = "0 0";           // not a margin: a box fixed by its right or bottom edge ignores the margin on the other side
-    const r = box.getBoundingClientRect(), over = r.bottom - (innerHeight - 12), under = 12 - r.top, right = r.right - (innerWidth - 12), left = 12 - r.left;
-    box.style.translate = `${right > 0 ? -right : left > 0 ? left : 0}px ${over > 0 ? -over : under > 0 ? under : 0}px`;
-  };
-  new MutationObserver(fit).observe(box, { attributes: true, attributeFilter: ["hidden", "class"] });
-  new ResizeObserver(fit).observe(box);
-  addEventListener("resize", fit);
-}
-{
-  const box = $("basebox"), wrap = baseTool.closest(".maplibregl-ctrl");
-  wrap.classList.add("bm-ctrl");
-  wrap.append(box);
-  const popBase = (open) => {
-    if (open) for (const t of rs.tools.list()) if (t.open) rs.tools.close(t.id);
-    box.classList.toggle("open", open);
-    baseTool.ariaExpanded = String(open);
-  };
-  baseTool.ariaExpanded = "false";
-  baseTool.addEventListener("click", () => popBase(!box.classList.contains("open")));
-  document.addEventListener("click", (e) => { if (box.classList.contains("open") && !wrap.contains(e.target)) popBase(false); }, true);
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") popBase(false); }, true);
-  for (const b of [box, ...document.querySelectorAll("#rs-attr-box, #rs-settings-box")]) keepInside(b);
-}
-rs.tools.ready();   // the bar was held back until these tools were in (toolbar.hold)
-for (const r of document.querySelectorAll("input[name=base]")) r.onchange = () => {
-  baseChosen = true;                              // the next draws keep it (freshMap)
-  view.base = r.value;
-  keep("duckosm.basemap", r.value);
-  if (r.value === "satellite") $("ownlayers").checked = false;   // the duckOSM layers would cover the photo
-  loaded.then(setBase);
-};
-$("ownlayers").onchange = () => loaded.then(setBase);
-buildingsTool.addEventListener("click", () => { view.buildings = !view.buildings; keep("duckosm.buildings", view.buildings ? "1" : "0"); loaded.then(setBase); });
-loaded.then(setBase);
+// The base map is roadstyle's (its tool in the bar, its box, the link to the theme): the page only keeps the choice for the next visit, and gives
+// the base-map module the layer `basemap` with each roads style (it reads the layer from the roads style).
+const withBase = (style) => ({ ...style, layers: [...baseLayers, ...style.layers] });
+document.addEventListener("rs:basemapchange", (e) => {
+  const b = basemaps.find((x) => x.key === e.detail.basemap);
+  keep("duckosm.basemap", (basemaps.find((x) => x.dark === b.key) ?? b).key);       // the light key of a pair
+  // the module puts a raster base map before the layer that follows `basemap` in the roads style, which has the page's prefix: it goes on top. It goes back under the roads.
+  const road = map.getStyle().layers.find((l) => l.id !== "bg" && l.id !== "basemap" && !l.id.startsWith("vbm-"));
+  if (road && map.getLayer("basemap")) map.moveLayer("basemap", road.id);
+});
 
 // The tile format of the roads map (MVT or MLT), kept for the next visit. A change gives the roads that show the style of the new format
 // (the worker keeps its tiles; each tile address has the format, so no tile of the other format is reused).

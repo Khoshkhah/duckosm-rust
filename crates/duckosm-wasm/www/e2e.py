@@ -67,6 +67,7 @@ with sync_playwright() as p:
     for served, source in [("popup.css", "rust/roadstyle-assets/files/static/popup.css"), ("popup.js", "rust/roadstyle-assets/files/static/popup.js"),
                            ("roads_sql.js", "rust/roadstyle-wasm/js/roads_sql.js"), ("features_sql.js", "rust/roadstyle-wasm/js/features_sql.js"),
                            ("level_editor.html", "rust/roadstyle-assets/files/static/level_editor.html"),
+                           ("basemaps.json", "rust/roadstyle-assets/files/data/basemaps.json"),
                            *[(f.removeprefix("rust/roadstyle-assets/files/static/"), f) for f in dashboard]]:
         want = subprocess.run(["git", "-C", str(clone), "show", f"{pin}:{source}"], capture_output=True, check=True).stdout
         got = page.request.get(url.split("index.html")[0] + "map/roadstyle/" + served).body()
@@ -139,15 +140,15 @@ with sync_playwright() as p:
         page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent)", timeout=600_000)
     print("map:", page.inner_text("#mapnote"))
     # the draw after a build or "Show on map" with no base map chosen in this page: the blank base map (Kaveh, 2026-10-26: it did not change)
-    assert page.evaluate("document.querySelector('input[name=base]:checked')?.value") == "blank", "the first draw sets the blank base map"
+    assert page.evaluate("document.querySelector('input[name=rs-bm]:checked')?.value") == "blank", "the first draw sets the blank base map"
     page.wait_for_function("window.duckMap && window.duckMap.loaded()", timeout=600_000)   # the tiles are cut and drawn
     # a base map chosen before: "Show on map" (a fresh map) sets the blank one again (Kaveh, 2026-10-26)
-    page.click("#bbase"); page.click("input[name=base][value='']"); page.wait_for_timeout(500)
-    assert page.evaluate("document.querySelector('input[name=base]:checked')?.value") == "", "OpenFreeMap chosen"
+    page.click("#rs-toolbar .bm-ctrl .bm-icon"); page.click("input[name=rs-bm][value='ofm_liberty']"); page.wait_for_timeout(500)
+    assert page.evaluate("document.querySelector('input[name=rs-bm]:checked')?.value") == "ofm_liberty", "OpenFreeMap chosen"
     page.evaluate("document.getElementById('show').click()")
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=600_000)
     page.wait_for_function("window.duckMap.loaded()", timeout=600_000)
-    assert page.evaluate("document.querySelector('input[name=base]:checked')?.value") == "blank", "Show on map sets blank after a chosen base map"
+    assert page.evaluate("document.querySelector('input[name=rs-bm]:checked')?.value") == "blank", "Show on map sets blank after a chosen base map"
     if args.view:
         lng, lat, z = map(float, args.view.split(","))
         page.evaluate(f"window.duckMap.jumpTo({{center: [{lng}, {lat}], zoom: {z}}})")
@@ -162,8 +163,6 @@ with sync_playwright() as p:
         for z in (12, 16):
             for pitch in (0, 60):
                 page.evaluate(f"window.duckMap.jumpTo({{center: [{lng}, {lat}], zoom: {z}, pitch: {pitch}}})")
-                if pitch:
-                    page.evaluate("if (document.getElementById('bbld').ariaPressed !== 'true') document.getElementById('bbld').click()")
                 page.wait_for_function("window.duckMap.loaded()", timeout=600_000)
                 page.wait_for_timeout(1500)
                 page.screenshot(path=str(out / f"boundary-z{z}-pitch{pitch}.png"))
