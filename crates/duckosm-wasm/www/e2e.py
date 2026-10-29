@@ -67,7 +67,6 @@ with sync_playwright() as p:
     for served, source in [("popup.css", "rust/roadstyle-assets/files/static/popup.css"), ("popup.js", "rust/roadstyle-assets/files/static/popup.js"),
                            ("roads_sql.js", "rust/roadstyle-wasm/js/roads_sql.js"), ("features_sql.js", "rust/roadstyle-wasm/js/features_sql.js"),
                            ("level_editor.html", "rust/roadstyle-assets/files/static/level_editor.html"),
-                           ("basemaps.json", "rust/roadstyle-assets/files/data/basemaps.json"),
                            *[(f.removeprefix("rust/roadstyle-assets/files/static/"), f) for f in dashboard]]:
         want = subprocess.run(["git", "-C", str(clone), "show", f"{pin}:{source}"], capture_output=True, check=True).stdout
         got = page.request.get(url.split("index.html")[0] + "map/roadstyle/" + served).body()
@@ -142,6 +141,13 @@ with sync_playwright() as p:
     # the draw after a build or "Show on map" with no base map chosen in this page: the blank base map (Kaveh, 2026-10-26: it did not change)
     assert page.evaluate("document.querySelector('input[name=rs-bm]:checked')?.value") == "blank", "the first draw sets the blank base map"
     page.wait_for_function("window.duckMap && window.duckMap.loaded()", timeout=600_000)   # the tiles are cut and drawn
+    # roadstyle's standard tools read each roads style that comes after the start (rs.setStyle). The style of the map worker has no
+    # `roadstyle:color_options` and no entry of `roadstyle:controls.overlays` for the area's layers (ov<i>), so "Colour by and legend" stays
+    # greyed out and the Layers box has no row for the duckOSM layers: gaps 12 and 13 in docs/app.md. They are printed, not asserted.
+    if page.evaluate("rs.tools.list().find((t) => t.id === 'legend').disabled"):
+        print("GAP, 'Colour by and legend' is greyed out after the roads are drawn (the style has no color_options)")
+    if not page.query_selector(".ov-ctrl"):
+        print("GAP, the Layers box has no row for the duckOSM layers (the style has no controls.overlays)")
     # a base map chosen before: "Show on map" (a fresh map) sets the blank one again (Kaveh, 2026-10-26)
     page.click("#rs-toolbar .bm-ctrl .bm-icon"); page.click("input[name=rs-bm][value='ofm_liberty']"); page.wait_for_timeout(500)
     assert page.evaluate("document.querySelector('input[name=rs-bm]:checked')?.value") == "ofm_liberty", "OpenFreeMap chosen"

@@ -11,7 +11,7 @@
 #                     (aba5884, crates/duckosm-build/Cargo.toml): at this commit they are the crate roadstyle-levels.
 set -e
 NIGHTLY=nightly-2026-10-15
-ROADSTYLE_COMMIT=917037b324a05e9abb2cb0258c44f25356652862   # the full SHA: a fetch by SHA needs it
+ROADSTYLE_COMMIT=6d37af5e5b15cb29459f06765f13b358cc54f072   # the full SHA: a fetch by SHA needs it
 ROADSTYLE_REPO=${ROADSTYLE_REPO:-https://github.com/Khoshkhah/roadstyle.git}
 cargo build --release --target wasm32-unknown-unknown -p duckosm-wasm
 wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/pkg target/wasm32-unknown-unknown/release/duckosm_wasm.wasm
@@ -44,8 +44,6 @@ mkdir -p crates/duckosm-wasm/www/map/roadstyle
 cp $R/rust/roadstyle-assets/files/static/popup.css $R/rust/roadstyle-assets/files/static/popup.js $R/rust/roadstyle-assets/files/static/level_editor.html \
   crates/duckosm-wasm/www/map/roadstyle/
 cp $R/rust/roadstyle-wasm/js/roads_sql.js $R/rust/roadstyle-wasm/js/features_sql.js crates/duckosm-wasm/www/map/roadstyle/
-# roadstyle's base maps and the layers on top (the page gives them to the dashboard's base-map tool)
-cp $R/rust/roadstyle-assets/files/data/basemaps.json crates/duckosm-wasm/www/map/roadstyle/
 rm -rf crates/duckosm-wasm/www/map/roadstyle/dashboard crates/duckosm-wasm/www/map/roadstyle/windows.js
 cp -r $R/rust/roadstyle-assets/files/static/dashboard crates/duckosm-wasm/www/map/roadstyle/
 wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/map/pkg \
