@@ -123,8 +123,8 @@ with sync_playwright() as p:
                            timeout=300_000)
     assert "drawn" in page.inner_text("#mapnote"), page.inner_text("#mapnote")
 
-    # the level editor: one panel at a time. The page's bar with Apply and Close at the top, the map under it, roadstyle's sheet at the
-    # bottom of the map (half the height)
+    # the level editor: one panel at a time. It draws into the page's own sheet (#sb): the page's steps and footer are hidden, "← Steps" is at
+    # the top of the sheet, and the editor's apply bar is fixed at its bottom. The map stays full width under the bar and above the sheet.
     def open_editor():
         page.tap("#edit-open")
         page.wait_for_function("window.levelEditorOpen || /failed/.test(document.getElementById('editnote').textContent)", timeout=300_000)
@@ -132,12 +132,14 @@ with sync_playwright() as p:
         page.wait_for_function("window.duckMap.loaded()", timeout=120_000)
         page.wait_for_timeout(400)                  # the sheet's height and the map's padding (0.2 s)
         same("opened")
+        assert page.evaluate("document.getElementById('sb').contains(document.getElementById('lv'))"), "the editor is in the page's panel"
+        assert not page.is_visible("#step1-card") and not page.is_visible("footer"), "the page's steps and footer are away"
 
     def back_at(before):
         page.wait_for_function("!window.levelEditorOpen && !window.mapDrawing && window.duckMap.loaded()", timeout=300_000)
         page.wait_for_timeout(400)
         same("closed")
-        assert page.is_visible("#step7-card") and page.is_visible("footer") and not page.is_visible("#editbar")
+        assert page.is_visible("#step7-card") and page.is_visible("footer") and not page.is_visible("#lv")
         # the page's sheet again, in the state it had, with the map's padding for it, and card 7 in view in it
         assert state() == before and abs(page.evaluate(BOX, "sb")[3] - H) < 1 and abs(padding() - under_grip()) < 2, (state(), padding(), under_grip())
         top, card = page.evaluate(BOX, "sb")[1], page.evaluate(BOX, "step7-card")
@@ -151,22 +153,21 @@ with sync_playwright() as p:
         assert max(abs(x - y) for x, y in zip(at(), pos0)) <= 2, (f"the view moved when the editor {what}", pos0, at())
     before = state()
     open_editor()
-    bar, mp, lv, rsbar = (page.evaluate(BOX, i) for i in ("editbar", "map", "lv", "rs-toolbar"))
+    mp, lv, sb, rsbar = (page.evaluate(BOX, i) for i in ("map", "lv", "sb", "rs-toolbar"))
     height = page.evaluate("innerHeight")
-    assert page.evaluate("document.body.classList.contains('lv-sheet')"), "roadstyle's sheet"
-    assert abs(bar[1] - rsbar[3]) < 12 and mp == [0, 0, 390, height], ("the page's bar under roadstyle's bar, the map under both", bar, rsbar, mp, height)
-    assert abs(lv[3] - height) < 1 and bar[3] < lv[1] < height * 0.6, ("the sheet at the bottom, half the height", lv, height)
-    assert not page.is_visible("#step1-card") and not page.is_visible("footer") and sheet_h() < 1, "the page's sheet is away"
-    for b in page.query_selector_all("#editbar button"):
+    assert mp == [0, 0, 390, height], ("the map fills the screen under roadstyle's bar", mp, height)
+    assert abs(sb[3] - height) < 1 and sb[1] > rsbar[3], ("the one panel is the sheet at the bottom, under the bar", sb, rsbar, height)
+    assert lv[1] >= sb[1] and lv[3] <= sb[3] + 1, ("the editor is inside the sheet", lv, sb)
+    for b in page.query_selector_all("#sb .sb-top button, #lv-bar button"):
         r = b.bounding_box()
-        assert r and r["y"] >= 0 and r["y"] + r["height"] <= bar[3], ("in the bar", b.inner_text(), r)
-    print(f"editor: bar {bar}, map {mp}, sheet {lv}, window height {height}")
+        if r: assert r["width"] >= 32 and r["height"] >= 32 and r["y"] >= 0 and r["y"] + r["height"] <= height, ("a button of the editor on the screen", b.inner_text(), r)
+    print(f"editor: map {mp}, sheet {sb}, editor {lv}, window height {height}")
     shot("5-editor-sheet")
 
     # a tap on a road in the part of the map above the sheet: the sheet shows its card
-    point = page.evaluate("""(top) => { const m = window.duckMap, t = window.RS_SIDE, bottom = document.getElementById('lv').getBoundingClientRect().top;
+    point = page.evaluate("""(top) => { const m = window.duckMap, t = window.RS_SIDE, bottom = document.getElementById('sb').getBoundingClientRect().top;
         for (const c of t.mids) { if (!c) continue; const p = m.project(c), y = p.y + top;
-          if (p.x > 30 && p.x < innerWidth - 70 && y > document.getElementById('editbar').getBoundingClientRect().bottom + 20 && y < bottom - 20 &&
+          if (p.x > 30 && p.x < innerWidth - 70 && y > document.getElementById('rs-toolbar').getBoundingClientRect().bottom + 20 && y < bottom - 20 &&
             m.queryRenderedFeatures([[p.x - 4, p.y - 4], [p.x + 4, p.y + 4]], {layers: window.duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id)}).length) return [p.x, y]; } return null; }""", 0)
     assert point, "a road above the sheet"
     page.touchscreen.tap(*point)
@@ -187,8 +188,8 @@ with sync_playwright() as p:
     if "unknown road" in page.evaluate("document.getElementById('lv-toast').textContent"):
         print("roadstyle fault: the tap picked a second road 'undefined' (unknown road)")
     page.wait_for_function("/Changed/.test(document.getElementById('editnote').textContent)", timeout=60_000)
-    # Apply in the page's bar: the tables, the map again, the page's panel back
-    page.tap("#editbar [data-for=edit-apply]")
+    # "← Steps": the editor's applied change goes into the tables, the map draws again, the page's panel comes back
+    page.tap("#lv-back")
     page.wait_for_function("/Applied|failed/.test(document.getElementById('editnote').textContent)", timeout=120_000)
     assert "heads: 1" in page.inner_text("#editnote"), page.inner_text("#editnote")
     back_at(before)
@@ -196,24 +197,13 @@ with sync_playwright() as p:
     assert "drawn" in page.inner_text("#mapnote"), page.inner_text("#mapnote")
     shot("7-applied")
 
-    # the editor's sheet handle: half, full, one row; then Close, and the page's panel back
+    # open again and leave with no change: the page's panel comes back as it was
     open_editor()
-    for lv_state in ("full", "fold"):
-        # the editor's full sheet is 100% - 48 px high and starts under roadstyle's top bar: its handle can be under the bar (a gap in roadstyle,
-        # docs/app.md). The page does not correct it. The test prints the gap and clicks the handle in the page.
-        if page.evaluate("(h => { const r = h.getBoundingClientRect(); return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) !== h; })(document.getElementById('lv-handle'))"):
-            print("GAP, the editor's sheet handle is under roadstyle's bar:", page.evaluate(BOX, "lv-handle"))
-            page.evaluate("document.getElementById('lv-handle').click()")
-        else:
-            page.tap("#lv-handle")
-        page.wait_for_timeout(400)
-        assert page.evaluate("document.body.dataset.lvSheet") == lv_state
-        shot(f"8-sheet-{lv_state}")
-    page.tap("#editbar [data-for=edit-close]")
+    page.tap("#lv-back")
     back_at(before)
     shot("9-closed")
     assert not errors, errors
-    print("phone: the sheet (40 %, full, closed), Build from the sheet, a scroll in the sheet; the editor: the sheet, a tap on a road, a head, Apply, the handle, Close; "
+    print("phone: the sheet (40 %, full, closed), Build from the sheet, a scroll in the sheet; the editor: the sheet, a tap on a road, a head, ← Steps (applies), ← Steps (no change); "
           "the page's panel comes back; no page errors")
     browser.close()
 server.shutdown()

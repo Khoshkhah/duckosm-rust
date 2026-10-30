@@ -22,13 +22,12 @@ and `docs/guides/dashboard-layout.md`). The page uses the template `dashboard` w
 - **The map fills the window.** The panel floats over it, at the left, in roadstyle's frame look. The panel does not change the size
   of the map. The panel hides with the button in its title row (the button at the corner shows it again); the page keeps the choice
   (`duckosm.panel`).
-- **The bar.** roadstyle's toolbar holds the map buttons, in this order: theme, navigate, Street View, Google 3D, base map, 3D
+- **The bar.** roadstyle's toolbar holds the map buttons, in this order: theme, navigate, Street View, Google 3D, base map, roads, 3D
   buildings, colour and legend, settings. **Navigate** (the compass needle, roadstyle's default since `6fdc893`) is one button in place of
   zoom in, zoom out, the compass and 2D/3D: its box has a zoom slider, a turn slider, a tilt slider and a reset button, and Ctrl + drag on
   the map turns and tilts it. The credits (attribution) are in the corner box of the map on a computer, and at the end of the bar on a
   phone. The page does not add navigation buttons (the default is used). The toolbox is fixed: a tool that the page cannot use
-  stays in its place, greyed out (the legend: the page has no colour options). The bar is next to the panel. It goes to the edge of the window when the
-  panel is hidden. The settings button lets the person move the bar and the panel, change the transparency, and save the Google key.
+  stays in its place, greyed out (the legend: the page has no colour options). The bar is at the right edge of the window (roadstyle's default since `0.26.0`), and the panel is at the left. The settings button lets the person move the bar and the panel, change the transparency, and save the Google key.
 - **The base map is roadstyle's.** The page has no tool, box or base-map code of its own. It gives the dashboard the `basemaps` and
   `ontop` options of `map/roadstyle/host_options.json` (roadstyle's list with the twins), and a map that has the two layers `bg` and
   `basemap`. The tool, the box (the rows, **Hillshade**, **Labels**, **3D buildings**), the order of the layers under the roads, the rules
@@ -44,20 +43,40 @@ and `docs/guides/dashboard-layout.md`). The page uses the template `dashboard` w
   - their list in the legend box ("Map layers", each with its colour; a layer that is hidden is dimmed).
   - the row **Buildings 3D** and the 3D buildings tool, for the 3D layer of the buildings.
   A page with a bar has no floating Layers box (before, the box was at the bottom right of the map, and the phone's sheet covered it).
+- **Roads.** The tool **Roads** (roadstyle `6205d9c`, after the base map button) is the road filter in the bar. It is greyed out until
+  roads are drawn. Its box has a row for each road class (a check box, the colour, the name and the number of roads), **All** and
+  **None**, the rows **Bridges** and **Tunnels**, and the restricted kinds (private roads, bus lanes, pedestrian streets). A click on
+  a class name shows only that class. The page does not make a filter of its own. `e2e.py` checks the rows, None, All, one class, Bridges and Tunnels on Monaco.
 - **Colour by.** The look has the colour option **Road class** (`color_options`), so the tool "Colour by and legend" is on after the roads
   are drawn: its box has **Colour by** (Road class), the **Legend** of the road classes and the **Map layers**.
-- **The cards.** The seven cards are in the panel's body. A card has no color of its own: all cards have one neutral look (a line
-  around the card, a number in the theme's accent color) that follows the light and the dark theme of the panel. Before, each card
-  had a color (the number of a step had the color of its line on the map). Each card still folds (see "The cards fold").
-  The cards are not `rs.sections`: a section of roadstyle sets the text style of its content (size, color, the tables, the details),
-  and the cards are forms with their own style.
+- **The cards.** The seven cards are in the panel's body, all in view and folded at the start (see "The cards follow the steps"). A card
+  has no color of its own: all active cards have one neutral look (a line around the card, a number in the standard's accent color) that
+  follows the light and the dark theme of the panel; a card that is not ready is grey. The cards are not `rs.sections`: a section of
+  roadstyle sets the text style of its content (size, color, the tables, the details), and the cards are forms with their own style.
+- **The accent** is roadstyle's one accent (`--accent` of the panel: since roadstyle 0.26.1 the teal of the Sonocount logo, and a lighter
+  variant in the dark theme). The page has no accent of its own: links, the focus ring, the step numbers, the done marks and the
+  main button use `var(--accent)`. Only **Build** is filled with it. Every other button (Search, Show on map, Edit levels, What is here?,
+  GeoJSON, the downloads) is the secondary style: light surface, border, ink text. Search is joined to its field (the same height).
+- **Disabled buttons.** An action button is `disabled` until its inputs are ready: Search (a name), GeoJSON (an area), Build (an area and a
+  data file), Run (a query), Show on map and Edit levels (while a draw runs or the editor opens). A disabled button is grey (the panel's
+  tokens: the surface, the line and the muted text), has the cursor not-allowed and no hover, and the reason is the text under it ("Choose an
+  area in step 1."), not a tooltip. `buttons_e2e.py` checks each of them before and after its inputs, on a computer (light and dark) and on a phone.
+- **The help windows.** The panel's title has the "?" of roadstyle's help window (`rs.help`: the window and its button are roadstyle's, the
+  page gives the words in Simplified Technical English). The window has the overview of the page, where the data stays (this browser only) and the
+  links to the documentation (this page's `docs/app.md` on GitHub, the duckOSM features tables and fix guide, roadstyle's levels guide and Google
+  key guide). A card with more than two lines of explanation has a short card and a "?" in its title row: it opens the same window with the words
+  of the card (`rs.help.set` again for the card, and the overview again when the window closes). `rs.help` has one window and one button, so a
+  per-card "?" is a button of the page that sets the words and opens the window. `panel_e2e.py` checks that every link answers 200.
+- **Collapse all / Expand all** is a button in the panel's title row (before the hide button). It folds or opens every active card, its label for
+  screen readers tells the next action, and the page keeps the choice (`duckosm.cards`): a visit after "collapse all" starts with every card folded.
+  roadstyle's standard panel has no such control; it is a button of the page.
 - **The theme** is one value: `data-rs-theme` on `<html>`. The theme tool of the bar sets it, and the panel, the bar, the boxes, the
   popup and the tooltip read it. The page keeps the choice (`duckosm.theme`; the system's theme if there is none) and copies it to
   `data-theme`, which the level editor's panel reads.
-- **The Google key** is in roadstyle's settings (the gear button), in the browser's storage (`rs-key:google`) and never in a file.
-  Card 6 has a text and a button that opens the settings. The Google 3D tool is always on the bar. Without a key, its window says
-  so and has a button for the settings. The key that the card of an earlier version saved (`duckosm.googleKey`) moves to the new
-  place at the first visit.
+- **The Google key** is in roadstyle's settings (the gear button), in the browser's storage (`rs-key:google`) and never in a file. The page
+  has no card for it (the site has its key at the deploy, the greyed tools say why, and the gear has the key row); the help window of card 6
+  and the overview say how to get a key. The Google 3D tool is always on the bar. Without a key, its window says so and has a button for the
+  settings. The key that the card of an earlier version saved (`duckosm.googleKey`) moves to the new place at the first visit.
 - **A select** is roadstyle's list (`selectbox.js`). The `<select>` stays in the page, hidden, and a button and a list take its place.
   The page reads and sets `select.value` and the `change` event as before. A test that uses a select must click the list, or set the
   value in the page.
@@ -129,12 +148,11 @@ On a screen of 700 px or less:
   (2026-10, also headless) left a band of the map undrawn, at the size of the scroll box but near the top of the screen.
 - Before (2026-10-24), the map was at the top (42 %) and the cards scrolled with the page under it; the map then had
   less room, and a scroll in the cards moved the page.
-- **The level editor: one panel at a time.** The page's panel goes away. A bar under roadstyle's bar keeps the counts, **Apply** and
-  **Close** in view, and the map fills the screen under the two bars. The editor's panel is roadstyle's sheet at the bottom of
-  the map (since roadstyle `d25601e`, its layout `"auto"` up to 700 px): half the height, and its handle changes it to
-  the full height or to one row. The editor keeps the roads above the sheet, a finger can pick a road (a wide line that
-  takes the taps), and the buttons are 44 px high. After Apply or Close, the page's sheet comes back in the state it had,
-  with card 7 in view and the map's padding for it.
+- **The level editor: one panel at a time.** The page has one panel (`#sb`), and the editor draws into it (roadstyle's `levelEditor({panel})`):
+  the page's steps, its title and its footer are hidden while the editor is open, and **← Steps** at the top of the panel brings them
+  back. The panel is roadstyle's: on a phone it is the sheet (closed, 40 %, full), and the editor's bar with **Apply and solve** is fixed at
+  its bottom. A finger can pick a road (a wide line that takes the taps). After **← Steps**, the page's panel comes back in the
+  state it had, with card 7 in view and the map's padding for it.
 - Before 2026-10-24 the editor's panel (400 px wide) covered the whole screen of a phone, and Apply and Close were
   under it.
 
@@ -200,13 +218,23 @@ Not done: the map worker's memory (roadstyle's engine: about 5 KB for each road,
 copy of each Parquet file for the downloads (75 MiB for Burnaby; DuckDB can write them again, but the files of the
 downloads must stay equal to the native build's).
 
-### The cards fold
+### The cards follow the steps
 
-Kaveh (2026-10-24): "the result card is not well designed and take many space and its not collapsable". Each
-numbered card (1 to 7) folds: a click on its heading, or on the chevron at the right of the heading (a button that the
-keyboard can reach, with `aria-expanded`), hides the card's body. The heading stays. The page keeps the fold of each
-card in this browser (`duckosm.card.<n>`), so a fold stays after a reload. All cards are open at first. When a step
-becomes active, the page opens its card: card 4 at the click on **Build**, cards 5, 6 and 7 after a build.
+Kaveh (2026-10-24): "the result card is not well designed and take many space and its not collapsable". Kaveh (2026-10-30): "show all cards
+(but closed) at the beginning, or we can make some of them disabled till their turn". Both are one rule:
+
+- At the start every card is in view and folded; only the current step (card 1) is open. The page does not keep the fold of each card
+  (it keeps only "collapse all", `duckosm.cards`).
+- A card whose inputs are not ready is disabled: its title is grey, its chevron does not open it, a click on it does nothing, and the title row says
+  why ("after step 1"). Card 2 needs an area; card 3 is always active (a cut file needs no area); card 4 needs the data; cards 5 and 6 need the build;
+  card 7 needs the build and the table `visualization.edge_levels`.
+- A finished step has a done mark (✓) and can still be opened: card 1 and card 2 with an area, card 3 with the data ready, card 4 with the build,
+  cards 5 and 6 with the map drawn, card 7 with the edits applied.
+- When a step is finished, the next card that is ready and not done opens, and the others fold, unless the person opened or folded a card by hand
+  (then only the next card opens). So an area opens card 3, the data opens card 4, the build opens card 5, and the map opens card 7.
+- A heading, or its chevron, opens or folds an active card. Collapse all / Expand all acts on the active cards only.
+
+`panel_e2e.py` runs the flow from the start to the editor and checks each state; `dashboard_e2e.py` checks the grey look of the cards that are not ready.
 
 ### Step 3: the data
 
@@ -280,7 +308,7 @@ and the two download buttons between them. With three modes, the line takes thre
 
 - **Network**: All, Driving, Walking, Cycling: only the modes of the build, and no list for a build with one mode.
   (It was "Roads of" in step 5; Kaveh did not understand the name.) A change draws the map again when it shows.
-- **Map tiles**: MVT (the default) or MLT. See "Map tiles: MVT or MLT" below.
+- **Map tiles**: MLT (the default) or MVT. See "Map tiles: MVT or MLT" below.
 - **Show on map** draws the roads of the network. After a build, the page draws them at once only for a small area
   (fewer than 20,000 roads: Monaco has 13,298). A larger area waits for the click (Tartu: 64,828 roads).
 - **Show on map** and the draw after a build set the blank base map (Blank, or Blank dark with the dark theme) and put the
@@ -311,14 +339,14 @@ and the two download buttons between them. With three modes, the line takes thre
 - The base map and the layers are tools of the bar (see "The map"). For one commit they were in this card; Kaveh
   wants them on the map ("it has a good design").
 
-### Map tiles: MVT or MLT
+### Map tiles: MLT or MVT
 
 The map gets its roads as vector tiles. The setting **Map tiles** in step 6 sets the format of these tiles.
 
-- **MVT** (Mapbox Vector Tile) is the default.
-- **MLT** (MapLibre Tile) is the second format of roadstyle. It stores the data of a tile in columns. MLT needs MapLibre 5.12 or newer. The page has MapLibre 5.24.
+- **MLT** (MapLibre Tile) is the default since 2026-10-29 (Kaveh's order). It stores the data of a tile in columns. MLT needs MapLibre 5.12 or newer. The page has MapLibre 5.24.
+- **MVT** (Mapbox Vector Tile) is the second choice.
 
-To switch, choose the format in the list **Map tiles**. If the roads show on the map, the page draws them again with the new format at once. If they do not show, the next draw uses the new format. The page keeps the choice in the browser (`duckosm.tileformat`), so the next visit has it.
+To switch, choose the format in the list **Map tiles**. If the roads show on the map, the page draws them again with the new format at once. If they do not show, the next draw uses the new format. The page keeps the choice in the browser (`duckosm.tileformat`), so the next visit has it. A visit with no stored choice starts on MLT; a stored MVT (the choice of an earlier visit) stays.
 
 A change of format does not build the roads again. The map worker keeps its tiles and gives the style of the new format (`LiveMap.style(format)`: the vector source has `encoding: "mlt"`). The tile address has the format after the generation: `rs://<generation>/roads/{z}/{x}/{y}?g=<generation>&f=<format>`. A tile of the other format has another address, so the page never uses it.
 
@@ -335,7 +363,7 @@ A change of format does not build the roads again. The map worker keeps its tile
 - The worker needs more time to cut an MLT tile. The MVT times are low because the Rust code can keep the MVT tiles it cut before.
 - The picture is the same. On Monaco, with the blank base map, no pixel differs between MVT and MLT (`tile_format_e2e.py`).
 
-**These results can depend on the browser and on the device.** The measurements used one browser (Chromium), software rendering and 2 runs. A phone or another browser can give other times. Kaveh will compare MVT and MLT in several browsers later. MVT stays the default until that comparison.
+**These results can depend on the browser and on the device.** The measurements used one browser (Chromium), software rendering and 2 runs. A phone or another browser can give other times. MLT is the default by Kaveh's order of 2026-10-29. A comparison of MVT and MLT in several browsers is still open; MVT stays as the second choice.
 
 ### Step 7: edit the levels
 
@@ -354,9 +382,11 @@ The card shows after a build that has `visualization.edge_levels` (each build of
    this browser (`roads.parquet`, `pairs.csv`, `edges.json`, and `edits.csv` only when the store has none, so the edits
    of an earlier session show again). The store is `browserStore("duckosm:<area name>")`, in the private file system of
    the site. The card gives the number of roads and the warnings of `makeArea`.
-2. The editor (`levelEditor({map, container, pkgUrl, store, dashboard: rs, levels, host: {edgeIdCol, replaceRoads}, colors})`) draws on the page's own
-   map, roads and dashboard (roadstyle `f0a161b`, host mode): the editor has the same colours and profile as the roads of the page.
-   `replaceRoads` sends the changed edges to the map worker (`LiveMap.relevel`) and the visible tiles load again; the tables change at **Apply**. `levels` is the build's `visualization.edge_levels` as CSV text,
+2. The editor (`levelEditor({map, panel, backLabel, pkgUrl, store, dashboard: rs, prefix: "rs-", levels})`) draws its own roads (`rs-lv-roads`, the tiles `lv://`) on the page's map,
+   with the page's dashboard, as roadstyle's own editor page does (not the `host` mode, which keeps the page's roads and their hover and select colours). So the hover and the
+   picks are the editor's: a lighter red for the road that the next click picks first, a lighter blue for the second, red and blue picks, and no tooltip or popup of the page's own
+   dashboard while the editor is open. The page's roads source stays and its road layers are off while the editor is open (`destroy` puts them back). The editor opens in 1 to 2 s on Monaco
+   (the `host` mode: 0.3 s). The tables change at **Apply** (the page reads the editor's `levels.csv` from the store at "← Steps"). `levels` is the build's `visualization.edge_levels` as CSV text,
    with the `edge_hash` of `edge_levels_meta` (`duck.storedLevels()`). The editor starts from its stored `levels.csv`
    when it was solved for the same inputs (roadstyle `6be68c2`: the SHA-256 of `roads.parquet`, `pairs.csv` and
    `edits.csv`), else from the build's levels (since `083224c`); it solves the whole area only when neither fits. Its panel (roadstyle's `level_editor.html`) is on the right of the
@@ -370,14 +400,15 @@ The card shows after a build that has `visualization.edge_levels` (each build of
    Burnaby (76,189 roads) the first open takes 14.1 s and the second 11.5 s, with no solve. A head or a cap change takes
    4–13 s until the map is drawn again; of this time, the worker makes the new tiles and the road table in 1.6–2.2 s
    (`build`), and the rest is the map's new tiles on the page.
-3. **Apply** writes the editor's `levels.csv` into `visualization.edge_levels`. `edge_levels_meta` gets `source = 'area'`,
+3. **← Steps** (after the editor's own *Apply and solve*) writes the editor's `levels.csv` into `visualization.edge_levels`. `edge_levels_meta` gets `source = 'area'`,
    `area = 'this browser: <area name>'` and a new `created` time. `n_edges` and `edge_hash` do not change, because the
    edges are the same. The user's own files go into `level_edits`, `level_heads` and `level_caps`, as roadstyle's
    `save_area_levels` writes them (duckOSM's `duckosm levels` reads them back). The Parquet files, the zip and the
    `.duckdb` download then have the new tables. The editor closes, and the map draws the roads in the new order.
-4. **Close** removes the editor (`destroy()`), which puts the page's road layers back. Without Apply, the tables do not
-   change.
-5. While the editor is open, the card has two downloads: `edits.csv` and `levels.csv` (`editor.download`).
+4. **← Steps** removes the editor (`destroy()`), which puts the page's road layers and the page's panel back. With changes
+   waiting, the editor first asks: apply, discard or stay. If the editor applied a change in this session, the page then writes
+   the editor's `levels.csv` into the tables as step 3 says; if it applied nothing, the tables do not change.
+5. The editor's History tab has the download of `edits.csv` (`editor.download`); the page's downloads have the files of the tables.
 
 How the editor shares the map:
 
@@ -391,10 +422,9 @@ How the editor shares the map:
   `map/pkg/roadstyle_wasm.js`), not in the map worker.
 - The panel follows the page's theme (the theme tool of the bar and the system's theme): its colors are variables, with a dark set
   for `:root[data-theme=dark]` and for the system's dark theme.
-- The editor's panel is in `#lvhost`, out of the page's panel. Before 2026-10-25 it was in the page's panel. A collapse of
-  the page's panel then moved the editor's panel off the screen and made it inert (Kaveh: "when I collapse duckosm side
-  panel, the level editor convert totally white! like disable"). Now the page's panel hides and shows while the
-  editor stays on the right and works (`editor_e2e.py` clicks its tabs in both states).
+- The editor's panel is the page's own panel (`#sb`), as roadstyle's standard host panel: the editor hides the page's steps and title and puts
+  them back with `destroy()`. There is no second panel and no page bar (before 2026-10-30 the editor had a frame, `#lvhost`, and the page had
+  a bar with Apply and Close).
 - The dashboard checks the interaction contract of each roads style (`roadstyle:contract`, since `6be68c2`). The page's
   look is not "live", so its styles have no contract. The dashboard reads them as version 1 and writes an info line in
   the console, not an error.
@@ -422,9 +452,11 @@ Limits:
 - `edge_levels_meta.roadstyle_version` keeps the value of the build: the page does not know the version of roadstyle's
   module.
 
+The check `editor_path_e2e.py` is the editor as a person uses it, with real clicks: build Monaco, Show on map, **Edit levels**, pick two roads on the map, choose their order and add it to the list, **← Steps** with the change waiting (the bar asks: Stay, Discard, Apply), Stay, **Apply and solve**, **← Steps**: the steps come back and the edit is in the tables. It runs on a computer (light and dark) and on a phone (390 × 844, touch), and checks the seven base maps.
+
 The check: `editor_e2e.py` (headless Chromium, Monaco through the File tab). It opens the editor, makes one edit with
-`window.lvApi` (an end head of 7 m) and applies it. Then it checks the tables in the page and in the `.duckdb` download, a
-map of one mode, the duckOSM base-map layers while the editor is open, and Close. It writes `editor.png` and
+`window.lvApi` (an end head of 7 m) and leaves with **← Steps**, which applies it. Then it checks the tables in the page and in the
+`.duckdb` download, a map of one mode, the duckOSM base-map layers while the editor is open, and **← Steps** with no change. It writes `editor.png` and
 `editor-dark.png` (the dark theme).
 
 ## The map
@@ -462,7 +494,7 @@ map of one mode, the duckOSM base-map layers while the editor is open, and Close
     and the flat view. The tilt does not change the buildings.
   - **3D buildings** (the building icon) is roadstyle's tool. It is on for a vector base map (OpenFreeMap) and greyed out for the
     others. It switches the 3D buildings of that base map, in the tilted view. The same switch is a row in the base-map box.
-  - **Base map** (the layers icon) opens roadstyle's box: OpenFreeMap (Liberty, Bright, Positron), OpenStreetMap, Esri (Gray, Streets,
+  - **Base map** (the layers icon) opens roadstyle's box: OpenFreeMap (Liberty, Positron), OpenStreetMap, Esri (Gray, Streets,
     Satellite) and Blank. A map with a dark twin follows the theme. The box has the rows **Hillshade**, **Labels** and
     **3D buildings** under "On top". The page keeps the base map.
   - **Street View** (the person) opens roadstyle's floating window. A click on a road shows Google Street View there.
@@ -562,10 +594,24 @@ works in the same tab during the build, and the computer had other load. Not mea
 ## Gaps in roadstyle (2026-10-29)
 
 Kaveh's rule: the page uses the standard dashboard and the standard toolbox, and does not change them. The page does not make its own version
-of what the standard lacks. Since roadstyle `4d61862` no gap is open. (`phone_e2e.py` still prints a `GAP` if the handle of the editor's sheet is
-under roadstyle's bar again; it was so up to `dd08231`.)
+of what the standard lacks. Four gaps are open (roadstyle `0.26.0`, `07c85b5`, the pin of 2026-10-30):
 
-Fixed in roadstyle `6d37af5`, `f460335`, `dd08231`, `6fdc893` and `4d61862` (the page has no adapter for them): a box that leaves a phone's screen sideways; a raster base
+1. **The credits button is outside a phone's screen at 390 px.** The one-row bar of ten tools is 372 px wide, and the credits button (the last
+   tool, `attribution`) is at 377 to 409 px: part of it is outside the screen, and the legal credits cannot be reached. At 412 and 430 px the
+   button is at the same place and the bar is wider. `dashboard_e2e.py` prints `GAP`. The page does not correct it.
+
+2. **A page that starts in the dark theme throws "Style is not done loading".** The page calls `rsSetTheme` with the stored choice when it starts,
+   before the map's style is loaded. The handler of `rs:themechange` in `theme.js` (the dark twin of the base map) calls `rsSetBasemap` at once and throws,
+   while `syncStyleTheme` in the same file waits for `style.load`. The page ends in the right state (the module sets the base map when the style loads),
+   but the console has the error. The handler must wait for `style.load` as `syncStyleTheme` does. `panel_e2e.py` prints `GAP`.
+3. **`rs.help` has one window and one button.** A "?" in a card's title row is a button of the page that sets the words of the card (`rs.help.set`) and opens
+   the window, and sets the overview again when the window closes. A standard way to have more than one set of words (a key for each "?") would remove that code.
+4. **The panel has no "collapse all" control.** The page has a button in the title row; the standard panel could have it for its own sections.
+
+The handle of the editor's full sheet on a phone was under the bar at `9d745c9`; at `0.26.0` it is reachable (`phone_e2e.py` prints no gap, and
+`editor_path_e2e.py` taps through the whole editor on a phone).
+
+Fixed in roadstyle `6d37af5`, `f460335`, `dd08231`, `6fdc893`, `4d61862` and `0.26.0` (the page has no adapter for them): a box that leaves a phone's screen sideways; a raster base
 map that goes on top of the roads of a host page; the list of base maps and the typed `dashboard` with its first paint for a JavaScript host
 (`data/host_options.json`, `rsFirstPaint`); `rsSetBasemap("blank")` that gives the dark twin in the dark theme; OpenFreeMap's sprite;
 the panel's shell rules (now in `dashboard.css`); the sheet and the free part of the map (`rs.sheet()`, `rs.freeArea()`); a tool found by

@@ -28,7 +28,7 @@ with sync_playwright() as p:
     page.click("#tab-cut")
     page.set_input_files("#pbf", str(ROOT / "tests/data/monaco.osm.pbf"))
     page.click("#run")
-    page.wait_for_function("!document.getElementById('step5-card').hidden", timeout=300_000)
+    page.wait_for_function("!document.getElementById('step5-card').classList.contains('off')", timeout=300_000)
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent)", timeout=300_000)
     page.wait_for_function("window.duckMap && window.duckMap.loaded()", timeout=300_000)
     tiles = page.evaluate("Object.values(window.duckMap.getStyle().sources).flatMap((s) => s.tiles ?? [])")

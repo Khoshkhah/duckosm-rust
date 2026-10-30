@@ -27,16 +27,16 @@
   html:not(.rs-tpl-dashboard) #sb { visibility: hidden; }
   :root {
     --bg: #ffffff; --surface: #f6f7f9; --fg: #111827; --muted: #6b7280; --line: #e5e7eb;
-    --accent: #2563eb; --accent-fg: #ffffff; --accent-soft: #dbeafe; --warn: #b45309; --warn-soft: #fef3c7;
+    --accent-fg: #ffffff; --warn: #b45309; --warn-soft: #fef3c7;
     --error: #b91c1c; --shadow: 0 10px 30px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.08);
   }
   /* the one theme value of the dashboard: roadstyle's theme button sets data-rs-theme on <html> */
   :root[data-rs-theme=dark] {
     --bg: #17181c; --surface: #22242a; --fg: #f3f4f6; --muted: #9ca3af; --line: #33363d;
-    --accent: #60a5fa; --accent-fg: #0b1220; --accent-soft: #1e3a5f; --warn: #fbbf24; --warn-soft: #3b2f12;
+    --accent-fg: #0b1220; --warn: #fbbf24; --warn-soft: #3b2f12;
     --error: #f87171; --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   }
-  /* in the panel the colors are the panel's (--bg, --ink, --mut, --line, --card, --accent: set on #sb and flipped by its data-theme) */
+  /* in the panel the colors are the panel's (--bg, --ink, --mut, --line, --card, --accent: roadstyle's, set on #sb and flipped by its data-theme; the page has no accent of its own) */
   #sb {
     --fg: var(--ink); --muted: var(--mut); --surface: var(--card); --accent-fg: #ffffff;
     --accent-soft: color-mix(in srgb, var(--accent) 16%, var(--bg)); --warn: #b45309; --warn-soft: #fef3c7; --error: #b91c1c;
@@ -57,23 +57,40 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { #mapbusy .spin { animation-duration: 3s; } }
   /* the panel's shell (position, tokens, the hide and show buttons with their icons: the markup of roadstyle's template) is dashboard.css. Here: the title of the panel. */
-  .sb-top h1 { margin: 0; font-size: 16px; letter-spacing: -0.01em; }
+  /* the panel's title: h2 (roadstyle's help window puts its "?" in it); the buttons of the title row */
+  .sb-top h2 { margin: 0; font-size: 16px; letter-spacing: -0.01em; text-transform: none; color: var(--fg); display: block; }
+  .sb-btns { display: inline-flex; gap: 6px; align-items: center; }
+  #sb-fold { background: none; border: 1px solid var(--line); border-radius: 8px; color: var(--mut); cursor: pointer; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+  #sb-fold:hover { color: var(--accent); border-color: var(--accent); }
+  body.editing #sb-fold { display: none; }
+  /* the cards: the title row has the done mark, the reason of a disabled card, the card's own buttons and the chevron */
+  .step .tools { margin-left: auto; display: flex; align-items: center; gap: 4px; text-transform: none; letter-spacing: 0; }
+  .step .tools .icon-btn { margin: -8px 0; }
+  .step .tools .fold { margin: -6px -6px -6px 0; }
+  .step .after { font-size: 12px; font-weight: 400; color: var(--muted); }
+  .step .done { color: var(--accent); font-size: 13px; font-weight: 700; text-transform: none; }
+  .step .hq { display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 8px; background: none; color: var(--muted); }
+  .step .hq:hover { background: var(--bg); color: var(--accent); }
+  .step .hq svg { width: 16px; height: 16px; }
+  .step.off { background: var(--surface); }
+  .step.off > h2:first-child, .step.off > h2:first-child .tools { cursor: not-allowed; color: var(--muted); }
+  .step.off h2 .n { background: var(--line); color: var(--muted); }
+  .step .fold:disabled { opacity: 0.4; cursor: not-allowed; }
   .sb-top p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
   .sb-body { display: flex; flex-direction: column; gap: 12px; }
   /* the panel's type: the cards' own sizes (roadstyle's template sets 13px for its controls) */
   :where(#sb) h2 { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 10px; }
-  :where(#sb, #editbar) button { font: inherit; color: inherit; cursor: pointer; }
+  :where(#sb) button { font: inherit; color: inherit; cursor: pointer; }
   /* a step is a section of the panel: one neutral box that follows the panel's theme (the colors of the old cards went with the old panel) */
   .step { border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
   .step > h2:first-child { margin: 0 0 12px; color: var(--fg); cursor: pointer; }
-  h2 .icon-btn { margin: -8px -6px -8px auto; text-transform: none; }
+  h2 .icon-btn { text-transform: none; }
   .icon-btn:disabled { visibility: hidden; }
   .icon-btn { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 8px; background: none; color: var(--muted); flex: none; }
   .icon-btn:hover { background: var(--bg); color: var(--fg); }
   /* each card folds (a click on its heading or on the chevron); a folded card keeps only its heading */
   .step .fold { display: grid; place-items: center; width: 28px; height: 28px; margin: -6px -6px -6px auto; border: 0; border-radius: 8px;
                 background: none; color: var(--muted); flex: none; }
-  .step .icon-btn + .fold { margin-left: 0; }
   .step .fold:hover { background: var(--bg); color: var(--fg); }
   .step .fold svg { transform: rotate(-90deg); transition: transform 0.15s ease; }
   .step.folded .fold svg { transform: rotate(180deg); }
@@ -88,7 +105,7 @@
   .dl .btn { padding: 0 8px; font-size: 12.5px; white-space: nowrap; }
   #sql-box .row { margin-top: 6px; }
   /* the panel's icons; not the map's, the bar's and the floating windows' own SVGs (roadstyle's) */
-  :is(#sb, #editbar, #mapbusy) svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  :is(#sb, #mapbusy) svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
   #sb .field input[type=search] { padding-left: 36px; }
   #sb .sb-top svg { width: 16px; height: 16px; stroke-width: 1.8; }
   a { color: var(--accent); }
@@ -99,9 +116,13 @@
   .btn:hover:not(:disabled) { background: var(--surface); }
   .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
   .btn.primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); }
-  .btn:disabled { opacity: 0.45; cursor: default; }
+  /* an action button is disabled until its inputs are ready: grey (the panel's tokens), no hover, not-allowed; the reason is the text under it (.why) */
+  .btn:disabled, .btn.primary:disabled { background: var(--surface); border-color: var(--line); color: var(--muted); opacity: 1; filter: none; cursor: not-allowed; }
+  .why { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); }
+  .why:empty { display: none; }
+  .sb-foot .why { grid-column: 1 / -1; margin: 0; }
   .btn[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  :focus-visible { outline: 2px solid var(--accent, currentColor); outline-offset: 2px; }
 
   .segmented { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--surface); border-radius: 10px; padding: 3px; gap: 3px; }
   .segmented [role=tab] { display: flex; align-items: center; justify-content: center; gap: 6px; height: 34px; border: 0; border-radius: 8px; background: none; color: var(--muted); font-weight: 500; }
@@ -112,6 +133,10 @@
   .field svg { position: absolute; left: 11px; top: 9px; color: var(--muted); }
   input[type=search], input[type=text] { font: inherit; color: var(--fg); background: var(--bg); width: 100%; height: 36px; border: 1px solid var(--line); border-radius: 9px; padding: 0 10px; }
   input[type=search] { padding-left: 36px; }
+  /* the Search button is joined to the field: the same height, the corners of the pair */
+  .field { gap: 0; }
+  .field input[type=search] { border-radius: 9px 0 0 9px; border-right-width: 0; }
+  .field .btn { border-radius: 0 9px 9px 0; flex: none; }
   input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
   #found { margin-top: 10px; display: grid; gap: 4px; }
@@ -181,8 +206,6 @@
 
   /* steps 3 to 5: the data, the build, the result (docs/app.md) */
   #step7-card [hidden] { display: none; }
-  /* the level editor's panel (roadstyle's level_editor.html): the page's rules for header and .row are not for it */
-  #lv header { display: block; } #lv .row { margin-top: 0; }
   .grid2 [hidden] { display: none; }
   .pick { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 10px; cursor: pointer; margin-bottom: 10px; }
   .pick:hover { border-color: var(--accent); color: var(--accent); }
@@ -231,7 +254,8 @@
   #status { position: fixed; left: calc(var(--free-l, 0px) + (100% - var(--free-l, 0px) - var(--free-r, 0px)) / 2); top: 14px; transform: translateX(-50%); z-index: 9; background: var(--fg); color: var(--bg); padding: 7px 14px; border-radius: 99px; font-size: 13px; box-shadow: var(--shadow); }
   #status:empty { display: none; }
   body.picking #map canvas { cursor: crosshair; }
-  #editbar { display: none; }
+  /* the level editor holds the page's one panel: roadstyle's editor hides the steps (.sb-body) and the title; the footer goes too */
+  body.editing .sb-foot { display: none; }
   @media (max-width: 700px) {
     /* a phone: roadstyle's phone form (the bar at the top, the panel as a bottom sheet with three heights: closed, 40 %, full). The page itself
        never scrolls. The map's padding follows the sheet (padMap() in the script), so the area stays above it. */
@@ -239,16 +263,9 @@
     #status { top: calc(var(--rs-top, 52px) + 6px); }
     #sb .sb-body { overscroll-behavior: contain; }
     .sb-top p { display: none; }
-    .btn, .segmented [role=tab] { height: 44px; }
+    .btn, .segmented [role=tab], input[type=search], input[type=text] { height: 44px; }
+    .field svg { top: 13px; }
     .shapes button { height: 44px; }
-    /* the level editor on a phone: one panel at a time. The page's panel goes away, a fixed bar under roadstyle's bar keeps the counts, Apply
-       and Close, and the map fills the rest of the screen. The editor's panel is roadstyle's sheet at the bottom (its layout "auto"), and the
-       editor keeps the roads above the sheet (the map's padding). */
-    body.editing #editbar { display: flex; position: fixed; top: var(--rs-top, 52px); left: 0; right: 0; z-index: 8; height: 48px; align-items: center;
-                            gap: 8px; padding: 0 10px; background: var(--bg); border-bottom: 1px solid var(--line); }
-    #editbar span { flex: 1; min-width: 0; font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    #editbar .btn { height: 40px; }
-    body.editing #sb, body.editing .rs-grip { display: none !important; }
   }
 </style>
 </head>
@@ -281,15 +298,13 @@
 <div id="map" role="region" aria-label="Map of the area"></div>
 <div id="mapbusy" hidden><div class="spin"></div><span id="mapbusy-text"></span></div>
 <!-- the level editor's bar on a phone (card 7): the counts, Apply and Close stay in view -->
-<div id="editbar"><span id="editbar-note"></span><button class="btn primary" data-for="edit-apply">Apply</button>
-  <button class="btn" data-for="edit-close">Close</button></div>
 <div id="status" role="status" aria-live="polite"></div>
 
 <div id="sb" data-theme="light" role="complementary" aria-label="duckOSM">
 <div class="sb-card">
 <div class="sb-top">
-  <div><h1>duckOSM in the browser</h1><p>Build the road network of an area in your browser</p></div>
-  <button id="sb-hide" title="Hide panel" aria-label="Hide panel" aria-controls="sb"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/><path d="m8.5 9.5 2.5 2.5-2.5 2.5"/></svg></button>
+  <div><h2>duckOSM in the browser</h2><p>Build the road network of an area in your browser</p></div>
+  <span class="sb-btns"><button id="sb-fold" title="Collapse all steps" aria-label="Collapse all steps"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg></button><button id="sb-hide" title="Hide panel" aria-label="Hide panel" aria-controls="sb"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/><path d="m8.5 9.5 2.5 2.5-2.5 2.5"/></svg></button></span>
 </div>
 <div class="sb-body">
 <section id="step1-card" class="step" aria-labelledby="step1">
@@ -304,8 +319,9 @@
   <form id="search" class="field" role="search">
     <svg><use href="#i-search"/></svg>
     <input id="q" type="search" placeholder="A city, a region, a country" aria-label="Name of a place" autocomplete="off">
-    <button class="btn primary">Search</button>
+    <button id="search-go" class="btn" disabled>Search</button>
   </form>
+  <p id="search-why" class="why">Type a place first.</p>
   <div class="row">
     <button id="here" class="btn" aria-pressed="false"><svg><use href="#i-target"/></svg>What is here?</button>
     <span class="small muted">Then click the map.</span>
@@ -382,19 +398,14 @@
     <label><input type="checkbox" name="mode" value="cycling" checked>Cycling</label>
   </div>
   <div class="checks" style="margin-top:6px"><label><input type="checkbox" id="features" checked>Base map layers</label></div>
-  <p class="small muted" style="margin:4px 0 0">Water, land use, buildings, railways and more
-    (<a href="https://khoshkhah.github.io/duckOSM/reference/features/" target="_blank" rel="noopener">features tables</a>).
-    Needs a region file. The first build downloads 4.5 MB.</p>
   <div class="grid2" style="margin-top:10px">
     <label for="levels" class="small">Drawing order</label>
     <select id="levels"><option value="tags">From the tags (fast)</option><option value="solve" selected>Optimized (slower)</option></select>
   </div>
   <details><summary>Advanced: fixes to the map data</summary>
-    <p class="small muted" style="margin:8px 0">Your fixes for OpenStreetMap errors, for example a one-way street.
-      <a href="https://khoshkhah.github.io/duckOSM/guides/fix-osm-errors/" target="_blank" rel="noopener">File format</a>. Turn rules are not used.</p>
+    <p class="small muted" style="margin:8px 0">Your fixes for OpenStreetMap errors.</p>
     <label class="pick" style="margin:0"><svg><use href="#i-upload"/></svg><span id="fixes-name">Select a fixes file (.yaml)</span><input id="fixes" type="file" accept=".yaml,.yml"></label>
   </details>
-  <p id="buildhint" class="small" style="margin:10px 0 0; color: var(--warn)" aria-live="polite"></p>
   <p id="buildstatus" class="progress" aria-live="polite"></p>
   <details id="builddetails" hidden><summary>Build details</summary><table class="steplog"><tbody></tbody></table></details>
   <details id="steplog" open hidden><summary>Time and memory of each step</summary>
@@ -403,19 +414,19 @@
   </details>
 </section>
 
-<section id="step5-card" class="step" aria-labelledby="step5" hidden>
+<section id="step5-card" class="step" aria-labelledby="step5">
   <h2 id="step5"><span class="n">5</span>The result</h2>
   <p id="resultline" class="small muted line"></p>
   <details id="sql-box"><summary><h3>SQL</h3></summary>
     <textarea id="sql" rows="4" aria-label="SQL">SELECT highway, count(*) AS edges, round(sum(length_m) / 1000, 1) AS km
 FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
     <div class="row"><button id="query" class="btn">Run</button></div>
+    <p id="query-why" class="why"></p>
     <div id="result"></div>
   </details>
-  <div class="dl"><button id="zip" class="btn primary">Download all (.zip)</button><button id="duckdb" class="btn">Download .duckdb</button></div>
+  <div class="dl"><button id="zip" class="btn">Download all (.zip)</button><button id="duckdb" class="btn">Download .duckdb</button></div>
   <details id="files-box"><summary><h3>Downloads: each table</h3></summary>
-    <p class="small muted">The .duckdb file is a duckOSM database with all tables. The zip has the tables as GeoParquet files, with
-      make_duckdb.sql, the boundary and a README. <a id="reference" target="_blank" rel="noopener">The columns of each table</a></p>
+    <p class="small muted"><a id="reference" target="_blank" rel="noopener">The columns of each table</a></p>
     <div id="files"></div>
   </details>
 </section>
@@ -428,26 +439,17 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
   </div>
   <div class="grid2" style="margin-top:6px">
     <label for="tilefmt" class="small">Map tiles</label>
-    <select id="tilefmt"><option value="mvt">MVT (default)</option><option value="mlt">MLT (smaller tiles)</option></select>
+    <select id="tilefmt"><option value="mlt">MLT (default, smaller tiles)</option><option value="mvt">MVT</option></select>
   </div>
-  <div class="row" id="showrow" style="margin-top:10px" hidden><button id="show" class="btn primary">Show on map</button></div>
+  <div id="showrow" style="margin-top:10px" hidden><div class="row"><button id="show" class="btn">Show on map</button></div>
+    <p id="show-why" class="why"></p></div>
   <p id="mapnote" class="progress" aria-live="polite"></p>
-  <p class="small muted" style="margin:10px 0 0">Street View (Linked) and Google 3D need a Google Maps JavaScript API key.
-    The key stays only in this browser: the gear button of the map bar opens its settings.
-    <a href="https://khoshkhah.github.io/roadstyle/guides/google-key/" target="_blank" rel="noopener">How to get a key</a></p>
-  <div class="row" style="margin-top:6px"><button id="gkey-open" class="btn">Open the settings</button></div>
 </section>
 
-<section id="step7-card" class="step" aria-labelledby="step7" hidden>
+<section id="step7-card" class="step" aria-labelledby="step7">
   <h2 id="step7"><span class="n">7</span>Edit levels</h2>
-  <p class="small muted" style="margin:0">Change the drawing order of the roads by hand with roadstyle's level editor: which road goes
-    over which one, where two roads join, the heads and the line ends. The editor opens on the map, with its panel on the right (at the bottom on a phone).
-    Your edits stay in this browser for this area.
-    <a href="https://khoshkhah.github.io/roadstyle/guides/levels/" target="_blank" rel="noopener">How to use the editor</a></p>
-  <div class="row"><button id="edit-open" class="btn primary">Edit levels</button>
-    <button id="edit-apply" class="btn primary" hidden>Apply</button><button id="edit-close" class="btn" hidden>Close</button></div>
-  <div class="row" id="edit-dl" hidden><button class="btn" data-dl="edits.csv"><svg><use href="#i-download"/></svg>edits.csv</button>
-    <button class="btn" data-dl="levels.csv"><svg><use href="#i-download"/></svg>levels.csv</button></div>
+  <div class="row"><button id="edit-open" class="btn">Edit levels</button></div>
+  <p id="edit-why" class="why"></p>
   <p id="editnote" class="progress" aria-live="polite"></p>
 </section>
 
@@ -456,12 +458,11 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
 <footer class="sb-foot">
   <button id="save" class="btn" disabled><svg><use href="#i-download"/></svg>GeoJSON</button>
   <button id="run" class="btn primary" disabled>Build<svg><use href="#i-arrow"/></svg></button>
+  <p id="buildhint" class="why" aria-live="polite"></p>
 </footer>
 </div>
 </div>
 <button id="sb-show" title="Show panel" aria-label="Show panel" aria-controls="sb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/><path d="m10.5 9.5-2.5 2.5 2.5 2.5"/></svg></button>
-<!-- the level editor's panel (card 7): out of the page's panel, so that the panel's hiding does not take it -->
-<div id="lvhost"></div>
 
 <script type="module">
 import { TerraDraw, TerraDrawRectangleMode, TerraDrawPolygonMode, TerraDrawCircleMode, TerraDrawFreehandMode,
@@ -873,7 +874,10 @@ async function search() {
   }
 }
 $("search").onsubmit = (ev) => { ev.preventDefault(); search(); };
-$("q").oninput = () => { clearTimeout(typing); typing = setTimeout(search, 300); };
+// Search is on when there is a name to look for
+const searchReady = () => { const why = $("q").value.trim() ? "" : "Type a place first."; $("search-go").disabled = !!why; $("search-why").textContent = why; };
+$("q").oninput = () => { searchReady(); clearTimeout(typing); typing = setTimeout(search, 300); };
+searchReady();
 
 // what is here: the areas at 5 levels around the point that the user clicks
 function picking(on) {
@@ -1036,22 +1040,29 @@ $("save").onclick = () => {
 
 // ---- step 3: the data ----
 let source = "region", building = false;
+let stepsReady = false, netBuilt = false, levelsApplied = false, touched = false;   // the cards (below): the networks are netBuilt; the edits are in the tables; the person opened or folded a card by hand
 const dataTabs = [...document.querySelectorAll("#extracts-box [role=tab]")];
 for (const t of dataTabs) t.onclick = () => {
   for (const u of dataTabs) { u.setAttribute("aria-selected", u === t); $(u.getAttribute("aria-controls")).hidden = u !== t; }
   source = t.dataset.source;
   canBuild();
 };
-// Build is on when the data is ready: a region file or Overpass need the area; a cut file needs only itself. When it is off, step 4
-// says what is missing.
-function canBuild() {
-  const missing = building ? "" : source === "cut" ? (!$("pbf").files[0] && "Select the cut file in step 3.")
+// Build is on when the data is ready: a region file or Overpass need the area; a cut file needs only itself. When it is off, the text under
+// the footer buttons says what is missing.
+function missingInput() {
+  return source === "cut" ? (!$("pbf").files[0] && "Select the cut file in step 3.")
     : !area ? "Choose an area in step 1."
     : area.props.area_km2 == null ? "Finding the extracts…"
     : source === "region" && !regionFile && (regions.relay ? "Get a file in step 3, or select a region file." : "Select a region file in step 3.");
-  $("run").disabled = building || !!missing;
-  $("buildhint").textContent = missing || "";
-  $("run").title = missing || "Build the networks of the area";
+}
+function canBuild() {
+  const missing = building ? "" : missingInput();
+  const why = building ? "Building the networks…" : missing;
+  $("run").disabled = !!why;
+  $("save").disabled = !area;
+  // the reason is the text under the buttons (not a tooltip); GeoJSON needs only the area
+  $("buildhint").textContent = why || (area ? "" : "GeoJSON needs an area: choose one in step 1.");
+  refreshSteps();
 }
 for (const id of ["pbf", "fixes"]) $(id).onchange = () => {
   const f = $(id).files[0];
@@ -1207,8 +1218,7 @@ $("run").onclick = async () => {
   if (!modes) return status("Select at least one mode.");
   building = true;
   canBuild();
-  unfold("step4-card");                           // the progress of the build shows there
-  $("step5-card").hidden = true;
+  netBuilt = false;
   $("steplog").hidden = true;
   $("builddetails").hidden = true;
   $("showrow").hidden = true;
@@ -1216,7 +1226,6 @@ $("run").onclick = async () => {
   closeEditor();
   roadsRun++;                                     // a draw that runs stops at its next step
   await drawing;
-  $("step7-card").hidden = true;
   removeRoads();
   areaName = $("name").value.trim() || "area";
   try {
@@ -1279,8 +1288,8 @@ $("run").onclick = async () => {
     files();
     const counts = [...out.summary.matchAll(/^(\w+): (\d+) edges, (\d+) nodes/gm)].map((m) => `${m[1]} ${num(+m[2])} / ${num(+m[3])}`);
     $("resultline").textContent = `${counts.join(" · ")} (edges / nodes), built in ${num((ready - start) / 1000, 1)} s`;
-    $("step5-card").hidden = false;
-    unfold("step5-card");
+    netBuilt = true;
+    refreshSteps();
     if (phone.matches) {                          // a phone: the result shows in the sheet (its cards scroll, the page does not)
       if (rs.sheet() === 0) rs.sheet(1);
       const cards = document.querySelector(".sb-body");
@@ -1317,7 +1326,15 @@ const addImages = (images) => Promise.all(Object.entries(images).map(([n, v]) =>
 // with name e does not exist"). A draw that is asked for while one runs (a click, the draw after Apply) comes after it, one time only.
 // "Show on map" and the network list are off while a draw runs or the level editor is open.
 let drawing = null, drawAgain = false;
-const drawControls = () => { $("show").disabled = $("mapmode").disabled = !!drawing || !!editor; };
+let opening = false;                              // the level editor is opening
+const drawControls = () => {
+  const why = drawing ? "Drawing the map…" : editor ? "Close the level editor first." : "";
+  $("show").disabled = $("mapmode").disabled = !!why;
+  $("show-why").textContent = why;
+  const editWhy = drawing ? "Wait until the map is drawn." : opening ? "Opening the level editor…" : "";
+  $("edit-open").disabled = !!editWhy;
+  $("edit-why").textContent = editWhy;
+};
 function showRoads() {
   if (drawing) {
     drawAgain = true;
@@ -1332,6 +1349,7 @@ function showRoads() {
     drawing = window.mapDrawing = null;
     $("mapbusy").hidden = true;
     drawControls();
+    refreshSteps();
   });
   $("mapbusy").hidden = false;
   drawControls();
@@ -1426,7 +1444,7 @@ async function drawRoads() {
     const total = (performance.now() - t0) / 1000;
     logSteps([{ step: "the roads table (DuckDB)", ms: r.roadsSeconds * 1000 }, { step: "the style", ms: r.styleSeconds * 1000, mib: r.liveMiB[0] },
       { step: "draw the map", ms: (total - r.roadsSeconds - r.styleSeconds) * 1000 }], "map");
-    if (!editor && !$("step7-card").hidden) setTimeout(() => (areaPrep ??= prepareArea()).catch(() => { areaPrep = null; }), 500);   // the editor opens sooner
+    if (!editor && levelsTable()) setTimeout(() => (areaPrep ??= prepareArea()).catch(() => { areaPrep = null; }), 500);   // the editor opens sooner
     $("mapnote").textContent = `${num(roadCount[$("mapmode").value] ?? 0)} roads, drawn in ${num(total, 1)} s (step 4 gives each ` +
       `step). Click a road for its data.`;
   } catch (e) {
@@ -1451,9 +1469,7 @@ async function visualization() {
   $("mapmode").value = $("mapmode").value;      // the list in roadstyle's look shows the new first option
   $("mapmode-row").style.display = modes.length < 2 ? "none" : "";
   $("showrow").hidden = false;
-  $("step7-card").hidden = !duck.tables.some((t) => t.mode === "visualization" && t.table === "edge_levels");
-  unfold("step6-card");
-  if (!$("step7-card").hidden) unfold("step7-card");
+  refreshSteps();
   $("editnote").textContent = "";
   areaPrep = null;
   duck.prepareRoads($("mapmode").value).catch(() => {});   // the roads for the map, in the idle time of the build: "Show on map" then does no SQL
@@ -1473,7 +1489,6 @@ function freshMap() {
 }
 $("show").onclick = freshMap;
 // the Google Maps key of Street View and Google 3D: only in this browser's storage (roadstyle's settings), never in the address or the page's code
-$("gkey-open").onclick = () => window.rsOpenSettings?.();
 // a network: drawn at once when the map shows roads; else the note says how many roads it has (or the limit of the device)
 $("mapmode").onchange = () => {
   if (roadsShown) return showRoads();
@@ -1488,7 +1503,7 @@ document.addEventListener("rs:basemapchange", (e) => {
   keep("duckosm.basemap", (basemaps.find((x) => x.dark === b.key) ?? b).key);
 });
 
-// The tile format of the roads map (MVT or MLT), kept for the next visit. A change gives the roads that show the style of the new format
+// The tile format of the roads map (MLT, the default, or MVT), kept for the next visit. A change gives the roads that show the style of the new format
 // (the worker keeps its tiles; each tile address has the format, so no tile of the other format is reused).
 duck.setTileFormat(kept("duckosm.tileformat"));
 $("tilefmt").value = duck.tileFormat;
@@ -1519,7 +1534,7 @@ window.duckMap = map;   // for e2e.py
 
 // The view stays still when the map's box or padding changes (the editor's panel or sheet, the page's sheet): MapLibre keeps the centre
 // in the middle of the padded box, so the roads would jump. Each setPadding and resize puts the old centre back on its screen point, with no
-// animation. This also covers roadstyle's level_editor.js, which calls map.setPadding itself (lines 379, 385, 428).
+// animation. This also covers the calls of roadstyle's modules.
 for (const name of ["setPadding", "resize"]) {
   const orig = map[name].bind(map);
   map[name] = (...a) => {
@@ -1533,29 +1548,163 @@ for (const name of ["setPadding", "resize"]) {
 }
 
 // the sheet on a phone is roadstyle's (template.js: a grip and three heights, closed, 40 % and full; the CSS at 700 px). The map's padding
-// follows it (padMap). The level editor has its own sheet: while it is open, the page's sheet is away and the editor sets the padding.
+// follows it (padMap). The level editor draws into the same sheet (the page's one panel): the page's steps are away while it is open.
 loaded.then(() => padMap());
 
-// ---- each numbered card folds: a click on its heading or on its chevron (a button, with aria-expanded). The page keeps the fold of each
-// card (duckosm.card.<n>); a card opens again when its step becomes active (unfold). ----
+// ---- the help windows: roadstyle's window (rs.help; the panel's "?" in the title row, and the "?" of a card). The words are the page's, in Simplified Technical English ----
+const DOCS = {
+  app: "https://github.com/Khoshkhah/duckosm-rust/blob/main/docs/app.md",
+  features: "https://khoshkhah.github.io/duckOSM/reference/features/",
+  fixes: "https://khoshkhah.github.io/duckOSM/guides/fix-osm-errors/",
+  levels: "https://khoshkhah.github.io/roadstyle/guides/levels/",
+  google: "https://khoshkhah.github.io/roadstyle/guides/google-key/",
+};
+const link = (href, text) => `<a href="${href}" target="_blank" rel="noopener">${text}</a>`;
+const HELP = {
+  title: "duckOSM in the browser",
+  button: "Help: how this page works",
+  intro: "This page builds the road network of an area. All work is done in your browser. No file goes to a server: the data stays in this browser.",
+  terms: [
+    ["1 Choose an area", "Search for a place, draw a shape on the map, or open a GeoJSON file."],
+    ["2 The area", "Check the name and the size of the area."],
+    ["3 The data", "Select the OpenStreetMap data: a region file, the Overpass API or a cut file."],
+    ["4 Build", "Select the networks and press Build. The page makes the tables."],
+    ["5 The result", "Run SQL on the tables. Download the tables as a zip or as a .duckdb file."],
+    ["6 Visualization", "Show the roads on the map."],
+    ["7 Edit levels", "Change the drawing order of the roads by hand."],
+    ["Google key", "Street View (Linked) and Google 3D need a Google Maps key. The gear button of the map bar saves it in this browser only."],
+  ],
+  note: `Documentation: ${link(DOCS.app, "this page (docs/app.md)")} · ${link(DOCS.features, "duckOSM features tables")} · ${link(DOCS.fixes, "fix OpenStreetMap errors")} · ` +
+    `${link(DOCS.levels, "roadstyle levels guide")} · ${link(DOCS.google, "how to get a Google key")}`,
+};
+const CARD_HELP = {
+  1: { title: "Choose an area", intro: "Search, draw or open a file to make the area.", terms: [
+    ["Search", "Type the name of a place. The page finds its boundary."],
+    ["Draw", "Draw rectangles, polygons, circles or free shapes. Merge the shapes that overlap."],
+    ["File", "Open a GeoJSON file with the polygons of the area."],
+    ["What is here?", "Click a point on the map to see the areas around it."]],
+    note: `Search: ${link("https://photon.komoot.io", "Photon")} (komoot). Boundaries: ${link("https://nominatim.openstreetmap.org", "Nominatim")}.` },
+  3: { title: "The data", intro: "The OpenStreetMap data of the area.", terms: [
+    ["Region file", "A .osm.pbf file that covers the area. The page lists the Geofabrik files that cover it. Click a file to see it on the map."],
+    ["Overpass", "Data from the Overpass API. Use it for a city or a smaller area. The public servers are often busy."],
+    ["Cut file", "A .osm.pbf file that is already cut to the area. The page uses all of the file. The area gives only the name."]] },
+  4: { title: "Build", intro: "The page makes the road networks and the tables in your browser.", terms: [
+    ["Networks", "Driving, walking and cycling. Each one makes its own tables."],
+    ["Base map layers", "Water, land use, buildings, railways and more. They need a region file. The first build downloads 4.5 MB."],
+    ["Drawing order", "From the tags is fast. Optimized solves the order of the roads that cross, and is slower."],
+    ["Fixes", "A file with your fixes for OpenStreetMap errors, for example a one-way street. Turn rules are not used."]],
+    note: `${link(DOCS.features, "The features tables")} · ${link(DOCS.fixes, "The format of the fixes file")}` },
+  5: { title: "The result", intro: "The tables that the build made.", terms: [
+    ["SQL", "Run a query on the tables in this browser."],
+    ["Download all", "The tables as GeoParquet files, with make_duckdb.sql, the boundary and a README, in one zip."],
+    [".duckdb", "A duckOSM database with all tables."],
+    ["Each table", "Download one table. The columns of each table are in the reference."]],
+    note: link(DOCS.features, "The columns of each table") },
+  6: { title: "Visualization", intro: "Draw the roads on the map.", terms: [
+    ["Network", "Show all networks, or one."],
+    ["Map tiles", "MLT has smaller tiles. MVT is the older format."],
+    ["Show on map", "Draws the roads with roadstyle. Click a road to see its data."],
+    ["Google key", "Street View (Linked) and Google 3D need a Google Maps JavaScript API key. The gear button of the map bar saves it in this browser only."]],
+    note: link(DOCS.google, "How to get a Google key") },
+  7: { title: "Edit levels", intro: "Change the drawing order of the roads by hand with roadstyle's level editor: which road goes over which one, where two roads join, the heads and the line ends.", terms: [
+    ["The editor", "It takes this panel (the sheet on a phone)."],
+    ["← Steps", "Comes back to the steps and puts the applied edits into the tables."],
+    ["Your edits", "They stay in this browser for this area."]],
+    note: link(DOCS.levels, "How to use the editor") },
+};
+
+// ---- the numbered cards. All are in view and folded; only the current step is open. A card whose inputs are not ready (a later step) is disabled,
+// with its reason in the title row ("after step 2"); when a step is finished (a done mark) the next card that is ready opens, and the others fold, unless
+// the person opened or folded cards by hand. A finished step can still be opened. "Collapse all" / "Expand all" in the panel's title row acts on the cards
+// that are active; the page keeps its choice for the next visit (duckosm.cards). ----
 const cards = [...document.querySelectorAll("section.step")];
-const cardN = (c) => c.querySelector("h2 .n").textContent;
+const cardN = (c) => +c.querySelector("h2 .n").textContent;
+const levelsTable = () => duck.tables.some((t) => t.mode === "visualization" && t.table === "edge_levels");
+// what each step needs ("" when ready: else the reason) and when it is done
+const STEP = {
+  1: { ready: () => "", done: () => !!area },
+  2: { ready: () => (area ? "" : "after step 1"), done: () => !!area },
+  3: { ready: () => "", done: () => !missingInput() },                       // a cut file needs no area
+  4: { ready: () => (netBuilt || !missingInput() ? "" : "after step 3"), done: () => netBuilt },
+  5: { ready: () => (netBuilt ? "" : "after step 4"), done: () => roadsShown },
+  6: { ready: () => (netBuilt ? "" : "after step 4"), done: () => roadsShown },
+  7: { ready: () => (netBuilt && levelsTable() ? "" : "after step 4"), done: () => levelsApplied },
+};
+const active = () => cards.filter((c) => !c.classList.contains("off"));
+function syncFoldButton() {
+  const all = active().every((c) => c.classList.contains("folded"));
+  const b = $("sb-fold"), label = all ? "Expand all steps" : "Collapse all steps";
+  b.title = label;
+  b.setAttribute("aria-label", label);
+  b.querySelector("svg").innerHTML = all ? '<path d="m7 20 5-5 5 5"/><path d="m7 4 5 5 5-5"/>' : '<path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>';
+}
 function fold(c, folded) {
   c.classList.toggle("folded", folded);
   c.querySelector(".fold").setAttribute("aria-expanded", String(!folded));
-  keep(`duckosm.card.${cardN(c)}`, folded ? "1" : "0");
+  syncFoldButton();
 }
-function unfold(id) { fold($(id), false); }
+let current = null;                                // the step that the page opened last
+function refreshSteps() {
+  if (!stepsReady) return;
+  for (const c of cards) {
+    const n = cardN(c), why = STEP[n].ready(), done = STEP[n].done();
+    c.classList.toggle("off", !!why);
+    c.setAttribute("aria-disabled", String(!!why));
+    c.querySelector(".after").textContent = why;
+    c.querySelector(".done").hidden = !done || !!why;
+    c.querySelector(".fold").disabled = !!why;
+    if (why) fold(c, true);                         // a card that is not ready keeps only its heading
+  }
+  const next = cards.find((c) => !STEP[cardN(c)].ready() && !STEP[cardN(c)].done());
+  if (next && next !== current) {
+    current = next;
+    fold(next, false);
+    if (!touched) for (const c of cards) if (c !== next) fold(c, true);
+  }
+  syncFoldButton();
+}
+function foldAll(folded) {
+  touched = true;
+  for (const c of active()) fold(c, folded);
+  keep("duckosm.cards", folded ? "collapsed" : "open");
+}
+$("sb-fold").onclick = () => foldAll(!active().every((c) => c.classList.contains("folded")));
+// the "?" of a card opens roadstyle's help window with the words of the card; the window is the panel's one (rs.help), and the panel's own "?" has the overview
+const QMARK = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 4.5"/><circle cx="12" cy="17.6" r=".6" fill="currentColor"/></svg>';
+const helpOf = (n) => (n in CARD_HELP ? { ...CARD_HELP[n], button: HELP.button } : HELP);
+let helpOwner = 0;                                  // 0: the overview is in the window; else the number of the card
+document.addEventListener("rs:helpchange", (e) => { if (!e.detail.open && helpOwner) { rs.help.set(HELP); helpOwner = 0; } });
+function cardHelp(n) { rs.help.set(helpOf(n)); helpOwner = n; rs.help.open(); }
 for (const c of cards) {
-  const h = c.querySelector("h2"), b = document.createElement("button");
-  b.className = "fold";
-  b.innerHTML = icon("chevron");
-  b.setAttribute("aria-label", `Fold or open: ${h.textContent.trim().slice(1)}`);
-  b.setAttribute("aria-controls", c.id);
-  h.append(b);
-  h.onclick = (e) => { if (!e.target.closest("button:not(.fold), a, input")) fold(c, !c.classList.contains("folded")); };
-  fold(c, kept(`duckosm.card.${cardN(c)}`) === "1");
+  const h = c.querySelector("h2"), n = cardN(c), t = document.createElement("span"), fb = document.createElement("button");
+  t.className = "tools";
+  const own = h.querySelector(".icon-btn");
+  h.insertAdjacentHTML("beforeend", '<span class="done" hidden title="Done">✓</span>');
+  if (own) t.append(own);
+  t.insertAdjacentHTML("afterbegin", '<span class="after"></span>');
+  if (n in CARD_HELP) {
+    const q = document.createElement("button");
+    q.className = "hq"; q.type = "button"; q.innerHTML = QMARK;
+    q.setAttribute("aria-label", `Help: ${h.textContent.trim().replace(/^\d/, "").trim()}`);
+    q.onclick = (e) => { e.stopPropagation(); cardHelp(n); };
+    t.append(q);
+  }
+  fb.className = "fold"; fb.type = "button"; fb.innerHTML = icon("chevron");
+  fb.setAttribute("aria-label", `Fold or open: ${h.textContent.trim().replace(/^\d/, "").trim()}`);
+  fb.setAttribute("aria-controls", c.id);
+  t.append(fb);
+  h.append(t);
+  h.onclick = (e) => {
+    if (e.target.closest("button:not(.fold), a, input") || c.classList.contains("off")) return;
+    touched = true;
+    fold(c, !c.classList.contains("folded"));
+  };
+  fold(c, true);
 }
+stepsReady = true;
+rs.help.set(HELP);
+if (kept("duckosm.cards") === "collapsed") { touched = true; current = cards[0]; }    // the person chose "collapse all": every card starts folded
+refreshSteps();
 
 // ---- card 7: roadstyle's level editor on the page's map (docs/app.md). The page makes the level area from the tables (makeArea) and keeps
 // it in this browser (browserStore, one for each area name). The editor uses the page's dashboard, map and roads (host mode): the page's roads
@@ -1591,28 +1740,16 @@ const workerStopped = (e) => {
   if (editor && m.includes("the worker stopped")) editNote(`The level editor's worker stopped (${m}). Close the editor and open it again.`);
 };
 window.addEventListener("unhandledrejection", workerStopped);
-let panelScroll = 0;                              // where the panel's cards were when the editor opened (a phone: the panel goes away)
 function editing(on) {
-  const cards = document.querySelector(".sb-body");
-  if (on) panelScroll = cards.scrollTop;
-  document.body.classList.toggle("editing", on);
-  if (!on) {
-    cards.scrollTop = panelScroll;
-    padMap();                                     // the page's sheet in its state again, and the map's padding for it
-  }
-  $("edit-open").hidden = on;
-  $("edit-apply").hidden = $("edit-close").hidden = $("edit-dl").hidden = !on;
-  $("edit-open").disabled = false;
+  document.body.classList.toggle("editing", on);  // the editor holds the page's one panel (roadstyle's editor hides the steps and the title and puts them back)
+  if (!on) padMap();                              // the page's sheet in its state again, and the map's padding for it
+  opening = false;                                // (drawControls: Edit levels is on again unless a draw runs)
   drawControls();
 }
 // the editor goes away (destroy: its panel, its roads and its listeners); the page's roads come back when draw is true
 function closeEditor(draw = false) {
   if (!editor) return;
-  window.rsDeselect?.();                          // the selection's glow is on the editor's roads
-  editor.destroy();
-  // destroy leaves the colour of the picked road (the panel's rsColor(ids), level_editor.html line 235: feature state rs_c, violet) on the page's map, so that no
-  // click removes it. The page paints no roads of its own, so all of them go. Module side: destroy() in level_editor.js should call rsColor(null) (the panel's node goes, its colour does not).
-  window.rsColor?.(null);
+  editor.destroy();                               // its panel, its roads, the colour and the glow of the picked roads, and the page's steps come back
   editor = window.levelEditorOpen = null;
   editing(false);
   map.resize();
@@ -1675,11 +1812,14 @@ $("edit-open").onclick = async () => {
   // the editor draws every road of the area (all networks): the same limit as the map on a small device
   if (roadCount.all > window.mapMaxRoads) return editNote(`The level editor shows all ${num(roadCount.all)} roads of the area; on this ` +
     `device it can show up to ${num(window.mapMaxRoads)}. Use a desktop browser, or a smaller area.`);
-  $("edit-open").disabled = true;
+  opening = true;
+  drawControls();
   try {
     editorStore = null;                           // the note of a store of an earlier area goes
     editNote("opening the level editor…");
     const t0 = performance.now();
+    // the area made before: its files can be gone (the browser cleared the private file system, a full storage), and the editor draws its roads from them
+    if (areaPrep && (await (await areaPrep).store.load("roads.parquet")) == null) areaPrep = null;
     const { levelEditor, store, levels, warnings } = await (areaPrep ??= prepareArea());
     editorStore = store;
     let t;
@@ -1697,8 +1837,7 @@ $("edit-open").onclick = async () => {
     const fit = map.fitBounds;
     map.fitBounds = () => map;
     t = performance.now();
-    try { editor = await levelEditor({ map, container: $("lvhost"), pkgUrl, store, dashboard: rs, levels: levels ?? undefined,
-      host: { edgeIdCol: "edge_id", replaceRoads }, colors: { select: "#7c4dff", hover: "#b388ff", second: "#4527a0" } }); }
+    try { editor = await levelEditor({ map, panel: $("sb"), backLabel: "Steps", pkgUrl, store, dashboard: rs, prefix: "rs-", levels: levels ?? undefined }); }
     finally { map.fitBounds = fit; }
     lap("levelEditor()", t);
     lap("open, all", t0);
@@ -1706,26 +1845,28 @@ $("edit-open").onclick = async () => {
     const made = `${num(editor.roads.length)} roads` + warnings;
     window.levelEditorOpen = editor;              // for editor_e2e.py
     // "solved": after each change (since roadstyle 6be68c2 a head or a cap is drawing only, with no solve)
-    editor.addEventListener("solved", () => editNote(`${made}. Changed: Apply puts the new drawing order into the tables.`));
-    $("editbar-note").textContent = made;
+    editor.addEventListener("solved", () => {
+      editedMap = true;                           // the editor has levels that the tables do not have
+      editNote(`${made}. Changed: ← Steps puts the new drawing order into the tables.`);
+    });
+    editor.addEventListener("back", leaveEditor);  // "← Steps" (with changes waiting, after the editor's own Apply, Discard or Stay)
     editing(true);
-    editNote(`${made}, open in ${num((performance.now() - t0) / 1000, 1)} s. Click a road on the map to start. Apply puts the drawing ` +
-      "order into the tables and the downloads; Close goes back with no change.");
+    editNote(`${made}, open in ${num((performance.now() - t0) / 1000, 1)} s. Click a road on the map to start. ← Steps puts the ` +
+      "applied drawing order into the tables and the downloads (nothing applied: no change).");
   } catch (e) {
     // the editor did not start: its panel goes, and the page's roads are drawn again
-    $("lvhost").replaceChildren();
-    document.body.classList.remove("lv-open");
     editing(false);
     showRoads();
     const stale = areaPrep && /make the area first/.test(e.message);   // the browser's files of the area went after the area was made: once more
     areaPrep = null;
-    if (stale) { $("lvhost").replaceChildren(); document.body.classList.remove("lv-open"); return $("edit-open").click(); }
+    if (stale) return $("edit-open").click();
     editNote("The level editor failed: " + e.message);
   }
 };
-$("edit-close").onclick = () => { closeEditor(); editNote("Closed. The tables have not changed."); };
-$("edit-apply").onclick = async () => {
-  $("edit-apply").disabled = true;
+// "← Steps": the editor goes, and the edits that it applied (the editor's Apply and solve) go into the tables (visualization.edge_levels and the
+// downloads). Nothing applied: the tables stay as they are.
+async function leaveEditor() {
+  if (!editedMap) { closeEditor(); return editNote("Closed. The tables have not changed."); }
   try {
     editNote("writing the drawing order into the tables…");
     const text = async (n) => (await editorStore.load(n))?.body ?? "";
@@ -1733,23 +1874,24 @@ $("edit-apply").onclick = async () => {
     await duck.saveLevels(await text("levels.csv"), inputs, "this browser: " + areaName);
     areaPrep = null;                              // the tables have the new levels
     files();                                      // the download links of the new files
+    levelsApplied = true;
     closeEditor(true);
+    refreshSteps();
     const n = (f) => Math.max(0, inputs[f].trim().split("\n").length - 1);
     editNote(`Applied: visualization.edge_levels has the edited drawing order (your rules: ${num(n("edits.csv"))}, heads: ` +
       `${num(n("heads.csv"))}, line ends: ${num(n("caps.csv"))}), also in the downloads. The map draws it.`);
   } catch (e) {
-    editNote("Apply failed: " + e.message);
+    editNote("Apply failed: " + e.message);       // the editor stays open
   }
-  $("edit-apply").disabled = false;
-};
-for (const b of document.querySelectorAll("#editbar [data-for]")) b.onclick = () => $(b.dataset.for).click();
-for (const b of document.querySelectorAll("#edit-dl [data-dl]")) {
-  b.onclick = () => editor?.download(b.dataset.dl).catch((e) => editNote(`The download of ${b.dataset.dl} failed: ${e.message}`));
 }
 
 // SQL on the tables
 const cell = (v) => (v === null || v === undefined ? "NULL" : v instanceof Uint8Array ? `(${v.length} bytes)` : typeof v === "object"
   ? JSON.stringify(v, (k, x) => (typeof x === "bigint" ? x.toString() : x)) : String(v));
+// Run is on when there is a query
+const queryReady = () => { const why = $("sql").value.trim() ? "" : "Type a query first."; $("query").disabled = !!why; $("query-why").textContent = why; };
+$("sql").oninput = queryReady;
+queryReady();
 $("query").onclick = async () => {
   try {
     const t = performance.now(), res = await duck.query($("sql").value);

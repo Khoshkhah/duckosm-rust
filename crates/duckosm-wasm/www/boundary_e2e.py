@@ -47,6 +47,14 @@ def boundary(page, ready):
     return f
 
 
+
+def step_tab(page, tab):
+    """a tab of step 1 or step 3; the page folds a card when its step is done (a click on the heading opens it)"""
+    card, head = ("extracts-box", "#step3") if tab in ("#tab-region", "#tab-overpass", "#tab-cut") else ("step1-card", "#step1")
+    if page.evaluate(f"document.getElementById('{card}').classList.contains('folded')"):
+        page.click(head)
+    page.click(tab)
+
 with sync_playwright() as p:
     browser = p.chromium.launch(args=["--enable-unsafe-swiftshader"])
     page = browser.new_page(accept_downloads=True, viewport={"width": 1200, "height": 800})
@@ -56,7 +64,7 @@ with sync_playwright() as p:
     page.wait_for_function("window.mapReady", timeout=60_000)
 
     # a file
-    page.click("#tab-file")
+    step_tab(page, "#tab-file")
     n = areas(page)
     page.set_input_files("#file", str(MONACO))
     f = boundary(page, n + 1)
@@ -84,7 +92,7 @@ with sync_playwright() as p:
         page.mouse.up()
         page.wait_for_timeout(300)
 
-    page.click("#tab-draw")
+    step_tab(page, "#tab-draw")
     n = areas(page)
     for rect in [(0.45, 0.3, 0.6, 0.5), (0.55, 0.4, 0.75, 0.6)]:
         page.click("[data-mode=rectangle]")
@@ -120,7 +128,7 @@ with sync_playwright() as p:
 
     # a search
     if not args.no_search:
-        page.click("#tab-find")
+        step_tab(page, "#tab-find")
         n = areas(page)
         page.fill("#q", "Monaco")
         page.press("#q", "Enter")
@@ -146,15 +154,15 @@ with sync_playwright() as p:
             print("search: skipped,", page.inner_text("#found"))
 
     # Build: on when the area and its data are ready (step 3), off without a region file
-    page.click("#tab-file")
+    step_tab(page, "#tab-file")
     n = areas(page)
     page.set_input_files("#file", str(MONACO))
     boundary(page, n + 1)
-    page.click("#tab-region")
+    step_tab(page, "#tab-region")
     assert page.is_disabled("#run"), "Build is on without a region file"
     page.set_input_files("#region", str(MONACO.with_name("monaco_sample.osm.pbf")))
     assert page.is_enabled("#run"), "Build is off with an area and a region file"
-    page.click("#tab-overpass")
+    step_tab(page, "#tab-overpass")
     assert page.is_enabled("#run"), "Build is off with an area and Overpass"
     print("build button: ok")
 

@@ -96,7 +96,7 @@ with sync_playwright() as p:
     page.locator(".rs-sel-opt", has_text={"tags": "From the tags", "solve": "Optimized"}[args.levels]).first.click()
     assert page.input_value("#levels") == args.levels
     page.click("#run")
-    page.wait_for_function("!document.getElementById('step5-card').hidden || document.getElementById('buildstatus').textContent.startsWith('Error')",
+    page.wait_for_function("!document.getElementById('step5-card').classList.contains('off') || document.getElementById('buildstatus').textContent.startsWith('Error')",
                            timeout=1_800_000)
     status = page.inner_text("#buildstatus")
     if status.startswith("Error"):
@@ -141,6 +141,38 @@ with sync_playwright() as p:
     # the draw after a build or "Show on map" with no base map chosen in this page: the blank base map (Kaveh, 2026-10-26: it did not change)
     assert page.evaluate("document.querySelector('input[name=rs-bm]:checked')?.value") == "blank", "the first draw sets the blank base map"
     page.wait_for_function("window.duckMap && window.duckMap.loaded()", timeout=600_000)   # the tiles are cut and drawn
+    # the tool `roads` (the road filter in the bar): a row for each road class with its number of roads, All and None, Bridges, Tunnels and the restricted kinds
+    assert not page.evaluate("rs.tools.list().find((t) => t.id === 'roads').disabled"), "the Roads tool is on after the roads are drawn"
+    road_features = lambda: page.evaluate("(() => { const L = duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple') && l.layout?.visibility !== 'none').map((l) => l.id); return duckMap.queryRenderedFeatures({layers: L}).length; })()")  # noqa: E731
+    page.evaluate("duckMap.jumpTo({center: [7.4225, 43.7345], zoom: 14.5})")
+    page.wait_for_function("window.duckMap.loaded()", timeout=600_000)
+    page.wait_for_timeout(1500)
+    page.click("[data-rs-tool=roads] button")
+    assert page.is_visible("#rs-roads-box"), "the Roads box opens"
+    rows = page.evaluate("[...document.querySelectorAll('#rs-roads-box input[data-c]')].map((i) => i.dataset.c)")
+    counts = page.evaluate("[...document.querySelectorAll('#rs-roads-box .rs-rd-row b')].slice(0, " + str(len(rows)) + ").map((b) => b.textContent)")
+    print("roads box:", len(rows), "classes;", rows[:6], counts[:6])
+    assert len(rows) >= 10 and "primary" in rows and "residential" in rows and all(counts), (rows, counts)
+    assert page.query_selector("#rs-roads-box input[data-g=bridges]") and page.query_selector("#rs-roads-box input[data-g=tunnels]"), "the rows Bridges and Tunnels"
+    full = road_features()
+    assert full > 0
+    page.click("#rs-roads-box button[data-a=none]")                 # None: no road on the map, no class checked
+    page.wait_for_function("(() => { const L = duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id); return duckMap.queryRenderedFeatures({layers: L}).length === 0; })()", timeout=30_000)
+    assert page.evaluate("[...document.querySelectorAll('#rs-roads-box input[data-c]')].every((i) => !i.checked)")
+    page.click("#rs-roads-box button[data-a=all]")                  # All: every road again
+    page.wait_for_function(f"(() => {{ const L = duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id); return duckMap.queryRenderedFeatures({{layers: L}}).length === {full}; }})()", timeout=30_000)
+    page.click("#rs-roads-box button[data-only=residential]")        # a click on a name: only that class
+    page.wait_for_function(f"(() => {{ const L = duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id); const n = duckMap.queryRenderedFeatures({{layers: L}}).length; return n > 0 && n < {full}; }})()", timeout=30_000)
+    assert page.evaluate("[...document.querySelectorAll('#rs-roads-box input[data-c]')].filter((i) => i.checked).map((i) => i.dataset.c)") == ["residential"]
+    page.click("#rs-roads-box button[data-a=all]")
+    page.wait_for_function(f"(() => {{ const L = duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id); return duckMap.queryRenderedFeatures({{layers: L}}).length === {full}; }})()", timeout=30_000)
+    for kind in ("bridges", "tunnels"):                              # Bridges and Tunnels: their roads go and come back
+        page.click(f"#rs-roads-box input[data-g={kind}]")
+        page.wait_for_function(f"(() => {{ const L = duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id); return duckMap.queryRenderedFeatures({{layers: L}}).length < {full}; }})()", timeout=30_000)
+        page.click(f"#rs-roads-box input[data-g={kind}]")
+        page.wait_for_function(f"(() => {{ const L = duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id); return duckMap.queryRenderedFeatures({{layers: L}}).length === {full}; }})()", timeout=30_000)
+    page.screenshot(path=str(out / "roads-box.png"))
+    page.keyboard.press("Escape")
     # roadstyle's standard tools read each roads style that comes after the start (rs.setStyle): the bar has no floating Layers box; the one switch for
     # all the area's layers (the duckOSM layers: landcover, water, buildings, ...) is in the Base map box; the legend box lists them with their colours;
     # "Colour by" has the look's option. A switch that is off stays off in the next draw.

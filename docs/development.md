@@ -163,10 +163,25 @@ the page as JSON. The CLI writes zstd and the page writes snap, so compare `out-
 not with `cmp`.
 
 Check the level editor of the page (card 7) in headless Chromium: open, one edit, Apply, the tables and the `.duckdb`
-download, Close. It writes `editor.png` and `editor-dark.png` and prints the time to open the editor:
+download, "← Steps". It writes `editor.png` and `editor-dark.png` and prints the time to open the editor:
 
 ```bash
 python crates/duckosm-wasm/www/editor_e2e.py out-editor
+```
+
+Check the level editor as a person uses it (real clicks, no test hook): two roads, a change, "← Steps" with the change waiting, Apply and solve.
+On a computer (light and dark) and on a phone (390 × 844, touch):
+
+```bash
+python crates/duckosm-wasm/www/editor_path_e2e.py out-editor-path
+```
+
+Check the panel (the cards that follow the steps, the help windows and their links, collapse all, the main button) and the action buttons (disabled until
+their inputs are ready, with the reason under them). On a computer (light and dark) and on a phone:
+
+```bash
+python crates/duckosm-wasm/www/panel_e2e.py out-panel
+python crates/duckosm-wasm/www/buttons_e2e.py out-buttons
 ```
 
 Check the generation of the tiles (the dashboard's red message and the hidden vector layers when the tiles are of another road set,
