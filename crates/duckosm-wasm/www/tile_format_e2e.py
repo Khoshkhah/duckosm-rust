@@ -1,7 +1,7 @@
 """The tile format of the roads map in headless Chromium (Playwright): build Monaco, draw the roads on the blank base map,
-and check (1) MVT is the default, the tile address has `f=mvt` and the source has no encoding; (2) the setting "Map tiles" = MLT gives
-the style with the encoding `mlt`, `f=mlt` in the address and the same picture (a small share of pixels may differ); the choice is kept
-in the storage of the browser; MVT again gives the first picture.
+and check (1) MLT is the default (no stored choice), the tile address has `f=mlt` and the source has the encoding `mlt`; (2) the setting
+"Map tiles" = MVT gives the style with no encoding, `f=mvt` in the address and the same picture (a small share of pixels may differ); the
+choice is kept in the storage of the browser; MLT again gives the first picture.
 
     python crates/duckosm-wasm/www/tile_format_e2e.py [out folder]
 
@@ -56,12 +56,14 @@ with sync_playwright() as p:
     def addresses():
         return page.evaluate(f"{SOURCES}.flatMap((s) => s.tiles)")
 
-    assert page.input_value("#tilefmt") == "mvt", "MVT is not the default"
+    assert page.input_value("#tilefmt") == "mlt", "MLT is not the default"
     a = addresses()
-    assert a and all("&f=mvt" in u and "?g=" in u for u in a), a
-    assert not any(s.get("encoding") for s in page.evaluate(SOURCES)), "MVT: the source has an encoding"
-    mvt = picture("mvt")
-    print(f"MVT: {len(a)} source address(es), e.g. {a[0]}")
+    assert a and all("&f=mlt" in u and "?g=" in u for u in a), a
+    assert all(s.get("encoding") == "mlt" for s in page.evaluate(SOURCES)), "MLT: the source has the encoding"
+    assert page.evaluate("localStorage.getItem('duckosm.tileformat')") is None, "the default is not a stored choice"
+    mlt = picture("mlt")
+    assert page.evaluate("window.duckApi.tileStats.length") > 0, "no tile of the MLT style"
+    print(f"MLT (the default): {len(a)} source address(es), e.g. {a[0]}")
 
     def choose(page, id, text):
         """A choice in roadstyle's list (selectbox.js shows a button and a list in place of the select)."""
@@ -71,20 +73,19 @@ with sync_playwright() as p:
     def diff(x, y):
         return float((np.abs(x - y).max(axis=2) > 8).mean())
 
-    choose(page, "tilefmt", "MLT")
-    page.wait_for_function("window.duckApi.tileFormat === 'mlt'")
-    page.wait_for_function(f"{SOURCES}.every((s) => s.encoding === 'mlt' && s.tiles.every((u) => u.includes('&f=mlt')))")
-    mlt = picture("mlt")
-    assert page.evaluate("localStorage.getItem('duckosm.tileformat')") == "mlt"
-    assert page.evaluate("window.duckApi.tileStats.length") > 0, "no tile of the MLT style"
-    d = diff(mvt, mlt)
-    print(f"MLT: encoding mlt, f=mlt in the address, {d * 100:.3f} % of the pixels differ from MVT")
+    choose(page, "tilefmt", "MVT")
+    page.wait_for_function("window.duckApi.tileFormat === 'mvt'")
+    page.wait_for_function(f"{SOURCES}.every((s) => !s.encoding && s.tiles.every((u) => u.includes('&f=mvt')))")
+    mvt = picture("mvt")
+    assert page.evaluate("localStorage.getItem('duckosm.tileformat')") == "mvt"
+    d = diff(mlt, mvt)
+    print(f"MVT: no encoding, f=mvt in the address, {d * 100:.3f} % of the pixels differ from MLT")
     assert d < 0.005, d
 
-    choose(page, "tilefmt", "MVT")
-    page.wait_for_function(f"{SOURCES}.every((s) => !s.encoding && s.tiles.every((u) => u.includes('&f=mvt')))")
-    d = diff(mvt, picture("mvt-again"))
-    print(f"MVT again: {d * 100:.3f} % of the pixels differ from the first MVT picture")
+    choose(page, "tilefmt", "MLT")
+    page.wait_for_function(f"{SOURCES}.every((s) => s.encoding === 'mlt' && s.tiles.every((u) => u.includes('&f=mlt')))")
+    d = diff(mlt, picture("mlt-again"))
+    print(f"MLT again: {d * 100:.3f} % of the pixels differ from the first MLT picture")
     assert d < 0.005, d
 
     assert not errors, errors

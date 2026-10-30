@@ -22,7 +22,7 @@ and `docs/guides/dashboard-layout.md`). The page uses the template `dashboard` w
 - **The map fills the window.** The panel floats over it, at the left, in roadstyle's frame look. The panel does not change the size
   of the map. The panel hides with the button in its title row (the button at the corner shows it again); the page keeps the choice
   (`duckosm.panel`).
-- **The bar.** roadstyle's toolbar holds the map buttons, in this order: theme, navigate, Street View, Google 3D, base map, 3D
+- **The bar.** roadstyle's toolbar holds the map buttons, in this order: theme, navigate, Street View, Google 3D, base map, roads, 3D
   buildings, colour and legend, settings. **Navigate** (the compass needle, roadstyle's default since `6fdc893`) is one button in place of
   zoom in, zoom out, the compass and 2D/3D: its box has a zoom slider, a turn slider, a tilt slider and a reset button, and Ctrl + drag on
   the map turns and tilts it. The credits (attribution) are in the corner box of the map on a computer, and at the end of the bar on a
@@ -44,6 +44,10 @@ and `docs/guides/dashboard-layout.md`). The page uses the template `dashboard` w
   - their list in the legend box ("Map layers", each with its colour; a layer that is hidden is dimmed).
   - the row **Buildings 3D** and the 3D buildings tool, for the 3D layer of the buildings.
   A page with a bar has no floating Layers box (before, the box was at the bottom right of the map, and the phone's sheet covered it).
+- **Roads.** The tool **Roads** (roadstyle `6205d9c`, after the base map button) is the road filter in the bar. It is greyed out until
+  roads are drawn. Its box has a row for each road class (a check box, the colour, the name and the number of roads), **All** and
+  **None**, the rows **Bridges** and **Tunnels**, and the restricted kinds (private roads, bus lanes, pedestrian streets). A click on
+  a class name shows only that class. The page does not make a filter of its own. `e2e.py` checks the rows, None, All, one class, Bridges and Tunnels on Monaco.
 - **Colour by.** The look has the colour option **Road class** (`color_options`), so the tool "Colour by and legend" is on after the roads
   are drawn: its box has **Colour by** (Road class), the **Legend** of the road classes and the **Map layers**.
 - **The cards.** The seven cards are in the panel's body. A card has no color of its own: all cards have one neutral look (a line
@@ -280,7 +284,7 @@ and the two download buttons between them. With three modes, the line takes thre
 
 - **Network**: All, Driving, Walking, Cycling: only the modes of the build, and no list for a build with one mode.
   (It was "Roads of" in step 5; Kaveh did not understand the name.) A change draws the map again when it shows.
-- **Map tiles**: MVT (the default) or MLT. See "Map tiles: MVT or MLT" below.
+- **Map tiles**: MLT (the default) or MVT. See "Map tiles: MVT or MLT" below.
 - **Show on map** draws the roads of the network. After a build, the page draws them at once only for a small area
   (fewer than 20,000 roads: Monaco has 13,298). A larger area waits for the click (Tartu: 64,828 roads).
 - **Show on map** and the draw after a build set the blank base map (Blank, or Blank dark with the dark theme) and put the
@@ -311,14 +315,14 @@ and the two download buttons between them. With three modes, the line takes thre
 - The base map and the layers are tools of the bar (see "The map"). For one commit they were in this card; Kaveh
   wants them on the map ("it has a good design").
 
-### Map tiles: MVT or MLT
+### Map tiles: MLT or MVT
 
 The map gets its roads as vector tiles. The setting **Map tiles** in step 6 sets the format of these tiles.
 
-- **MVT** (Mapbox Vector Tile) is the default.
-- **MLT** (MapLibre Tile) is the second format of roadstyle. It stores the data of a tile in columns. MLT needs MapLibre 5.12 or newer. The page has MapLibre 5.24.
+- **MLT** (MapLibre Tile) is the default since 2026-10-29 (Kaveh's order). It stores the data of a tile in columns. MLT needs MapLibre 5.12 or newer. The page has MapLibre 5.24.
+- **MVT** (Mapbox Vector Tile) is the second choice.
 
-To switch, choose the format in the list **Map tiles**. If the roads show on the map, the page draws them again with the new format at once. If they do not show, the next draw uses the new format. The page keeps the choice in the browser (`duckosm.tileformat`), so the next visit has it.
+To switch, choose the format in the list **Map tiles**. If the roads show on the map, the page draws them again with the new format at once. If they do not show, the next draw uses the new format. The page keeps the choice in the browser (`duckosm.tileformat`), so the next visit has it. A visit with no stored choice starts on MLT; a stored MVT (the choice of an earlier visit) stays.
 
 A change of format does not build the roads again. The map worker keeps its tiles and gives the style of the new format (`LiveMap.style(format)`: the vector source has `encoding: "mlt"`). The tile address has the format after the generation: `rs://<generation>/roads/{z}/{x}/{y}?g=<generation>&f=<format>`. A tile of the other format has another address, so the page never uses it.
 
@@ -335,7 +339,7 @@ A change of format does not build the roads again. The map worker keeps its tile
 - The worker needs more time to cut an MLT tile. The MVT times are low because the Rust code can keep the MVT tiles it cut before.
 - The picture is the same. On Monaco, with the blank base map, no pixel differs between MVT and MLT (`tile_format_e2e.py`).
 
-**These results can depend on the browser and on the device.** The measurements used one browser (Chromium), software rendering and 2 runs. A phone or another browser can give other times. Kaveh will compare MVT and MLT in several browsers later. MVT stays the default until that comparison.
+**These results can depend on the browser and on the device.** The measurements used one browser (Chromium), software rendering and 2 runs. A phone or another browser can give other times. MLT is the default by Kaveh's order of 2026-10-29. A comparison of MVT and MLT in several browsers is still open; MVT stays as the second choice.
 
 ### Step 7: edit the levels
 
