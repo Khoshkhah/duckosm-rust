@@ -49,8 +49,9 @@ with sync_playwright() as p:
     def picture(name):
         settle()
         # the part of the map that the panel and the bar leave free: the panel's list shows another text for each format
-        left = page.evaluate("Math.ceil(Math.max(document.getElementById('sb').getBoundingClientRect().right, document.getElementById('rs-toolbar').getBoundingClientRect().right)) + 8")
-        png = page.screenshot(path=str(out / f"{name}.png"), clip={"x": left, "y": 0, "width": 1000 - left, "height": 700})
+        # (the panel is at the left, the bar at the right: the part between them)
+        left, right = page.evaluate("[Math.ceil(document.getElementById('sb').getBoundingClientRect().right) + 8, Math.floor(document.getElementById('rs-toolbar').getBoundingClientRect().left) - 8]")
+        png = page.screenshot(path=str(out / f"{name}.png"), clip={"x": left, "y": 0, "width": right - left, "height": 700})
         return np.asarray(Image.open(io.BytesIO(png)).convert("RGB")).astype(int)
 
     def addresses():

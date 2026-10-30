@@ -27,8 +27,7 @@ and `docs/guides/dashboard-layout.md`). The page uses the template `dashboard` w
   zoom in, zoom out, the compass and 2D/3D: its box has a zoom slider, a turn slider, a tilt slider and a reset button, and Ctrl + drag on
   the map turns and tilts it. The credits (attribution) are in the corner box of the map on a computer, and at the end of the bar on a
   phone. The page does not add navigation buttons (the default is used). The toolbox is fixed: a tool that the page cannot use
-  stays in its place, greyed out (the legend: the page has no colour options). The bar is next to the panel. It goes to the edge of the window when the
-  panel is hidden. The settings button lets the person move the bar and the panel, change the transparency, and save the Google key.
+  stays in its place, greyed out (the legend: the page has no colour options). The bar is at the right edge of the window (roadstyle's default since `0.26.0`), and the panel is at the left. The settings button lets the person move the bar and the panel, change the transparency, and save the Google key.
 - **The base map is roadstyle's.** The page has no tool, box or base-map code of its own. It gives the dashboard the `basemaps` and
   `ontop` options of `map/roadstyle/host_options.json` (roadstyle's list with the twins), and a map that has the two layers `bg` and
   `basemap`. The tool, the box (the rows, **Hillshade**, **Labels**, **3D buildings**), the order of the layers under the roads, the rules
@@ -425,6 +424,8 @@ Limits:
 - `edge_levels_meta.roadstyle_version` keeps the value of the build: the page does not know the version of roadstyle's
   module.
 
+The check `editor_path_e2e.py` is the editor as a person uses it, with real clicks: build Monaco, Show on map, **Edit levels**, pick two roads on the map, choose their order and add it to the list, **← Steps** with the change waiting (the bar asks: Stay, Discard, Apply), Stay, **Apply and solve**, **← Steps**: the steps come back and the edit is in the tables. It runs on a computer (light and dark) and on a phone (390 × 844, touch), and checks the seven base maps.
+
 The check: `editor_e2e.py` (headless Chromium, Monaco through the File tab). It opens the editor, makes one edit with
 `window.lvApi` (an end head of 7 m) and leaves with **← Steps**, which applies it. Then it checks the tables in the page and in the
 `.duckdb` download, a map of one mode, the duckOSM base-map layers while the editor is open, and **← Steps** with no change. It writes `editor.png` and
@@ -565,13 +566,16 @@ works in the same tab during the build, and the computer had other load. Not mea
 ## Gaps in roadstyle (2026-10-29)
 
 Kaveh's rule: the page uses the standard dashboard and the standard toolbox, and does not change them. The page does not make its own version
-of what the standard lacks. One gap is open (roadstyle `9d745c9`, the pin of 2026-10-30):
+of what the standard lacks. One gap is open (roadstyle `0.26.0`, `07c85b5`, the pin of 2026-10-30):
 
-1. **The editor's full sheet on a phone** starts under roadstyle's top bar (the sheet is `100% - 48px` high), so its handle is under the bar
-   (`[0, 49, 390, 73]`). It was reachable at `6fdc893` and `4d61862`, and it is covered again at `9d745c9`. `phone_e2e.py` prints `GAP` and clicks
-   the handle with a script. The page does not correct it.
+1. **The credits button is outside a phone's screen at 390 px.** The one-row bar of ten tools is 372 px wide, and the credits button (the last
+   tool, `attribution`) is at 377 to 409 px: part of it is outside the screen, and the legal credits cannot be reached. At 412 and 430 px the
+   button is at the same place and the bar is wider. `dashboard_e2e.py` prints `GAP`. The page does not correct it.
 
-Fixed in roadstyle `6d37af5`, `f460335`, `dd08231`, `6fdc893` and `4d61862` (the page has no adapter for them): a box that leaves a phone's screen sideways; a raster base
+The handle of the editor's full sheet on a phone was under the bar at `9d745c9`; at `0.26.0` it is reachable (`phone_e2e.py` prints no gap, and
+`editor_path_e2e.py` taps through the whole editor on a phone).
+
+Fixed in roadstyle `6d37af5`, `f460335`, `dd08231`, `6fdc893`, `4d61862` and `0.26.0` (the page has no adapter for them): a box that leaves a phone's screen sideways; a raster base
 map that goes on top of the roads of a host page; the list of base maps and the typed `dashboard` with its first paint for a JavaScript host
 (`data/host_options.json`, `rsFirstPaint`); `rsSetBasemap("blank")` that gives the dark twin in the dark theme; OpenFreeMap's sprite;
 the panel's shell rules (now in `dashboard.css`); the sheet and the free part of the map (`rs.sheet()`, `rs.freeArea()`); a tool found by

@@ -9,6 +9,11 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ### Changed
 
+- The page uses roadstyle `0.26.0` (`07c85b5036ab229deb5e7fa423f2322ce64aba69`): the editor draws into the host's standard panel (the apply bar, the History tab with edits.csv), the toolbar is at the right edge by default, 7 base maps (no Bright map), MLT is the default tile format. `map/look.json` is made again. `dashboard_e2e.py` and `tile_format_e2e.py` follow the bar at the right edge, `editor_e2e.py` finds the theme tool by its id.
+- The test `editor_path_e2e.py`: the editor as a person uses it, with real clicks and on a phone with touch: Edit levels, two roads picked, a change added, "← Steps" with the change waiting (Stay, Discard, Apply), Apply and solve, "← Steps": the edit is in the tables. It runs on a computer (light and dark) and on a phone, and checks the seven base maps.
+- **MLT is the default tile format** of the roads map (Kaveh's order, 2026-10-29): the setting **Map tiles** lists MLT first and MVT second, and a stored MVT choice stays (this was PR #36).
+- Roadstyle gap: the credits button is outside a phone's screen at 390 px (the bar of ten tools is 372 px wide). `dashboard_e2e.py` prints `GAP`; `docs/app.md` has it.
+
 - **The level editor uses the page's one panel.** roadstyle's editor draws into `#sb` (`levelEditor({panel, backLabel: "Steps"})`): the page's steps, title and footer are hidden while it is open, and **← Steps** brings them back. The page's own bar with Apply and Close, the editor's frame (`#lvhost`) and the page's edits.csv and levels.csv buttons are gone (the editor's History tab has the `edits.csv` download). **← Steps** writes the changes that the editor applied into the tables; with none applied, the tables do not change. On a phone the editor is in the page's sheet. The picked roads are red and blue, and the tabs and rows are roadstyle's segmented control. `build.sh` pins the roadstyle commit with this editor. `editor_e2e.py` and `phone_e2e.py` follow the new flow.
 
 - The test `dashboard_e2e.py`: the form of roadstyle's dashboard on a computer (1400 × 900) and on a phone (390 × 844): the bar and its tools, the panel, one look for the cards in both themes, the boxes, the settings and the Google key, the windows, the sheet.

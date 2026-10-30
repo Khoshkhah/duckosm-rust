@@ -169,6 +169,13 @@ download, "← Steps". It writes `editor.png` and `editor-dark.png` and prints t
 python crates/duckosm-wasm/www/editor_e2e.py out-editor
 ```
 
+Check the level editor as a person uses it (real clicks, no test hook): two roads, a change, "← Steps" with the change waiting, Apply and solve.
+On a computer (light and dark) and on a phone (390 × 844, touch):
+
+```bash
+python crates/duckosm-wasm/www/editor_path_e2e.py out-editor-path
+```
+
 Check the generation of the tiles (the dashboard's red message and the hidden vector layers when the tiles are of another road set,
 and the normal path):
 
