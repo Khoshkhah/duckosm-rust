@@ -241,10 +241,10 @@ export async function zipAll(areaName, boundary) {
 // map asks for (tile()), until the next style (a worker that ends gives its memory back). keep: the road properties in the tiles, with the
 // ones the style reads. The road table (the fields of each road, for roadstyle's dashboard: the popup) comes with the style.
 let look = null, mapWorker = null, generation = 0, tileId = 0;
-// The tile format of the roads map: "mvt" (the default) or "mlt" (roadstyle's second format, smaller tiles). The style has the format (the
+// The tile format of the roads map: "mlt" (the default, roadstyle's format with smaller tiles) or "mvt". The style has the format (the
 // source's encoding) and each tile address has it (&f=, after the generation's ?g=), so that a tile of the other format is never reused.
-export let tileFormat = "mvt";
-export const setTileFormat = (f) => { tileFormat = f === "mlt" ? "mlt" : "mvt"; };
+export let tileFormat = "mlt";
+export const setTileFormat = (f) => { tileFormat = f === "mvt" ? "mvt" : "mlt"; };   // a stored "mvt" (the choice of an earlier visit) stays; no choice is MLT
 const inFormat = (text) => {
   const style = JSON.parse(text);
   for (const s of Object.values(style.sources)) if (s.tiles) s.tiles = s.tiles.map((u) => `${u}${u.includes("?") ? "&" : "?"}f=${tileFormat}`);

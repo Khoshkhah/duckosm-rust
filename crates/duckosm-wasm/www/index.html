@@ -428,7 +428,7 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
   </div>
   <div class="grid2" style="margin-top:6px">
     <label for="tilefmt" class="small">Map tiles</label>
-    <select id="tilefmt"><option value="mvt">MVT (default)</option><option value="mlt">MLT (smaller tiles)</option></select>
+    <select id="tilefmt"><option value="mlt">MLT (default, smaller tiles)</option><option value="mvt">MVT</option></select>
   </div>
   <div class="row" id="showrow" style="margin-top:10px" hidden><button id="show" class="btn primary">Show on map</button></div>
   <p id="mapnote" class="progress" aria-live="polite"></p>
@@ -1488,7 +1488,7 @@ document.addEventListener("rs:basemapchange", (e) => {
   keep("duckosm.basemap", (basemaps.find((x) => x.dark === b.key) ?? b).key);
 });
 
-// The tile format of the roads map (MVT or MLT), kept for the next visit. A change gives the roads that show the style of the new format
+// The tile format of the roads map (MLT, the default, or MVT), kept for the next visit. A change gives the roads that show the style of the new format
 // (the worker keeps its tiles; each tile address has the format, so no tile of the other format is reused).
 duck.setTileFormat(kept("duckosm.tileformat"));
 $("tilefmt").value = duck.tileFormat;

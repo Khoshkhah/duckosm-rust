@@ -23,7 +23,7 @@ url = f"http://127.0.0.1:{server.server_address[1]}/index.html"
 BOX = "(s) => { const r = document.querySelector(s).getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; }"
 # roadstyle's toolbox is fixed: a tool that the page cannot use stays in its place, greyed out (the legend: the page has no colour options)
 # (roadstyle's default: one `navigate` button in place of zoom in, zoom out, the compass and 2D/3D; the credits are in the corner box on a computer)
-TOOLS = ["theme", "navigate", "street_view", "google_3d", "basemap", "buildings", "legend", "settings", "attribution"]
+TOOLS = ["theme", "navigate", "street_view", "google_3d", "basemap", "roads", "buildings", "legend", "settings", "attribution"]
 BASEBTN = "#rs-toolbar .bm-ctrl .bm-icon"      # the button of roadstyle's base-map tool
 tool = lambda id: f"[data-rs-tool={id}] button, button[data-rs-tool={id}]"  # noqa: E731  (a tool is found by its id: its title goes to the tooltip)
 FAKE = "not-a-key-test-value"
@@ -54,7 +54,7 @@ with sync_playwright() as p:
     for c in ("rs-tpl-dashboard", "rs-overlay", "rs-has-toolbar", "rs-panel-left"):
         assert c in classes.split(), (c, classes)
     assert page.evaluate("rs.tools.list().map((t) => t.id)") == TOOLS
-    assert page.evaluate("rs.tools.list().filter((t) => t.disabled).map((t) => t.id)") == ["legend"], "only the legend is greyed out"
+    assert page.evaluate("rs.tools.list().filter((t) => t.disabled).map((t) => t.id)") == ["roads", "legend"], "the roads filter and the legend are greyed out (no roads yet)"
     for old in ("theme", "collapse", "open", "mapctl", "basectl", "panel", "sheet-handle"):
         assert page.query_selector(f"#{old}") is None, f"the old #{old} is still in the page"
     # roadstyle's one `navigate` button (zoom, turn and tilt sliders; no zoom, compass or 2D/3D buttons) and the credits in the corner box (a computer)
