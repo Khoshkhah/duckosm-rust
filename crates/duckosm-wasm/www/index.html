@@ -8,6 +8,7 @@
 <!-- roadstyle's dashboard and popup look (src/roadstyle/static/, copied by build.sh from roadstyle at ROADSTYLE_COMMIT) -->
 <link rel="stylesheet" href="map/roadstyle/dashboard/dashboard.css">
 <link rel="stylesheet" href="map/roadstyle/popup.css">
+<link rel="preload" href="map/roadstyle/host_options.json" as="fetch" crossorigin>
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js" crossorigin></script>
 <script src="coi-serviceworker.js"></script>   <!-- the COOP and COEP headers on GitHub Pages, for threads -->
 <script type="importmap">
@@ -17,36 +18,13 @@
   "polyclip-ts": "https://cdn.jsdelivr.net/npm/polyclip-ts@0.16.8/+esm"
 } }
 </script>
-<script>
-/* roadstyle's dashboard, as the Rust page writer gives it to a page (roadstyle::dashboard::Template::Dashboard, layout overlay; docs/app.md):
-   this object is the page's `dashboard` option, and the classes of <html> are Dashboard::first_paint, so that no frame shows another form. The
-   panel is at the left (the level editor's panel is at the right) and the bar beside it. The panel hides none of roadstyle's own sections:
-   the page has none of them (the template's `hide` list would fail on a section that is not there). */
-window.DASHBOARD = {
-  template: "dashboard", layout: "overlay",
-  panel: { side: "left", width_px: 370, look: "frame", sections: [], hide: [] },
-  toolbar: { position: "left", settings: true, hold: true },
-  windows: { clamp: true, recenter_map: false, restore_open: true, remember: true },
-  boundary: { dim: false, limit: false, dim_light: 0.16, dim_dark: 0.4, limit_pad: 2.0, zoom_out: 3.0 },
-  google_3d: { fov_deg: null, follow: true, min_alt_m: 80.0, min_zoom_drawn: 17.0, mesh_altitude_m: 1.5,
-    selection_style: { color: "#22d3ee", width: 8.0, outline: "#0b1020", outline_width: 2.0, arrow_color: "#ffffff", arrow_width: 5.0, arrow_every: 25.0, fill: "rgba(34,211,238,0.35)" },
-    layers: [] },
-  legend: { rows: [] },
-  scale_box: false,
-  phone: { max_width_px: 700, toolbar: "top" },
-};
-(function () {
-  var d = window.DASHBOARD, c = document.documentElement.classList;
-  c.add("rs-tpl-dashboard", "rs-overlay", "rs-has-toolbar", "rs-tb-" + d.toolbar.position, "rs-panel-left", "rs-hide-scale");
-  document.documentElement.style.setProperty("--rs-panel-w", d.panel.width_px + "px");
-  if (matchMedia("(max-width:" + d.phone.max_width_px + "px)").matches) c.add("rs-phone");
-})();
-</script>
 <style>
   /* The page is roadstyle's dashboard (docs/app.md): the map fills the window, the panel (#sb, with the frame look) floats over it, and
      roadstyle's toolbar (#rs-toolbar) holds the map buttons. The layout, the bar, the boxes, the windows and the phone's sheet are
      map/roadstyle/dashboard/dashboard.css. Here: the colors of the page outside the panel, the panel's shell (the rules of roadstyle's
      templates/dashboard.html that a host page needs), and the content of the cards. */
+  /* the panel waits for rsFirstPaint (the script below): no frame shows another form */
+  html:not(.rs-tpl-dashboard) #sb { visibility: hidden; }
   :root {
     --bg: #ffffff; --surface: #f6f7f9; --fg: #111827; --muted: #6b7280; --line: #e5e7eb;
     --accent: #2563eb; --accent-fg: #ffffff; --accent-soft: #dbeafe; --warn: #b45309; --warn-soft: #fef3c7;
@@ -78,26 +56,9 @@ window.DASHBOARD = {
   #mapbusy span { background: var(--bg); color: var(--fg); padding: 6px 12px; border-radius: 99px; font-size: 13px; box-shadow: var(--shadow); }
   @keyframes spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { #mapbusy .spin { animation-duration: 3s; } }
-  /* the page's two bar tools: the base map box (the look of roadstyle's boxes) and the 3D buildings switch */
-  #basebox { padding: 8px; }
-  #basebox label { display: flex; align-items: center; gap: 8px; }
-  #basebox #ownbox[hidden], #basebox #ownsep[hidden] { display: none; }
-  /* the panel's shell: roadstyle's templates/dashboard.html (position, tokens, the title row, the hide and show buttons). dashboard.css has the
-     frame and card looks, the sides and the phone's sheet */
-  #sb {
-    position: fixed; top: 0; right: 0; bottom: 0; width: var(--rs-panel-w, 340px); box-sizing: border-box; overflow: auto; padding: 14px 15px;
-    font: 13px/1.5 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
-    --bg: #fff; --ink: #16181d; --mut: #767c88; --line: #e6e8ec; --card: #f7f8fa; --accent: #1a6bd6;
-    background: var(--bg); color: var(--ink); border-left: 1px solid var(--line);
-  }
-  #sb[data-theme=dark] { --bg: #14171c; --ink: #e9ecf1; --mut: #8b93a1; --line: #272b33; --card: #1c2026; --accent: #5aa9f8; }
-  #sb.hidden { display: none; }
-  .sb-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  /* the panel's shell (position, tokens, the hide and show buttons with their icons: the markup of roadstyle's template) is dashboard.css. Here: the title of the panel. */
   .sb-top h1 { margin: 0; font-size: 16px; letter-spacing: -0.01em; }
   .sb-top p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
-  #sb-hide, #sb-show { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; line-height: 1; cursor: pointer; flex: none; }
-  #sb-show { position: fixed; top: 10px; right: 10px; z-index: 3; display: none; width: 32px; height: 32px; }
-  #sb-hide svg, #sb-show svg { width: 16px; height: 16px; stroke-width: 1.8; }
   .sb-body { display: flex; flex-direction: column; gap: 12px; }
   /* the panel's type: the cards' own sizes (roadstyle's template sets 13px for its controls) */
   :where(#sb) h2 { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 10px; }
@@ -288,8 +249,6 @@ window.DASHBOARD = {
     #editbar span { flex: 1; min-width: 0; font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #editbar .btn { height: 40px; }
     body.editing #sb, body.editing .rs-grip { display: none !important; }
-    /* the editor's full sheet (roadstyle: the window less 48 px) ends under the page's bar, so that its handle is not under roadstyle's bar */
-    html body.lv-sheet[data-lv-sheet=full] { --lv-sheet-h: calc(100% - var(--rs-top, 52px) - 48px); }
   }
 </style>
 </head>
@@ -324,27 +283,13 @@ window.DASHBOARD = {
 <!-- the level editor's bar on a phone (card 7): the counts, Apply and Close stay in view -->
 <div id="editbar"><span id="editbar-note"></span><button class="btn primary" data-for="edit-apply">Apply</button>
   <button class="btn" data-for="edit-close">Close</button></div>
-<div id="toolhold" hidden>
-  <!-- the page's base-map box: a tool of roadstyle's bar (setupBarTools() in the script moves it into the bar), in the look of roadstyle's boxes -->
-  <div id="basebox" class="bm-menu rs-bm-box" role="group" aria-label="Base map">
-    <div class="rs-bm-h">Base map</div>
-    <label class="rs-bm-row"><input type="radio" name="base" value=""><span class="rs-bm-sw" style="background:#f2efe9"></span><span class="rs-bm-n">OpenFreeMap</span></label>
-    <label class="rs-bm-row"><input type="radio" name="base" value="esri_gray"><span class="rs-bm-sw" style="background:#e4e4e4"></span><span class="rs-bm-n">Light gray</span></label>
-    <label class="rs-bm-row"><input type="radio" name="base" value="satellite"><span class="rs-bm-sw" style="background:linear-gradient(135deg,#3d5a3a,#7b8a5c 50%,#a09a7c)"></span><span class="rs-bm-n">Satellite</span></label>
-    <label class="rs-bm-row"><input type="radio" name="base" value="blank"><span class="rs-bm-sw" style="background:#efede8"></span><span class="rs-bm-n">Blank</span></label>
-    <label class="rs-bm-row"><input type="radio" name="base" value="blank_dark"><span class="rs-bm-sw" style="background:#14181d"></span><span class="rs-bm-n">Blank dark</span></label>
-    <hr id="ownsep" hidden>
-    <label id="ownbox" class="rs-bm-row" hidden><input type="checkbox" id="ownlayers" checked><span class="rs-bm-n">duckOSM layers</span></label>
-  </div>
-</div>
-
 <div id="status" role="status" aria-live="polite"></div>
 
 <div id="sb" data-theme="light" role="complementary" aria-label="duckOSM">
 <div class="sb-card">
 <div class="sb-top">
   <div><h1>duckOSM in the browser</h1><p>Build the road network of an area in your browser</p></div>
-  <button id="sb-hide" title="Hide the panel" aria-label="Hide the panel" aria-controls="sb"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/><path d="m8.5 9.5 2.5 2.5-2.5 2.5"/></svg></button>
+  <button id="sb-hide" title="Hide panel" aria-label="Hide panel" aria-controls="sb"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/><path d="m8.5 9.5 2.5 2.5-2.5 2.5"/></svg></button>
 </div>
 <div class="sb-body">
 <section id="step1-card" class="step" aria-labelledby="step1">
@@ -514,7 +459,7 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
 </footer>
 </div>
 </div>
-<button id="sb-show" title="Show the panel" aria-label="Show the panel" aria-controls="sb"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/><path d="m10.5 9.5-2.5 2.5 2.5 2.5"/></svg></button>
+<button id="sb-show" title="Show panel" aria-label="Show panel" aria-controls="sb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/><path d="m10.5 9.5-2.5 2.5 2.5 2.5"/></svg></button>
 <!-- the level editor's panel (card 7): out of the page's panel, so that the panel's hiding does not take it -->
 <div id="lvhost"></div>
 
@@ -526,8 +471,7 @@ import * as duck from "./app/duck.js";
 window.duckApi = duck;   // for the tests (drawLaps, tileStats)
 import * as regions from "./app/regions.js";
 import { rsDashboard } from "./map/roadstyle/dashboard/index.js";   // roadstyle's map dashboard (copied by build.sh at ROADSTYLE_COMMIT)
-import { LAYERS_ICON, BUILDINGS_ICON } from "./map/roadstyle/dashboard/tools.js";   // the icons of roadstyle's base-map and 3D-buildings tools
-import { setSheet } from "./map/roadstyle/dashboard/template.js";   // the phone sheet's height (0 closed, 1 40 %, 2 full): roadstyle has no rs call for it yet
+import { rsFirstPaint } from "./map/roadstyle/dashboard/template.js";   // the classes of <html> before the first paint
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
@@ -591,7 +535,25 @@ const empty = { type: "FeatureCollection", features: [] };
 maplibregl.setWorkerCount(Math.min(4, navigator.hardwareConcurrency || 1));   // MapLibre has one worker by default; the dense road tiles parse in parallel with more (before the first map)
 const keep = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* no storage */ } };
 const kept = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
-const map = new maplibregl.Map({ container: "map", style: "https://tiles.openfreemap.org/styles/liberty", center: [10, 50], zoom: 3 });
+// The options of roadstyle's dashboard are roadstyle's (data/host_options.json, copied by build.sh: the typed `dashboard`, its first paint, the base
+// maps and the layers on top, as a page that roadstyle writes has them). The page gives only what is its own: the panel's width, no panel section
+// of roadstyle's (the page has none of them), and the base map that the person chose for the next visit (its light key; the dark twin comes with the
+// theme). The active base map is the first of the list.
+const host = await (await fetch("map/roadstyle/host_options.json")).json();
+host.dashboard.panel = { ...host.dashboard.panel, width_px: 370, hide: [] };
+host.first_paint.panel_width_px = 370;
+{
+  const key = (k) => host.basemaps.some((b) => b.key === k) ? k : "ofm_liberty";
+  const active = key(kept("duckosm.basemap"));
+  host.basemaps.sort((a, b) => (b.key === active) - (a.key === active));   // a stable sort: the others keep their order
+}
+rsFirstPaint(host.first_paint);
+const basemaps = host.basemaps;
+// the map starts with the backdrop that roadstyle's base-map module changes: the layers `bg` and `basemap` (OpenFreeMap's glyphs are for the page's labels)
+const rasters = basemaps.find((b) => b.tiles.length);
+const map = new maplibregl.Map({ container: "map", center: [10, 50], zoom: 3, style: { version: 8, glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
+  sources: { bm: { type: "raster", tiles: rasters.tiles, tileSize: 256 } },
+  layers: [{ id: "bg", type: "background", paint: { "background-color": basemaps[0].bg } }, { id: "basemap", type: "raster", source: "bm", layout: { visibility: "none" } }] } });
 // the zoom buttons and the compass become tools of roadstyle's bar, the scale bar goes into its corner box with the zoom number: both before rsDashboard
 map.addControl(new maplibregl.NavigationControl(), "top-right");
 map.addControl(new maplibregl.ScaleControl(), "bottom-left");
@@ -605,12 +567,13 @@ try {
 // roadstyle's dashboard (docs/app.md), made once, before the roads: the bar and its tools, the panel's look, the 2D/3D button, Street View with
 // its marker, Google 3D (the key is the person's, in the settings), the road popup and the hover and select glow. The roads come later as
 // vector tiles (the prefix rs-; showRoads gives each new roads style to rs.setStyle), and a click reads the road's fields in the road table of
-// the style (window.RS_SIDE). The page's base map stays its own (setBase), as a tool of the bar.
+// the style (window.RS_SIDE). The base map is roadstyle's (basemaps, ontop).
 // no `pick` option: roadstyle picks the road layers of the style (RS_LEANS: roads-simple and one layer for each band of zooms),
 // so the hover, the tooltip and the click work at every zoom
 const rs = rsDashboard(map, { style: null, prefix: "rs-", tiles: true,
+  basemaps, ontop: host.ontop, basemap_switcher: true,
   select_color: "#7c4dff",   // the look's theme.selection.select
-  street_view: "window", street_view_key: "", google_3d: true, dashboard: window.DASHBOARD });
+  street_view: "window", street_view_key: "", google_3d: true, dashboard: host.dashboard });
 // no road popup or selection while the user draws a shape or picks a point (the dashboard has its own click on the roads)
 document.addEventListener("rs:select", () => {
   if ($("draw").hidden && $("here").getAttribute("aria-pressed") !== "true") return;
@@ -619,9 +582,6 @@ document.addEventListener("rs:select", () => {
 // the tiles of the roads map: roadstyle's module makes each one when the map asks for it (app/duck.js tile())
 maplibregl.addProtocol("rs", async (params, abort) => ({ data: await duck.tile(params.url, abort.signal) }));
 const loaded = new Promise((ok) => map.on("load", ok));
-// OpenFreeMap's layers (the style before the page adds its own), and which of them are roads
-const baseLayers = [];
-loaded.then(() => map.getStyle().layers.forEach((l) => baseLayers.push({ id: l.id, road: /^transportation/.test(l["source-layer"] ?? "") })));
 const setData = (src, data) => loaded.then(() => map.getSource(src).setData(data ?? empty));
 
 const blue = "#2563eb";
@@ -692,27 +652,11 @@ function pin() {
 }
 
 // ---- the free part of the map: the panel, the bar and the phone's sheet cover a part of the full-window map (roadstyle's overlay layout) ----
-const phone = matchMedia("(max-width: 700px)");   // roadstyle's phone width (dashboard.phone.max_width_px)
-const seen = (e) => !!e && getComputedStyle(e).display !== "none" && e.getBoundingClientRect().width > 0;
-// the insets from the edges of the window of what the panel and the bar cover (roadstyle's windows.js freeArea does the same for its windows)
+const phone = matchMedia(`(max-width: ${host.dashboard.phone.max_width_px}px)`);
+// the insets from the edges of the window of what the panel, the bar and the sheet cover: rs.freeArea() is the part that they leave free
 function freeInsets() {
-  const f = { top: 0, right: 0, bottom: 0, left: 0 }, bar = $("rs-toolbar"), sb = $("sb");
-  if (phone.matches) {
-    const grip = document.querySelector(".rs-grip");                  // the sheet's grip is its upper edge; a closed sheet has the grip alone
-    const edge = seen(grip) ? grip : seen(sb) ? sb : null;
-    f.bottom = edge ? Math.max(0, Math.round(innerHeight - edge.getBoundingClientRect().top)) : 0;
-    if (seen(bar)) f.top = Math.ceil(bar.getBoundingClientRect().bottom) + 8;
-    return f;
-  }
-  if (seen(sb)) { const r = sb.getBoundingClientRect(); if (r.left + r.right < innerWidth) f.left = Math.round(r.right); else f.right = Math.round(innerWidth - r.left); }
-  if (seen(bar)) {
-    const r = bar.getBoundingClientRect(), e = bar.dataset.edge;
-    if (e === "left") f.left = Math.max(f.left, Math.ceil(r.right) + 8);
-    else if (e === "right") f.right = Math.max(f.right, Math.ceil(innerWidth - r.left) + 8);
-    else if (e === "top") f.top = Math.ceil(r.bottom) + 8;
-    else if (e === "bottom") f.bottom = Math.ceil(innerHeight - r.top) + 8;
-  }
-  return f;
+  const a = rs.freeArea();
+  return { top: Math.round(a.top), right: Math.round(innerWidth - a.hi), bottom: Math.round(innerHeight - a.bottom), left: Math.round(a.lo) };
 }
 // the map's bottom padding on a phone is the sheet, so that the area and the roads stay above it (the level editor has its own sheet: while it is
 // open, the editor sets the padding). --free-* are for the veil and the message.
@@ -740,10 +684,9 @@ $("zoom-area").onclick = zoomToArea;
 // The theme is roadstyle's one value (data-rs-theme on <html>, set by the theme button of the bar). The page keeps it for the next visit, and
 // copies it to data-theme, which the level editor's panel reads.
 const root = document.documentElement;
-const dark = () => root.dataset.rsTheme === "dark";
 window.rsSetTheme(kept("duckosm.theme") ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
 root.dataset.theme = root.dataset.rsTheme;
-document.addEventListener("rs:themechange", (e) => { root.dataset.theme = e.detail.theme; keep("duckosm.theme", e.detail.theme); loaded.then(setBase); });
+document.addEventListener("rs:themechange", (e) => { root.dataset.theme = e.detail.theme; keep("duckosm.theme", e.detail.theme); });
 // the panel hides (the map keeps its place: it is under the panel) and the button at the corner shows it again; the bar slides to the edge.
 // A phone has the sheet (roadstyle's grip) in place of the two buttons.
 function showPanel(on, remember = true) {
@@ -1339,7 +1282,7 @@ $("run").onclick = async () => {
     $("step5-card").hidden = false;
     unfold("step5-card");
     if (phone.matches) {                          // a phone: the result shows in the sheet (its cards scroll, the page does not)
-      if (root.classList.contains("rs-sheet-0")) setSheet(1);
+      if (rs.sheet() === 0) rs.sheet(1);
       const cards = document.querySelector(".sb-body");
       cards.scrollTop += $("step5-card").getBoundingClientRect().top - cards.getBoundingClientRect().top - 8;
     }
@@ -1360,7 +1303,6 @@ let roadsShown = false;
 function removeRoads() {
   if (!map.getStyle()) return;
   roadsShown = false;
-  setBase();
   for (const l of map.getStyle().layers) if (l.id.startsWith("rs-")) map.removeLayer(l.id);
   for (const id of Object.keys(map.getStyle().sources)) if (id.startsWith("rs-")) map.removeSource(id);
   if (map.getLayer("area-fill")) map.setLayoutProperty("area-fill", "visibility", "visible");
@@ -1416,7 +1358,6 @@ async function addRoadStyle(style) {
     for (const n of Object.keys(own)) json = json.replaceAll(`"${n}"`, `"rs-${n}"`);   // the image names in the layout
     const layer = JSON.parse(json);
     map.addLayer({ ...layer, id: "rs-" + l.id, source: "rs-" + l.source }, "area-fill");
-    if (layer.layout?.visibility === "none") offLayers.add("rs-" + l.id);
   }
   map.setLayoutProperty("area-fill", "visibility", "none");   // the fill would change the colors of the roads
   addOverview(style);
@@ -1443,7 +1384,6 @@ async function useStyle(style) {
   removeRoads();
   await addRoadStyle(style);
   roadsShown = true;
-  setBase();
   rs.setStyle(style);
 }
 async function drawRoads() {
@@ -1468,7 +1408,6 @@ async function drawRoads() {
     //   // the road fields (the popup); the level editor puts its own here while it is open
     rs.setStyle(r.style);   // the dashboard reads the new roads style (its layers and metadata)
     roadsShown = true;
-    setBase();
     // the first tiles: the map is drawn when it is idle (at most 60 s)
     await Promise.race([new Promise((ok) => map.once("idle", ok)), new Promise((ok) => setTimeout(ok, 60000))]);
     if (run !== roadsRun) { fresh ||= isFresh; return; }
@@ -1478,8 +1417,7 @@ async function drawRoads() {
     if (isFresh) {   // freshMap: the blank base map and the area in view in one move, when the roads are ready
       // "Show on map" and the draw after a build always set the blank base map, whatever the user chose before; his choice stays for the
       // draws that are not a fresh map (a network change, the draw after Apply, the editor's redraws)
-      view.base = dark() ? "blank_dark" : "blank";
-      setBase();
+      window.rsSetBasemap("blank");
       zoomToArea();
       await new Promise((ok) => { map.once("moveend", ok); setTimeout(ok, 1000); });
     }
@@ -1512,7 +1450,6 @@ async function visualization() {
   $("mapmode").innerHTML = options.join("");
   $("mapmode").value = $("mapmode").value;      // the list in roadstyle's look shows the new first option
   $("mapmode-row").style.display = modes.length < 2 ? "none" : "";
-  $("ownbox").hidden = $("ownsep").hidden = !duck.tables.some((t) => t.mode === "features");
   $("showrow").hidden = false;
   $("step7-card").hidden = !duck.tables.some((t) => t.mode === "visualization" && t.table === "edge_levels");
   unfold("step6-card");
@@ -1529,7 +1466,7 @@ async function visualization() {
 // chooses after that stays for the next draws of this page. Kaveh: "a loading map processing shows first, then change base map to
 // blank and zoom to that area": the map stays as it is under the veil of showRoads, and drawRoads changes the base map and the view
 // when the roads are ready.
-let baseChosen = false, fresh = false;
+let fresh = false;
 function freshMap() {
   fresh = true;
   return showRoads();
@@ -1544,97 +1481,12 @@ $("mapmode").onchange = () => {
   $("mapnote").textContent = n > window.mapMaxRoads ? tooLarge(n) : `${num(n)} roads. Click Show on map to draw it.`;
 };
 
-// the base map: OpenFreeMap, or a layer over it (under the roads): roadstyle's keyless raster map, or an empty background
-const BASEMAPS = {
-  esri_gray: { tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"],
-               attribution: "Tiles © Esri", maxzoom: 16 },
-  satellite: { tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
-               attribution: "Imagery © Esri, Maxar, Earthstar Geographics", maxzoom: 19 },
-};
-// the map buttons: the base map (OpenFreeMap without its roads while the duckOSM roads show, Esri's light gray or satellite
-// tiles, or a blank background; all but OpenFreeMap hide all of its layers, also its labels and 3D buildings), the duckOSM
-// layers (the base-map layers of the build, the style's sources ov<i>, over any base map), the 3D buildings and the 3D view.
-// The style alone shows the building footprints (and from which zoom). The 3D buildings switch adds their 3D version: the
-// duckOSM layers' own (roadstyle adds them hidden), and OpenFreeMap's, which is flat (height 0) when the switch is off.
-// The 3D view only tilts the map.
-const BLANKS = { blank: "#efede8", blank_dark: "#14181d" };   // roadstyle's tile-less base maps (basemaps.py), not the page's theme
-const view = { base: BASEMAPS[kept("duckosm.basemap")] || BLANKS[kept("duckosm.basemap")] ? kept("duckosm.basemap") : "",
-  buildings: kept("duckosm.buildings") === "1" };
-const offLayers = new Set();   // the layers that roadstyle adds hidden (showRoads)
-const isOv = (l) => l.source === "rs-roads" && /^ov\d/.test(l["source-layer"] ?? "");   // a base-map layer of the build
-function setBase() {
-  if (map.getLayer("base-over")) map.removeLayer("base-over");
-  if (map.getSource("base-over")) map.removeSource("base-over");
-  const v = view.base, own = !$("ownbox").hidden && $("ownlayers").checked;
-  const show = (l, on) => map.setLayoutProperty(l.id, "visibility", on ? "visible" : "none");
-  const style = map.getStyle().layers;
-  // OpenFreeMap's own layers stay as served (no hidden road, no 3D heights, no zoom range): with its base map only our layers above them
-  // (the area's base-map layers with the boundary's fill) cover it inside the area. Esri's and the blank base map need it hidden under them.
-  for (const l of baseLayers) if (v !== "" || map.getLayoutProperty(l.id, "visibility") === "none") show(l, v === "");
-  for (const l of style) if (isOv(l)) show(l, own && (!offLayers.has(l.id) || (l.type === "fill-extrusion" && view.buildings)));
-  const bottom = style[0].id;
-  if (BLANKS[v]) map.addLayer({ id: "base-over", type: "background", paint: { "background-color": BLANKS[v] } }, bottom);
-  else if (BASEMAPS[v]) {
-    map.addSource("base-over", { type: "raster", tileSize: 256, ...BASEMAPS[v] });
-    map.addLayer({ id: "base-over", type: "raster", source: "base-over" }, bottom);
-  }
-  for (const r of document.querySelectorAll("input[name=base]")) r.checked = r.value === v;
-  buildingsTool.ariaPressed = String(view.buildings);
-  buildingsTool.classList.toggle("rs-on", view.buildings);
-}
-// The page's two tools in roadstyle's bar, put before the settings and the attribution as roadstyle's own base-map and buildings tools are: the
-// base map (a button that opens the page's box, with roadstyle's rules for a box: one open at a time, a click outside or the Escape key
-// closes it, it stays 12 px inside the window) and the 3D buildings switch.
-const barTool = (id, title) => {
-  const btn = document.querySelector(`#rs-toolbar button[title="${title}"]`), wrap = btn.closest(".maplibregl-ctrl");
-  btn.id = id; btn.ariaLabel = title;
-  wrap.parentElement.insertBefore(wrap, document.querySelector("#rs-toolbar .rs-set-ctrl") ?? document.querySelector("#rs-toolbar .rs-attr-ctrl"));
-  return btn;
-};
-rs.tools.add({ id: "basemap", kind: "box", title: "Base map", icon: LAYERS_ICON });
-rs.tools.add({ id: "buildings", kind: "toggle", title: "3D buildings", icon: BUILDINGS_ICON });
-const baseTool = barTool("bbase", "Base map"), buildingsTool = barTool("bbld", "3D buildings");
-// A box stays 12 px inside the window at each side: roadstyle's boxes move up or down (toolbar.js keepInside), and not sideways, so a bar at the top
-// (the phone) opens a box under its button, which can be at the far right or left (Attribution at the left of the second row). The page moves
-// each box that it finds: its own, and roadstyle's attribution and settings boxes.
-// ponytail: this stays until roadstyle's keepInside moves a box sideways too.
-function keepInside(box) {
-  const fit = () => {
-    if (box.hidden || (box.classList.contains("bm-menu") && !box.classList.contains("open"))) return;
-    box.style.translate = "0 0";           // not a margin: a box fixed by its right or bottom edge ignores the margin on the other side
-    const r = box.getBoundingClientRect(), over = r.bottom - (innerHeight - 12), under = 12 - r.top, right = r.right - (innerWidth - 12), left = 12 - r.left;
-    box.style.translate = `${right > 0 ? -right : left > 0 ? left : 0}px ${over > 0 ? -over : under > 0 ? under : 0}px`;
-  };
-  new MutationObserver(fit).observe(box, { attributes: true, attributeFilter: ["hidden", "class"] });
-  new ResizeObserver(fit).observe(box);
-  addEventListener("resize", fit);
-}
-{
-  const box = $("basebox"), wrap = baseTool.closest(".maplibregl-ctrl");
-  wrap.classList.add("bm-ctrl");
-  wrap.append(box);
-  const popBase = (open) => {
-    if (open) for (const t of rs.tools.list()) if (t.open) rs.tools.close(t.id);
-    box.classList.toggle("open", open);
-    baseTool.ariaExpanded = String(open);
-  };
-  baseTool.ariaExpanded = "false";
-  baseTool.addEventListener("click", () => popBase(!box.classList.contains("open")));
-  document.addEventListener("click", (e) => { if (box.classList.contains("open") && !wrap.contains(e.target)) popBase(false); }, true);
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") popBase(false); }, true);
-  for (const b of [box, ...document.querySelectorAll("#rs-attr-box, #rs-settings-box")]) keepInside(b);
-}
-rs.tools.ready();   // the bar was held back until these tools were in (toolbar.hold)
-for (const r of document.querySelectorAll("input[name=base]")) r.onchange = () => {
-  baseChosen = true;                              // the next draws keep it (freshMap)
-  view.base = r.value;
-  keep("duckosm.basemap", r.value);
-  if (r.value === "satellite") $("ownlayers").checked = false;   // the duckOSM layers would cover the photo
-  loaded.then(setBase);
-};
-$("ownlayers").onchange = () => loaded.then(setBase);
-buildingsTool.addEventListener("click", () => { view.buildings = !view.buildings; keep("duckosm.buildings", view.buildings ? "1" : "0"); loaded.then(setBase); });
-loaded.then(setBase);
+// The base map is roadstyle's (its tool in the bar, its box, the link to the theme, the order of its layers under the roads): the page only keeps the
+// choice for the next visit (the light key of a pair).
+document.addEventListener("rs:basemapchange", (e) => {
+  const b = basemaps.find((x) => x.key === e.detail.basemap);
+  keep("duckosm.basemap", (basemaps.find((x) => x.dark === b.key) ?? b).key);
+});
 
 // The tile format of the roads map (MVT or MLT), kept for the next visit. A change gives the roads that show the style of the new format
 // (the worker keeps its tiles; each tile address has the format, so no tile of the other format is reused).

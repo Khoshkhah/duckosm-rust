@@ -1,7 +1,7 @@
 """The page's form in roadstyle's dashboard (docs/app.md, "roadstyle's dashboard look"), in headless Chromium (Playwright), with no build:
 the bar and its tools in their order, the bar beside the panel, the panel that hides and shows, one neutral look for the seven cards
-and the theme that all parts follow, the base-map box and its rules (a click outside, the Escape key, one box at a time), the 3D buildings
-switch, the settings box with the Google key (kept in the browser only; the key of an earlier version moves there), a window in the free
+and the theme that all parts follow, the base-map box and its rules (a click outside, the Escape key, one box at a time), the base map that follows
+the theme, the 3D buildings switch (roadstyle's), the settings box with the Google key (kept in the browser only; the key of an earlier version moves there), a window in the free
 part of the map, and the phone form at 390 x 844 (the bar at the top, the sheet with three heights, the boxes and the windows inside the
 screen, the tools 32 px or more and reachable). It writes dashboard-*.png.
 
@@ -21,8 +21,11 @@ out.mkdir(parents=True, exist_ok=True)
 server = start(0, quiet=True, directory=sys.argv[2] if len(sys.argv) > 2 else WWW)
 url = f"http://127.0.0.1:{server.server_address[1]}/index.html"
 BOX = "(s) => { const r = document.querySelector(s).getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; }"
-TOOLS = ["Light / dark", "Zoom in", "Zoom out", "Drag to rotate map, click to reset north", "Tilt the view", "Street View", "Google 3D",
-         "Base map", "3D buildings", "Settings", "Attribution"]
+# roadstyle's toolbox is fixed: a tool that the page cannot use stays in its place, greyed out (the legend: the page has no colour options)
+# (roadstyle's default: one `navigate` button in place of zoom in, zoom out, the compass and 2D/3D; the credits are in the corner box on a computer)
+TOOLS = ["theme", "navigate", "street_view", "google_3d", "basemap", "buildings", "legend", "settings", "attribution"]
+BASEBTN = "#rs-toolbar .bm-ctrl .bm-icon"      # the button of roadstyle's base-map tool
+tool = lambda id: f"[data-rs-tool={id}] button, button[data-rs-tool={id}]"  # noqa: E731  (a tool is found by its id: its title goes to the tooltip)
 FAKE = "not-a-key-test-value"
 errors = []
 
@@ -33,7 +36,6 @@ def open_page(browser, **context):
     page.add_init_script("if (!sessionStorage.cleared) { localStorage.clear(); sessionStorage.cleared = '1'; }")
     page.goto(url)
     page.wait_for_function("window.mapReady && document.getElementById('rs-toolbar') && !document.getElementById('rs-toolbar').dataset.held", timeout=120_000)
-    page.evaluate("document.querySelectorAll('#rs-toolbar button').forEach((b) => (b.dataset.t = b.title))")   # tip.js takes the title after a hover
     page.wait_for_timeout(800)
     return page
 
@@ -51,9 +53,28 @@ with sync_playwright() as p:
     classes = page.evaluate("document.documentElement.className")
     for c in ("rs-tpl-dashboard", "rs-overlay", "rs-has-toolbar", "rs-panel-left"):
         assert c in classes.split(), (c, classes)
-    assert page.evaluate("[...document.querySelectorAll('#rs-toolbar button')].map((b) => b.title)") == TOOLS
+    assert page.evaluate("rs.tools.list().map((t) => t.id)") == TOOLS
+    assert page.evaluate("rs.tools.list().filter((t) => t.disabled).map((t) => t.id)") == ["legend"], "only the legend is greyed out"
     for old in ("theme", "collapse", "open", "mapctl", "basectl", "panel", "sheet-handle"):
         assert page.query_selector(f"#{old}") is None, f"the old #{old} is still in the page"
+    # roadstyle's one `navigate` button (zoom, turn and tilt sliders; no zoom, compass or 2D/3D buttons) and the credits in the corner box (a computer)
+    for gone in ("zoom_in", "zoom_out", "compass", "view3d"):
+        assert page.query_selector(f"[data-rs-tool={gone}]") is None, gone
+    z0 = page.evaluate("duckMap.getZoom()")
+    page.click(tool("navigate"))
+    assert page.is_visible("#rs-nav-box"), "the navigate box opens"
+    page.click("#rs-nav-box button[data-z='1']")
+    page.wait_for_function(f"Math.abs(duckMap.getZoom() - {z0 + 1}) < 0.05")
+    page.fill("#rs-nav-box input[data-k=p]", "40")
+    page.wait_for_function("Math.round(duckMap.getPitch()) === 40")
+    page.click("#rs-nav-box .rs-nb-reset")
+    page.wait_for_function("duckMap.getPitch() === 0 && duckMap.getBearing() === 0")
+    page.keyboard.press("Escape")
+    assert page.query_selector("#rs-toolbar [data-rs-tool=attribution]") is None and page.is_visible("[data-rs-tool=attribution]"), "the credits are in the corner box, not in the bar"
+    page.mouse.move(700, 450)
+    page.keyboard.down("Control"); page.mouse.down(); page.mouse.move(760, 400, steps=6); page.mouse.up(); page.keyboard.up("Control")
+    assert page.evaluate("duckMap.getBearing() !== 0 || duckMap.getPitch() !== 0"), "Ctrl + drag turns and tilts the map"
+    page.evaluate("duckMap.jumpTo({bearing: 0, pitch: 0})")
     # the bar is beside the panel; the panel hides, and the bar goes to the edge; the panel shows again
     bar, sb = page.evaluate(BOX, "#rs-toolbar"), page.evaluate(BOX, "#sb")
     assert sb[0] <= 1 and sb[2] - 12 <= bar[0] < sb[2] + 20, ("the bar beside the panel's card (the frame is 8 px)", bar, sb)
@@ -61,6 +82,10 @@ with sync_playwright() as p:
     page.click("#sb-hide")
     page.wait_for_timeout(500)
     assert page.is_hidden("#sb") and page.is_visible("#sb-show") and page.evaluate(BOX, "#rs-toolbar")[0] < 20, "the panel hides"
+    # the show button has the icon of roadstyle's template (an outline, not a filled square), at the corner, 32 px
+    icon = page.evaluate("(() => { const b = document.getElementById('sb-show'), r = b.getBoundingClientRect(), c = getComputedStyle(b.querySelector('svg')); return [Math.round(r.left), Math.round(r.top), Math.round(r.width), c.fill, c.width, c.strokeWidth]; })()")
+    assert icon == [10, 10, 32, "none", "18px", "1.8px"], icon
+    shot("1b-panel-hidden")
     page.click("#sb-show")
     page.wait_for_timeout(500)
     assert page.is_visible("#sb") and page.evaluate(BOX, "#rs-toolbar")[0] >= sb[2] - 12, "the panel shows again"
@@ -75,50 +100,68 @@ with sync_playwright() as p:
         })""")
     for theme in ("light", "dark"):
         if theme == "dark":
-            page.click("#rs-toolbar button[data-t='Light / dark']")
+            page.click(tool("theme"))
             page.wait_for_timeout(600)
             assert page.evaluate("[document.documentElement.dataset.rsTheme, document.documentElement.dataset.theme, "
                                  "document.getElementById('sb').dataset.theme, localStorage.getItem('duckosm.theme')]") == ["dark"] * 4
             shot("2-dark")
         seen = looks()
         assert len(seen) == 7 and all(x == seen[0] for x in seen) and seen[0][4] == "", (theme, seen)
-    page.click("#rs-toolbar button[data-t='Light / dark']")
+    page.click(tool("theme"))
     page.wait_for_timeout(300)
     assert page.evaluate("document.documentElement.dataset.rsTheme") == "light"
 
-    # the base-map box (the page's own tool): opens beside the bar, inside the window; the Escape key and a click outside close it; one box at a time
-    box = lambda: page.evaluate("document.getElementById('basebox').classList.contains('open')")  # noqa: E731
-    page.click("#bbase")
+    # the base-map box (roadstyle's tool, with its own rules): opens beside the bar, inside the window; the Escape key and a click outside close it;
+    # one box at a time
+    box = lambda: page.evaluate("document.querySelector('.bm-menu').classList.contains('open')")  # noqa: E731
+    page.click(BASEBTN)
     page.wait_for_timeout(300)
-    assert box() and inside(page.evaluate(BOX, "#basebox"), 1400, 900, 11), page.evaluate(BOX, "#basebox")
+    assert box() and inside(page.evaluate(BOX, ".bm-menu"), 1400, 900, 11), page.evaluate(BOX, ".bm-menu")
     shot("3-basemap-box")
     page.keyboard.press("Escape")
     assert not box()
-    page.click("#bbase")
+    page.click(BASEBTN)
     page.mouse.click(900, 400)
     assert not box(), "a click outside closes the box"
-    page.click("#bbase")
-    page.click("#rs-toolbar button[data-t='Attribution']")
+    page.click(BASEBTN)
+    page.click(tool("attribution"))
     page.wait_for_timeout(200)
     assert not box() and page.is_visible("#rs-attr-box"), "one box at a time: the attribution box closes the base-map box"
-    page.click("#bbase")
+    page.click(BASEBTN)
     page.wait_for_timeout(200)
     assert box() and page.is_hidden("#rs-attr-box"), "and the base-map box closes the attribution box"
-    page.click("input[name=base][value=blank_dark]")
-    page.wait_for_function("window.duckMap.getLayer('base-over')?.type === 'background'")
-    assert page.evaluate("localStorage.getItem('duckosm.basemap')") == "blank_dark"
+    # the base map is roadstyle's: a map with a dark twin follows the theme (the list has one row for the pair); the page keeps the light key
+    assert page.evaluate("[...document.querySelectorAll('.bm-menu input[name=rs-bm]')].map((r) => r.value)") == [
+        "ofm_liberty", "ofm_bright", "ofm_positron", "osm", "esri_gray", "esri_street", "satellite", "blank"]
+    assert page.evaluate("document.querySelector('input[name=rs-bm]:checked').value") == "ofm_liberty", "the page starts on OpenFreeMap"
+    page.click("input[name=rs-bm][value=blank]")
+    bg = lambda: page.evaluate("[duckMap.getPaintProperty('bg', 'background-color'), duckMap.getLayoutProperty('basemap', 'visibility')]")  # noqa: E731
+    page.wait_for_function("window.duckMap.getPaintProperty('bg', 'background-color') === '#efede8'")
+    assert bg() == ["#efede8", "none"] and page.evaluate("localStorage.getItem('duckosm.basemap')") == "blank"
+    page.keyboard.press("Escape")
+    page.click(tool("theme"))
+    page.wait_for_function("window.duckMap.getPaintProperty('bg', 'background-color') === '#14181d'")
+    assert page.evaluate("localStorage.getItem('duckosm.basemap')") == "blank", "the dark twin is not the choice"
+    page.click(tool("theme"))
+    page.wait_for_function("window.duckMap.getPaintProperty('bg', 'background-color') === '#efede8'")
+    # an Esri raster map goes under the page's layers; Satellite is a dark map, so it turns the page dark (roadstyle's rule)
+    page.click(BASEBTN)
+    page.click("input[name=rs-bm][value=esri_gray]")
+    page.wait_for_function("window.duckMap.getLayoutProperty('basemap', 'visibility') === 'visible'")
+    assert page.evaluate("duckMap.getStyle().layers.map((l) => l.id).slice(0, 3)") == ["bg", "basemap", "area-fill"], "the raster map is under the page's layers"
+    page.click("input[name=rs-bm][value=ofm_liberty]")
+    page.wait_for_function("window.duckMap.getStyle().layers.some((l) => l.id.startsWith('vbm-'))", timeout=60_000)
     page.keyboard.press("Escape")
 
-    # the 3D buildings switch
-    assert page.evaluate("document.getElementById('bbld').ariaPressed") == "false"
-    page.click("#bbld")
-    assert page.evaluate("[document.getElementById('bbld').ariaPressed, document.getElementById('bbld').classList.contains('rs-on'), "
-                         "localStorage.getItem('duckosm.buildings')]") == ["true", True, "1"]
-    page.click("#bbld")
-    assert page.evaluate("document.getElementById('bbld').ariaPressed") == "false"
+    # roadstyle's 3D buildings tool: on with a vector base map (OpenFreeMap), greyed out with the others
+    page.wait_for_function("document.getElementById('rs-b3d-btn') && !document.getElementById('rs-b3d-btn').disabled")
+    assert page.evaluate("document.getElementById('rs-b3d-btn').classList.contains('rs-on')")
+    page.click("#rs-b3d-btn")
+    assert not page.evaluate("document.getElementById('rs-b3d-btn').classList.contains('rs-on')")
+    page.click("#rs-b3d-btn")
 
     # the Google key: roadstyle's settings box (the gear). The browser keeps it; the page's card has no field for it
-    page.click("#rs-toolbar button[data-t=Settings]")
+    page.click(tool("settings"))
     page.wait_for_selector("#rs-settings-box .rs-set-key", state="visible")
     assert "Google Maps key" in page.inner_text("#rs-settings-box")
     shot("4-settings")
@@ -134,7 +177,7 @@ with sync_playwright() as p:
     page.keyboard.press("Escape")
 
     # Street View opens in the free part of the map: not under the panel, not under the bar
-    page.click("#rs-toolbar button[data-t='Street View']")
+    page.click(tool("street_view"))
     page.wait_for_selector(".rs-svw", state="visible")
     page.wait_for_timeout(600)
     win, bar, sb = page.evaluate(BOX, ".rs-svw"), page.evaluate(BOX, "#rs-toolbar"), page.evaluate(BOX, "#sb")
@@ -161,20 +204,22 @@ with sync_playwright() as p:
     bar = page.evaluate(BOX, "#rs-toolbar")
     assert page.evaluate("document.getElementById('rs-toolbar').dataset.edge") == "top" and bar[1] < 20 and bar[2] <= W, bar
     # each tool 32 px or more, and a tap reaches it (nothing covers it)
-    for i, b in enumerate(page.query_selector_all("#rs-toolbar button")):
+    BARBTN = "#rs-toolbar .maplibregl-ctrl > button, #rs-toolbar > button"       # the buttons of the tools (not the buttons inside a box)
+    for i, b in enumerate(page.query_selector_all(BARBTN)):
         r = b.bounding_box() or {"width": 0, "height": 0}
         assert r["width"] >= 32 and r["height"] >= 32, (i, r)
-    reach = page.evaluate("""() => [...document.querySelectorAll('#rs-toolbar button')].filter((b) => {
+    reach = page.evaluate("""(sel) => [...document.querySelectorAll(sel)].filter((b) => {
         const r = b.getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
         return !(e === b || b.contains(e));
-    }).map((b) => b.title)""")
+    }).map((b) => (b.closest('[data-rs-tool]') || b).dataset.rsTool)""", BARBTN)
     assert not reach, ("covered tools", reach)
 
     # the sheet: three heights, closed, 40 %, full; the bar stays in view; the map's padding is the sheet's part (down to the grip)
-    state = lambda: page.evaluate("[0, 1, 2].find((n) => document.documentElement.classList.contains('rs-sheet-' + n))")  # noqa: E731
+    state = lambda: page.evaluate("rs.sheet()")  # noqa: E731  (roadstyle's call for the sheet's height)
     pad = lambda: page.evaluate("window.duckMap.getPadding().bottom")  # noqa: E731
     grip = lambda: page.evaluate(BOX, ".rs-grip")  # noqa: E731
-    assert state() == 1
+    assert state() == 1 and page.evaluate("[0, 1, 2].find((n) => document.documentElement.classList.contains('rs-sheet-' + n))") == 1
+    assert abs(page.evaluate("rs.freeArea().bottom") - grip()[1]) < 2, "the free part of the map ends at the grip"
     sb = page.evaluate(BOX, "#sb")
     assert abs((sb[3] - sb[1]) - H * 0.4) < 6 and abs(pad() - (H - grip()[1])) < 2 and page.evaluate(BOX, "#run")[3] <= H, (sb, pad())
     assert H - (H - grip()[1]) >= H * 0.5, "the map has 50 % of the height or more at 40 %"
@@ -191,17 +236,17 @@ with sync_playwright() as p:
         if want == 0:
             assert page.is_hidden("#sb") and grip()[3] >= H - 1
             shot("8-phone-sheet-closed")
-    # a box is inside the screen
-    for title, sel in (("Base map", "#basebox"), ("Attribution", "#rs-attr-box"), ("Settings", "#rs-settings-box")):
-        page.tap(f"#rs-toolbar button[data-t='{title}']")
+    # a box is inside the screen, sideways too (roadstyle moves a box left or right as well as up or down)
+    for id, sel in (("basemap", ".bm-menu"), ("navigate", "#rs-nav-box"), ("attribution", "#rs-attr-box"), ("settings", "#rs-settings-box")):
+        page.tap(tool(id))
         page.wait_for_timeout(400)
-        assert inside(page.evaluate(BOX, sel), W, H), (title, page.evaluate(BOX, sel))
-        if title == "Base map":
+        assert inside(page.evaluate(BOX, sel), W, H), (id, page.evaluate(BOX, sel))
+        if id == "basemap":
             shot("9-phone-basemap-box")
         page.keyboard.press("Escape")
         page.wait_for_timeout(200)
     # a window is a bottom sheet, and only one sheet is open at a time: the panel's sheet closes
-    page.tap("#rs-toolbar button[data-t='Street View']")
+    page.tap(tool("street_view"))
     page.wait_for_selector(".rs-svw", state="visible")
     page.wait_for_timeout(500)
     win = page.evaluate(BOX, ".rs-svw")
@@ -212,5 +257,5 @@ with sync_playwright() as p:
     assert not errors, errors
     browser.close()
 server.shutdown()
-print("dashboard: the bar and its tools, the panel, one neutral card look in both themes, the boxes, the settings and the key, the windows; "
-      "the phone form (390 x 844): the bar at the top, the sheet, the boxes and the windows inside the screen")
+print("dashboard: the bar and its tools, the panel, one neutral card look in both themes, roadstyle's base map and its theme link, the settings and the key, the windows; "
+      "the phone form (390 x 844): the bar at the top, the sheet, the boxes inside the screen and the windows")
