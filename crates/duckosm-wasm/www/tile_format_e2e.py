@@ -36,7 +36,7 @@ with sync_playwright() as p:
     page.click("#tab-cut")
     page.set_input_files("#pbf", str(ROOT / "tests/data/monaco.osm.pbf"))
     page.click("#run")
-    page.wait_for_function("!document.getElementById('step5-card').hidden", timeout=300_000)
+    page.wait_for_function("!document.getElementById('step5-card').classList.contains('off')", timeout=300_000)
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent)", timeout=300_000)
     page.click("#rs-toolbar .bm-ctrl .bm-icon")
     page.click("input[name=rs-bm][value='blank']")
@@ -68,6 +68,8 @@ with sync_playwright() as p:
 
     def choose(page, id, text):
         """A choice in roadstyle's list (selectbox.js shows a button and a list in place of the select)."""
+        if page.evaluate("document.getElementById('step6-card').classList.contains('folded')"):
+            page.click("#step6")                      # the page folds a card when its step is done
         page.locator(f".rs-sel:has(#{id}) .rs-sel-btn").click()
         page.locator(".rs-sel-opt", has_text=text).first.click()
 

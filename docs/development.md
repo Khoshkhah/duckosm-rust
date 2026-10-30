@@ -176,6 +176,14 @@ On a computer (light and dark) and on a phone (390 × 844, touch):
 python crates/duckosm-wasm/www/editor_path_e2e.py out-editor-path
 ```
 
+Check the panel (the cards that follow the steps, the help windows and their links, collapse all, the main button) and the action buttons (disabled until
+their inputs are ready, with the reason under them). On a computer (light and dark) and on a phone:
+
+```bash
+python crates/duckosm-wasm/www/panel_e2e.py out-panel
+python crates/duckosm-wasm/www/buttons_e2e.py out-buttons
+```
+
 Check the generation of the tiles (the dashboard's red message and the hidden vector layers when the tiles are of another road set,
 and the normal path):
 

@@ -92,9 +92,9 @@ with sync_playwright() as p:
     # a map that is full-window: the panel does not change its box
     assert page.evaluate(BOX, "#map") == [0, 0, 1400, 900]
 
-    # one neutral look for the seven cards: no card has a color of its own, in both themes
+    # one neutral look for the cards that are active: no card has a color of its own, in both themes; a card that is not ready is grey (the panel's tokens)
     def looks():
-        return page.evaluate("""() => [...document.querySelectorAll('section.step')].map((s) => {
+        return page.evaluate("""() => [...document.querySelectorAll('section.step:not(.off)')].map((s) => {
             const n = s.querySelector('h2 .n'), c = getComputedStyle(s);
             return [getComputedStyle(n).backgroundColor, getComputedStyle(n).color, c.borderTopColor, c.backgroundColor, c.getPropertyValue('--c')];
         })""")
@@ -106,7 +106,9 @@ with sync_playwright() as p:
                                  "document.getElementById('sb').dataset.theme, localStorage.getItem('duckosm.theme')]") == ["dark"] * 4
             shot("2-dark")
         seen = looks()
-        assert len(seen) == 7 and all(x == seen[0] for x in seen) and seen[0][4] == "", (theme, seen)
+        assert len(seen) == 2 and all(x == seen[0] for x in seen) and seen[0][4] == "", (theme, seen)       # steps 1 and 3 are active at the start
+        grey = page.evaluate("""() => [...document.querySelectorAll('section.step.off')].map((s) => [getComputedStyle(s).backgroundColor, getComputedStyle(s.querySelector('h2')).cursor])""")
+        assert len(grey) == 5 and all(g == grey[0] and g[1] == "not-allowed" for g in grey), (theme, grey)
     page.click(tool("theme"))
     page.wait_for_timeout(300)
     assert page.evaluate("document.documentElement.dataset.rsTheme") == "light"
@@ -171,10 +173,7 @@ with sync_playwright() as p:
     page.click("#rs-settings-box .rs-set-key button:has-text('Clear')")
     assert page.evaluate("localStorage.getItem('rs-key:google')") is None
     page.keyboard.press("Escape")
-    assert page.query_selector("#gkey") is None and page.is_visible("#gkey-open")
-    page.click("#gkey-open")
-    assert page.is_visible("#rs-settings-box"), "card 6 opens the settings"
-    page.keyboard.press("Escape")
+    assert page.query_selector("#gkey") is None and page.query_selector("#gkey-open") is None, "the page has no card for the Google key (the gear of the bar has it)"
 
     # Street View opens in the free part of the map: not under the panel, not under the bar
     page.click(tool("street_view"))

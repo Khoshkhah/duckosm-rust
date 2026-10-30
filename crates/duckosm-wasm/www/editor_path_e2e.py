@@ -38,7 +38,7 @@ def run(browser, name, dark=False, **context):
     tap("#tab-region")
     page.set_input_files("#region", str(ROOT / "tests/data/monaco_sample.osm.pbf"))
     tap("#run")
-    page.wait_for_function("!document.getElementById('step5-card').hidden", timeout=900_000)
+    page.wait_for_function("!document.getElementById('step5-card').classList.contains('off')", timeout=900_000)
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=600_000)
     page.wait_for_function("window.duckMap.loaded()", timeout=600_000)
     page.wait_for_timeout(1500)
@@ -70,9 +70,25 @@ def run(browser, name, dark=False, **context):
         if len(picked) == 2:
             break
     assert len(picked) == 2, "two roads to pick"
-    for x, y in picked:
+    # roadstyle's editor page: the hover is a lighter colour of the road that the next click picks (light red for the first, light blue for the second), the
+    # picks are red and blue, and there is no tooltip or popup of the page's own dashboard
+    paint = lambda: page.evaluate("JSON.stringify(duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads')).map((l) => l.paint))").lower()  # noqa: E731
+    popups = lambda: page.evaluate("document.querySelectorAll('.maplibregl-popup').length")  # noqa: E731
+    HOVER1, HOVER2, ROAD1, ROAD2 = "#ff8a80", "#82b1ff", "#e53935", "#1e63d6"
+    assert HOVER1 in paint() and HOVER2 not in paint(), "no pick: the hover is the light red"
+    for k, (x, y) in enumerate(picked):
+        if not phone:
+            page.mouse.move(x - 30, y - 30)
+            page.mouse.move(x, y, steps=4)
+            page.wait_for_timeout(500)
+            assert popups() == 0, "no tooltip of the page while the editor is open"
         (page.touchscreen.tap if phone else page.mouse.click)(x, y)
         page.wait_for_timeout(900)
+        assert popups() == 0, "no popup of the page while the editor is open"
+        assert [ROAD1, ROAD2][k] in paint(), ("the pick colour of road", k + 1)
+        if k == 0:
+            assert HOVER2 in paint(), "one pick: the hover is the light blue (the next click picks road 2)"
+    page.screenshot(path=str(out / f"{name}-1b-picks.png"))
     assert "BETWEEN THESE TWO ROADS" in page.inner_text("#sb").upper(), "two roads picked"
     # the order of the pair: road 1 on top, added to the list (the change waits)
     page.evaluate("""() => { const b = [...document.querySelectorAll('#sb button')].find((x) => /^1\\S/.test(x.textContent.trim()) && x.getBoundingClientRect().width > 0); b.scrollIntoView({block: 'center'}); }""")

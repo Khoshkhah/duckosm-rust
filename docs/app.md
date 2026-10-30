@@ -49,18 +49,34 @@ and `docs/guides/dashboard-layout.md`). The page uses the template `dashboard` w
   a class name shows only that class. The page does not make a filter of its own. `e2e.py` checks the rows, None, All, one class, Bridges and Tunnels on Monaco.
 - **Colour by.** The look has the colour option **Road class** (`color_options`), so the tool "Colour by and legend" is on after the roads
   are drawn: its box has **Colour by** (Road class), the **Legend** of the road classes and the **Map layers**.
-- **The cards.** The seven cards are in the panel's body. A card has no color of its own: all cards have one neutral look (a line
-  around the card, a number in the theme's accent color) that follows the light and the dark theme of the panel. Before, each card
-  had a color (the number of a step had the color of its line on the map). Each card still folds (see "The cards fold").
-  The cards are not `rs.sections`: a section of roadstyle sets the text style of its content (size, color, the tables, the details),
-  and the cards are forms with their own style.
+- **The cards.** The seven cards are in the panel's body, all in view and folded at the start (see "The cards follow the steps"). A card
+  has no color of its own: all active cards have one neutral look (a line around the card, a number in the standard's accent color) that
+  follows the light and the dark theme of the panel; a card that is not ready is grey. The cards are not `rs.sections`: a section of
+  roadstyle sets the text style of its content (size, color, the tables, the details), and the cards are forms with their own style.
+- **The accent** is roadstyle's one accent (`--accent` of the panel: since roadstyle 0.26.1 the teal of the Sonocount logo, and a lighter
+  variant in the dark theme). The page has no accent of its own: links, the focus ring, the step numbers, the done marks and the
+  main button use `var(--accent)`. Only **Build** is filled with it. Every other button (Search, Show on map, Edit levels, What is here?,
+  GeoJSON, the downloads) is the secondary style: light surface, border, ink text. Search is joined to its field (the same height).
+- **Disabled buttons.** An action button is `disabled` until its inputs are ready: Search (a name), GeoJSON (an area), Build (an area and a
+  data file), Run (a query), Show on map and Edit levels (while a draw runs or the editor opens). A disabled button is grey (the panel's
+  tokens: the surface, the line and the muted text), has the cursor not-allowed and no hover, and the reason is the text under it ("Choose an
+  area in step 1."), not a tooltip. `buttons_e2e.py` checks each of them before and after its inputs, on a computer (light and dark) and on a phone.
+- **The help windows.** The panel's title has the "?" of roadstyle's help window (`rs.help`: the window and its button are roadstyle's, the
+  page gives the words in Simplified Technical English). The window has the overview of the page, where the data stays (this browser only) and the
+  links to the documentation (this page's `docs/app.md` on GitHub, the duckOSM features tables and fix guide, roadstyle's levels guide and Google
+  key guide). A card with more than two lines of explanation has a short card and a "?" in its title row: it opens the same window with the words
+  of the card (`rs.help.set` again for the card, and the overview again when the window closes). `rs.help` has one window and one button, so a
+  per-card "?" is a button of the page that sets the words and opens the window. `panel_e2e.py` checks that every link answers 200.
+- **Collapse all / Expand all** is a button in the panel's title row (before the hide button). It folds or opens every active card, its label for
+  screen readers tells the next action, and the page keeps the choice (`duckosm.cards`): a visit after "collapse all" starts with every card folded.
+  roadstyle's standard panel has no such control; it is a button of the page.
 - **The theme** is one value: `data-rs-theme` on `<html>`. The theme tool of the bar sets it, and the panel, the bar, the boxes, the
   popup and the tooltip read it. The page keeps the choice (`duckosm.theme`; the system's theme if there is none) and copies it to
   `data-theme`, which the level editor's panel reads.
-- **The Google key** is in roadstyle's settings (the gear button), in the browser's storage (`rs-key:google`) and never in a file.
-  Card 6 has a text and a button that opens the settings. The Google 3D tool is always on the bar. Without a key, its window says
-  so and has a button for the settings. The key that the card of an earlier version saved (`duckosm.googleKey`) moves to the new
-  place at the first visit.
+- **The Google key** is in roadstyle's settings (the gear button), in the browser's storage (`rs-key:google`) and never in a file. The page
+  has no card for it (the site has its key at the deploy, the greyed tools say why, and the gear has the key row); the help window of card 6
+  and the overview say how to get a key. The Google 3D tool is always on the bar. Without a key, its window says so and has a button for the
+  settings. The key that the card of an earlier version saved (`duckosm.googleKey`) moves to the new place at the first visit.
 - **A select** is roadstyle's list (`selectbox.js`). The `<select>` stays in the page, hidden, and a button and a list take its place.
   The page reads and sets `select.value` and the `change` event as before. A test that uses a select must click the list, or set the
   value in the page.
@@ -202,13 +218,23 @@ Not done: the map worker's memory (roadstyle's engine: about 5 KB for each road,
 copy of each Parquet file for the downloads (75 MiB for Burnaby; DuckDB can write them again, but the files of the
 downloads must stay equal to the native build's).
 
-### The cards fold
+### The cards follow the steps
 
-Kaveh (2026-10-24): "the result card is not well designed and take many space and its not collapsable". Each
-numbered card (1 to 7) folds: a click on its heading, or on the chevron at the right of the heading (a button that the
-keyboard can reach, with `aria-expanded`), hides the card's body. The heading stays. The page keeps the fold of each
-card in this browser (`duckosm.card.<n>`), so a fold stays after a reload. All cards are open at first. When a step
-becomes active, the page opens its card: card 4 at the click on **Build**, cards 5, 6 and 7 after a build.
+Kaveh (2026-10-24): "the result card is not well designed and take many space and its not collapsable". Kaveh (2026-10-30): "show all cards
+(but closed) at the beginning, or we can make some of them disabled till their turn". Both are one rule:
+
+- At the start every card is in view and folded; only the current step (card 1) is open. The page does not keep the fold of each card
+  (it keeps only "collapse all", `duckosm.cards`).
+- A card whose inputs are not ready is disabled: its title is grey, its chevron does not open it, a click on it does nothing, and the title row says
+  why ("after step 1"). Card 2 needs an area; card 3 is always active (a cut file needs no area); card 4 needs the data; cards 5 and 6 need the build;
+  card 7 needs the build and the table `visualization.edge_levels`.
+- A finished step has a done mark (✓) and can still be opened: card 1 and card 2 with an area, card 3 with the data ready, card 4 with the build,
+  cards 5 and 6 with the map drawn, card 7 with the edits applied.
+- When a step is finished, the next card that is ready and not done opens, and the others fold, unless the person opened or folded a card by hand
+  (then only the next card opens). So an area opens card 3, the data opens card 4, the build opens card 5, and the map opens card 7.
+- A heading, or its chevron, opens or folds an active card. Collapse all / Expand all acts on the active cards only.
+
+`panel_e2e.py` runs the flow from the start to the editor and checks each state; `dashboard_e2e.py` checks the grey look of the cards that are not ready.
 
 ### Step 3: the data
 
@@ -356,9 +382,11 @@ The card shows after a build that has `visualization.edge_levels` (each build of
    this browser (`roads.parquet`, `pairs.csv`, `edges.json`, and `edits.csv` only when the store has none, so the edits
    of an earlier session show again). The store is `browserStore("duckosm:<area name>")`, in the private file system of
    the site. The card gives the number of roads and the warnings of `makeArea`.
-2. The editor (`levelEditor({map, container, pkgUrl, store, dashboard: rs, levels, host: {edgeIdCol, replaceRoads}, colors})`) draws on the page's own
-   map, roads and dashboard (roadstyle `f0a161b`, host mode): the editor has the same colours and profile as the roads of the page.
-   `replaceRoads` sends the changed edges to the map worker (`LiveMap.relevel`) and the visible tiles load again; the tables change at **Apply**. `levels` is the build's `visualization.edge_levels` as CSV text,
+2. The editor (`levelEditor({map, panel, backLabel, pkgUrl, store, dashboard: rs, prefix: "rs-", levels})`) draws its own roads (`rs-lv-roads`, the tiles `lv://`) on the page's map,
+   with the page's dashboard, as roadstyle's own editor page does (not the `host` mode, which keeps the page's roads and their hover and select colours). So the hover and the
+   picks are the editor's: a lighter red for the road that the next click picks first, a lighter blue for the second, red and blue picks, and no tooltip or popup of the page's own
+   dashboard while the editor is open. The page's roads source stays and its road layers are off while the editor is open (`destroy` puts them back). The editor opens in 1 to 2 s on Monaco
+   (the `host` mode: 0.3 s). The tables change at **Apply** (the page reads the editor's `levels.csv` from the store at "← Steps"). `levels` is the build's `visualization.edge_levels` as CSV text,
    with the `edge_hash` of `edge_levels_meta` (`duck.storedLevels()`). The editor starts from its stored `levels.csv`
    when it was solved for the same inputs (roadstyle `6be68c2`: the SHA-256 of `roads.parquet`, `pairs.csv` and
    `edits.csv`), else from the build's levels (since `083224c`); it solves the whole area only when neither fits. Its panel (roadstyle's `level_editor.html`) is on the right of the
@@ -566,11 +594,19 @@ works in the same tab during the build, and the computer had other load. Not mea
 ## Gaps in roadstyle (2026-10-29)
 
 Kaveh's rule: the page uses the standard dashboard and the standard toolbox, and does not change them. The page does not make its own version
-of what the standard lacks. One gap is open (roadstyle `0.26.0`, `07c85b5`, the pin of 2026-10-30):
+of what the standard lacks. Four gaps are open (roadstyle `0.26.0`, `07c85b5`, the pin of 2026-10-30):
 
 1. **The credits button is outside a phone's screen at 390 px.** The one-row bar of ten tools is 372 px wide, and the credits button (the last
    tool, `attribution`) is at 377 to 409 px: part of it is outside the screen, and the legal credits cannot be reached. At 412 and 430 px the
    button is at the same place and the bar is wider. `dashboard_e2e.py` prints `GAP`. The page does not correct it.
+
+2. **A page that starts in the dark theme throws "Style is not done loading".** The page calls `rsSetTheme` with the stored choice when it starts,
+   before the map's style is loaded. The handler of `rs:themechange` in `theme.js` (the dark twin of the base map) calls `rsSetBasemap` at once and throws,
+   while `syncStyleTheme` in the same file waits for `style.load`. The page ends in the right state (the module sets the base map when the style loads),
+   but the console has the error. The handler must wait for `style.load` as `syncStyleTheme` does. `panel_e2e.py` prints `GAP`.
+3. **`rs.help` has one window and one button.** A "?" in a card's title row is a button of the page that sets the words of the card (`rs.help.set`) and opens
+   the window, and sets the overview again when the window closes. A standard way to have more than one set of words (a key for each "?") would remove that code.
+4. **The panel has no "collapse all" control.** The page has a button in the title row; the standard panel could have it for its own sections.
 
 The handle of the editor's full sheet on a phone was under the bar at `9d745c9`; at `0.26.0` it is reachable (`phone_e2e.py` prints no gap, and
 `editor_path_e2e.py` taps through the whole editor on a phone).

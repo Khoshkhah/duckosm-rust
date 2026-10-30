@@ -96,7 +96,7 @@ with sync_playwright() as p:
     page.locator(".rs-sel-opt", has_text={"tags": "From the tags", "solve": "Optimized"}[args.levels]).first.click()
     assert page.input_value("#levels") == args.levels
     page.click("#run")
-    page.wait_for_function("!document.getElementById('step5-card').hidden || document.getElementById('buildstatus').textContent.startsWith('Error')",
+    page.wait_for_function("!document.getElementById('step5-card').classList.contains('off') || document.getElementById('buildstatus').textContent.startsWith('Error')",
                            timeout=1_800_000)
     status = page.inner_text("#buildstatus")
     if status.startswith("Error"):

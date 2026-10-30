@@ -112,13 +112,15 @@ with sync_playwright() as p:
     page.wait_for_function("window.selected != null", timeout=10_000)
     print(f"hover and click: road row {point[2]} glows, rs:select gives row {page.evaluate('window.selected')}")
     page.evaluate("window.rsDeselect?.()")
-    # a card folds with a click on its heading, the page keeps the fold, and a second click opens it
+    # a card opens with a click on its heading or on its chevron, and folds with a second click
+    if page.evaluate("document.getElementById('step6-card').classList.contains('folded')"):
+        page.click("#step6")
+    assert page.is_visible("#show")
     page.click("#step6")
     assert page.evaluate("document.getElementById('step6-card').classList.contains('folded')") and not page.is_visible("#show")
-    assert page.evaluate("localStorage.getItem('duckosm.card.6')") == "1"
     assert page.get_attribute("#step6 .fold", "aria-expanded") == "false"
     page.click("#step6 .fold")
-    assert page.is_visible("#show") and page.evaluate("localStorage.getItem('duckosm.card.6')") == "0"
+    assert page.is_visible("#show")
 
     # a base map that the user chooses: "Show on map" (a fresh map) sets the blank one again; the choice stays for the draws that are not fresh
     choose = "(r => { r.checked = true; r.dispatchEvent(new Event('change')); })(document.querySelector('input[name=rs-bm][value=ofm_liberty]'))"
@@ -208,10 +210,12 @@ with sync_playwright() as p:
           if (m.queryRenderedFeatures(p, {layers: window.duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id)})[0] && p.x > 420 && p.x < c.width - 450 && p.y > 40 && p.y < c.height - 60) return [p.x + c.left, p.y + c.top]; }
         return null; }"""
     STATES = """() => { const m = window.duckMap, out = [];
-        const layers = [...new Set(m.getStyle().layers.filter((l) => l.source === 'rs-roads' && l['source-layer']).map((l) => l['source-layer']))];
-        for (const sl of layers) for (let i = 0; i < window.RS_SIDE.props.length; i++) {
-          const f = m.getFeatureState({source: 'rs-roads', sourceLayer: sl, id: i});
-          if (f && Object.keys(f).some((k) => f[k])) out.push([sl, i, JSON.stringify(f)]);
+        for (const src of ['rs-roads', 'rs-lv-roads']) {       // the page's roads, and the editor's own while it is open
+          const layers = [...new Set(m.getStyle().layers.filter((l) => l.source === src && l['source-layer']).map((l) => l['source-layer']))];
+          for (const sl of layers) for (let i = 0; i < window.RS_SIDE.props.length; i++) {
+            const f = m.getFeatureState({source: src, sourceLayer: sl, id: i});
+            if (f && Object.keys(f).some((k) => f[k])) out.push([src + '/' + sl, i, JSON.stringify(f)]);
+          }
         } return out; }"""
     # the real click in the editor: a road picked as the user does it (the editor's tap), then Close
     cam = page.evaluate("(() => { const m = window.duckMap; return {center: m.getCenter(), zoom: m.getZoom(), pitch: m.getPitch(), bearing: m.getBearing()}; })()")
@@ -220,8 +224,8 @@ with sync_playwright() as p:
     page.mouse.click(*page.evaluate(SPOT))
     page.wait_for_selector("#lv-cards .card, #lv-cards [data-hroad]", timeout=10_000)
     page.evaluate("c => window.duckMap.jumpTo(c)", cam)
-    # the road table has no lines (roadstyle a5209e9): the editor's end marks come from the worker's roadLines through linesOf
-    assert page.evaluate("window.RS_SIDE.props.some((p) => p && p.s_lon != null && p.e_lon != null)"), "the editor's end marks (lines of the roads)"
+    # the editor's end marks (its own source lv-ends) have the ends of the picked road
+    page.wait_for_function("(window.duckMap.getSource('lv-ends').serialize().data.features || []).length > 0", timeout=10_000)
     print("editor: a road picked by a click; states while open:", len(page.evaluate(STATES)))
     # the second open of the same area: the page writes the area's files again; since roadstyle 6be68c2 the editor starts from the
     # stored levels when levels_info.json names the same inputs (the SHA-256 of roads.parquet, pairs.csv and edits.csv): no solve
@@ -269,11 +273,13 @@ with sync_playwright() as p:
     assert page.evaluate("window.solves") == 0, "the second open of the same area starts from the stored levels"
     print("editor:", page.inner_text("#editnote"))
     assert made["roads"] > 6000 and made["pairs"] > 0, made      # Monaco: 6,830 roads (13,298 edges)
-    # host mode: the editor draws on the page's own map and tile source rs-roads; only its end markers are its own
-    assert page.evaluate("window.duckMap.getStyle().sources['rs-roads'].tiles[0]").startswith("rs://"), "the page's roads"
+    # the editor draws its own roads on the page's map (roadstyle's editor page: its own tiles lv://, the hover and the picks in its colours); the page's
+    # roads source is still there, and its road layers are off while the editor is open
+    assert page.evaluate("window.duckMap.getStyle().sources['rs-lv-roads'].tiles[0]").startswith("lv://"), "the editor's roads"
     assert page.evaluate("'lv-ends' in window.duckMap.getStyle().sources"), "the editor's end markers"
-    assert page.evaluate("window.duckMap.getStyle().layers.some((l) => l.source === 'rs-roads' && l['source-layer'] === 'simple')"), "the roads"
-    print("host mode: the editor uses the page's tile source rs-roads")
+    assert page.evaluate("window.duckMap.getStyle().layers.some((l) => l.source === 'rs-lv-roads' && l['source-layer'] === 'simple')"), "the editor's road layers"
+    assert not page.evaluate("window.duckMap.getStyle().layers.some((l) => l.source === 'rs-roads' && l['source-layer'] === 'simple')"), "the page's road layers are off"
+    print("the editor draws its own roads (rs-lv-roads) on the page's map")
     assert page.is_visible("#lv"), "the editor's panel"
     page.evaluate("window.rsSelect(200)")          # a road picked, as a click on it does: the panel shows its card
     page.wait_for_function("window.duckMap.loaded()", timeout=120_000)
