@@ -44,7 +44,7 @@ and `docs/guides/dashboard-layout.md`). The page uses the template `dashboard` w
   - their list in the legend box ("Map layers", each with its colour; a layer that is hidden is dimmed).
   - the row **Buildings 3D** and the 3D buildings tool, for the 3D layer of the buildings.
   A page with a bar has no floating Layers box (before, the box was at the bottom right of the map, and the phone's sheet covered it).
-- **Roads.** The tool **Roads** (roadstyle `6205d9c`, after the base map button) is the road filter in the bar. It is greyed out until
+- **Roads.** The tool **Roads** (roadstyle `d26`, after the base map button) is the road filter in the bar. It is greyed out until
   roads are drawn. Its box has a row for each road class (a check box, the colour, the name and the number of roads), **All** and
   **None**, the rows **Bridges** and **Tunnels**, and the restricted kinds (private roads, bus lanes, pedestrian streets). A click on
   a class name shows only that class. The page does not make a filter of its own. `e2e.py` checks the rows, None, All, one class, Bridges and Tunnels on Monaco.

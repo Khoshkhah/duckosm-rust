@@ -27,7 +27,7 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ### Changed
 
-- The page uses roadstyle `6205d9c585e0f09bf716089b7b78369d5ff16d99` (`design-dashboard-d26`): the tool **Roads** (the road filter in the bar, after the base map button) with a row for each road class, All and None, Bridges, Tunnels and the restricted kinds. The page uses the toolbar as it is. `dashboard_e2e.py` has the new tool list; `e2e.py` checks the Roads tool on Monaco (the rows and their counts, None, All, one class, Bridges, Tunnels), and a phone (390 × 844) shows its box inside the screen.
+- The page has roadstyle `d26`'s tool (in the pin `9d745c9`): the tool **Roads** (the road filter in the bar, after the base map button) with a row for each road class, All and None, Bridges, Tunnels and the restricted kinds. The page uses the toolbar as it is. `dashboard_e2e.py` has the new tool list; `e2e.py` checks the Roads tool on Monaco (the rows and their counts, None, All, one class, Bridges, Tunnels), and a phone (390 × 844) shows its box inside the screen.
 
 - **MLT is the default tile format** of the roads map (Kaveh's order, 2026-10-29). The setting **Map tiles** lists MLT first and MVT second. A visit with no stored choice starts on MLT; a stored MVT stays. `tile_format_e2e.py` checks the new default, the choice of MVT and the way back.
 
