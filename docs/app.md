@@ -129,12 +129,11 @@ On a screen of 700 px or less:
   (2026-10, also headless) left a band of the map undrawn, at the size of the scroll box but near the top of the screen.
 - Before (2026-10-24), the map was at the top (42 %) and the cards scrolled with the page under it; the map then had
   less room, and a scroll in the cards moved the page.
-- **The level editor: one panel at a time.** The page's panel goes away. A bar under roadstyle's bar keeps the counts, **Apply** and
-  **Close** in view, and the map fills the screen under the two bars. The editor's panel is roadstyle's sheet at the bottom of
-  the map (since roadstyle `d25601e`, its layout `"auto"` up to 700 px): half the height, and its handle changes it to
-  the full height or to one row. The editor keeps the roads above the sheet, a finger can pick a road (a wide line that
-  takes the taps), and the buttons are 44 px high. After Apply or Close, the page's sheet comes back in the state it had,
-  with card 7 in view and the map's padding for it.
+- **The level editor: one panel at a time.** The page has one panel (`#sb`), and the editor draws into it (roadstyle's `levelEditor({panel})`):
+  the page's steps, its title and its footer are hidden while the editor is open, and **← Steps** at the top of the panel brings them
+  back. The panel is roadstyle's: on a phone it is the sheet (closed, 40 %, full), and the editor's bar with **Apply and solve** is fixed at
+  its bottom. A finger can pick a road (a wide line that takes the taps). After **← Steps**, the page's panel comes back in the
+  state it had, with card 7 in view and the map's padding for it.
 - Before 2026-10-24 the editor's panel (400 px wide) covered the whole screen of a phone, and Apply and Close were
   under it.
 
@@ -370,14 +369,15 @@ The card shows after a build that has `visualization.edge_levels` (each build of
    Burnaby (76,189 roads) the first open takes 14.1 s and the second 11.5 s, with no solve. A head or a cap change takes
    4–13 s until the map is drawn again; of this time, the worker makes the new tiles and the road table in 1.6–2.2 s
    (`build`), and the rest is the map's new tiles on the page.
-3. **Apply** writes the editor's `levels.csv` into `visualization.edge_levels`. `edge_levels_meta` gets `source = 'area'`,
+3. **← Steps** (after the editor's own *Apply and solve*) writes the editor's `levels.csv` into `visualization.edge_levels`. `edge_levels_meta` gets `source = 'area'`,
    `area = 'this browser: <area name>'` and a new `created` time. `n_edges` and `edge_hash` do not change, because the
    edges are the same. The user's own files go into `level_edits`, `level_heads` and `level_caps`, as roadstyle's
    `save_area_levels` writes them (duckOSM's `duckosm levels` reads them back). The Parquet files, the zip and the
    `.duckdb` download then have the new tables. The editor closes, and the map draws the roads in the new order.
-4. **Close** removes the editor (`destroy()`), which puts the page's road layers back. Without Apply, the tables do not
-   change.
-5. While the editor is open, the card has two downloads: `edits.csv` and `levels.csv` (`editor.download`).
+4. **← Steps** removes the editor (`destroy()`), which puts the page's road layers and the page's panel back. With changes
+   waiting, the editor first asks: apply, discard or stay. If the editor applied a change in this session, the page then writes
+   the editor's `levels.csv` into the tables as step 3 says; if it applied nothing, the tables do not change.
+5. The editor's History tab has the download of `edits.csv` (`editor.download`); the page's downloads have the files of the tables.
 
 How the editor shares the map:
 
@@ -391,10 +391,9 @@ How the editor shares the map:
   `map/pkg/roadstyle_wasm.js`), not in the map worker.
 - The panel follows the page's theme (the theme tool of the bar and the system's theme): its colors are variables, with a dark set
   for `:root[data-theme=dark]` and for the system's dark theme.
-- The editor's panel is in `#lvhost`, out of the page's panel. Before 2026-10-25 it was in the page's panel. A collapse of
-  the page's panel then moved the editor's panel off the screen and made it inert (Kaveh: "when I collapse duckosm side
-  panel, the level editor convert totally white! like disable"). Now the page's panel hides and shows while the
-  editor stays on the right and works (`editor_e2e.py` clicks its tabs in both states).
+- The editor's panel is the page's own panel (`#sb`), as roadstyle's standard host panel: the editor hides the page's steps and title and puts
+  them back with `destroy()`. There is no second panel and no page bar (before 2026-10-30 the editor had a frame, `#lvhost`, and the page had
+  a bar with Apply and Close).
 - The dashboard checks the interaction contract of each roads style (`roadstyle:contract`, since `6be68c2`). The page's
   look is not "live", so its styles have no contract. The dashboard reads them as version 1 and writes an info line in
   the console, not an error.
@@ -423,8 +422,8 @@ Limits:
   module.
 
 The check: `editor_e2e.py` (headless Chromium, Monaco through the File tab). It opens the editor, makes one edit with
-`window.lvApi` (an end head of 7 m) and applies it. Then it checks the tables in the page and in the `.duckdb` download, a
-map of one mode, the duckOSM base-map layers while the editor is open, and Close. It writes `editor.png` and
+`window.lvApi` (an end head of 7 m) and leaves with **← Steps**, which applies it. Then it checks the tables in the page and in the
+`.duckdb` download, a map of one mode, the duckOSM base-map layers while the editor is open, and **← Steps** with no change. It writes `editor.png` and
 `editor-dark.png` (the dark theme).
 
 ## The map

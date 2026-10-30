@@ -225,7 +225,7 @@ with sync_playwright() as p:
     print("editor: a road picked by a click; states while open:", len(page.evaluate(STATES)))
     # the second open of the same area: the page writes the area's files again; since roadstyle 6be68c2 the editor starts from the
     # stored levels when levels_info.json names the same inputs (the SHA-256 of roads.parquet, pairs.csv and edits.csv): no solve
-    page.click("#edit-close")
+    page.click("#lv-back")
     page.wait_for_function("!window.levelEditorOpen && !window.mapDrawing && window.duckMap.loaded()", timeout=300_000)
     page.wait_for_timeout(500)
     assert max(abs(x - y) for x, y in zip(at(), pos0)) <= 2, ("the view moved when the editor closed", pos0, at())
@@ -285,21 +285,22 @@ with sync_playwright() as p:
     assert page.evaluate("getComputedStyle(document.getElementById('lv')).backgroundColor") != "rgb(246, 247, 249)", "the dark panel"
     page.screenshot(path=str(out / "editor-dark.png"))
     page.locator("#rs-toolbar button").first.click()   # the theme tool (roadstyle's tip.js takes the title attribute)
-    # the page's panel collapses and opens while the editor is open: the editor's panel stays on the right and works (Kaveh, 2026-10-25:
-    # "when I collapse duckosm side panel, the level editor convert totally white": a transform on the page's panel took it away)
-    lv_box = lambda: page.evaluate(BOX, "lv")  # noqa: E731
+    # the editor is in the page's one panel (#sb): the panel's hide button hides the editor with it, and the show button brings it back with its
+    # tabs working (before 2026-10-30 the editor had a frame of its own, which stayed on the right when the page's panel collapsed)
     for click, collapsed in [("#sb-hide", True), ("#sb-show", False)]:
         page.click(click)
         page.wait_for_timeout(400)
         assert page.evaluate("document.body.classList.contains('collapsed')") == collapsed
         assert page.is_hidden("#sb") if collapsed else page.is_visible("#sb"), "the page's panel hides and shows"
-        assert lv_box()[0] >= 900 and lv_box()[2] == 1400, ("the editor's panel on the right", collapsed, lv_box())
+        assert page.is_hidden("#lv") if collapsed else page.is_visible("#lv"), ("the editor goes with the panel", collapsed)
+        if collapsed:
+            page.screenshot(path=str(out / "editor-collapsed.png"))
+            continue
+        assert page.evaluate("getComputedStyle(document.querySelector('#sb .sb-body')).display") == "none", "the page's steps stay hidden"
         page.click("#lv-tabs [data-t=history]")
         page.wait_for_function("document.querySelector('#lv-tabs [data-t=history]').classList.contains('on')", timeout=5_000)
         page.click("#lv-tabs [data-t=edit]")
-        if collapsed:
-            page.screenshot(path=str(out / "editor-collapsed.png"))
-    print("collapse: the editor's panel stays on the right and its tabs work, with the page's panel collapsed and open")
+    print("collapse: the editor goes with the page's panel and comes back with it; its tabs work")
 
     # one edit: the end head of a long road 7 m long, as the panel's API does it; the editor solves again and sends "solved"
     page.evaluate("window.solvedEvents = 0; window.levelEditorOpen.addEventListener('solved', () => window.solvedEvents++)")
@@ -317,7 +318,7 @@ with sync_playwright() as p:
         print(f"edit: a cap ({cap or 'auto'}): {time.time() - t:.2f} s until the map is drawn again ({said['said']})")
     print("the worker's last times (s):", {k: round(v, 2) for k, v in page.evaluate("window.workerSeconds").items()})
     assert page.evaluate("window.solvedEvents") == 3
-    page.click("#edit-apply")
+    page.click("#lv-back")
     try:
         page.wait_for_function("/Applied|failed/.test(document.getElementById('editnote').textContent)", timeout=120_000)
     finally:
@@ -364,7 +365,7 @@ with sync_playwright() as p:
         return (await (await d.getFileHandle('heads.csv')).getFile()).text(); }""")
     assert heads.count(road) == 1, heads
     assert page.evaluate("localStorage.getItem('lv:duckosm:Monaco:pairs.csv')") is None, "no text file in localStorage"
-    page.click("#edit-close")                       # destroy puts the page's road layers back: no new drawing
+    page.click("#lv-back")                       # destroy puts the page's road layers back: no new drawing
     page.wait_for_function("window.duckMap.loaded()", timeout=300_000)
     assert page.evaluate("window.duckMap.getStyle().sources['rs-roads'].tiles[0]").startswith("rs://")
     assert not page.evaluate("Object.keys(window.duckMap.getStyle().sources).some((id) => id.startsWith('rs-lv-'))")
@@ -389,7 +390,7 @@ with sync_playwright() as p:
     assert said["ok"], said
     assert "could not keep the area files" in page.inner_text("#editnote"), page.inner_text("#editnote")
     print("full storage:", page.inner_text("#editnote")[-160:])
-    page.click("#edit-close")
+    page.click("#lv-back")
     page.wait_for_function("window.duckMap.loaded() && !window.levelEditorOpen", timeout=300_000)
     page.evaluate("() => { FileSystemWritableFileStream.prototype.write = window.realWrite; }")
     assert not errors, errors

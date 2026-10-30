@@ -62,7 +62,7 @@
   .sb-body { display: flex; flex-direction: column; gap: 12px; }
   /* the panel's type: the cards' own sizes (roadstyle's template sets 13px for its controls) */
   :where(#sb) h2 { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 10px; }
-  :where(#sb, #editbar) button { font: inherit; color: inherit; cursor: pointer; }
+  :where(#sb) button { font: inherit; color: inherit; cursor: pointer; }
   /* a step is a section of the panel: one neutral box that follows the panel's theme (the colors of the old cards went with the old panel) */
   .step { border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
   .step > h2:first-child { margin: 0 0 12px; color: var(--fg); cursor: pointer; }
@@ -88,7 +88,7 @@
   .dl .btn { padding: 0 8px; font-size: 12.5px; white-space: nowrap; }
   #sql-box .row { margin-top: 6px; }
   /* the panel's icons; not the map's, the bar's and the floating windows' own SVGs (roadstyle's) */
-  :is(#sb, #editbar, #mapbusy) svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  :is(#sb, #mapbusy) svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
   #sb .field input[type=search] { padding-left: 36px; }
   #sb .sb-top svg { width: 16px; height: 16px; stroke-width: 1.8; }
   a { color: var(--accent); }
@@ -231,7 +231,8 @@
   #status { position: fixed; left: calc(var(--free-l, 0px) + (100% - var(--free-l, 0px) - var(--free-r, 0px)) / 2); top: 14px; transform: translateX(-50%); z-index: 9; background: var(--fg); color: var(--bg); padding: 7px 14px; border-radius: 99px; font-size: 13px; box-shadow: var(--shadow); }
   #status:empty { display: none; }
   body.picking #map canvas { cursor: crosshair; }
-  #editbar { display: none; }
+  /* the level editor holds the page's one panel: roadstyle's editor hides the steps (.sb-body) and the title; the footer goes too */
+  body.editing .sb-foot { display: none; }
   @media (max-width: 700px) {
     /* a phone: roadstyle's phone form (the bar at the top, the panel as a bottom sheet with three heights: closed, 40 %, full). The page itself
        never scrolls. The map's padding follows the sheet (padMap() in the script), so the area stays above it. */
@@ -241,14 +242,6 @@
     .sb-top p { display: none; }
     .btn, .segmented [role=tab] { height: 44px; }
     .shapes button { height: 44px; }
-    /* the level editor on a phone: one panel at a time. The page's panel goes away, a fixed bar under roadstyle's bar keeps the counts, Apply
-       and Close, and the map fills the rest of the screen. The editor's panel is roadstyle's sheet at the bottom (its layout "auto"), and the
-       editor keeps the roads above the sheet (the map's padding). */
-    body.editing #editbar { display: flex; position: fixed; top: var(--rs-top, 52px); left: 0; right: 0; z-index: 8; height: 48px; align-items: center;
-                            gap: 8px; padding: 0 10px; background: var(--bg); border-bottom: 1px solid var(--line); }
-    #editbar span { flex: 1; min-width: 0; font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    #editbar .btn { height: 40px; }
-    body.editing #sb, body.editing .rs-grip { display: none !important; }
   }
 </style>
 </head>
@@ -281,8 +274,6 @@
 <div id="map" role="region" aria-label="Map of the area"></div>
 <div id="mapbusy" hidden><div class="spin"></div><span id="mapbusy-text"></span></div>
 <!-- the level editor's bar on a phone (card 7): the counts, Apply and Close stay in view -->
-<div id="editbar"><span id="editbar-note"></span><button class="btn primary" data-for="edit-apply">Apply</button>
-  <button class="btn" data-for="edit-close">Close</button></div>
 <div id="status" role="status" aria-live="polite"></div>
 
 <div id="sb" data-theme="light" role="complementary" aria-label="duckOSM">
@@ -441,13 +432,10 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
 <section id="step7-card" class="step" aria-labelledby="step7" hidden>
   <h2 id="step7"><span class="n">7</span>Edit levels</h2>
   <p class="small muted" style="margin:0">Change the drawing order of the roads by hand with roadstyle's level editor: which road goes
-    over which one, where two roads join, the heads and the line ends. The editor opens on the map, with its panel on the right (at the bottom on a phone).
-    Your edits stay in this browser for this area.
+    over which one, where two roads join, the heads and the line ends. The editor takes this panel (the sheet on a phone); "← Steps" in it comes back here
+    and puts the applied edits into the tables. Your edits stay in this browser for this area.
     <a href="https://khoshkhah.github.io/roadstyle/guides/levels/" target="_blank" rel="noopener">How to use the editor</a></p>
-  <div class="row"><button id="edit-open" class="btn primary">Edit levels</button>
-    <button id="edit-apply" class="btn primary" hidden>Apply</button><button id="edit-close" class="btn" hidden>Close</button></div>
-  <div class="row" id="edit-dl" hidden><button class="btn" data-dl="edits.csv"><svg><use href="#i-download"/></svg>edits.csv</button>
-    <button class="btn" data-dl="levels.csv"><svg><use href="#i-download"/></svg>levels.csv</button></div>
+  <div class="row"><button id="edit-open" class="btn primary">Edit levels</button></div>
   <p id="editnote" class="progress" aria-live="polite"></p>
 </section>
 
@@ -460,8 +448,6 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
 </div>
 </div>
 <button id="sb-show" title="Show panel" aria-label="Show panel" aria-controls="sb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/><path d="m10.5 9.5-2.5 2.5 2.5 2.5"/></svg></button>
-<!-- the level editor's panel (card 7): out of the page's panel, so that the panel's hiding does not take it -->
-<div id="lvhost"></div>
 
 <script type="module">
 import { TerraDraw, TerraDrawRectangleMode, TerraDrawPolygonMode, TerraDrawCircleMode, TerraDrawFreehandMode,
@@ -1519,7 +1505,7 @@ window.duckMap = map;   // for e2e.py
 
 // The view stays still when the map's box or padding changes (the editor's panel or sheet, the page's sheet): MapLibre keeps the centre
 // in the middle of the padded box, so the roads would jump. Each setPadding and resize puts the old centre back on its screen point, with no
-// animation. This also covers roadstyle's level_editor.js, which calls map.setPadding itself (lines 379, 385, 428).
+// animation. This also covers the calls of roadstyle's modules.
 for (const name of ["setPadding", "resize"]) {
   const orig = map[name].bind(map);
   map[name] = (...a) => {
@@ -1533,7 +1519,7 @@ for (const name of ["setPadding", "resize"]) {
 }
 
 // the sheet on a phone is roadstyle's (template.js: a grip and three heights, closed, 40 % and full; the CSS at 700 px). The map's padding
-// follows it (padMap). The level editor has its own sheet: while it is open, the page's sheet is away and the editor sets the padding.
+// follows it (padMap). The level editor draws into the same sheet (the page's one panel): the page's steps are away while it is open.
 loaded.then(() => padMap());
 
 // ---- each numbered card folds: a click on its heading or on its chevron (a button, with aria-expanded). The page keeps the fold of each
@@ -1591,28 +1577,16 @@ const workerStopped = (e) => {
   if (editor && m.includes("the worker stopped")) editNote(`The level editor's worker stopped (${m}). Close the editor and open it again.`);
 };
 window.addEventListener("unhandledrejection", workerStopped);
-let panelScroll = 0;                              // where the panel's cards were when the editor opened (a phone: the panel goes away)
 function editing(on) {
-  const cards = document.querySelector(".sb-body");
-  if (on) panelScroll = cards.scrollTop;
-  document.body.classList.toggle("editing", on);
-  if (!on) {
-    cards.scrollTop = panelScroll;
-    padMap();                                     // the page's sheet in its state again, and the map's padding for it
-  }
-  $("edit-open").hidden = on;
-  $("edit-apply").hidden = $("edit-close").hidden = $("edit-dl").hidden = !on;
+  document.body.classList.toggle("editing", on);  // the editor holds the page's one panel (roadstyle's editor hides the steps and the title and puts them back)
+  if (!on) padMap();                              // the page's sheet in its state again, and the map's padding for it
   $("edit-open").disabled = false;
   drawControls();
 }
 // the editor goes away (destroy: its panel, its roads and its listeners); the page's roads come back when draw is true
 function closeEditor(draw = false) {
   if (!editor) return;
-  window.rsDeselect?.();                          // the selection's glow is on the editor's roads
-  editor.destroy();
-  // destroy leaves the colour of the picked road (the panel's rsColor(ids), level_editor.html line 235: feature state rs_c, violet) on the page's map, so that no
-  // click removes it. The page paints no roads of its own, so all of them go. Module side: destroy() in level_editor.js should call rsColor(null) (the panel's node goes, its colour does not).
-  window.rsColor?.(null);
+  editor.destroy();                               // its panel, its roads, the colour and the glow of the picked roads, and the page's steps come back
   editor = window.levelEditorOpen = null;
   editing(false);
   map.resize();
@@ -1697,8 +1671,8 @@ $("edit-open").onclick = async () => {
     const fit = map.fitBounds;
     map.fitBounds = () => map;
     t = performance.now();
-    try { editor = await levelEditor({ map, container: $("lvhost"), pkgUrl, store, dashboard: rs, levels: levels ?? undefined,
-      host: { edgeIdCol: "edge_id", replaceRoads }, colors: { select: "#7c4dff", hover: "#b388ff", second: "#4527a0" } }); }
+    try { editor = await levelEditor({ map, panel: $("sb"), backLabel: "Steps", pkgUrl, store, dashboard: rs, levels: levels ?? undefined,
+      host: { edgeIdCol: "edge_id", replaceRoads } }); }
     finally { map.fitBounds = fit; }
     lap("levelEditor()", t);
     lap("open, all", t0);
@@ -1706,26 +1680,25 @@ $("edit-open").onclick = async () => {
     const made = `${num(editor.roads.length)} roads` + warnings;
     window.levelEditorOpen = editor;              // for editor_e2e.py
     // "solved": after each change (since roadstyle 6be68c2 a head or a cap is drawing only, with no solve)
-    editor.addEventListener("solved", () => editNote(`${made}. Changed: Apply puts the new drawing order into the tables.`));
-    $("editbar-note").textContent = made;
+    editor.addEventListener("solved", () => editNote(`${made}. Changed: ← Steps puts the new drawing order into the tables.`));
+    editor.addEventListener("back", leaveEditor);  // "← Steps" (with changes waiting, after the editor's own Apply, Discard or Stay)
     editing(true);
-    editNote(`${made}, open in ${num((performance.now() - t0) / 1000, 1)} s. Click a road on the map to start. Apply puts the drawing ` +
-      "order into the tables and the downloads; Close goes back with no change.");
+    editNote(`${made}, open in ${num((performance.now() - t0) / 1000, 1)} s. Click a road on the map to start. ← Steps puts the ` +
+      "applied drawing order into the tables and the downloads (nothing applied: no change).");
   } catch (e) {
     // the editor did not start: its panel goes, and the page's roads are drawn again
-    $("lvhost").replaceChildren();
-    document.body.classList.remove("lv-open");
     editing(false);
     showRoads();
     const stale = areaPrep && /make the area first/.test(e.message);   // the browser's files of the area went after the area was made: once more
     areaPrep = null;
-    if (stale) { $("lvhost").replaceChildren(); document.body.classList.remove("lv-open"); return $("edit-open").click(); }
+    if (stale) return $("edit-open").click();
     editNote("The level editor failed: " + e.message);
   }
 };
-$("edit-close").onclick = () => { closeEditor(); editNote("Closed. The tables have not changed."); };
-$("edit-apply").onclick = async () => {
-  $("edit-apply").disabled = true;
+// "← Steps": the editor goes, and the edits that it applied (the editor's Apply and solve) go into the tables (visualization.edge_levels and the
+// downloads). Nothing applied: the tables stay as they are.
+async function leaveEditor() {
+  if (!editedMap) { closeEditor(); return editNote("Closed. The tables have not changed."); }
   try {
     editNote("writing the drawing order into the tables…");
     const text = async (n) => (await editorStore.load(n))?.body ?? "";
@@ -1738,13 +1711,8 @@ $("edit-apply").onclick = async () => {
     editNote(`Applied: visualization.edge_levels has the edited drawing order (your rules: ${num(n("edits.csv"))}, heads: ` +
       `${num(n("heads.csv"))}, line ends: ${num(n("caps.csv"))}), also in the downloads. The map draws it.`);
   } catch (e) {
-    editNote("Apply failed: " + e.message);
+    editNote("Apply failed: " + e.message);       // the editor stays open
   }
-  $("edit-apply").disabled = false;
-};
-for (const b of document.querySelectorAll("#editbar [data-for]")) b.onclick = () => $(b.dataset.for).click();
-for (const b of document.querySelectorAll("#edit-dl [data-dl]")) {
-  b.onclick = () => editor?.download(b.dataset.dl).catch((e) => editNote(`The download of ${b.dataset.dl} failed: ${e.message}`));
 }
 
 // SQL on the tables
