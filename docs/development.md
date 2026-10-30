@@ -163,7 +163,7 @@ the page as JSON. The CLI writes zstd and the page writes snap, so compare `out-
 not with `cmp`.
 
 Check the level editor of the page (card 7) in headless Chromium: open, one edit, Apply, the tables and the `.duckdb`
-download, Close. It writes `editor.png` and `editor-dark.png` and prints the time to open the editor:
+download, "← Steps". It writes `editor.png` and `editor-dark.png` and prints the time to open the editor:
 
 ```bash
 python crates/duckosm-wasm/www/editor_e2e.py out-editor
