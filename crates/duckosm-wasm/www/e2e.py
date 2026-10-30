@@ -147,18 +147,22 @@ with sync_playwright() as p:
     assert not page.evaluate("rs.tools.list().find((t) => t.id === 'legend').disabled"), "Colour by and legend is on after the roads are drawn"
     assert page.query_selector(".ov-ctrl") is None, "a page with a bar has no floating Layers box"
     ov = lambda: page.evaluate("duckMap.getStyle().layers.filter((l) => /^rs-ov\\d/.test(l.id)).map((l) => l.layout?.visibility ?? 'visible')")  # noqa: E731
-    shown = lambda: page.evaluate("(() => { const L = duckMap.getStyle().layers.filter((l) => /^rs-ov\\d/.test(l.id) && !l.id.endsWith('-pattern') && l.layout?.visibility !== 'none').map((l) => l.id); return L.length; })()")  # noqa: E731
+    shown = lambda: page.evaluate("(() => { const L = duckMap.getStyle().layers.filter((l) => /^rs-ov\\d/.test(l.id) && l.layout?.visibility !== 'none').map((l) => l.id); return L.length; })()")  # noqa: E731
     assert shown() > 0, "the area's layers show"
     page.click("#rs-toolbar .bm-ctrl .bm-icon")
     assert page.is_visible(".bm-menu .rs-bm-layers"), "the switch is in the Base map box"
     print("base map box:", page.inner_text(".bm-menu").replace("\n", " | "))
     assert page.evaluate("document.querySelector('.rs-bm-layers input').checked")
     page.click(".bm-menu .rs-bm-layers label")                      # all the area's layers off (the footprints of the buildings too)
-    page.wait_for_function("duckMap.getStyle().layers.filter((l) => /^rs-ov\\d/.test(l.id) && !l.id.endsWith('-pattern') && l.layout?.visibility !== 'none').length === 0")
+    page.wait_for_function("duckMap.getStyle().layers.filter((l) => /^rs-ov\\d/.test(l.id) && l.layout?.visibility !== 'none').length === 0")
     assert not page.evaluate("document.querySelector('.rs-bm-layers input').checked")
-    # the overlay entry of landcover lists ov0-fill and ov0-outline, not its pattern layer ov0-pattern: the switch leaves the pattern on the map (a roadstyle gap)
-    if page.evaluate("duckMap.getStyle().layers.some((l) => /^rs-ov\\d.*-pattern$/.test(l.id) && l.layout?.visibility !== 'none')"):
-        print("GAP, the switch of the area's layers leaves the pattern layer (rs-ov0-pattern) on the map")
+    # with the switch off, no layer of the area's own data is visible: only the base map (bg, basemap, vbm-*), the roads (rs-roads*) and the page's own
+    # layers (the area, the extracts, the preview, the pin and the drawing tool)
+    visible = page.evaluate("duckMap.getStyle().layers.filter((l) => l.layout?.visibility !== 'none').map((l) => l.id)")
+    own = ("bg", "basemap", "vbm-", "rs-roads", "area-", "extract-", "preview-", "pin", "td-")
+    print("visible layers with Map layers off:", visible)
+    assert all(i.startswith(own) for i in visible), [i for i in visible if not i.startswith(own)]
+    assert not page.evaluate("[...document.querySelectorAll('.ov-ctrl, .flt-ctrl, .vw-ctrl, .tn-ctrl, .co-ctrl, .co-lg, .rs-find')].some((e) => getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width > 0)"), "no floating box"
     page.screenshot(path=str(out / "layers-off-basemap-box.png"))
     page.keyboard.press("Escape")
     page.evaluate("document.getElementById('show').click()")        # a new draw: the switch that is off stays off
@@ -166,7 +170,7 @@ with sync_playwright() as p:
     assert shown() == 0, "the switch stays off after a draw"
     page.click("#rs-toolbar .bm-ctrl .bm-icon")
     page.click(".bm-menu .rs-bm-layers label")                      # on: each layer as the style starts it
-    page.wait_for_function("duckMap.getStyle().layers.filter((l) => /^rs-ov\\d/.test(l.id) && !l.id.endsWith('-pattern') && l.layout?.visibility !== 'none').length > 0")
+    page.wait_for_function("duckMap.getStyle().layers.filter((l) => /^rs-ov\\d/.test(l.id) && l.layout?.visibility !== 'none').length > 0")
     page.screenshot(path=str(out / "layers-on-basemap-box.png"))
     page.keyboard.press("Escape")
     page.wait_for_function("window.duckMap.loaded()", timeout=600_000)

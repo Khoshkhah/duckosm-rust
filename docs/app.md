@@ -562,20 +562,15 @@ works in the same tab during the build, and the computer had other load. Not mea
 ## Gaps in roadstyle (2026-10-29)
 
 Kaveh's rule: the page uses the standard dashboard and the standard toolbox, and does not change them. The page does not make its own version
-of what the standard lacks. Since roadstyle `6fdc893` one gap is open:
+of what the standard lacks. Since roadstyle `4d61862` no gap is open. (`phone_e2e.py` still prints a `GAP` if the handle of the editor's sheet is
+under roadstyle's bar again; it was so up to `dd08231`.)
 
-1. **The switch of the area's layers leaves a pattern layer.** The overlay entry of landcover lists `ov0-fill` and `ov0-outline`, and not its
-   pattern layer `ov0-pattern`, so **Map layers** off leaves that layer on the map. `e2e.py` prints `GAP`.
-
-The editor's full sheet on a phone started under roadstyle's top bar (its handle was under the bar) up to `dd08231`. At `6fdc893` a tap on
-the handle works, so `phone_e2e.py` prints no `GAP`. The test still prints one if the handle is covered again.
-
-Fixed in roadstyle `6d37af5`, `f460335`, `dd08231` and `6fdc893` (the page has no adapter for them): a box that leaves a phone's screen sideways; a raster base
+Fixed in roadstyle `6d37af5`, `f460335`, `dd08231`, `6fdc893` and `4d61862` (the page has no adapter for them): a box that leaves a phone's screen sideways; a raster base
 map that goes on top of the roads of a host page; the list of base maps and the typed `dashboard` with its first paint for a JavaScript host
 (`data/host_options.json`, `rsFirstPaint`); `rsSetBasemap("blank")` that gives the dark twin in the dark theme; OpenFreeMap's sprite;
 the panel's shell rules (now in `dashboard.css`); the sheet and the free part of the map (`rs.sheet()`, `rs.freeArea()`); a tool found by
 `data-rs-tool`. The switch of the area's layers (in the Base map box), their list in the legend box, the 3D switch and "Colour by and legend" need a live look (`state: "live"`): a page with a dashboard has one.
-`dashboard_e2e.py` and `e2e.py` check each of them.
+`dashboard_e2e.py` and `e2e.py` check each of them. The switch **Map layers** hides every layer of the area's own data (`e2e.py` lists the visible layers with the switch off: only the base map, the roads and the page's own layers). A page with a bar has no floating box (the Roads box is gone).
 
 Load time (headless Chromium, 1400 × 900, no CPU throttle, median of 5 runs, local server): the panel has its form after 81 ms (before, with
 `hostOptions` in the WebAssembly module on the main thread: 189 ms), and the map is shown after 1,458 ms (before: 1,551 ms). The first visit
