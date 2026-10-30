@@ -132,7 +132,7 @@ with sync_playwright() as p:
     assert box() and page.is_hidden("#rs-attr-box"), "and the base-map box closes the attribution box"
     # the base map is roadstyle's: a map with a dark twin follows the theme (the list has one row for the pair); the page keeps the light key
     assert page.evaluate("[...document.querySelectorAll('.bm-menu input[name=rs-bm]')].map((r) => r.value)") == [
-        "ofm_liberty", "ofm_bright", "ofm_positron", "osm", "esri_gray", "esri_street", "satellite", "blank"]
+        "ofm_liberty", "ofm_positron", "osm", "esri_gray", "esri_street", "satellite", "blank"]       # roadstyle has no Bright base map since 6564889
     assert page.evaluate("document.querySelector('input[name=rs-bm]:checked').value") == "ofm_liberty", "the page starts on OpenFreeMap"
     page.click("input[name=rs-bm][value=blank]")
     bg = lambda: page.evaluate("[duckMap.getPaintProperty('bg', 'background-color'), duckMap.getLayoutProperty('basemap', 'visibility')]")  # noqa: E731
