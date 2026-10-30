@@ -466,7 +466,7 @@ map of one mode, the duckOSM base-map layers while the editor is open, and Close
     and the flat view. The tilt does not change the buildings.
   - **3D buildings** (the building icon) is roadstyle's tool. It is on for a vector base map (OpenFreeMap) and greyed out for the
     others. It switches the 3D buildings of that base map, in the tilted view. The same switch is a row in the base-map box.
-  - **Base map** (the layers icon) opens roadstyle's box: OpenFreeMap (Liberty, Bright, Positron), OpenStreetMap, Esri (Gray, Streets,
+  - **Base map** (the layers icon) opens roadstyle's box: OpenFreeMap (Liberty, Positron), OpenStreetMap, Esri (Gray, Streets,
     Satellite) and Blank. A map with a dark twin follows the theme. The box has the rows **Hillshade**, **Labels** and
     **3D buildings** under "On top". The page keeps the base map.
   - **Street View** (the person) opens roadstyle's floating window. A click on a road shows Google Street View there.
@@ -566,8 +566,11 @@ works in the same tab during the build, and the computer had other load. Not mea
 ## Gaps in roadstyle (2026-10-29)
 
 Kaveh's rule: the page uses the standard dashboard and the standard toolbox, and does not change them. The page does not make its own version
-of what the standard lacks. Since roadstyle `4d61862` no gap is open. (`phone_e2e.py` still prints a `GAP` if the handle of the editor's sheet is
-under roadstyle's bar again; it was so up to `dd08231`.)
+of what the standard lacks. One gap is open (roadstyle `9d745c9`, the pin of 2026-10-30):
+
+1. **The editor's full sheet on a phone** starts under roadstyle's top bar (the sheet is `100% - 48px` high), so its handle is under the bar
+   (`[0, 49, 390, 73]`). It was reachable at `6fdc893` and `4d61862`, and it is covered again at `9d745c9`. `phone_e2e.py` prints `GAP` and clicks
+   the handle with a script. The page does not correct it.
 
 Fixed in roadstyle `6d37af5`, `f460335`, `dd08231`, `6fdc893` and `4d61862` (the page has no adapter for them): a box that leaves a phone's screen sideways; a raster base
 map that goes on top of the roads of a host page; the list of base maps and the typed `dashboard` with its first paint for a JavaScript host

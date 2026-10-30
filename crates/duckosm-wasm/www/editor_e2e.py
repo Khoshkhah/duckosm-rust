@@ -279,12 +279,12 @@ with sync_playwright() as p:
     page.wait_for_function("window.duckMap.loaded()", timeout=120_000)
     page.screenshot(path=str(out / "editor.png"))
     # the dark theme (the theme tool of roadstyle's bar sets data-rs-theme; the page copies it to data-theme): the editor's panel follows it
-    page.locator("#rs-toolbar button").first.click()   # the theme tool (roadstyle's tip.js takes the title attribute)
+    page.click("[data-rs-tool=theme] button, button[data-rs-tool=theme]")   # the theme tool (found by its id: roadstyle's tip.js takes the title attribute, and the bar can have another button first)
     page.wait_for_timeout(500)
     assert page.evaluate("document.documentElement.dataset.theme") == "dark" == page.evaluate("document.documentElement.dataset.rsTheme")
     assert page.evaluate("getComputedStyle(document.getElementById('lv')).backgroundColor") != "rgb(246, 247, 249)", "the dark panel"
     page.screenshot(path=str(out / "editor-dark.png"))
-    page.locator("#rs-toolbar button").first.click()   # the theme tool (roadstyle's tip.js takes the title attribute)
+    page.click("[data-rs-tool=theme] button, button[data-rs-tool=theme]")   # the theme tool (found by its id: roadstyle's tip.js takes the title attribute, and the bar can have another button first)
     # the page's panel collapses and opens while the editor is open: the editor's panel stays on the right and works (Kaveh, 2026-10-25:
     # "when I collapse duckosm side panel, the level editor convert totally white": a transform on the page's panel took it away)
     lv_box = lambda: page.evaluate(BOX, "lv")  # noqa: E731
