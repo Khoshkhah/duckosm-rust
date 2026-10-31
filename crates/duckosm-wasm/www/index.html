@@ -203,7 +203,7 @@
   .checks { display: flex; gap: 14px; flex-wrap: wrap; }
   .checks label { display: flex; gap: 6px; align-items: center; }
   .checks input { accent-color: var(--accent); }
-  .scroll { max-height: 220px; overflow: auto; }
+  .pg-scroll { max-height: 220px; overflow: auto; }
   /* the table of the networks: roadstyle's table, with no row that acts */
   #resultline .rs-table tbody tr { cursor: default; }
   #resultline .rs-table tbody tr:hover { background: none; }
@@ -391,7 +391,7 @@
     <label class="pick"><svg><use href="#i-upload"/></svg><span id="fixes-name">Select a fixes file (.yaml)</span><input id="fixes" type="file" accept=".yaml,.yml"></label>
   </details>
   <p id="buildstatus" class="progress" aria-live="polite"></p>
-  <div id="buildinfo" class="scroll">
+  <div id="buildinfo" class="pg-scroll">
   <details id="builddetails" hidden><summary>Build details</summary><table class="steplog"><tbody></tbody></table></details>
   <details id="steplog" hidden><summary>Time and memory of each step</summary>
     <table class="steplog"><thead><tr><th>Step</th><th>Time (s)</th><th>Memory (MiB)</th></tr></thead><tbody></tbody>
@@ -408,12 +408,12 @@
 FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
     <div class="row"><button id="query" class="btn">Run</button></div>
     <p id="query-why" class="why"></p>
-    <div id="result" class="scroll"></div>
+    <div id="result" class="pg-scroll"></div>
   </details>
   <div class="dl"><button id="zip" class="btn" aria-label="Download all the tables as a zip"><svg><use href="#i-download"/></svg>.zip</button><button id="duckdb" class="btn" aria-label="Download the .duckdb database"><svg><use href="#i-download"/></svg>.duckdb</button></div>
   <details id="files-box"><summary><h3>Each table</h3></summary>
     <p class="small muted"><a id="reference" target="_blank" rel="noopener">The columns of each table</a></p>
-    <div id="files" class="scroll"></div>
+    <div id="files" class="pg-scroll"></div>
   </details>
 </section>
 

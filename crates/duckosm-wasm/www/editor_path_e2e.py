@@ -123,6 +123,8 @@ def run(browser, name, dark=False, **context):
             assert HOVER2 in paint(), "one pick: the hover is the light blue (the next click picks road 2)"
     page.screenshot(path=str(out / f"{name}-1b-picks.png"))
     assert "BETWEEN THESE TWO ROADS" in page.inner_text("#sb").upper(), "two roads picked"
+    if not phone:   # the page's own scroll boxes must not cap the editor's tab body: the relation form below the two roads must have room
+        assert page.evaluate("document.querySelector('#sb .scroll.rs-pbody:not([hidden])').getBoundingClientRect().height") > 400, "the editor's body is not capped"
     # the order of the pair: road 1 on top, added to the list (the change waits)
     page.evaluate("""() => { const b = [...document.querySelectorAll('#sb button')].find((x) => /^1\\S/.test(x.textContent.trim()) && x.getBoundingClientRect().width > 0); b.scrollIntoView({block: 'center'}); }""")
     page.wait_for_timeout(400)
