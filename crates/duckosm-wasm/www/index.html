@@ -47,9 +47,9 @@
   body { font: 14px/1.45 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--fg); background: var(--bg); }
   #map { position: fixed; inset: 0; }
   /* the part of the map that the panel and the bar leave free (freeInsets() in the script sets --free-l, --free-r, --free-b) */
-  /* the map while a draw runs: a light veil and a spinner with the draw's step (showRoads), over the part of the map that the panel
-     or the phone's sheet leaves free */
-  #mapbusy { position: fixed; inset: var(--free-t, 0px) var(--free-r, 0px) var(--free-b, 0px) var(--free-l, 0px); z-index: 1; display: flex; flex-direction: column; align-items: center;
+  /* the map while a draw runs: a light veil over the whole map (also the strip beside the bar), and a spinner with the draw's step (showRoads)
+     in the part of the map that the panel, the bar or the phone's sheet leave free */
+  #mapbusy { position: fixed; inset: 0; box-sizing: border-box; padding: var(--free-t, 0px) var(--free-r, 0px) var(--free-b, 0px) var(--free-l, 0px); z-index: 1; display: flex; flex-direction: column; align-items: center;
     justify-content: center; gap: 10px; background: color-mix(in srgb, var(--bg) 40%, transparent); pointer-events: none; }
   #mapbusy[hidden] { display: none; }
   #mapbusy .spin { width: 34px; height: 34px; border-radius: 50%; border: 4px solid var(--line); border-top-color: var(--fg); animation: spin 0.8s linear infinite; }
