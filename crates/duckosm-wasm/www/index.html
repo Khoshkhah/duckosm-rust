@@ -1679,6 +1679,7 @@ refreshSteps();
 // stay, and replaceRoads draws the edited edges again in the map worker. The editor solves and cuts no tiles of its own. Its pick adds
 // road and the line ends to the rows of window.RS_SIDE (destroy takes them off). Apply first writes the editor's levels.csv into the tables
 // (visualization.edge_levels), and then the page draws its roads again. ----
+let lookText = null;                                // the page's look (map/look.json), for the editor
 let editor = null, editorStore = null, editedMap = false;   // editedMap: the map has levels that the tables do not have
 const editNote = (t) => { $("editnote").textContent = t + lostNote(); };
 // The area's files in this browser (roadstyle's browserStore: the texts in localStorage, which has about 5 MB for the site). A file that
@@ -1805,7 +1806,9 @@ $("edit-open").onclick = async () => {
     const fit = map.fitBounds;
     map.fitBounds = () => map;
     t = performance.now();
-    try { editor = await levelEditor({ map, panel: $("sb"), backLabel: "Steps", pkgUrl, store, dashboard: rs, prefix: "rs-", levels: levels ?? undefined }); }
+    // `look`: the page's saved look gives the editor's roads the page's palette, sections and colour options (roadstyle 0.26.2)
+    try { editor = await levelEditor({ map, panel: $("sb"), backLabel: "Steps", pkgUrl, store, dashboard: rs, prefix: "rs-", levels: levels ?? undefined,
+      look: await (lookText ??= fetch("map/look.json").then((r) => r.text())) }); }
     finally { map.fitBounds = fit; }
     lap("levelEditor()", t);
     lap("open, all", t0);
