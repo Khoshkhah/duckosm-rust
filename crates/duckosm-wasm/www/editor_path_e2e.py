@@ -146,7 +146,7 @@ def run(browser, name, dark=False, **context):
     tap("#lv-back")
     page.wait_for_function("!window.levelEditorOpen", timeout=120_000)
     page.wait_for_function("/Applied|failed/.test(document.getElementById('editnote').textContent)", timeout=120_000)
-    assert "Applied" in page.inner_text("#editnote") and "your rules: 1" in page.inner_text("#editnote"), page.inner_text("#editnote")
+    assert "Applied" in page.inner_text("#editnote") and "Rules: 1" in page.inner_text("#editnote"), page.inner_text("#editnote")
     page.wait_for_function("!window.mapDrawing && window.duckMap.loaded()", timeout=300_000)
     assert page.evaluate("getComputedStyle(document.querySelector('#sb .sb-body')).display") != "none", "the steps are back"
     assert page.evaluate("getComputedStyle(document.querySelector('.sb-foot')).display") != "none", "the footer is back"

@@ -84,6 +84,8 @@
   .icon-btn:disabled { visibility: hidden; }
   .icon-btn { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 8px; background: none; color: var(--muted); flex: none; }
   .icon-btn:hover { background: var(--bg); color: var(--fg); }
+  .step-body { display: flex; flex-direction: column; gap: 10px; }
+  .step-body > * { margin-top: 0 !important; margin-bottom: 0 !important; }
   .step .n { width: 20px; height: 20px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 11px; flex: none; }
   /* card 5: one line of the build, the folded SQL and table downloads, the two downloads on one row */
   .step .line { margin: 0; }
@@ -143,13 +145,11 @@
 
   .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
   /* the drawing tools: a card in the Draw tab */
-  .toolbox { background: var(--surface); border-radius: 10px; padding: 12px; }
-  .shapes { margin-bottom: 10px; }
-  .shapes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-  .shapes button { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); font-weight: 500; }
-  .shapes button span { flex: 1; text-align: left; }
-  .edit { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-  .edit button { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 2px 6px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); font-size: 12px; font-weight: 500; }
+  /* the drawing tools: one row of icon buttons (a tool has its label and its tooltip); the row scrolls sideways when it is too narrow */
+  .toolbox { display: flex; align-items: center; gap: 2px; padding: 6px; background: var(--surface); border-radius: 10px; overflow-x: auto; }
+  .toolbox button { flex: none; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid transparent; border-radius: 9px; background: none; color: var(--fg); }
+  .toolbox .sep { flex: none; width: 1px; height: 22px; background: var(--line); margin: 0 2px; }
+  #hint { margin: 8px 0 0; font-size: 12.5px; color: var(--muted); }
   .toolbox button:hover:not(:disabled) { background: var(--surface); }
   .toolbox button[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
   .toolbox button:disabled { opacity: 0.4; cursor: default; }
@@ -162,12 +162,12 @@
   #file { position: absolute; width: 1px; height: 1px; opacity: 0; }
 
   .empty { padding: 18px 14px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; font-size: 13px; }
-  .stats { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 6px; margin-top: 10px; }
-  .stat { background: var(--surface); border-radius: 10px; padding: 8px 10px; }
-  .stat b { display: block; font-size: 17px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .stats { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 6px; }
+  .stat { background: var(--surface); border-radius: 10px; padding: 6px 10px; }
+  .stat b { display: block; font-size: 16px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
   .stat span { font-size: 11.5px; color: var(--muted); }
   .source { margin-top: 8px; font-size: 12.5px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
-  .callout { display: flex; gap: 8px; margin-top: 10px; padding: 9px 11px; border-radius: 9px; background: var(--warn-soft); color: var(--warn); font-size: 12.5px; }
+  .callout { display: flex; gap: 8px; margin-top: 8px; padding: 9px 11px; border-radius: 9px; background: var(--warn-soft); color: var(--warn); font-size: 12.5px; }
   .error { color: var(--error); }
 
   #extracts { display: grid; gap: 4px; }
@@ -201,6 +201,7 @@
   .checks { display: flex; gap: 14px; flex-wrap: wrap; }
   .checks label { display: flex; gap: 6px; align-items: center; }
   .checks input { accent-color: var(--accent); }
+  .scroll { max-height: 220px; overflow: auto; }
   details { margin-top: 10px; } summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
   .progress { margin: 10px 0 0; padding: 9px 11px; border-radius: 9px; background: var(--surface); font-size: 12.5px; white-space: pre-wrap; }
   .progress:empty { display: none; }
@@ -253,7 +254,7 @@
     .btn, .segmented [role=tab], input[type=search], input[type=text] { height: 44px; }
     .field > svg { top: 13px; }
     .here { width: 36px; height: 36px; top: 4px; }
-    .shapes button { height: 44px; }
+    .toolbox button { width: 44px; height: 44px; }
   }
 </style>
 </head>
@@ -314,20 +315,17 @@
 
 <section id="draw" role="tabpanel" aria-labelledby="tab-draw" hidden>
   <div class="toolbox" role="toolbar" aria-label="Drawing tools">
-    <div class="shapes">
-      <button data-mode="rectangle" aria-pressed="false" aria-keyshortcuts="R"><svg><use href="#i-rect"/></svg><span>Rectangle</span></button>
-      <button data-mode="polygon" aria-pressed="false" aria-keyshortcuts="P"><svg><use href="#i-poly"/></svg><span>Polygon</span></button>
-      <button data-mode="circle" aria-pressed="false" aria-keyshortcuts="C"><svg><use href="#i-circle"/></svg><span>Circle</span></button>
-      <button data-mode="freehand" aria-pressed="false" aria-keyshortcuts="F"><svg><use href="#i-free"/></svg><span>Freehand</span></button>
-    </div>
-    <div class="edit">
-      <button data-mode="select" aria-pressed="false" aria-keyshortcuts="S" title="Select, move and change a shape (S)"><svg><use href="#i-select"/></svg>Select</button>
-      <button id="merge" disabled title="Join the shapes that overlap into one shape" aria-label="Merge shapes"><svg><use href="#i-merge"/></svg>Merge</button>
-      <button id="delete" disabled title="Delete the selected shape (Delete)" aria-keyshortcuts="Delete"><svg><use href="#i-trash"/></svg>Delete</button>
-      <button id="clear" title="Delete all shapes"><svg><use href="#i-x"/></svg>Clear</button>
-    </div>
-    <p id="hint" aria-live="polite">Select a shape, then draw it on the map.</p>
+    <button data-mode="rectangle" aria-pressed="false" aria-keyshortcuts="R" aria-label="Rectangle" title="Rectangle (R)"><svg><use href="#i-rect"/></svg></button>
+    <button data-mode="polygon" aria-pressed="false" aria-keyshortcuts="P" aria-label="Polygon" title="Polygon (P)"><svg><use href="#i-poly"/></svg></button>
+    <button data-mode="circle" aria-pressed="false" aria-keyshortcuts="C" aria-label="Circle" title="Circle (C)"><svg><use href="#i-circle"/></svg></button>
+    <button data-mode="freehand" aria-pressed="false" aria-keyshortcuts="F" aria-label="Freehand" title="Freehand (F)"><svg><use href="#i-free"/></svg></button>
+    <span class="sep" aria-hidden="true"></span>
+    <button data-mode="select" aria-pressed="false" aria-keyshortcuts="S" aria-label="Select, move or change a shape" title="Select, move or change a shape (S)"><svg><use href="#i-select"/></svg></button>
+    <button id="merge" disabled aria-label="Merge the shapes that overlap" title="Merge the shapes that overlap"><svg><use href="#i-merge"/></svg></button>
+    <button id="delete" disabled aria-label="Delete the selected shape" aria-keyshortcuts="Delete" title="Delete the selected shape (Delete)"><svg><use href="#i-trash"/></svg></button>
+    <button id="clear" aria-label="Delete all shapes" title="Delete all shapes"><svg><use href="#i-x"/></svg></button>
   </div>
+  <p id="hint" aria-live="polite">Pick a tool, then draw on the map.</p>
 </section>
 
 <section id="file-panel" role="tabpanel" aria-labelledby="tab-file" hidden>
@@ -344,7 +342,7 @@
 <h2 id="step2"><span class="n">2</span>The area
   <button id="zoom-area" class="icon-btn" disabled title="Zoom to the area" aria-label="Zoom to the area"><svg><use href="#i-zoom"/></svg></button></h2>
 <input id="name" type="text" aria-label="Name of the area" placeholder="Name">
-<div id="summary" aria-live="polite"><div class="empty">No area yet. Choose one in step 1.</div></div>
+<div id="summary" aria-live="polite"></div>
 </section>
 
 <section id="extracts-box" class="step" aria-labelledby="step3">
@@ -355,42 +353,41 @@
     <button role="tab" id="tab-cut" aria-controls="src-cut" aria-selected="false" data-source="cut">Cut file</button>
   </div>
   <section id="src-region" role="tabpanel" aria-labelledby="tab-region">
-    <label class="pick"><svg><use href="#i-upload"/></svg><span id="region-name">Select the region file (.osm.pbf)</span><input id="region" type="file" accept=".pbf"></label>
-    <p id="extracts-help" class="small muted" style="margin-top:0">The file must cover the area. These Geofabrik files cover it. Click a file to see it on the map.</p>
-    <div id="extracts" role="radiogroup" aria-label="Show an extract on the map"><p class="small muted">Choose an area first.</p></div>
+    <label class="pick"><svg><use href="#i-upload"/></svg><span id="region-name">Select a region file (.osm.pbf)</span><input id="region" type="file" accept=".pbf"></label>
+    <div id="extracts" role="radiogroup" aria-label="Show an extract on the map"></div>
     <div id="kept" aria-live="polite"></div>
   </section>
   <section id="src-overpass" role="tabpanel" aria-labelledby="tab-overpass" hidden>
-    <p class="small muted" style="margin:0">Data from the <a href="https://wiki.openstreetmap.org/wiki/Overpass_API">Overpass API</a>. Use it for a city or a smaller area. The public servers are often busy.</p>
+    <p class="small muted">Data from the <a href="https://wiki.openstreetmap.org/wiki/Overpass_API" target="_blank" rel="noopener">Overpass API</a>.</p>
   </section>
   <section id="src-cut" role="tabpanel" aria-labelledby="tab-cut" hidden>
-    <label class="pick"><svg><use href="#i-upload"/></svg><span id="pbf-name">Select a cut .osm.pbf file</span><input id="pbf" type="file" accept=".pbf"></label>
-    <p class="small muted" style="margin:0">The page uses all of the file. The area gives only the name.</p>
+    <label class="pick"><svg><use href="#i-upload"/></svg><span id="pbf-name">Select a cut file (.osm.pbf)</span><input id="pbf" type="file" accept=".pbf"></label>
   </section>
 </section>
 
 <section id="step4-card" class="step" aria-labelledby="step4">
   <h2 id="step4"><span class="n">4</span>Build</h2>
-  <div class="checks" role="group" aria-label="The modes">
+  <div class="checks" role="group" aria-label="The networks and the base map layers">
     <label><input type="checkbox" name="mode" value="driving" checked>Driving</label>
     <label><input type="checkbox" name="mode" value="walking" checked>Walking</label>
     <label><input type="checkbox" name="mode" value="cycling" checked>Cycling</label>
+    <label><input type="checkbox" id="features" checked>Layers</label>
   </div>
-  <div class="checks" style="margin-top:6px"><label><input type="checkbox" id="features" checked>Base map layers</label></div>
-  <div class="grid2" style="margin-top:10px">
+  <div class="grid2">
     <label for="levels" class="small">Drawing order</label>
     <select id="levels"><option value="tags">From the tags (fast)</option><option value="solve" selected>Optimized (slower)</option></select>
   </div>
-  <details><summary>Advanced: fixes to the map data</summary>
-    <p class="small muted" style="margin:8px 0">Your fixes for OpenStreetMap errors.</p>
-    <label class="pick" style="margin:0"><svg><use href="#i-upload"/></svg><span id="fixes-name">Select a fixes file (.yaml)</span><input id="fixes" type="file" accept=".yaml,.yml"></label>
+  <details><summary>Fixes</summary>
+    <label class="pick"><svg><use href="#i-upload"/></svg><span id="fixes-name">Select a fixes file (.yaml)</span><input id="fixes" type="file" accept=".yaml,.yml"></label>
   </details>
   <p id="buildstatus" class="progress" aria-live="polite"></p>
+  <div id="buildinfo" class="scroll">
   <details id="builddetails" hidden><summary>Build details</summary><table class="steplog"><tbody></tbody></table></details>
-  <details id="steplog" open hidden><summary>Time and memory of each step</summary>
+  <details id="steplog" hidden><summary>Time and memory of each step</summary>
     <table class="steplog"><thead><tr><th>Step</th><th>Time (s)</th><th>Memory (MiB)</th></tr></thead><tbody></tbody>
       <tfoot><tr class="total"><td>Total</td><td></td><td></td></tr></tfoot></table>
   </details>
+  </div>
 </section>
 
 <section id="step5-card" class="step" aria-labelledby="step5">
@@ -401,12 +398,12 @@
 FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
     <div class="row"><button id="query" class="btn">Run</button></div>
     <p id="query-why" class="why"></p>
-    <div id="result"></div>
+    <div id="result" class="scroll"></div>
   </details>
-  <div class="dl"><button id="zip" class="btn">Download all (.zip)</button><button id="duckdb" class="btn">Download .duckdb</button></div>
-  <details id="files-box"><summary><h3>Downloads: each table</h3></summary>
+  <div class="dl"><button id="zip" class="btn" aria-label="Download all the tables as a zip"><svg><use href="#i-download"/></svg>.zip</button><button id="duckdb" class="btn" aria-label="Download the .duckdb database"><svg><use href="#i-download"/></svg>.duckdb</button></div>
+  <details id="files-box"><summary><h3>Each table</h3></summary>
     <p class="small muted"><a id="reference" target="_blank" rel="noopener">The columns of each table</a></p>
-    <div id="files"></div>
+    <div id="files" class="scroll"></div>
   </details>
 </section>
 
@@ -416,9 +413,9 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
     <label for="mapmode" class="small" id="mapmode-label">Network</label>
     <select id="mapmode"></select>
   </div>
-  <div class="grid2" style="margin-top:6px">
+  <div class="grid2">
     <label for="tilefmt" class="small">Map tiles</label>
-    <select id="tilefmt"><option value="mlt">MLT (default, smaller tiles)</option><option value="mvt">MVT</option></select>
+    <select id="tilefmt"><option value="mlt">MLT</option><option value="mvt">MVT</option></select>
   </div>
   <div id="showrow" style="margin-top:10px" hidden><div class="row"><button id="show" class="btn">Show on map</button></div>
     <p id="show-why" class="why"></p></div>
@@ -710,10 +707,10 @@ function clearArea() {
   setData("pin", null);
   $("zoom-area").disabled = true;
   showExtract(null);
-  $("extracts").innerHTML = `<p class="small muted">Choose an area first.</p>`;
+  $("extracts").innerHTML = "";
   $("save").disabled = true;
   canBuild();
-  $("summary").innerHTML = `<div class="empty">No area yet. Choose one in step 1.</div>`;
+  $("summary").innerHTML = "";
 }
 
 async function setArea(polys, props, { zoom = true } = {}) {
@@ -734,10 +731,8 @@ async function setArea(polys, props, { zoom = true } = {}) {
     `<div class="stats"><div class="stat"><b>${num(km2, 2)}</b><span>km²</span></div>` +
     `<div class="stat"><b>${num(polys.length)}</b><span>polygon${polys.length > 1 ? "s" : ""}</span></div>` +
     `<div class="stat"><b>${num(vertices)}</b><span>vertices</span></div></div>` +
-    `<div class="source">${icon(props.source === "drawn" ? "pen" : props.source.startsWith("Nominatim") ? "search" : "file")}` +
-    `<span>Source: ${esc(props.source === "drawn" ? "drawn on the map" : props.source.replace(/^Nominatim (\w+) (\d+)$/, "OpenStreetMap $1 $2 (Nominatim)"))}</span></div>` +
     (km2 > 10000 ? `<div class="callout">${icon("alert")}<span>Large area. The build can take minutes and use more than 1 GB of memory.</span></div>` : "");
-  $("extracts").innerHTML = `<p class="small muted">Finding the extracts…</p>`;
+  $("extracts").innerHTML = `<p class="small muted">Finding the files…</p>`;
   const mine = area;
   cover = (await covering(polys)).slice(0, 3);
   if (area !== mine) return;
@@ -916,10 +911,10 @@ $("found").onchange = async (ev) => {
 // ---- draw ----
 let selected = null;
 const hints = {
-  select: "Click a shape to select it. Drag the shape to move it. Drag a point to change it.",
-  rectangle: "Drag from one corner to the opposite corner.",
-  polygon: "Click each corner. To close, click the first corner or push Enter. Escape stops.",
-  circle: "Drag from the center outward.",
+  select: "Click a shape to select it.",
+  rectangle: "Drag from corner to corner.",
+  polygon: "Click each corner. Enter closes.",
+  circle: "Drag from the center out.",
   freehand: "Drag around the area.",
 };
 const toolButtons = [...document.querySelectorAll("[data-mode]")];
@@ -1066,9 +1061,7 @@ function useKept(k) {
 }
 const day = (d) => (d ? new Date(d).toISOString().slice(0, 10) : "");
 function renderExtracts() {
-  if (area?.props.area_km2 == null) return;   // "Choose an area" or "Finding the extracts" stays
-  if (regions.relay) $("extracts-help").firstChild.textContent = "The file must cover the area. " +
-    "Click Get to download one of these Geofabrik files. The page keeps it. Click a file to see it on the map.";
+  if (area?.props.area_km2 == null) return;   // the list is empty or "Finding the files…" until the files are known
   $("extracts").innerHTML = cover.length ? cover.map((x, i) => {
     const k = keptRegions.find((r) => r.id === x.id), inUse = k && regionKept === k.id;
     const prog = getting?.id === x.id ? `<span class="prog"><span class="bar"><i id="bar"></i></span><span class="got" id="got">0 %</span>` +
@@ -1125,7 +1118,7 @@ $("kept").onclick = async (ev) => {
   const id = ev.target.closest("button[data-del]")?.dataset.del;
   if (!id) return;
   await regions.remove(id);
-  if (regionKept === id) { regionKept = null; regionFile = null; $("region-name").textContent = "Select the region file (.osm.pbf)"; }
+  if (regionKept === id) { regionKept = null; regionFile = null; $("region-name").textContent = "Select a region file (.osm.pbf)"; }
   await refreshKept();
   canBuild();
 };
@@ -1264,7 +1257,7 @@ $("run").onclick = async () => {
     buildDetails(out.summary);
     files();
     const counts = [...out.summary.matchAll(/^(\w+): (\d+) edges, (\d+) nodes/gm)].map((m) => `${m[1]} ${num(+m[2])} / ${num(+m[3])}`);
-    $("resultline").textContent = `${counts.join(" · ")} (edges / nodes), built in ${num((ready - start) / 1000, 1)} s`;
+    $("resultline").textContent = `${counts.join(" · ")} (edges / nodes)`;
     netBuilt = true;
     refreshSteps();
     if (phone.matches) {                          // a phone: the result shows in the sheet (its cards scroll, the page does not)
@@ -1422,8 +1415,7 @@ async function drawRoads() {
     logSteps([{ step: "the roads table (DuckDB)", ms: r.roadsSeconds * 1000 }, { step: "the style", ms: r.styleSeconds * 1000, mib: r.liveMiB[0] },
       { step: "draw the map", ms: (total - r.roadsSeconds - r.styleSeconds) * 1000 }], "map");
     if (!editor && levelsTable()) setTimeout(() => (areaPrep ??= prepareArea()).catch(() => { areaPrep = null; }), 500);   // the editor opens sooner
-    $("mapnote").textContent = `${num(roadCount[$("mapmode").value] ?? 0)} roads, drawn in ${num(total, 1)} s (step 4 gives each ` +
-      `step). Click a road for its data.`;
+    $("mapnote").textContent = `${num(roadCount[$("mapmode").value] ?? 0)} roads, drawn in ${num(total, 1)} s`;
   } catch (e) {
     // no memory (a WebAssembly memory that cannot grow, an allocation): the same advice as the limit above
     const memory = /memory|allocat|RangeError/i.test(`${e.name} ${e.message}`);
@@ -1562,7 +1554,7 @@ const CARD_HELP = {
     ["What is here?", "Click a point on the map to see the areas around it."]],
     note: `Search: ${link("https://photon.komoot.io", "Photon")} (komoot). Boundaries: ${link("https://nominatim.openstreetmap.org", "Nominatim")}. Data © OpenStreetMap contributors.` },
   3: { title: "The data", intro: "The OpenStreetMap data of the area.", terms: [
-    ["Region file", "A .osm.pbf file that covers the area. The page lists the Geofabrik files that cover it. Click a file to see it on the map."],
+    ["Region file", "A .osm.pbf file that covers the area. The page lists the Geofabrik files that cover it: click a file to see it on the map, and Get to download it (the page keeps it in this browser)."],
     ["Overpass", "Data from the Overpass API. Use it for a city or a smaller area. The public servers are often busy."],
     ["Cut file", "A .osm.pbf file that is already cut to the area. The page uses all of the file. The area gives only the name."]] },
   4: { title: "Build", intro: "The page makes the road networks and the tables in your browser.", terms: [
@@ -1774,7 +1766,6 @@ $("edit-open").onclick = async () => {
   drawControls();
   try {
     editorStore = null;                           // the note of a store of an earlier area goes
-    editNote("opening the level editor…");
     const t0 = performance.now();
     // the area made before: its files can be gone (the browser cleared the private file system, a full storage), and the editor draws its roads from them
     if (areaPrep && (await (await areaPrep).store.load("roads.parquet")) == null) areaPrep = null;
@@ -1807,12 +1798,11 @@ $("edit-open").onclick = async () => {
     // "solved": after each change (since roadstyle 6be68c2 a head or a cap is drawing only, with no solve)
     editor.addEventListener("solved", () => {
       editedMap = true;                           // the editor has levels that the tables do not have
-      editNote(`${made}. Changed: ← Steps puts the new drawing order into the tables.`);
+      editNote(`${made}. Changed: ← Steps applies the new drawing order.`);
     });
     editor.addEventListener("back", leaveEditor);  // "← Steps" (with changes waiting, after the editor's own Apply, Discard or Stay)
     editing(true);
-    editNote(`${made}, open in ${num((performance.now() - t0) / 1000, 1)} s. Click a road on the map to start. ← Steps puts the ` +
-      "applied drawing order into the tables and the downloads (nothing applied: no change).");
+    editNote(`${made}, open in ${num((performance.now() - t0) / 1000, 1)} s`);
   } catch (e) {
     // the editor did not start: its panel goes, and the page's roads are drawn again
     editing(false);
@@ -1826,7 +1816,7 @@ $("edit-open").onclick = async () => {
 // "← Steps": the editor goes, and the edits that it applied (the editor's Apply and solve) go into the tables (visualization.edge_levels and the
 // downloads). Nothing applied: the tables stay as they are.
 async function leaveEditor() {
-  if (!editedMap) { closeEditor(); return editNote("Closed. The tables have not changed."); }
+  if (!editedMap) { closeEditor(); return editNote("Closed. No change."); }
   try {
     editNote("writing the drawing order into the tables…");
     const text = async (n) => (await editorStore.load(n))?.body ?? "";
@@ -1838,8 +1828,7 @@ async function leaveEditor() {
     closeEditor(true);
     refreshSteps();
     const n = (f) => Math.max(0, inputs[f].trim().split("\n").length - 1);
-    editNote(`Applied: visualization.edge_levels has the edited drawing order (your rules: ${num(n("edits.csv"))}, heads: ` +
-      `${num(n("heads.csv"))}, line ends: ${num(n("caps.csv"))}), also in the downloads. The map draws it.`);
+    editNote(`Applied. Rules: ${num(n("edits.csv"))}, heads: ${num(n("heads.csv"))}, line ends: ${num(n("caps.csv"))}. The map draws it.`);
   } catch (e) {
     editNote("Apply failed: " + e.message);       // the editor stays open
   }
