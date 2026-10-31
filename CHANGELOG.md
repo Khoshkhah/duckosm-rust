@@ -9,6 +9,20 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ### Changed
 
+- The page uses roadstyle `0.26.2` (`14b40d0f2bd221200a9444a592f96d2febb0b9f5`): the level editor's map follows the dashboard theme, and the area's layers (the **Map layers** switch and the legend list) stay inside the editor. The page gives the editor its look (`look`: `map/look.json`), so the editor's roads have the page's palette and colour options. `editor_path_e2e.py` checks the theme, the layers, the Base map box, the legend box and a theme change inside the open editor.
+- **Card 5: the networks of the build are a table** (Network with its icon, Roads, Junctions; numbers right-aligned), in roadstyle's table, in place of the line "driving 57,765 / 26,535 · ... (edges / nodes)".
+- **The progress of a build is in one place**: the map's busy box (also on a phone: the page opens the sheet only to its middle height, so the box is in view). The Build button is off with a small spinner, and there is no text line under it. Card 4 has only the result of the build or its error. `buttons_e2e.py` checks that only one element says "Building" during a build, that it is in the map's busy box, and (on a phone) that the box is above the sheet.
+
+- **Every card is calm and short** (Kaveh, 2026-10-30: "check every card ... for optimizing and better layout, and remove unnecessary parts"). The explanations moved into the "?" help of the card, the credits into roadstyle's credits box. What changed in each card:
+  - **1 Choose an area:** one search field with the "What is here?" icon button inside it (no Search button, no "Type a place first", no "Then click the map", no credits paragraph); the Draw tab is one row of icon tools (rectangle, polygon, circle, freehand, select, merge, delete, delete all; each with a label and a tooltip; 44 px and a sideways scroll on a phone) and one hint line; the File tab has one line. Photon and Nominatim are in the credits box.
+  - **2 The area:** the name and one row of three figures; the "Source:" line and the empty box "No area yet" are gone (the card is disabled with its reason until there is an area).
+  - **3 The data:** the "The file must cover the area..." paragraph, the Overpass and Cut file explanations and the placeholders ("Choose an area first.") are gone; the list of files shows only when it has files.
+  - **4 Build:** the networks and "Layers" in one group of checks; "Advanced: fixes to the map data" is "Fixes" with no paragraph; "Base map layers" text is in the help; the two detail tables are in one scroll area, closed.
+  - **5 The result:** "built in N s" is not repeated (the build line has it); the downloads are one row of two icon buttons (.zip, .duckdb); "Downloads: each table" is "Each table"; the result and the list of files scroll in a fixed height.
+  - **6 Visualization:** "MLT (default, smaller tiles)" is "MLT"; the note is "13,298 roads, drawn in 2.4 s".
+  - **7 Edit levels:** the status lines are short ("Opening the level editor..." is shown once, by the button's reason; "Applied. Rules: 1, heads: 0, line ends: 0. The map draws it.").
+  - Spacing: the body of a card is one column with one gap.
+
 - The page uses roadstyle `0.26.1` (`49f948a6ab1f3da5bc5834fbc5f2bbc59f8437a6`) and drops its own versions of what the standard now gives:
   - the step cards are `rs.sections` that fold (`fold: true`); the button of the title row "Collapse all" / "Expand all" is roadstyle's (`#rs-fold-all`); the page's own button is gone;
   - the "?" of a card is `rs.help.button(el, {...})`: the page's code that set the words again for each card and set the overview back is gone;

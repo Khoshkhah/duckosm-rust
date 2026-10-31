@@ -54,6 +54,39 @@ def run(browser, name, dark=False, **context):
     assert page.evaluate("getComputedStyle(document.querySelector('#sb .sb-body')).display") == "none", "the steps are hidden"
     assert page.query_selector("#editbar") is None and page.query_selector("#lvhost") is None, "no edit bar and no frame of the page's own"
     page.screenshot(path=str(out / f"{name}-1-open.png"))
+    # inside the editor: the page's theme, its area layers with the switch in the Base map box, and its base map (roadstyle 0.26.2)
+    theme = "dark" if dark else "light"
+    state = lambda: page.evaluate("duckMap.getGlobalState().rs_theme")  # noqa: E731
+    shown = lambda: page.evaluate("duckMap.getStyle().layers.filter((l) => /^rs-ov\\d/.test(l.id) && l.layout?.visibility !== 'none').length")  # noqa: E731
+    bg = lambda: page.evaluate("duckMap.getPaintProperty('bg', 'background-color')")  # noqa: E731
+    assert state() == theme and page.evaluate("document.documentElement.dataset.rsTheme") == theme, ("the editor's map has the page's theme", state())
+    assert shown() > 0, "the area's layers show inside the editor"
+    tap("[data-rs-tool=basemap] button")
+    page.wait_for_selector(".bm-menu .rs-bm-layers", state="visible")
+    assert "Map layers" in page.inner_text(".bm-menu .rs-bm-layers"), "the Base map box has the switch of the area's layers inside the editor"
+    tap(".bm-menu .rs-bm-layers label")
+    page.wait_for_function("duckMap.getStyle().layers.filter((l) => /^rs-ov\\d/.test(l.id) && l.layout?.visibility !== 'none').length === 0", timeout=30_000)
+    page.screenshot(path=str(out / f"{name}-1b-layers-off-in-editor.png"))
+    tap(".bm-menu .rs-bm-layers label")
+    page.wait_for_function("duckMap.getStyle().layers.filter((l) => /^rs-ov\\d/.test(l.id) && l.layout?.visibility !== 'none').length > 0", timeout=30_000)
+    page.keyboard.press("Escape")
+    page.evaluate("rs.tools.open('legend')")
+    assert "water" in page.inner_text("#rs-color-box"), "the legend box lists the area's layers inside the editor"
+    page.evaluate("rs.tools.close('legend')")
+    # the base maps: Blank (its colour follows the theme), then OpenFreeMap (its dark twin Fiord in the dark theme)
+    page.evaluate("rsSetBasemap('blank')")
+    page.wait_for_function(f"duckMap.getPaintProperty('bg', 'background-color') === '{'#14181d' if dark else '#efede8'}'", timeout=30_000)
+    page.evaluate("rsSetBasemap('ofm_liberty')")
+    page.wait_for_function("duckMap.getStyle().layers.some((l) => l.id.startsWith('vbm-'))", timeout=60_000)
+    page.wait_for_timeout(1500)
+    page.screenshot(path=str(out / f"{name}-1c-basemap-in-editor.png"))
+    # the theme changes while the editor is open: the map follows
+    other = "light" if dark else "dark"
+    page.click("[data-rs-tool=theme] button") if not phone else page.tap("[data-rs-tool=theme] button")
+    page.wait_for_function(f"duckMap.getGlobalState().rs_theme === '{other}'", timeout=30_000)
+    page.click("[data-rs-tool=theme] button") if not phone else page.tap("[data-rs-tool=theme] button")
+    page.wait_for_function(f"duckMap.getGlobalState().rs_theme === '{theme}'", timeout=30_000)
+    page.evaluate("rsSetBasemap('blank')")
     # two roads picked with real clicks (taps)
     w, h = context["viewport"]["width"], context["viewport"]["height"]
     page.evaluate("duckMap.jumpTo({center: [7.4225, 43.7345], zoom: 15.2, pitch: 0, bearing: 0})")
@@ -113,7 +146,7 @@ def run(browser, name, dark=False, **context):
     tap("#lv-back")
     page.wait_for_function("!window.levelEditorOpen", timeout=120_000)
     page.wait_for_function("/Applied|failed/.test(document.getElementById('editnote').textContent)", timeout=120_000)
-    assert "Applied" in page.inner_text("#editnote") and "your rules: 1" in page.inner_text("#editnote"), page.inner_text("#editnote")
+    assert "Applied" in page.inner_text("#editnote") and "Rules: 1" in page.inner_text("#editnote"), page.inner_text("#editnote")
     page.wait_for_function("!window.mapDrawing && window.duckMap.loaded()", timeout=300_000)
     assert page.evaluate("getComputedStyle(document.querySelector('#sb .sb-body')).display") != "none", "the steps are back"
     assert page.evaluate("getComputedStyle(document.querySelector('.sb-foot')).display") != "none", "the footer is back"
