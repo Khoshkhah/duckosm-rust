@@ -202,6 +202,11 @@
   .checks label { display: flex; gap: 6px; align-items: center; }
   .checks input { accent-color: var(--accent); }
   .scroll { max-height: 220px; overflow: auto; }
+  /* the table of the networks: roadstyle's table, with no row that acts */
+  #resultline .rs-table tbody tr { cursor: default; }
+  #resultline .rs-table tbody tr:hover { background: none; }
+  #resultline .rs-table th { cursor: default; position: static; }
+  #resultline .rs-table td:first-child svg { width: 16px; height: 16px; margin-right: 6px; vertical-align: -3px; color: var(--muted); }
   details { margin-top: 10px; } summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
   .progress { margin: 10px 0 0; padding: 9px 11px; border-radius: 9px; background: var(--surface); font-size: 12.5px; white-space: pre-wrap; }
   .progress:empty { display: none; }
@@ -274,6 +279,9 @@
   <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></symbol>
   <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v12M7 11l5 5 5-5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></symbol>
+  <symbol id="i-car" viewBox="0 0 24 24"><path d="M5 17H3v-4l2-5a2 2 0 0 1 2-1h10a2 2 0 0 1 2 1l2 5v4h-2"/><circle cx="7.5" cy="17" r="2"/><circle cx="16.5" cy="17" r="2"/><path d="M3 13h18M9.5 17h5"/></symbol>
+  <symbol id="i-walk" viewBox="0 0 24 24"><circle cx="12" cy="4.5" r="1.8"/><path d="M12 8v6M8 10.5l4-2.5 4 2.5M12 14l-3 7M12 14l3 7"/></symbol>
+  <symbol id="i-bike" viewBox="0 0 24 24"><circle cx="6" cy="16.5" r="3.5"/><circle cx="18" cy="16.5" r="3.5"/><path d="M6 16.5 9.5 9h5l3.5 7.5M9.5 9 12 16.5M13.5 6h3"/></symbol>
   <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
   <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20Z"/><path d="M12 10v4M12 17v.5"/></symbol>
   <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></symbol>
@@ -392,7 +400,7 @@
 
 <section id="step5-card" class="step" aria-labelledby="step5">
   <h2 id="step5"><span class="n">5</span>The result</h2>
-  <p id="resultline" class="small muted line"></p>
+  <div id="resultline"></div>
   <details id="sql-box"><summary><h3>SQL</h3></summary>
     <textarea id="sql" rows="4" aria-label="SQL">SELECT highway, count(*) AS edges, round(sum(length_m) / 1000, 1) AS km
 FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
@@ -1256,8 +1264,11 @@ $("run").onclick = async () => {
     progress(`Built in ${num((ready - start) / 1000, 1)} s · ${out.threads} thread${out.threads > 1 ? "s" : ""} · ${out.memoryMiB} MiB${got}`);
     buildDetails(out.summary);
     files();
-    const counts = [...out.summary.matchAll(/^(\w+): (\d+) edges, (\d+) nodes/gm)].map((m) => `${m[1]} ${num(+m[2])} / ${num(+m[3])}`);
-    $("resultline").textContent = `${counts.join(" · ")} (edges / nodes)`;
+    // the networks of the build: one row for each, with its roads (edges) and junctions (nodes), in roadstyle's table
+    const NET = { driving: ["car", "Driving"], walking: ["walk", "Walking"], cycling: ["bike", "Cycling"] };
+    $("resultline").innerHTML = '<table class="rs-table"><thead><tr><th>Network</th><th>Roads</th><th>Junctions</th></tr></thead><tbody>' +
+      [...out.summary.matchAll(/^(\w+): (\d+) edges, (\d+) nodes/gm)].map((m) =>
+        `<tr><td>${icon(NET[m[1]]?.[0] ?? "arrow")}${NET[m[1]]?.[1] ?? esc(m[1])}</td><td>${num(+m[2])}</td><td>${num(+m[3])}</td></tr>`).join("") + "</tbody></table>";
     netBuilt = true;
     refreshSteps();
     if (phone.matches) {                          // a phone: the result shows in the sheet (its cards scroll, the page does not)
@@ -1564,6 +1575,7 @@ const CARD_HELP = {
     ["Fixes", "A file with your fixes for OpenStreetMap errors, for example a one-way street. Turn rules are not used."]],
     note: `${link(DOCS.features, "The features tables")} · ${link(DOCS.fixes, "The format of the fixes file")}` },
   5: { title: "The result", intro: "The tables that the build made.", terms: [
+    ["Networks", "Roads are the edges of a network and junctions are its nodes."],
     ["SQL", "Run a query on the tables in this browser."],
     ["Download all", "The tables as GeoParquet files, with make_duckdb.sql, the boundary and a README, in one zip."],
     [".duckdb", "A duckOSM database with all tables."],
