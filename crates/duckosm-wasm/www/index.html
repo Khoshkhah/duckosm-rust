@@ -1037,11 +1037,10 @@ function missingInput() {
 }
 function canBuild() {
   const missing = building ? "" : missingInput();
-  const why = building ? "Building the networks…" : missing;
-  $("run").disabled = !!why;
+  $("run").disabled = building || !!missing;
   $("save").disabled = !area;
-  // the reason is the text under the buttons (not a tooltip); GeoJSON needs only the area
-  $("buildhint").textContent = why || (area ? "" : "GeoJSON needs an area: choose one in step 1.");
+  // the reason is the text under the buttons (not a tooltip); GeoJSON needs only the area. While it builds, the text is the progress (progress())
+  if (!building) $("buildhint").textContent = missing || (area ? "" : "GeoJSON needs an area: choose one in step 1.");
   refreshSteps();
 }
 for (const id of ["pbf", "fixes"]) $(id).onchange = () => {
@@ -1134,7 +1133,13 @@ refreshKept();
 canBuild();
 
 // ---- step 4: build ----
-const progress = (text) => { $("buildstatus").classList.remove("done"); $("buildstatus").textContent = text; };
+// The progress of a build is shown in one place: under the Build button (the footer, always in view, also on a phone). The line in card 4 has the result
+// of the build (or its error) when it ends.
+const progress = (text, { final = false } = {}) => {
+  if (building && !final) { $("buildhint").textContent = text.charAt(0).toUpperCase() + text.slice(1); return; }
+  $("buildstatus").classList.remove("done");
+  $("buildstatus").textContent = text;
+};
 // card 4's "Build details": the build's summary (one line for each part: "driving: 2765 edges, 1719 nodes, ...") as one small table: a row
 // for each mode with its numbers in columns, then one row for each other part. A line of another form stays as text.
 // the columns of a mode: [the words in the summary, the heading]; "graph": the rows of edge_graph, "turns": the turn restrictions
@@ -1195,6 +1200,7 @@ $("run").onclick = async () => {
   const modes = [...document.querySelectorAll("input[name=mode]:checked")].map((c) => c.value).join(",");
   if (!modes) return status("Select at least one mode.");
   building = true;
+  $("buildhint").textContent = "Building the networks…";
   canBuild();
   netBuilt = false;
   $("steplog").hidden = true;
@@ -1261,7 +1267,7 @@ $("run").onclick = async () => {
       memoryMiB: out.memoryMiB, threads: out.threads, download, features: featuresSeconds,
     });
     const got = download ? ` · ${num(download.bytes / 2 ** 20, 1)} MB from ${download.server}` : "";
-    progress(`Built in ${num((ready - start) / 1000, 1)} s · ${out.threads} thread${out.threads > 1 ? "s" : ""} · ${out.memoryMiB} MiB${got}`);
+    progress(`Built in ${num((ready - start) / 1000, 1)} s · ${out.threads} thread${out.threads > 1 ? "s" : ""} · ${out.memoryMiB} MiB${got}`, { final: true });
     buildDetails(out.summary);
     files();
     // the networks of the build: one row for each, with its roads (edges) and junctions (nodes), in roadstyle's table
@@ -1278,7 +1284,7 @@ $("run").onclick = async () => {
     }
     await visualization();
   } catch (e) {
-    progress("Error: " + e.message);
+    progress("Error: " + e.message, { final: true });
   }
   building = false;
   canBuild();

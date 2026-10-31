@@ -9,6 +9,10 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ### Changed
 
+- The page uses roadstyle `0.26.2` (`14b40d0f2bd221200a9444a592f96d2febb0b9f5`): the level editor's map follows the dashboard theme, and the area's layers (the **Map layers** switch and the legend list) stay inside the editor. The page gives the editor its look (`look`: `map/look.json`), so the editor's roads have the page's palette and colour options. `editor_path_e2e.py` checks the theme, the layers, the Base map box, the legend box and a theme change inside the open editor.
+- **Card 5: the networks of the build are a table** (Network with its icon, Roads, Junctions; numbers right-aligned), in roadstyle's table, in place of the line "driving 57,765 / 26,535 · ... (edges / nodes)".
+- **The progress of a build is in one place**: under the Build button (the footer, also on a phone). Card 4 has only the result of the build or its error. `buttons_e2e.py` checks that only one element says "building the networks" during a build.
+
 - **Every card is calm and short** (Kaveh, 2026-10-30: "check every card ... for optimizing and better layout, and remove unnecessary parts"). The explanations moved into the "?" help of the card, the credits into roadstyle's credits box. What changed in each card:
   - **1 Choose an area:** one search field with the "What is here?" icon button inside it (no Search button, no "Type a place first", no "Then click the map", no credits paragraph); the Draw tab is one row of icon tools (rectangle, polygon, circle, freehand, select, merge, delete, delete all; each with a label and a tooltip; 44 px and a sideways scroll on a phone) and one hint line; the File tab has one line. Photon and Nominatim are in the credits box.
   - **2 The area:** the name and one row of three figures; the "Source:" line and the empty box "No area yet" are gone (the card is disabled with its reason until there is an area).

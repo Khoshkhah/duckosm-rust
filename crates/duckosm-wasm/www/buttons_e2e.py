@@ -71,6 +71,14 @@ def run(browser, name, dark=False, **context):
     # building: Build is off with its reason
     tap("#run")
     off("run", "buildhint", "Building")
+    # the progress of the build is in one place (under Build): during the build only one visible element says "building the networks"
+    says = "[...document.querySelectorAll('body *')].filter((e) => !e.children.length && /building the networks/i.test(e.textContent) && e.getBoundingClientRect().height > 0).length"
+    seen = []
+    while not page.evaluate("!document.getElementById('step5-card').classList.contains('off')") and len(seen) < 3000:
+        seen.append(page.evaluate(says))
+        page.wait_for_timeout(50)
+    assert max(seen, default=0) <= 1, ("the progress of the build is in two places", max(seen))
+    assert 1 in seen, ("the progress of the build shows under Build", seen[:20])
     page.wait_for_function("!document.getElementById('step5-card').classList.contains('off')", timeout=900_000)
     page.wait_for_function("!document.getElementById('run').disabled", timeout=300_000)       # the build ends after the tables are in the cards
     on("run", "buildhint")
