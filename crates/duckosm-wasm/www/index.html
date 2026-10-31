@@ -107,6 +107,8 @@
   .btn.primary { background: var(--accent-fill); border-color: var(--accent-fill); color: #ffffff; }
   .btn.primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent-fill); }
   /* an action button is disabled until its inputs are ready: grey (the panel's tokens), no hover, not-allowed; the reason is the text under it (.why) */
+  .btn.busy svg { display: none; }
+  .btn.busy::after { content: ""; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--muted); animation: spin 0.8s linear infinite; }
   .btn:disabled, .btn.primary:disabled { background: var(--surface); border-color: var(--line); color: var(--muted); opacity: 1; filter: none; cursor: not-allowed; }
   .why { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); }
   .why:empty { display: none; }
@@ -1039,8 +1041,10 @@ function canBuild() {
   const missing = building ? "" : missingInput();
   $("run").disabled = building || !!missing;
   $("save").disabled = !area;
-  // the reason is the text under the buttons (not a tooltip); GeoJSON needs only the area. While it builds, the text is the progress (progress())
-  if (!building) $("buildhint").textContent = missing || (area ? "" : "GeoJSON needs an area: choose one in step 1.");
+  // the reason is the text under the buttons (not a tooltip); GeoJSON needs only the area. While it builds, the button has a spinner and the progress is in the map's busy box (progress())
+  $("buildhint").textContent = building ? "" : missing || (area ? "" : "GeoJSON needs an area: choose one in step 1.");
+  $("run").classList.toggle("busy", building);
+  $("run").toggleAttribute("aria-busy", building);
   refreshSteps();
 }
 for (const id of ["pbf", "fixes"]) $(id).onchange = () => {
@@ -1133,10 +1137,10 @@ refreshKept();
 canBuild();
 
 // ---- step 4: build ----
-// The progress of a build is shown in one place: under the Build button (the footer, always in view, also on a phone). The line in card 4 has the result
-// of the build (or its error) when it ends.
+// The progress of a build is shown in one place: the map's busy box (#mapbusy; also on a phone, where the page opens the sheet only to its middle height).
+// The Build button shows a spinner and is off. The line in card 4 has the result of the build (or its error) when it ends.
 const progress = (text, { final = false } = {}) => {
-  if (building && !final) { $("buildhint").textContent = text.charAt(0).toUpperCase() + text.slice(1); return; }
+  if (building && !final) { $("mapbusy-text").textContent = text.charAt(0).toUpperCase() + text.slice(1); $("mapbusy").hidden = false; return; }
   $("buildstatus").classList.remove("done");
   $("buildstatus").textContent = text;
 };
@@ -1200,7 +1204,6 @@ $("run").onclick = async () => {
   const modes = [...document.querySelectorAll("input[name=mode]:checked")].map((c) => c.value).join(",");
   if (!modes) return status("Select at least one mode.");
   building = true;
-  $("buildhint").textContent = "Building the networks…";
   canBuild();
   netBuilt = false;
   $("steplog").hidden = true;
@@ -1211,6 +1214,8 @@ $("run").onclick = async () => {
   roadsRun++;                                     // a draw that runs stops at its next step
   await drawing;
   removeRoads();
+  if (phone.matches && rs.sheet() === 2) rs.sheet(1);       // the busy box needs a free part of the map
+  progress("Building the networks…");
   areaName = $("name").value.trim() || "area";
   try {
     const start = performance.now();
@@ -1287,6 +1292,7 @@ $("run").onclick = async () => {
     progress("Error: " + e.message, { final: true });
   }
   building = false;
+  if (!drawing) $("mapbusy").hidden = true;
   canBuild();
 };
 

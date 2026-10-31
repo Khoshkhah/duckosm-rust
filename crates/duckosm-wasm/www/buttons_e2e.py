@@ -32,6 +32,7 @@ def run(browser, name, dark=False, **context):
     if dark:
         page.evaluate("rsSetTheme('dark')")
     tap = page.tap if phone else page.click
+    phone_check = phone
     look = lambda i: page.evaluate(LOOK, i)  # noqa: E731
     why = lambda i: page.evaluate("(i) => document.getElementById(i).textContent.trim()", i)  # noqa: E731
 
@@ -70,15 +71,25 @@ def run(browser, name, dark=False, **context):
     page.screenshot(path=str(out / f"{name}-3-ready.png"))
     # building: Build is off with its reason
     tap("#run")
-    off("run", "buildhint", "Building")
-    # the progress of the build is in one place (under Build): during the build only one visible element says "building the networks"
-    says = "[...document.querySelectorAll('body *')].filter((e) => !e.children.length && /building the networks/i.test(e.textContent) && e.getBoundingClientRect().height > 0).length"
+    l = look("run")
+    assert l["disabled"] and l["cursor"] == "not-allowed" and not l["title"], ("Build is off while it builds", l)
+    assert page.evaluate("document.getElementById('run').classList.contains('busy')"), "Build shows a spinner while it builds"
+    assert why("buildhint") == "", ("no text line under Build while it builds", why("buildhint"))
+    # the progress of the build is in one place (the map's busy box): during the build only one visible element says "Building", and it is in #mapbusy
+    says = "[...document.querySelectorAll('body *')].filter((e) => !e.children.length && /building/i.test(e.textContent) && e.getBoundingClientRect().height > 0).map((e) => !!e.closest('#mapbusy'))"
+    box = "(() => { const e = document.getElementById('mapbusy-text'), r = e.getBoundingClientRect(), s = document.getElementById('sb').getBoundingClientRect(); return {w: r.width, h: r.height, top: r.top, bottom: r.bottom, left: r.left, right: r.right, sbTop: s.top, sbLeft: s.left, sbRight: s.right, vw: innerWidth, vh: innerHeight}; })()"
     seen = []
     while not page.evaluate("!document.getElementById('step5-card').classList.contains('off')") and len(seen) < 3000:
-        seen.append(page.evaluate(says))
+        n = page.evaluate(says)
+        seen.append(n)
+        if n and phone_check:
+            b = page.evaluate(box)
+            assert b["left"] >= 0 and b["right"] <= b["vw"] and b["top"] >= 0 and b["bottom"] <= b["sbTop"] + 1, ("the busy box is in view, above the sheet", b)
+            phone_check = False
         page.wait_for_timeout(50)
-    assert max(seen, default=0) <= 1, ("the progress of the build is in two places", max(seen))
-    assert 1 in seen, ("the progress of the build shows under Build", seen[:20])
+    assert all(len(n) <= 1 and all(n) for n in seen), ("the progress of the build is in more than one place", [n for n in seen if len(n) > 1 or not all(n)][:3])
+    assert any(len(n) == 1 for n in seen), ("the progress of the build shows in the map's busy box", seen[:20])
+    assert not phone_check, "the busy box was checked against the sheet"
     page.wait_for_function("!document.getElementById('step5-card').classList.contains('off')", timeout=900_000)
     page.wait_for_function("!document.getElementById('run').disabled", timeout=300_000)       # the build ends after the tables are in the cards
     on("run", "buildhint")
