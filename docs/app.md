@@ -53,23 +53,23 @@ and `docs/guides/dashboard-layout.md`). The page uses the template `dashboard` w
   has no color of its own: all active cards have one neutral look (a line around the card, a number in the standard's accent color) that
   follows the light and the dark theme of the panel; a card that is not ready is grey. The cards are not `rs.sections`: a section of
   roadstyle sets the text style of its content (size, color, the tables, the details), and the cards are forms with their own style.
-- **The accent** is roadstyle's one accent (`--accent` of the panel: since roadstyle 0.26.1 the teal of the Sonocount logo, and a lighter
-  variant in the dark theme). The page has no accent of its own: links, the focus ring, the step numbers, the done marks and the
-  main button use `var(--accent)`. Only **Build** is filled with it. Every other button (Search, Show on map, Edit levels, What is here?,
-  GeoJSON, the downloads) is the secondary style: light surface, border, ink text. Search is joined to its field (the same height).
+- **The accent** is roadstyle's one accent (`--accent`: the Sonocount teal `#0e7c8e` in the light theme and a lighter teal `#42c2d7` in the dark theme;
+  `--accent-fill` `#0E7F91` for a filled control). The page has no accent of its own: links, the focus ring, the step numbers and the done marks use
+  `var(--accent)`, and the main button uses `var(--accent-fill)` with white text. Only **Build** is filled. Every other button (Search, Show on map,
+  Edit levels, What is here?, GeoJSON, the downloads) is the secondary style: light surface, border, ink text. Search is joined to its field (the same height).
+  The card behind the text of the panel starts at 70 % (`--rs-a-card`), and a button with a text has no tooltip box (roadstyle's `tip.js`).
 - **Disabled buttons.** An action button is `disabled` until its inputs are ready: Search (a name), GeoJSON (an area), Build (an area and a
   data file), Run (a query), Show on map and Edit levels (while a draw runs or the editor opens). A disabled button is grey (the panel's
   tokens: the surface, the line and the muted text), has the cursor not-allowed and no hover, and the reason is the text under it ("Choose an
   area in step 1."), not a tooltip. `buttons_e2e.py` checks each of them before and after its inputs, on a computer (light and dark) and on a phone.
-- **The help windows.** The panel's title has the "?" of roadstyle's help window (`rs.help`: the window and its button are roadstyle's, the
-  page gives the words in Simplified Technical English). The window has the overview of the page, where the data stays (this browser only) and the
-  links to the documentation (this page's `docs/app.md` on GitHub, the duckOSM features tables and fix guide, roadstyle's levels guide and Google
-  key guide). A card with more than two lines of explanation has a short card and a "?" in its title row: it opens the same window with the words
-  of the card (`rs.help.set` again for the card, and the overview again when the window closes). `rs.help` has one window and one button, so a
-  per-card "?" is a button of the page that sets the words and opens the window. `panel_e2e.py` checks that every link answers 200.
-- **Collapse all / Expand all** is a button in the panel's title row (before the hide button). It folds or opens every active card, its label for
-  screen readers tells the next action, and the page keeps the choice (`duckosm.cards`): a visit after "collapse all" starts with every card folded.
-  roadstyle's standard panel has no such control; it is a button of the page.
+- **The help windows.** The panel's title has the "?" of roadstyle's help window (`rs.help.set`: the window and its button are roadstyle's, the page gives
+  the words in Simplified Technical English). The window has the overview of the page, where the data stays (this browser only) and the links to the
+  documentation (this page's `docs/app.md` on GitHub, the duckOSM features tables and fix guide, roadstyle's levels guide and Google key guide). A card
+  with more than two lines of explanation has a short card and a "?" beside its title: `rs.help.button(el, {title, intro, terms, note})` (roadstyle 0.26.1: one
+  window, several buttons). `panel_e2e.py` checks that every link answers 200.
+- **Collapse all / Expand all** is roadstyle's button in the panel's title row (`#rs-fold-all`, before the hide button). The step cards are `rs.sections` that fold
+  (`rs.sections.add({id, label, fold: true, el})`; the title is the section's button with its chevron), so the button folds or opens every card that is shown. The page
+  folds a card that is not ready again at once (`rs:sectionchange`), so "Expand all" opens only the cards that are ready.
 - **The theme** is one value: `data-rs-theme` on `<html>`. The theme tool of the bar sets it, and the panel, the bar, the boxes, the
   popup and the tooltip read it. The page keeps the choice (`duckosm.theme`; the system's theme if there is none) and copies it to
   `data-theme`, which the level editor's panel reads.
@@ -594,24 +594,14 @@ works in the same tab during the build, and the computer had other load. Not mea
 ## Gaps in roadstyle (2026-10-29)
 
 Kaveh's rule: the page uses the standard dashboard and the standard toolbox, and does not change them. The page does not make its own version
-of what the standard lacks. Four gaps are open (roadstyle `0.26.0`, `07c85b5`, the pin of 2026-10-30):
+of what the standard lacks. Since roadstyle `0.26.1` (`49f948a`, the pin of 2026-10-30) no gap is open. The four gaps of `0.26.0` are fixed:
 
-1. **The credits button is outside a phone's screen at 390 px.** The one-row bar of ten tools is 372 px wide, and the credits button (the last
-   tool, `attribution`) is at 377 to 409 px: part of it is outside the screen, and the legal credits cannot be reached. At 412 and 430 px the
-   button is at the same place and the bar is wider. `dashboard_e2e.py` prints `GAP`. The page does not correct it.
+1. The credits button is whole on a 390 px screen (a tool shrinks from 32 to 26 px). `dashboard_e2e.py` has no `GAP` line now.
+2. A page that starts in the dark theme has no error (the theme's base-map swap waits for the style). `panel_e2e.py` asserts no page error in the dark theme.
+3. `rs.help.button(el, {...})`: several "?" buttons, one window. The page has no code to swap the words.
+4. The panel's "Collapse all" / "Expand all" for sections that fold. The page has no button of its own.
 
-2. **A page that starts in the dark theme throws "Style is not done loading".** The page calls `rsSetTheme` with the stored choice when it starts,
-   before the map's style is loaded. The handler of `rs:themechange` in `theme.js` (the dark twin of the base map) calls `rsSetBasemap` at once and throws,
-   while `syncStyleTheme` in the same file waits for `style.load`. The page ends in the right state (the module sets the base map when the style loads),
-   but the console has the error. The handler must wait for `style.load` as `syncStyleTheme` does. `panel_e2e.py` prints `GAP`.
-3. **`rs.help` has one window and one button.** A "?" in a card's title row is a button of the page that sets the words of the card (`rs.help.set`) and opens
-   the window, and sets the overview again when the window closes. A standard way to have more than one set of words (a key for each "?") would remove that code.
-4. **The panel has no "collapse all" control.** The page has a button in the title row; the standard panel could have it for its own sections.
-
-The handle of the editor's full sheet on a phone was under the bar at `9d745c9`; at `0.26.0` it is reachable (`phone_e2e.py` prints no gap, and
-`editor_path_e2e.py` taps through the whole editor on a phone).
-
-Fixed in roadstyle `6d37af5`, `f460335`, `dd08231`, `6fdc893`, `4d61862` and `0.26.0` (the page has no adapter for them): a box that leaves a phone's screen sideways; a raster base
+Fixed in roadstyle `6d37af5`, `f460335`, `dd08231`, `6fdc893`, `4d61862`, `0.26.0` and `0.26.1` (the page has no adapter for them): a box that leaves a phone's screen sideways; a raster base
 map that goes on top of the roads of a host page; the list of base maps and the typed `dashboard` with its first paint for a JavaScript host
 (`data/host_options.json`, `rsFirstPaint`); `rsSetBasemap("blank")` that gives the dark twin in the dark theme; OpenFreeMap's sprite;
 the panel's shell rules (now in `dashboard.css`); the sheet and the free part of the map (`rs.sheet()`, `rs.freeArea()`); a tool found by

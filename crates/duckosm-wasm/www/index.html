@@ -27,21 +27,21 @@
   html:not(.rs-tpl-dashboard) #sb { visibility: hidden; }
   :root {
     --bg: #ffffff; --surface: #f6f7f9; --fg: #111827; --muted: #6b7280; --line: #e5e7eb;
-    --accent-fg: #ffffff; --warn: #b45309; --warn-soft: #fef3c7;
+    --warn: #b45309; --warn-soft: #fef3c7;
     --error: #b91c1c; --shadow: 0 10px 30px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.08);
   }
   /* the one theme value of the dashboard: roadstyle's theme button sets data-rs-theme on <html> */
   :root[data-rs-theme=dark] {
     --bg: #17181c; --surface: #22242a; --fg: #f3f4f6; --muted: #9ca3af; --line: #33363d;
-    --accent-fg: #0b1220; --warn: #fbbf24; --warn-soft: #3b2f12;
+    --warn: #fbbf24; --warn-soft: #3b2f12;
     --error: #f87171; --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   }
   /* in the panel the colors are the panel's (--bg, --ink, --mut, --line, --card, --accent: roadstyle's, set on #sb and flipped by its data-theme; the page has no accent of its own) */
   #sb {
-    --fg: var(--ink); --muted: var(--mut); --surface: var(--card); --accent-fg: #ffffff;
+    --fg: var(--ink); --muted: var(--mut); --surface: var(--card);
     --accent-soft: color-mix(in srgb, var(--accent) 16%, var(--bg)); --warn: #b45309; --warn-soft: #fef3c7; --error: #b91c1c;
   }
-  #sb[data-theme=dark] { --accent-fg: #0b1220; --warn: #fbbf24; --warn-soft: #3b2f12; --error: #f87171; }
+  #sb[data-theme=dark] { --warn: #fbbf24; --warn-soft: #3b2f12; --error: #f87171; }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body { font: 14px/1.45 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--fg); background: var(--bg); }
@@ -59,23 +59,21 @@
   /* the panel's shell (position, tokens, the hide and show buttons with their icons: the markup of roadstyle's template) is dashboard.css. Here: the title of the panel. */
   /* the panel's title: h2 (roadstyle's help window puts its "?" in it); the buttons of the title row */
   .sb-top h2 { margin: 0; font-size: 16px; letter-spacing: -0.01em; text-transform: none; color: var(--fg); display: block; }
-  .sb-btns { display: inline-flex; gap: 6px; align-items: center; }
-  #sb-fold { background: none; border: 1px solid var(--line); border-radius: 8px; color: var(--mut); cursor: pointer; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
-  #sb-fold:hover { color: var(--accent); border-color: var(--accent); }
-  body.editing #sb-fold { display: none; }
-  /* the cards: the title row has the done mark, the reason of a disabled card, the card's own buttons and the chevron */
-  .step .tools { margin-left: auto; display: flex; align-items: center; gap: 4px; text-transform: none; letter-spacing: 0; }
-  .step .tools .icon-btn { margin: -8px 0; }
-  .step .tools .fold { margin: -6px -6px -6px 0; }
-  .step .after { font-size: 12px; font-weight: 400; color: var(--muted); }
-  .step .done { color: var(--accent); font-size: 13px; font-weight: 700; text-transform: none; }
-  .step .hq { display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 8px; background: none; color: var(--muted); }
-  .step .hq:hover { background: var(--bg); color: var(--accent); }
-  .step .hq svg { width: 16px; height: 16px; }
+  body.editing #sb #rs-fold-all { display: none; }
+  /* the cards are roadstyle's sections that fold (the title is its button with the chevron): the number, the done mark and the reason of a disabled card are
+     in the title; the card's own buttons ("?", the zoom to the area) are beside the chevron */
+  .step { position: relative; margin: 0; }
+  .step > .rs-sec-hd { justify-content: flex-start; padding: 6px 0; font-size: 12px; letter-spacing: 0.06em; color: var(--fg); }
+  .step > .rs-sec-hd:disabled { cursor: not-allowed; color: var(--muted); }
+  .step > .rs-sec-hd .after { margin-left: auto; margin-right: 30px; font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); }
+  .step > .rs-sec-hd .done { color: var(--accent); font-size: 13px; font-weight: 700; text-transform: none; }
+  .step > .tools { position: absolute; top: 14px; right: 40px; height: 32px; display: flex; align-items: center; gap: 2px; }
+  .step.off > .tools { opacity: 0.5; }
   .step.off { background: var(--surface); }
-  .step.off > h2:first-child, .step.off > h2:first-child .tools { cursor: not-allowed; color: var(--muted); }
-  .step.off h2 .n { background: var(--line); color: var(--muted); }
-  .step .fold:disabled { opacity: 0.4; cursor: not-allowed; }
+  .step.off .n { background: var(--line); color: var(--muted); }
+  .step .icon-btn { margin: 0; }
+  /* the panel's sections give their text the ink (dashboard.css); the muted lines of the cards stay muted */
+  #sb .muted, #sb .why { color: var(--muted); }
   .sb-top p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
   .sb-body { display: flex; flex-direction: column; gap: 12px; }
   /* the panel's type: the cards' own sizes (roadstyle's template sets 13px for its controls) */
@@ -83,20 +81,10 @@
   :where(#sb) button { font: inherit; color: inherit; cursor: pointer; }
   /* a step is a section of the panel: one neutral box that follows the panel's theme (the colors of the old cards went with the old panel) */
   .step { border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
-  .step > h2:first-child { margin: 0 0 12px; color: var(--fg); cursor: pointer; }
-  h2 .icon-btn { text-transform: none; }
   .icon-btn:disabled { visibility: hidden; }
   .icon-btn { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 8px; background: none; color: var(--muted); flex: none; }
   .icon-btn:hover { background: var(--bg); color: var(--fg); }
-  /* each card folds (a click on its heading or on the chevron); a folded card keeps only its heading */
-  .step .fold { display: grid; place-items: center; width: 28px; height: 28px; margin: -6px -6px -6px auto; border: 0; border-radius: 8px;
-                background: none; color: var(--muted); flex: none; }
-  .step .fold:hover { background: var(--bg); color: var(--fg); }
-  .step .fold svg { transform: rotate(-90deg); transition: transform 0.15s ease; }
-  .step.folded .fold svg { transform: rotate(180deg); }
-  .step.folded > :not(h2:first-child) { display: none !important; }
-  .step.folded > h2:first-child { margin-bottom: 0; }
-  h2 .n { width: 20px; height: 20px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 11px; }
+  .step .n { width: 20px; height: 20px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 11px; flex: none; }
   /* card 5: one line of the build, the folded SQL and table downloads, the two downloads on one row */
   .step .line { margin: 0; }
   .step h3 { display: inline; margin: 0; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
@@ -114,8 +102,8 @@
   .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: 9px;
          border: 1px solid var(--line); background: var(--bg); font-weight: 500; }
   .btn:hover:not(:disabled) { background: var(--surface); }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
-  .btn.primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); }
+  .btn.primary { background: var(--accent-fill); border-color: var(--accent-fill); color: #ffffff; }
+  .btn.primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent-fill); }
   /* an action button is disabled until its inputs are ready: grey (the panel's tokens), no hover, not-allowed; the reason is the text under it (.why) */
   .btn:disabled, .btn.primary:disabled { background: var(--surface); border-color: var(--line); color: var(--muted); opacity: 1; filter: none; cursor: not-allowed; }
   .why { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); }
@@ -304,7 +292,7 @@
 <div class="sb-card">
 <div class="sb-top">
   <div><h2>duckOSM in the browser</h2><p>Build the road network of an area in your browser</p></div>
-  <span class="sb-btns"><button id="sb-fold" title="Collapse all steps" aria-label="Collapse all steps"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg></button><button id="sb-hide" title="Hide panel" aria-label="Hide panel" aria-controls="sb"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/><path d="m8.5 9.5 2.5 2.5-2.5 2.5"/></svg></button></span>
+  <button id="sb-hide" title="Hide panel" aria-label="Hide panel" aria-controls="sb"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/><path d="m8.5 9.5 2.5 2.5-2.5 2.5"/></svg></button>
 </div>
 <div class="sb-body">
 <section id="step1-card" class="step" aria-labelledby="step1">
@@ -1613,13 +1601,19 @@ const CARD_HELP = {
     note: link(DOCS.levels, "How to use the editor") },
 };
 
-// ---- the numbered cards. All are in view and folded; only the current step is open. A card whose inputs are not ready (a later step) is disabled,
-// with its reason in the title row ("after step 2"); when a step is finished (a done mark) the next card that is ready opens, and the others fold, unless
-// the person opened or folded cards by hand. A finished step can still be opened. "Collapse all" / "Expand all" in the panel's title row acts on the cards
-// that are active; the page keeps its choice for the next visit (duckosm.cards). ----
-const cards = [...document.querySelectorAll("section.step")];
-const cardN = (c) => +c.querySelector("h2 .n").textContent;
+// ---- the numbered cards are roadstyle's panel sections that fold (rs.sections.add with fold: true): the title is the section's button with its chevron, and
+// the button in the panel's title row (Collapse all / Expand all) is roadstyle's. All are in view and folded; only the current step is open. A card whose
+// inputs are not ready (a later step) is disabled, with its reason in the title row ("after step 2"); when a step is finished (a done mark) the next card that
+// is ready opens, and the others fold, unless the person opened or folded cards by hand. A finished step can still be opened. Collapse all / Expand all acts on
+// the cards that are shown, so the page folds a disabled card again at once. ----
 const levelsTable = () => duck.tables.some((t) => t.mode === "visualization" && t.table === "edge_levels");
+const cards = [];                                  // the sections, in the order of the steps
+const cardN = (c) => +c.dataset.rsSection.slice(4);
+let auto = false;                                  // the page folds or opens a card itself (not the person)
+function autoFold(c, folded) {
+  auto = true;
+  try { rs.sections.fold(c.dataset.rsSection, folded); } finally { auto = false; }
+}
 // what each step needs ("" when ready: else the reason) and when it is done
 const STEP = {
   1: { ready: () => "", done: () => !!area },
@@ -1630,80 +1624,54 @@ const STEP = {
   6: { ready: () => (netBuilt ? "" : "after step 4"), done: () => roadsShown },
   7: { ready: () => (netBuilt && levelsTable() ? "" : "after step 4"), done: () => levelsApplied },
 };
-const active = () => cards.filter((c) => !c.classList.contains("off"));
-function syncFoldButton() {
-  const all = active().every((c) => c.classList.contains("folded"));
-  const b = $("sb-fold"), label = all ? "Expand all steps" : "Collapse all steps";
-  b.title = label;
-  b.setAttribute("aria-label", label);
-  b.querySelector("svg").innerHTML = all ? '<path d="m7 20 5-5 5 5"/><path d="m7 4 5 5 5-5"/>' : '<path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>';
-}
-function fold(c, folded) {
-  c.classList.toggle("folded", folded);
-  c.querySelector(".fold").setAttribute("aria-expanded", String(!folded));
-  syncFoldButton();
-}
 let current = null;                                // the step that the page opened last
 function refreshSteps() {
   if (!stepsReady) return;
   for (const c of cards) {
     const n = cardN(c), why = STEP[n].ready(), done = STEP[n].done();
     c.classList.toggle("off", !!why);
-    c.setAttribute("aria-disabled", String(!!why));
+    c.querySelector(".rs-sec-hd").disabled = !!why;
     c.querySelector(".after").textContent = why;
     c.querySelector(".done").hidden = !done || !!why;
-    c.querySelector(".fold").disabled = !!why;
-    if (why) fold(c, true);                         // a card that is not ready keeps only its heading
+    if (why && !c.classList.contains("folded")) autoFold(c, true);      // a card that is not ready keeps only its title
   }
   const next = cards.find((c) => !STEP[cardN(c)].ready() && !STEP[cardN(c)].done());
   if (next && next !== current) {
     current = next;
-    fold(next, false);
-    if (!touched) for (const c of cards) if (c !== next) fold(c, true);
+    autoFold(next, false);
+    if (!touched) for (const c of cards) if (c !== next) autoFold(c, true);
   }
-  syncFoldButton();
 }
-function foldAll(folded) {
+// a card that the person opened or folded (a click on its title, or the button of all): the next step does not fold the others
+document.addEventListener("rs:sectionchange", (e) => {
+  const c = cards.find((x) => x.dataset.rsSection === e.detail.id);
+  if (!c || auto || (e.detail.state !== "fold" && e.detail.state !== "unfold")) return;
+  if (c.classList.contains("off") && e.detail.state === "unfold") return autoFold(c, true);    // "Expand all" does not open a card that is not ready
   touched = true;
-  for (const c of active()) fold(c, folded);
-  keep("duckosm.cards", folded ? "collapsed" : "open");
-}
-$("sb-fold").onclick = () => foldAll(!active().every((c) => c.classList.contains("folded")));
-// the "?" of a card opens roadstyle's help window with the words of the card; the window is the panel's one (rs.help), and the panel's own "?" has the overview
-const QMARK = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 4.5"/><circle cx="12" cy="17.6" r=".6" fill="currentColor"/></svg>';
-const helpOf = (n) => (n in CARD_HELP ? { ...CARD_HELP[n], button: HELP.button } : HELP);
-let helpOwner = 0;                                  // 0: the overview is in the window; else the number of the card
-document.addEventListener("rs:helpchange", (e) => { if (!e.detail.open && helpOwner) { rs.help.set(HELP); helpOwner = 0; } });
-function cardHelp(n) { rs.help.set(helpOf(n)); helpOwner = n; rs.help.open(); }
-for (const c of cards) {
-  const h = c.querySelector("h2"), n = cardN(c), t = document.createElement("span"), fb = document.createElement("button");
-  t.className = "tools";
-  const own = h.querySelector(".icon-btn");
-  h.insertAdjacentHTML("beforeend", '<span class="done" hidden title="Done">✓</span>');
-  if (own) t.append(own);
-  t.insertAdjacentHTML("afterbegin", '<span class="after"></span>');
-  if (n in CARD_HELP) {
-    const q = document.createElement("button");
-    q.className = "hq"; q.type = "button"; q.innerHTML = QMARK;
-    q.setAttribute("aria-label", `Help: ${h.textContent.trim().replace(/^\d/, "").trim()}`);
-    q.onclick = (e) => { e.stopPropagation(); cardHelp(n); };
-    t.append(q);
-  }
-  fb.className = "fold"; fb.type = "button"; fb.innerHTML = icon("chevron");
-  fb.setAttribute("aria-label", `Fold or open: ${h.textContent.trim().replace(/^\d/, "").trim()}`);
-  fb.setAttribute("aria-controls", c.id);
-  t.append(fb);
-  h.append(t);
-  h.onclick = (e) => {
-    if (e.target.closest("button:not(.fold), a, input") || c.classList.contains("off")) return;
-    touched = true;
-    fold(c, !c.classList.contains("folded"));
-  };
-  fold(c, true);
+});
+for (const old of [...document.querySelectorAll("section.step")]) {
+  const h = old.querySelector(":scope > h2"), n = +h.querySelector(".n").textContent, own = h.querySelector(".icon-btn");
+  const label = h.textContent.trim().replace(/^\d+/, "").trim(), body = document.createElement("div");
+  body.className = "step-body";
+  while (h.nextSibling) body.append(h.nextSibling);
+  const c = rs.sections.add({ id: `step${n}`, label, fold: true, el: body });
+  c.classList.add("step");
+  c.id = old.id;
+  const hd = c.querySelector(":scope > .rs-sec-hd");
+  hd.id = `step${n}`;
+  hd.insertAdjacentHTML("afterbegin", `<span class="n">${n}</span>`);
+  hd.querySelector("span:not(.n)").insertAdjacentHTML("afterend", '<span class="done" hidden title="Done">✓</span><span class="after"></span>');
+  const tools = document.createElement("span");    // the card's own buttons, beside the chevron: the zoom to the area (card 2) and the "?" of roadstyle's help window
+  tools.className = "tools";
+  if (own) tools.append(own);
+  if (n in CARD_HELP) rs.help.button(tools, { ...CARD_HELP[n], button: `Help: ${label}` });
+  c.append(tools);
+  old.remove();
+  cards.push(c);
+  autoFold(c, true);
 }
 stepsReady = true;
 rs.help.set(HELP);
-if (kept("duckosm.cards") === "collapsed") { touched = true; current = cards[0]; }    // the person chose "collapse all": every card starts folded
 refreshSteps();
 
 // ---- card 7: roadstyle's level editor on the page's map (docs/app.md). The page makes the level area from the tables (makeArea) and keeps

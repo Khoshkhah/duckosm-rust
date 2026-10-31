@@ -9,6 +9,13 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ### Changed
 
+- The page uses roadstyle `0.26.1` (`49f948a6ab1f3da5bc5834fbc5f2bbc59f8437a6`) and drops its own versions of what the standard now gives:
+  - the step cards are `rs.sections` that fold (`fold: true`); the button of the title row "Collapse all" / "Expand all" is roadstyle's (`#rs-fold-all`); the page's own button is gone;
+  - the "?" of a card is `rs.help.button(el, {...})`: the page's code that set the words again for each card and set the overview back is gone;
+  - the accent is roadstyle's teal (`--accent`, and `--accent-fill` for Build); the page's `--accent-fg` is gone;
+  - a page that starts in the dark theme has no error (the test no longer has a `GAP` for it); the credits button is whole on a 390 px screen (no `GAP`); a tool of the bar is 26 px wide at least on a phone.
+  `docs/app.md` has no open gap in roadstyle.
+
 - **The panel follows the steps** (Kaveh, 2026-10-30). All cards are in view and folded at the start; only the current step is open. A card whose inputs are not ready is disabled, grey, with its reason in the title row ("after step 2"). A finished step has a done mark (✓) and can still be opened; when a step is finished the next card opens and the others fold (unless the person opened cards by hand). The page keeps only "collapse all" (`duckosm.cards`), not the fold of each card.
 - **A button in the panel's title row: Collapse all / Expand all** (it acts on the active cards; roadstyle's standard has no such control). The panel's title is an `h2`, as in roadstyle's template.
 - **Help windows.** The "?" of roadstyle's help window (`rs.help`) is in the panel's title (overview, the data stays in this browser, links to the documentation), and a card with a long explanation has a short card and a "?" in its title row (the same window with the words of the card). The long texts of cards 1, 3, 4, 5, 6 and 7 moved there. `panel_e2e.py` checks that every link answers 200.

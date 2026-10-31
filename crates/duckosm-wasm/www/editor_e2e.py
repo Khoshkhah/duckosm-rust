@@ -118,8 +118,8 @@ with sync_playwright() as p:
     assert page.is_visible("#show")
     page.click("#step6")
     assert page.evaluate("document.getElementById('step6-card').classList.contains('folded')") and not page.is_visible("#show")
-    assert page.get_attribute("#step6 .fold", "aria-expanded") == "false"
-    page.click("#step6 .fold")
+    assert page.get_attribute("#step6", "aria-expanded") == "false"
+    page.click("#step6")
     assert page.is_visible("#show")
 
     # a base map that the user chooses: "Show on map" (a fresh map) sets the blank one again; the choice stays for the draws that are not fresh
