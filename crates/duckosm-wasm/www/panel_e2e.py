@@ -76,8 +76,25 @@ def run(browser, name, dark=False, **context):
     # the accent is roadstyle's (0.26.1: the Sonocount teal; a lighter variant in the dark theme), and the page sets none
     assert page.evaluate("getComputedStyle(document.getElementById('sb')).getPropertyValue('--accent').trim()") == ("#42c2d7" if dark else "#0e7c8e")
     assert not page.evaluate("[...document.styleSheets].some((sh) => { try { return [...sh.cssRules].some((r) => r.style && r.cssText.includes('--accent:') && !sh.href); } catch (e) { return false; } })"), "the page has no --accent of its own"
-    f = page.evaluate("""() => { const i = document.getElementById('q').getBoundingClientRect(), b = document.getElementById('search-go').getBoundingClientRect(); return [Math.round(i.top), Math.round(i.height), Math.round(b.top), Math.round(b.height), Math.round(b.left - i.right)]; }""")
-    assert f[0] == f[2] and f[1] == f[3] and abs(f[4]) <= 1, ("Search is joined to its field", f)
+    # step 1 is calm: one field with the "What is here?" icon button inside it, and no extra line of text
+    f = page.evaluate("""() => { const i = document.getElementById('q').getBoundingClientRect(), h = document.getElementById('here').getBoundingClientRect();
+        return [Math.round(i.top), Math.round(i.height), Math.round(h.top - i.top), Math.round(i.right - h.right), Math.round(h.left - i.left)]; }""")
+    assert 0 <= f[2] <= 8 and 0 <= f[3] <= 8 and f[4] > f[1], ("the 'What is here?' button is inside the field, at its right", f)
+    assert page.get_attribute("#here", "aria-label") == "What is here? Click the map" and page.get_attribute("#q", "placeholder") == "City, region or country"
+    assert page.evaluate("document.getElementById('find').querySelector('.btn') === null"), "no Search button"
+    text = page.inner_text("#step1-card")
+    assert "Type a place first" not in text and "Then click the map" not in text and "Photon" not in text and "OpenStreetMap contributors" not in text, text
+    page.screenshot(path=str(out / f"{name}-1a-step1-search.png"))
+    for tab, shot in (("#tab-draw", "1b-step1-draw"), ("#tab-file", "1c-step1-file")):
+        tap(tab)
+        page.screenshot(path=str(out / f"{name}-{shot}.png"))
+    assert page.evaluate("document.querySelectorAll('#draw .cap, #draw kbd').length") == 0, "no captions and no key chips in the Draw tab"
+    tap("#tab-find")
+    # the credits of the search are in roadstyle's credits box (the corner "i")
+    tap("[data-rs-tool=attribution] button")
+    box = page.inner_text("#rs-attr-box")
+    assert "Photon" in box and "Nominatim" in box and "OpenStreetMap" in box, box
+    page.keyboard.press("Escape")
     # ---- the help windows: the panel's "?", the overview, the links; a card's "?" and the overview again after it
     tap("#rs-help-btn")
     page.wait_for_selector("#rs-help .rs-help-box", state="visible")

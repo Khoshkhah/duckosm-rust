@@ -117,14 +117,15 @@
   .segmented [role=tab][aria-selected=true] { background: var(--bg); color: var(--fg); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
   [role=tabpanel] { padding-top: 12px; }
 
-  .field { position: relative; display: flex; gap: 6px; }
-  .field svg { position: absolute; left: 11px; top: 9px; color: var(--muted); }
+  .field { position: relative; }
+  .field > svg { position: absolute; left: 11px; top: 9px; color: var(--muted); pointer-events: none; }
   input[type=search], input[type=text] { font: inherit; color: var(--fg); background: var(--bg); width: 100%; height: 36px; border: 1px solid var(--line); border-radius: 9px; padding: 0 10px; }
   input[type=search] { padding-left: 36px; }
-  /* the Search button is joined to the field: the same height, the corners of the pair */
-  .field { gap: 0; }
-  .field input[type=search] { border-radius: 9px 0 0 9px; border-right-width: 0; }
-  .field .btn { border-radius: 0 9px 9px 0; flex: none; }
+  /* the search field is one field: the search icon at the left, the "What is here?" icon button at the right */
+  .field input[type=search] { padding-right: 40px; }
+  .here { position: absolute; right: 4px; top: 4px; width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--muted); }
+  .here:hover { background: var(--surface); color: var(--fg); }
+  .here[aria-pressed=true] { background: var(--accent-soft); color: var(--accent); }
   input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
   #found { margin-top: 10px; display: grid; gap: 4px; }
@@ -143,8 +144,7 @@
   .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
   /* the drawing tools: a card in the Draw tab */
   .toolbox { background: var(--surface); border-radius: 10px; padding: 12px; }
-  .toolbox .cap { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
-  .toolbox .cap + .shapes, .toolbox .cap + .edit { margin-bottom: 12px; }
+  .shapes { margin-bottom: 10px; }
   .shapes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .shapes button { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); font-weight: 500; }
   .shapes button span { flex: 1; text-align: left; }
@@ -153,7 +153,6 @@
   .toolbox button:hover:not(:disabled) { background: var(--surface); }
   .toolbox button[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
   .toolbox button:disabled { opacity: 0.4; cursor: default; }
-  kbd { font: 600 10.5px ui-monospace, monospace; color: var(--muted); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; }
   #hint { margin: 0; padding: 9px 11px; background: var(--bg); border-radius: 9px; font-size: 12.5px; color: var(--muted); }
 
   #drop { display: grid; place-items: center; gap: 6px; text-align: center; padding: 26px 14px; border: 2px dashed var(--line); border-radius: 12px; color: var(--muted); cursor: pointer; }
@@ -252,7 +251,8 @@
     #sb .sb-body { overscroll-behavior: contain; }
     .sb-top p { display: none; }
     .btn, .segmented [role=tab], input[type=search], input[type=text] { height: 44px; }
-    .field svg { top: 13px; }
+    .field > svg { top: 13px; }
+    .here { width: 36px; height: 36px; top: 4px; }
     .shapes button { height: 44px; }
   }
 </style>
@@ -306,28 +306,20 @@
 <section id="find" role="tabpanel" aria-labelledby="tab-find">
   <form id="search" class="field" role="search">
     <svg><use href="#i-search"/></svg>
-    <input id="q" type="search" placeholder="A city, a region, a country" aria-label="Name of a place" autocomplete="off">
-    <button id="search-go" class="btn" disabled>Search</button>
+    <input id="q" type="search" placeholder="City, region or country" aria-label="Name of a place" autocomplete="off">
+    <button id="here" type="button" class="here" aria-pressed="false" aria-label="What is here? Click the map" title="What is here? Click the map"><svg><use href="#i-target"/></svg></button>
   </form>
-  <p id="search-why" class="why">Type a place first.</p>
-  <div class="row">
-    <button id="here" class="btn" aria-pressed="false"><svg><use href="#i-target"/></svg>What is here?</button>
-    <span class="small muted">Then click the map.</span>
-  </div>
   <div id="found" role="radiogroup" aria-label="The matches"></div>
-  <p class="small muted">Search: <a href="https://photon.komoot.io">Photon</a> (komoot). Boundaries: <a href="https://nominatim.openstreetmap.org">Nominatim</a>. Data © OpenStreetMap contributors.</p>
 </section>
 
 <section id="draw" role="tabpanel" aria-labelledby="tab-draw" hidden>
   <div class="toolbox" role="toolbar" aria-label="Drawing tools">
-    <p class="cap">Draw a shape</p>
     <div class="shapes">
-      <button data-mode="rectangle" aria-pressed="false" aria-keyshortcuts="R"><svg><use href="#i-rect"/></svg><span>Rectangle</span><kbd>R</kbd></button>
-      <button data-mode="polygon" aria-pressed="false" aria-keyshortcuts="P"><svg><use href="#i-poly"/></svg><span>Polygon</span><kbd>P</kbd></button>
-      <button data-mode="circle" aria-pressed="false" aria-keyshortcuts="C"><svg><use href="#i-circle"/></svg><span>Circle</span><kbd>C</kbd></button>
-      <button data-mode="freehand" aria-pressed="false" aria-keyshortcuts="F"><svg><use href="#i-free"/></svg><span>Freehand</span><kbd>F</kbd></button>
+      <button data-mode="rectangle" aria-pressed="false" aria-keyshortcuts="R"><svg><use href="#i-rect"/></svg><span>Rectangle</span></button>
+      <button data-mode="polygon" aria-pressed="false" aria-keyshortcuts="P"><svg><use href="#i-poly"/></svg><span>Polygon</span></button>
+      <button data-mode="circle" aria-pressed="false" aria-keyshortcuts="C"><svg><use href="#i-circle"/></svg><span>Circle</span></button>
+      <button data-mode="freehand" aria-pressed="false" aria-keyshortcuts="F"><svg><use href="#i-free"/></svg><span>Freehand</span></button>
     </div>
-    <p class="cap">Change the shapes</p>
     <div class="edit">
       <button data-mode="select" aria-pressed="false" aria-keyshortcuts="S" title="Select, move and change a shape (S)"><svg><use href="#i-select"/></svg>Select</button>
       <button id="merge" disabled title="Join the shapes that overlap into one shape" aria-label="Merge shapes"><svg><use href="#i-merge"/></svg>Merge</button>
@@ -341,8 +333,7 @@
 <section id="file-panel" role="tabpanel" aria-labelledby="tab-file" hidden>
   <label id="drop">
     <svg><use href="#i-upload"/></svg>
-    <span><strong>Select a GeoJSON file</strong><br>or drag it onto the map</span>
-    <span class="small">Polygons in GeoJSON</span>
+    <span><strong>Select a GeoJSON file</strong> or drop it on the map</span>
     <input id="file" type="file" accept=".geojson,.json">
   </label>
 </section>
@@ -559,6 +550,7 @@ try {
 // the style (window.RS_SIDE). The base map is roadstyle's (basemaps, ontop).
 // no `pick` option: roadstyle picks the road layers of the style (RS_LEANS: roads-simple and one layer for each band of zooms),
 // so the hover, the tooltip and the click work at every zoom
+host.dashboard.credits = [...(host.dashboard.credits ?? []), { text: "Search: Photon (komoot)", href: "https://photon.komoot.io" }, { text: "Boundaries: Nominatim", href: "https://nominatim.openstreetmap.org" }];   // roadstyle's credits box (the corner "i")
 const rs = rsDashboard(map, { style: null, prefix: "rs-", tiles: true,
   basemaps, ontop: host.ontop, basemap_switcher: true,
   select_color: "#7c4dff",   // the look's theme.selection.select
@@ -862,10 +854,7 @@ async function search() {
   }
 }
 $("search").onsubmit = (ev) => { ev.preventDefault(); search(); };
-// Search is on when there is a name to look for
-const searchReady = () => { const why = $("q").value.trim() ? "" : "Type a place first."; $("search-go").disabled = !!why; $("search-why").textContent = why; };
-$("q").oninput = () => { searchReady(); clearTimeout(typing); typing = setTimeout(search, 300); };
-searchReady();
+$("q").oninput = () => { clearTimeout(typing); typing = setTimeout(search, 300); };
 
 // what is here: the areas at 5 levels around the point that the user clicks
 function picking(on) {
@@ -1571,7 +1560,7 @@ const CARD_HELP = {
     ["Draw", "Draw rectangles, polygons, circles or free shapes. Merge the shapes that overlap."],
     ["File", "Open a GeoJSON file with the polygons of the area."],
     ["What is here?", "Click a point on the map to see the areas around it."]],
-    note: `Search: ${link("https://photon.komoot.io", "Photon")} (komoot). Boundaries: ${link("https://nominatim.openstreetmap.org", "Nominatim")}.` },
+    note: `Search: ${link("https://photon.komoot.io", "Photon")} (komoot). Boundaries: ${link("https://nominatim.openstreetmap.org", "Nominatim")}. Data © OpenStreetMap contributors.` },
   3: { title: "The data", intro: "The OpenStreetMap data of the area.", terms: [
     ["Region file", "A .osm.pbf file that covers the area. The page lists the Geofabrik files that cover it. Click a file to see it on the map."],
     ["Overpass", "Data from the Overpass API. Use it for a city or a smaller area. The public servers are often busy."],

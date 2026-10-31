@@ -52,16 +52,10 @@ def run(browser, name, dark=False, **context):
         return l
 
     # before any input
-    s0, g0, b0 = off("search-go", "search-why", "Type a place first"), off("save", "buildhint", "area"), off("run", "buildhint", "area")
-    assert s0["bg"] == g0["bg"] == b0["bg"], ("one disabled look for every button", s0, g0, b0)
+    assert page.query_selector("#search-go") is None and page.query_selector("#search-why") is None, "the search has one field and no button"
+    g0, b0 = off("save", "buildhint", "area"), off("run", "buildhint", "area")
+    assert g0["bg"] == b0["bg"], ("one disabled look for every button", g0, b0)
     page.screenshot(path=str(out / f"{name}-1-nothing.png"))
-    # a name: Search is on
-    page.fill("#q", "Monaco")
-    on("search-go", "search-why")
-    enabled_search = look("search-go")
-    assert enabled_search["bg"] != s0["bg"], "Search looks different when it is on"
-    page.fill("#q", "")
-    off("search-go", "search-why", "Type a place first")
     # an area: GeoJSON is on, Build waits for the data file
     page.set_input_files("#file", str(ROOT / "tests/data/monaco.geojson"))
     page.wait_for_function("window.areas >= 1", timeout=60_000)
@@ -99,7 +93,7 @@ def run(browser, name, dark=False, **context):
     on("show", "show-why")
     on("edit-open", "edit-why")
     page.context.close()
-    print(f"buttons ({name}): Search, GeoJSON, Build, Run, Show on map and Edit levels are off with a reason until their inputs are ready, and on after")
+    print(f"buttons ({name}): GeoJSON, Build, Run, Show on map and Edit levels are off with a reason until their inputs are ready, and on after")
 
 
 with sync_playwright() as p:
