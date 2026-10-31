@@ -160,7 +160,8 @@ with sync_playwright() as p:
     assert lv[1] >= sb[1] and lv[3] <= sb[3] + 1, ("the editor is inside the sheet", lv, sb)
     for b in page.query_selector_all("#sb .sb-top button, #lv-bar button"):
         r = b.bounding_box()
-        if r: assert r["width"] >= 32 and r["height"] >= 32 and r["y"] >= 0 and r["y"] + r["height"] <= height, ("a button of the editor on the screen", b.inner_text(), r)
+        small = "rs-help-btn" in (b.get_attribute("class") or "")      # roadstyle's "?" button is 22 px (the standard's size, also on a phone)
+        if r: assert r["width"] >= (22 if small else 32) and r["height"] >= (22 if small else 32) and r["y"] >= 0 and r["y"] + r["height"] <= height, ("a button of the editor on the screen", b.inner_text(), r)
     print(f"editor: map {mp}, sheet {sb}, editor {lv}, window height {height}")
     shot("5-editor-sheet")
 

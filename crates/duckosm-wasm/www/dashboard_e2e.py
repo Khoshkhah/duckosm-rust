@@ -94,8 +94,8 @@ with sync_playwright() as p:
 
     # one neutral look for the cards that are active: no card has a color of its own, in both themes; a card that is not ready is grey (the panel's tokens)
     def looks():
-        return page.evaluate("""() => [...document.querySelectorAll('section.step:not(.off)')].map((s) => {
-            const n = s.querySelector('h2 .n'), c = getComputedStyle(s);
+        return page.evaluate("""() => [...document.querySelectorAll('.step:not(.off)')].map((s) => {
+            const n = s.querySelector('.n'), c = getComputedStyle(s);
             return [getComputedStyle(n).backgroundColor, getComputedStyle(n).color, c.borderTopColor, c.backgroundColor, c.getPropertyValue('--c')];
         })""")
     for theme in ("light", "dark"):
@@ -107,7 +107,7 @@ with sync_playwright() as p:
             shot("2-dark")
         seen = looks()
         assert len(seen) == 2 and all(x == seen[0] for x in seen) and seen[0][4] == "", (theme, seen)       # steps 1 and 3 are active at the start
-        grey = page.evaluate("""() => [...document.querySelectorAll('section.step.off')].map((s) => [getComputedStyle(s).backgroundColor, getComputedStyle(s.querySelector('h2')).cursor])""")
+        grey = page.evaluate("""() => [...document.querySelectorAll('.step.off')].map((s) => [getComputedStyle(s).backgroundColor, getComputedStyle(s.querySelector('.rs-sec-hd')).cursor])""")
         assert len(grey) == 5 and all(g == grey[0] and g[1] == "not-allowed" for g in grey), (theme, grey)
     page.click(tool("theme"))
     page.wait_for_timeout(300)
@@ -206,14 +206,11 @@ with sync_playwright() as p:
     BARBTN = "#rs-toolbar .maplibregl-ctrl > button, #rs-toolbar > button"       # the buttons of the tools (not the buttons inside a box)
     for i, b in enumerate(page.query_selector_all(BARBTN)):
         r = b.bounding_box() or {"width": 0, "height": 0}
-        assert r["width"] >= 32 and r["height"] >= 32, (i, r)
+        assert r["width"] >= 26 and r["height"] >= 32, (i, r)      # (roadstyle 0.26.1: a tool shrinks from 32 to 26 px wide so that the ten tools of the bar fit 390 px)
     reach = page.evaluate("""(sel) => [...document.querySelectorAll(sel)].filter((b) => {
         const r = b.getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
         return !(e === b || b.contains(e));
     }).map((b) => (b.closest('[data-rs-tool]') || b).dataset.rsTool)""", BARBTN)
-    if "attribution" in reach:         # the one-row bar of ten tools is 372 px wide at 390 px: the credits button (377 to 409 px) is outside the screen (a gap in roadstyle)
-        print("GAP, the credits button is outside the screen on a phone at 390 px:", page.evaluate(BOX, "[data-rs-tool=attribution]"))
-        reach.remove("attribution")
     assert not reach, ("covered tools", reach)
 
     # the sheet: three heights, closed, 40 %, full; the bar stays in view; the map's padding is the sheet's part (down to the grip)

@@ -23,9 +23,8 @@ out.mkdir(parents=True, exist_ok=True)
 server = start(0, quiet=True, directory=WWW)
 url = f"http://127.0.0.1:{server.server_address[1]}/index.html?maxroads=0"
 errors = []
-gap = set()
 CARDS = ["step1-card", "step2-card", "extracts-box", "step4-card", "step5-card", "step6-card", "step7-card"]
-STATE = """() => Object.fromEntries([...document.querySelectorAll('section.step')].map((c) => [c.id, (c.classList.contains('folded') ? 'F' : 'O') + (c.classList.contains('off') ? '-off' : '') + (c.querySelector('.done').hidden ? '' : '-done')]))"""
+STATE = """() => Object.fromEntries([...document.querySelectorAll('.step')].map((c) => [c.id, (c.classList.contains('folded') ? 'F' : 'O') + (c.classList.contains('off') ? '-off' : '') + (c.querySelector('.done').hidden ? '' : '-done')]))"""
 checked_links = {}
 
 
@@ -53,14 +52,7 @@ def check_links(page, names):
 def run(browser, name, dark=False, **context):
     phone = "has_touch" in context
     page = browser.new_context(**context).new_page()
-    def on_error(e):
-        # a gap in roadstyle: a page that starts in the dark theme (the stored choice) calls rsSetTheme before the map's style is loaded, and the handler of
-        # rs:themechange (theme.js: the dark twin of the base map) throws "Style is not done loading" (syncStyleTheme waits for style.load, this handler does not)
-        if "Style is not done loading" in str(e):
-            gap.add(name)
-        else:
-            errors.append(str(e))
-    page.on("pageerror", on_error)
+    page.on("pageerror", lambda e: errors.append(str(e)))
     page.add_init_script("if (!sessionStorage.cleared) { localStorage.clear(); sessionStorage.cleared = '1'; }")
     page.goto(url)
     page.wait_for_function("window.mapReady", timeout=120_000)
@@ -75,13 +67,15 @@ def run(browser, name, dark=False, **context):
     assert s["step2-card"] == "F-off" and s["step4-card"] == "F-off" and s["step5-card"] == "F-off" and s["step6-card"] == "F-off" and s["step7-card"] == "F-off", s
     assert s["extracts-box"] == "F", "step 3 is active (a cut file needs no area)"
     assert page.inner_text("#step2-card .after") == "after step 1" and page.inner_text("#step4-card .after") == "after step 3"
-    assert page.evaluate("document.querySelector('#step5-card .fold').disabled"), "the chevron of a disabled card does not open it"
+    assert page.evaluate("document.getElementById('step5').disabled"), "the title of a disabled card does not open it"
     page.evaluate("document.getElementById('step5').click()")
     assert st()["step5-card"] == "F-off", "a click on a disabled card does nothing"
     page.screenshot(path=str(out / f"{name}-1-start.png"))
     # ---- the main button and the search field: only Build is filled with the accent (the standard's: the page has no accent of its own)
     assert page.evaluate("[...document.querySelectorAll('#sb .btn.primary')].map((b) => b.id)") == ["run"]
-    assert page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()") == "", "no accent value of the page"
+    # the accent is roadstyle's (0.26.1: the Sonocount teal; a lighter variant in the dark theme), and the page sets none
+    assert page.evaluate("getComputedStyle(document.getElementById('sb')).getPropertyValue('--accent').trim()") == ("#42c2d7" if dark else "#0e7c8e")
+    assert not page.evaluate("[...document.styleSheets].some((sh) => { try { return [...sh.cssRules].some((r) => r.style && r.cssText.includes('--accent:') && !sh.href); } catch (e) { return false; } })"), "the page has no --accent of its own"
     f = page.evaluate("""() => { const i = document.getElementById('q').getBoundingClientRect(), b = document.getElementById('search-go').getBoundingClientRect(); return [Math.round(i.top), Math.round(i.height), Math.round(b.top), Math.round(b.height), Math.round(b.left - i.right)]; }""")
     assert f[0] == f[2] and f[1] == f[3] and abs(f[4]) <= 1, ("Search is joined to its field", f)
     # ---- the help windows: the panel's "?", the overview, the links; a card's "?" and the overview again after it
@@ -94,7 +88,7 @@ def run(browser, name, dark=False, **context):
     page.keyboard.press("Escape")
     page.wait_for_selector("#rs-help", state="hidden")
     for n in (1, 3, 4, 5, 6, 7):
-        page.evaluate(f"document.querySelector('#{CARDS[n - 1]} .hq').click()")
+        page.evaluate(f"document.querySelector('#{CARDS[n - 1]} .rs-help-btn').click()")
         page.wait_for_selector("#rs-help .rs-help-box", state="visible")
         assert page.inner_text("#rs-help .rs-help-ttl") != "duckOSM in the browser", n
         check_links(page, n)
@@ -106,26 +100,18 @@ def run(browser, name, dark=False, **context):
     page.wait_for_selector("#rs-help .rs-help-box", state="visible")
     assert page.inner_text("#rs-help .rs-help-ttl") == "duckOSM in the browser", "the panel's \"?\" has the overview again"
     page.keyboard.press("Escape")
-    # ---- collapse all / expand all: only the active cards; the choice is kept
-    tap("#sb-fold")
-    assert st()["step1-card"] == "F" and st()["step2-card"] == "F-off" and page.get_attribute("#sb-fold", "aria-label") == "Expand all steps", st()
-    assert page.evaluate("localStorage.getItem('duckosm.cards')") == "collapsed"
-    tap("#sb-fold")
+    # ---- collapse all / expand all: roadstyle's button in the title row; it acts on the cards that are shown, and the page folds a card that is not ready again
+    tap("#rs-fold-all")
+    assert st()["step1-card"] == "F" and st()["step2-card"] == "F-off" and page.get_attribute("#rs-fold-all", "aria-label") == "Expand all", st()
+    tap("#rs-fold-all")
     s = st()
-    assert s["step1-card"] == "O" and s["extracts-box"] == "O" and s["step2-card"] == "F-off" and s["step4-card"] == "F-off", ("expand all opens the active cards only", s)
-    assert page.get_attribute("#sb-fold", "aria-label") == "Collapse all steps"
+    assert s["step1-card"] == "O" and s["extracts-box"] == "O" and s["step2-card"] == "F-off" and s["step4-card"] == "F-off", ("expand all opens the cards that are ready only", s)
+    assert page.get_attribute("#rs-fold-all", "aria-label") == "Collapse all"
     page.screenshot(path=str(out / f"{name}-4-expanded.png"))
     page.reload()
     page.wait_for_function("window.mapReady", timeout=120_000)
-    tap("#sb-fold")                                  # (the stored choice is "open": a reload starts with step 1 open)
-    tap("#sb-fold")
+    assert st()["step1-card"] == "O" and st()["step2-card"] == "F-off" and st()["extracts-box"] == "F", ("a reload starts with step 1 open", st())
     # ---- the flow: an area, the data, the build, the map, the editor; the next step opens, the finished one folds
-    page.evaluate("localStorage.setItem('duckosm.cards', 'open')")
-    page.reload()
-    page.wait_for_function("window.mapReady", timeout=120_000)
-    if dark:
-        page.wait_for_function("window.duckMap.isStyleLoaded()", timeout=60_000)
-        page.evaluate("rsSetTheme('dark')")
     assert st()["step1-card"] == "O"
     page.set_input_files("#file", str(ROOT / "tests/data/monaco.geojson"))
     page.wait_for_function("window.areas >= 1", timeout=60_000)
@@ -136,6 +122,15 @@ def run(browser, name, dark=False, **context):
     s = st()
     assert s["extracts-box"] == "F-done" and s["step4-card"] == "O", ("the data: step 4 opens, step 3 folds", s)
     page.screenshot(path=str(out / f"{name}-5-data-ready.png"))
+    assert page.evaluate("getComputedStyle(document.getElementById('run')).backgroundColor") == "rgb(14, 127, 145)", "Build is filled with the accent (the filled-control teal)"
+    if not phone:                                    # a button with a text has no tooltip box; a tool of the bar has one
+        page.hover("#run")
+        page.wait_for_timeout(900)
+        assert page.evaluate("(() => { const t = document.getElementById('rs-tip'); return !t || t.hidden; })()"), "no tooltip box over the Build button"
+        page.hover("[data-rs-tool=basemap] button")
+        page.wait_for_selector("#rs-tip:not([hidden])", timeout=5_000)
+        page.mouse.move(5, 5)
+    assert page.evaluate("parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--rs-a-card'))") == 0.7, "the card behind the text starts at 70 %"
     tap("#run")
     page.wait_for_function("!document.getElementById('step5-card').classList.contains('off')", timeout=900_000)
     s = st()
@@ -160,7 +155,5 @@ with sync_playwright() as p:
     run(browser, "phone", viewport={"width": 390, "height": 844}, has_touch=True, is_mobile=True, device_scale_factor=2)
     browser.close()
 server.shutdown()
-for n in sorted(gap):
-    print(f"GAP, rsSetTheme before the style is loaded throws 'Style is not done loading' (a page that starts in the dark theme): {n}")
 assert not errors, errors
 print("panel: cards that follow the steps, one help window, collapse all, one main button; no page errors")
