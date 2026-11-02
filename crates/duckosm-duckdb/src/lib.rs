@@ -36,6 +36,30 @@ pub fn write_database(db: &Path, parquet_dir: &Path, modes: &[&str]) -> Result<(
             &["edge_levels", "edge_levels_meta"],
         )?;
     }
+    // the elevation step: duckOSM's columns on the nodes and the edges, and main.elevation_metadata
+    for mode in modes {
+        let (nz, ez) = (
+            parquet_dir.join(format!("elevation_nodes_{mode}.parquet")),
+            parquet_dir.join(format!("elevation_edges_{mode}.parquet")),
+        );
+        if nz.exists() && ez.exists() {
+            con.execute_batch(&format!(
+                "ALTER TABLE {mode}.nodes ADD COLUMN ele DOUBLE;
+                 UPDATE {mode}.nodes n SET ele = t.ele FROM read_parquet('{}') t WHERE t.node_id = n.node_id;
+                 ALTER TABLE {mode}.edges ADD COLUMN z_from DOUBLE;
+                 ALTER TABLE {mode}.edges ADD COLUMN z_to DOUBLE;
+                 ALTER TABLE {mode}.edges ADD COLUMN z_vertices DOUBLE[];
+                 UPDATE {mode}.edges e SET z_from = t.z_from, z_to = t.z_to, z_vertices = t.z_vertices
+                   FROM read_parquet('{}') t WHERE t.edge_id = e.edge_id;",
+                nz.display(),
+                ez.display()
+            ))
+            .map_err(|e| e.to_string())?;
+        }
+    }
+    if parquet_dir.join("elevation_metadata_main.parquet").exists() {
+        write_schema(&con, parquet_dir, "main", &["elevation_metadata"])?;
+    }
     if parquet_dir.join("transfers_mm.parquet").exists() {
         con.execute_batch(&mm_edges(modes))
             .map_err(|e| e.to_string())?;

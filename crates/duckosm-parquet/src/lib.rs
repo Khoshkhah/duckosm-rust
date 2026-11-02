@@ -1061,6 +1061,114 @@ pub fn write_route_edges_to<W: Write + Send>(out: W, rows: &[RouteEdge]) -> Resu
     })
 }
 
+/// Write the heights of the nodes of a mode (`elevation_nodes_<mode>.parquet`): `node_id`, `ele`.
+pub fn write_node_heights_to<W: Write + Send>(out: W, rows: &[(i64, f64)]) -> Result<(), String> {
+    let fields = vec![
+        field("node_id", DataType::Int64),
+        field("ele", DataType::Float64),
+    ];
+    write_rows(out, fields, rows, |c| {
+        let mut ele = Float64Builder::new();
+        c.iter().for_each(|r| ele.append_value(r.1));
+        vec![i64s(c.iter().map(|r| r.0)), Arc::new(ele.finish())]
+    })
+}
+
+/// Write the heights of the edges of a mode (`elevation_edges_<mode>.parquet`): `edge_id`, `z_from`, `z_to`,
+/// `z_vertices` (one height for each vertex of the geometry, in its order).
+pub fn write_edge_heights_to<W: Write + Send>(
+    out: W,
+    rows: &[(i64, f64, f64, Vec<f64>)],
+) -> Result<(), String> {
+    let fields = vec![
+        field("edge_id", DataType::Int64),
+        field("z_from", DataType::Float64),
+        field("z_to", DataType::Float64),
+        field(
+            "z_vertices",
+            DataType::List(Arc::new(Field::new("item", DataType::Float64, true))),
+        ),
+    ];
+    write_rows(out, fields, rows, |c| {
+        let (mut zf, mut zt) = (Float64Builder::new(), Float64Builder::new());
+        let mut zv = ListBuilder::new(Float64Builder::new());
+        for r in c {
+            zf.append_value(r.1);
+            zt.append_value(r.2);
+            r.3.iter().for_each(|z| zv.values().append_value(*z));
+            zv.append(true);
+        }
+        vec![
+            i64s(c.iter().map(|r| r.0)),
+            Arc::new(zf.finish()),
+            Arc::new(zt.finish()),
+            Arc::new(zv.finish()),
+        ]
+    })
+}
+
+/// Write duckOSM's `main.elevation_metadata` (`elevation_metadata_main.parquet`), one row for the column `ele`:
+/// the text columns in duckOSM's order (ele_column, source, source_type, uri, product, dem_crs, vertical_datum,
+/// license, sampled_at, duckosm_version), the resolution, the fill value and the two counts.
+pub fn write_elevation_metadata_to<W: Write + Send>(
+    out: W,
+    text: [&str; 10],
+    resolution_m: f64,
+    nodata_fill: f64,
+    n_nodes: i64,
+    n_nodata: i64,
+) -> Result<(), String> {
+    let names = [
+        "ele_column",
+        "source",
+        "source_type",
+        "uri",
+        "resolution_m",
+        "product",
+        "dem_crs",
+        "vertical_datum",
+        "license",
+        "nodata_fill",
+        "n_nodes",
+        "n_nodata",
+        "sampled_at",
+        "duckosm_version",
+    ];
+    let fields = names
+        .iter()
+        .map(|n| {
+            field(
+                n,
+                match *n {
+                    "resolution_m" | "nodata_fill" => DataType::Float64,
+                    "n_nodes" | "n_nodata" => DataType::Int64,
+                    _ => DataType::Utf8,
+                },
+            )
+        })
+        .collect();
+    write_rows(out, fields, &[()], |_| {
+        let t = |i: usize| texts(std::iter::once(Some(text[i])));
+        let f = |v: f64| -> ArrayRef { Arc::new(arrow_array::Float64Array::from(vec![v])) };
+        vec![
+            t(0),
+            t(1),
+            t(2),
+            t(3),
+            f(resolution_m),
+            t(4),
+            t(5),
+            t(6),
+            t(7),
+            f(nodata_fill),
+            i64s(std::iter::once(n_nodes)),
+            i64s(std::iter::once(n_nodata)),
+            t(8),
+            t(9),
+        ]
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

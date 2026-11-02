@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 
 pub mod area;
 pub mod config;
+pub mod elevation;
 pub mod levels;
 
 pub use area::{write_area_tables, write_lane_profile, write_levels, Area};
@@ -60,6 +61,10 @@ pub struct Params {
     /// The entry of the area's Geofabrik region in the page's time zone table (`www/timezones.json`, JSON text):
     /// the browser build has no world map of the zones. None: the map of `tzf-rs` (the cargo feature `tzf`).
     pub timezone_entry: Option<String>,
+    /// A DEM (GeoTIFF, EPSG:4326): the elevation step of duckOSM (`duckosm elevation --dem`) runs on each mode
+    /// and writes `elevation_nodes_<mode>.parquet`, `elevation_edges_<mode>.parquet` (with `z_vertices`, the
+    /// height at each vertex) and `elevation_metadata_main.parquet`; the .duckdb gets duckOSM's columns.
+    pub dem: Option<PathBuf>,
 }
 
 impl Default for Params {
@@ -79,6 +84,7 @@ impl Default for Params {
             area_boundary: None,
             built_at: None,
             timezone_entry: None,
+            dem: None,
         }
     }
 }
@@ -428,6 +434,8 @@ pub fn run<W: Write + Send>(
         sum.sidewalk_roads = Some(sidewalks::infer_separate_sidewalks(&mut ways, &coords));
         log.step("sidewalk rule");
     }
+    let dem = p.dem.as_deref().map(elevation::Dem::open).transpose()?;
+    let (mut dem_nodes, mut dem_nodata) = (0i64, 0i64);
     let mut mode_nodes = Vec::new();
     let mut level_edges = LevelEdges::default();
     let mut lane_edges = LaneEdges::default();
@@ -437,6 +445,22 @@ pub fn run<W: Write + Send>(
         log.step(&format!("build {n}"));
         write_tables(&net, *mode, opts, &ways, &mut file)?;
         log.step(&format!("write geoparquet {n}"));
+        if let Some(d) = &dem {
+            let (nz, ez, nodata) = elevation::sample_mode(d, &net.nodes, &net.edges, 0.0);
+            dem_nodes += nz.len() as i64;
+            dem_nodata += nodata as i64;
+            duckosm_parquet::write_node_heights_to(
+                file(&format!("elevation_nodes_{n}.parquet"))?,
+                &nz.iter().map(|r| (r.node_id, r.ele)).collect::<Vec<_>>(),
+            )?;
+            duckosm_parquet::write_edge_heights_to(
+                file(&format!("elevation_edges_{n}.parquet"))?,
+                &ez.into_iter()
+                    .map(|r| (r.edge_id, r.z_from, r.z_to, r.z_vertices))
+                    .collect::<Vec<_>>(),
+            )?;
+            log.step(&format!("elevation {n}"));
+        }
         sum.modes.push(ModeSummary {
             mode: *mode,
             edges: net.edges.len(),
@@ -460,6 +484,37 @@ pub fn run<W: Write + Send>(
             log.step("bus routes");
         }
         mode_nodes.push((*mode, net.nodes));
+    }
+    if let (Some(d), Some(path)) = (&dem, &p.dem) {
+        let name = path
+            .file_name()
+            .map_or(String::new(), |f| f.to_string_lossy().into_owned());
+        let uri = std::fs::canonicalize(path).unwrap_or(path.clone());
+        let sampled = area::iso_time(p.built_at.unwrap_or_else(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_micros() as i64)
+        }));
+        duckosm_parquet::write_elevation_metadata_to(
+            file("elevation_metadata_main.parquet")?,
+            [
+                "ele",
+                &name,
+                "file",
+                &uri.to_string_lossy(),
+                "unknown",
+                "EPSG:4326",
+                "unknown",
+                "unknown",
+                &sampled,
+                concat!("duckosm-rust ", env!("CARGO_PKG_VERSION")),
+            ],
+            d.resolution_m,
+            0.0,
+            dem_nodes,
+            dem_nodata,
+        )?;
+        log.step("elevation metadata");
     }
     if let Some(r) = raw.as_mut().filter(|_| p.raw) {
         // the tags that the steps set on the network's ways (the sidewalk rule, the arrows of the fixes)

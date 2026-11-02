@@ -7,6 +7,13 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ### Added
 
+- **The elevation step, `--dem FILE`** (duckOSM `duckosm elevation --dem`): the build samples a DEM (a GeoTIFF in EPSG:4326, 32-bit
+  floats, uncompressed or deflate) at every node and at every vertex of every edge, as rasterio's `sample` does (the pixel that holds
+  the point, 2 decimals). It writes `elevation_nodes_<mode>.parquet`, `elevation_edges_<mode>.parquet` (`z_from`, `z_to` and
+  `z_vertices`, one height for each vertex) and `elevation_metadata_main.parquet`; the .duckdb gets duckOSM's columns `nodes.ele`,
+  `edges.z_from`, `z_to`, `z_vertices` and `main.elevation_metadata`. On Monaco (Copernicus GLO-30) every value equals Python
+  duckOSM's. New crate: `tiff` 0.11.3 (deflate only).
+
 ### Changed
 
 - The page uses roadstyle `0.26.2` (`14b40d0f2bd221200a9444a592f96d2febb0b9f5`): the level editor's map follows the dashboard theme, and the area's layers (the **Map layers** switch and the legend list) stay inside the editor. The page gives the editor its look (`look`: `map/look.json`), so the editor's roads have the page's palette and colour options. `editor_path_e2e.py` checks the theme, the layers, the Base map box, the legend box and a theme change inside the open editor.
