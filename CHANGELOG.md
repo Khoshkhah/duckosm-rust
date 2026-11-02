@@ -7,6 +7,7 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ### Added
 
+- **Saved areas in the browser page**: each build is saved in the browser (OPFS) with its drawing cache. A banner restores the last area with no build, and the **Saved** tab of card 1 lists, opens and deletes areas (docs/app.md, "Saved areas"). `saved_e2e.py` tests it.
 ### Changed
 
 - The page uses roadstyle `0.26.2` (`14b40d0f2bd221200a9444a592f96d2febb0b9f5`): the level editor's map follows the dashboard theme, and the area's layers (the **Map layers** switch and the legend list) stay inside the editor. The page gives the editor its look (`look`: `map/look.json`), so the editor's roads have the page's palette and colour options. `editor_path_e2e.py` checks the theme, the layers, the Base map box, the legend box and a theme change inside the open editor.

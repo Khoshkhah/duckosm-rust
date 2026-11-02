@@ -365,6 +365,23 @@ A change of format does not build the roads again. The map worker keeps its tile
 
 **These results can depend on the browser and on the device.** The measurements used one browser (Chromium), software rendering and 2 runs. A phone or another browser can give other times. MLT is the default by Kaveh's order of 2026-10-29. A comparison of MVT and MLT in several browsers is still open; MVT stays as the second choice.
 
+### Saved areas
+
+Each build is saved in the browser (OPFS, the origin private file system): the tables as Parquet files, `meta.json` (the
+name, the boundary, the fixes text, the summary and the table list) and a cache of the drawn roads (`viz_roads.parquet`,
+`viz_features.parquet`). The code is `www/app/area_store.js`. A new visit shows a banner above the cards: **Restore**
+loads the last area into DuckDB and draws the map again with no build (Monaco: 1.6 s). The **Saved** tab of card 1 lists all
+areas, with **Open** and **Delete**.
+
+- A save replaces the area: it removes all old files first, and writes `meta.json` last. A restore reads only the files that
+  `meta.json` lists, so the tables of an older build (other modes) never come back.
+- The slug is the name in lower case and a short hash of the exact name, so "Tartu" and "tartu" are two areas.
+- The drawing cache is valid only for the page that wrote it: it holds the page's `?v=<sha>` (a deployed page; empty on a
+  local server). Another page version loads the tables and draws the roads again.
+- A failed save (for example, full storage) shows a message, and the page keeps working.
+- The edits of the level editor are not here: roadstyle's own browser store keeps them.
+- Test: `python crates/duckosm-wasm/www/saved_e2e.py <out folder>` (build, new visit, restore, a smaller rebuild).
+
 ### Step 7: edit the levels
 
 Kaveh's words (2026-10-24): "Add editing dashboard to duckosm rust github io dashboard". The card **Edit levels** puts
