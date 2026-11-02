@@ -89,6 +89,10 @@ struct Cli {
     /// options.levels (on: solve).
     #[arg(long, value_name = "METHOD")]
     levels: Option<String>,
+    /// A DEM (GeoTIFF in EPSG:4326, 32-bit floats): sample it at every node and at every vertex of every edge
+    /// (duckOSM `duckosm elevation --dem`). Writes nodes.ele, edges.z_from, z_to and z_vertices.
+    #[arg(long, value_name = "FILE")]
+    dem: Option<PathBuf>,
     /// Print the time of each step.
     #[arg(long)]
     timing: bool,
@@ -143,6 +147,7 @@ fn run() -> Result<(), String> {
     if let Some(m) = &cli.levels {
         p.levels = parse_levels(m)?;
     }
+    p.dem = cli.dem.clone();
     if let Some(f) = &cli.fixes {
         p.osm_fixes = Some(f.clone());
     }
