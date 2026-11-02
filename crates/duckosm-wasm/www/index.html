@@ -763,7 +763,7 @@ async function setArea(polys, props, { zoom = true } = {}) {
   const mine = area;
   cover = (await covering(polys)).slice(0, 3);
   if (area !== mine) return;
-  area.props = { ...props, buffer_m: m, area_km2: km2, geofabrik: cover.map((x) => ({ id: x.id, name: x.name, pbf: x.pbf })) };
+  area.props = { ...props, ...(m > 0 ? { buffer_m: m } : {}), area_km2: km2, geofabrik: cover.map((x) => ({ id: x.id, name: x.name, pbf: x.pbf })) };
   showExtract(null);
   shown = null;
   renderExtracts();
