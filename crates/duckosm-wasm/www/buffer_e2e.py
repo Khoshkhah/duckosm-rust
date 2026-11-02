@@ -70,15 +70,14 @@ with sync_playwright() as p:
     assert abs(first - a0) / a0 < 0.02, (first, a0)
     print(f"area without a buffer: {first} km2 (computed here: {a0:.2f})")
 
-    if not page.is_visible("#buffer"):
-        page.click("#step2")      # card 2 folds when an area is chosen
+    assert page.is_visible("#buffer"), "card 2 stays open beside step 3 after an area is chosen"
     page.fill("#buffer", str(int(D)))
     page.wait_for_function("window.areas >= 2", timeout=60_000)
     grown = shown_km2(page)
     low, high = a0 + perimeter * D / 2e6, a0 + (perimeter * D + math.pi * D * D) / 1e6
     print(f"area with a buffer of {D:.0f} m: {grown} km2 (it must be between {low:.2f} and {high:.2f})")
     assert low < grown <= high * 1.02, (grown, low, high)
-    assert "m buffer" in page.inner_text("#summary")
+    assert "+500 m" in page.inner_text("#summary")
     with page.expect_download() as d:
         page.click("#save")
     saved = json.loads(pathlib.Path(d.value.path()).read_text())
@@ -90,7 +89,7 @@ with sync_playwright() as p:
     page.fill("#buffer", "0")
     page.wait_for_function("window.areas >= 3", timeout=60_000)
     assert shown_km2(page) == first, (shown_km2(page), first)
-    assert "m buffer" not in page.inner_text("#summary")
+    assert "+500" not in page.inner_text("#summary")
     print("a buffer of 0 gives the first area again")
     page.set_viewport_size({"width": 390, "height": 664})
     page.fill("#buffer", "250")
