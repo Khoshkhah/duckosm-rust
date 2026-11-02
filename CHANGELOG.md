@@ -7,6 +7,7 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ### Added
 
+- **A buffer around the area** in card 2 of the browser page: **Buffer around the area (m)**, 0 by default, as duckOSM's `boundary.buffer_m` (metres, in the UTM zone of the area's centre). The cut, the Overpass query and the saved GeoJSON use the grown area (docs/app.md, "The buffer"). `buffer_e2e.py` tests it.
 - **The elevation step, `--dem FILE`** (duckOSM `duckosm elevation --dem`): the build samples a DEM (a GeoTIFF in EPSG:4326, 32-bit
   floats, uncompressed or deflate) at every node and at every vertex of every edge, as rasterio's `sample` does (the pixel that holds
   the point, 2 decimals). It writes `elevation_nodes_<mode>.parquet`, `elevation_edges_<mode>.parquet` (`z_from`, `z_to` and
