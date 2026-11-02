@@ -181,8 +181,11 @@ with sync_playwright() as p:
     pos0 = at()
     t = time.time()
     page.click("#edit-open")
+    # "Opening the level editor…" is in the map's busy box (spinner and veil), as Build and Show on map show their progress (Kaveh, 2026-11-02)
+    page.wait_for_function("!document.getElementById('mapbusy').hidden && /Opening the level editor/.test(document.getElementById('mapbusy-text').textContent)", timeout=5_000)
     page.wait_for_function("window.levelEditorOpen || /failed/.test(document.getElementById('editnote').textContent)", timeout=300_000)
     assert page.evaluate("!!window.levelEditorOpen"), page.inner_text("#editnote")
+    assert page.evaluate("document.getElementById('mapbusy').hidden"), "the busy box stays after the editor is open"
     # the page gives the editor the map's levels (levelEditor's levels, roadstyle 083224c): no solve also at the first open
     page.wait_for_timeout(500)
     assert max(abs(x - y) for x, y in zip(at(), pos0)) <= 2, ("the view moved when the editor opened", pos0, at())
