@@ -114,6 +114,7 @@ fn browser_area_build_equals_native_build() {
         duckdb: false,
         boundary: Some(geojson.clone()),
         raw: true,
+        cut_pbf: true,
         osm_fixes: Some(fixes.clone()),
         built_at: Some(0),
         ..Params::default()
@@ -131,6 +132,7 @@ fn browser_area_build_equals_native_build() {
     let mut browser = Params {
         modes: p.modes.clone(),
         raw: true,
+        cut_pbf: true,
         built_at: Some(0),
         timezone_entry: Some(monaco_timezone()),
         ..Params::default()
@@ -151,8 +153,9 @@ fn browser_area_build_equals_native_build() {
     .unwrap();
     // 3 modes x 10 files (edges, private_edges, nodes, virtual_nodes, ways, way_nodes, edge_id_map, edge_graph,
     // turn_permission, and in driving the two turn restriction tables and the lane profile) + 4 area files + 3 raw
-    // files + the 2 levels files (solve) + the 2 bus files
-    assert_eq!(names.len(), 3 * 9 + 3 + 4 + 3 + 2 + 2, "{names:?}");
+    // files + the 2 levels files (solve) + the 2 bus files + the cut file
+    assert_eq!(names.len(), 3 * 9 + 3 + 4 + 3 + 2 + 2 + 1, "{names:?}");
+    assert!(names.contains(&"cut.osm.pbf".to_string()));
     assert!(names.contains(&"raw_ways.parquet".to_string()));
     for n in &names {
         let (a, b) = (

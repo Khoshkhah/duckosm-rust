@@ -91,7 +91,8 @@
   .step .line { margin: 0; }
   .step h3 { display: inline; margin: 0; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
   .step details > summary:has(h3) { color: var(--muted); }
-  .dl { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+  .dl { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; margin-top: 10px; }
+  .dl [hidden] { display: none; }
   .dl .btn { padding: 0 8px; font-size: 12.5px; white-space: nowrap; }
   #sql-box .row { margin-top: 6px; }
   /* the panel's icons; not the map's, the bar's and the floating windows' own SVGs (roadstyle's) */
@@ -410,7 +411,7 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
     <p id="query-why" class="why"></p>
     <div id="result" class="pg-scroll"></div>
   </details>
-  <div class="dl"><button id="zip" class="btn" aria-label="Download all the tables as a zip"><svg><use href="#i-download"/></svg>.zip</button><button id="duckdb" class="btn" aria-label="Download the .duckdb database"><svg><use href="#i-download"/></svg>.duckdb</button></div>
+  <div class="dl"><button id="zip" class="btn" aria-label="Download all the tables as a zip"><svg><use href="#i-download"/></svg>.zip</button><button id="duckdb" class="btn" aria-label="Download the .duckdb database"><svg><use href="#i-download"/></svg>.duckdb</button><button id="cutpbf" class="btn" hidden aria-label="Download the cut area as an .osm.pbf file"><svg><use href="#i-download"/></svg>.osm.pbf</button></div>
   <details id="files-box"><summary><h3>Each table</h3></summary>
     <p class="small muted"><a id="reference" target="_blank" rel="noopener">The columns of each table</a></p>
     <div id="files" class="pg-scroll"></div>
@@ -1591,6 +1592,7 @@ const CARD_HELP = {
     ["SQL", "Run a query on the tables in this browser."],
     ["Download all", "The tables as GeoParquet files, with make_duckdb.sql, the boundary and a README, in one zip."],
     [".duckdb", "A duckOSM database with all tables."],
+    [".osm.pbf", "The area as cut from the region file: its nodes, ways and relations with all tags. It shows only when a region file was cut and Base map layers is on."],
     ["Each table", "Download one table. The columns of each table are in the reference."]],
     note: link(DOCS.features, "The columns of each table") },
   6: { title: "Visualization", intro: "Draw the roads on the map.", terms: [
@@ -1882,6 +1884,7 @@ $("query").onclick = async () => {
 const size = (b) => (b < 2 ** 20 ? `${num(Math.max(1, b / 1024))} KB` : `${mb(b)} MB`);
 let urls = [];
 function files() {
+  $("cutpbf").hidden = !duck.cut;
   urls.forEach(URL.revokeObjectURL);
   urls = [];
   const modes = [...new Set(duck.tables.map((t) => t.mode))].filter((m) => m !== "features");
@@ -1904,6 +1907,12 @@ function files() {
       }).join("") + "</div></div>" : "");
 }
 $("reference").href = duck.REFERENCE;
+$("cutpbf").onclick = () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([duck.cut], { type: "application/octet-stream" }));
+  a.download = duck.slug(areaName) + ".osm.pbf";
+  a.click();
+};
 $("zip").onclick = async () => {
   try {
     const { blob, name } = await duck.zipAll(areaName, area ? text() : null);

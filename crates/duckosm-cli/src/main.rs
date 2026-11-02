@@ -84,6 +84,13 @@ struct Cli {
     /// raw_relations.parquet, as osmium's smart cut), the input of the base-map layers (docs/features.md).
     #[arg(long, requires = "boundary")]
     raw: bool,
+    /// With --boundary: also write the cut area as cut.osm.pbf (the nodes, ways and relations of osmium's smart cut,
+    /// before the OSM fixes), to read in other tools or to use as the cut file of the browser page.
+    #[arg(long, requires = "boundary")]
+    cut_pbf: bool,
+    /// With --boundary: also write the cut area as cut.osm (XML).
+    #[arg(long, requires = "boundary")]
+    cut_osm: bool,
     /// The drawing order of the roads (visualization.edge_levels, docs/levels.md): tags (a rule on layer,
     /// bridge and tunnel), solve (roadstyle's optimization) or none. Default: tags, or the config's
     /// options.levels (on: solve).
@@ -154,6 +161,8 @@ fn run() -> Result<(), String> {
     if cli.boundary.is_some() {
         p.boundary = cli.boundary.clone();
         p.raw = cli.raw;
+        p.cut_pbf = cli.cut_pbf;
+        p.cut_osm = cli.cut_osm;
     }
     if let Some(f) = &cli.format {
         p.set_formats(&f.split(',').collect::<Vec<_>>())?;

@@ -7,6 +7,10 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ### Added
 
+- **The cut area as a download, `.osm.pbf`**: after a build from a region file (with **Base map layers** on), card 5 has a button
+  `.osm.pbf` with the nodes, ways and relations of the cut (osmium's `smart` cut, before the OSM fixes), and the page accepts the
+  file again as the "Cut file". New: `cutfile.rs` (the PBF writer and an `.osm` XML writer, with `miniz_oxide`), the CLI options
+  `--cut-pbf` and `--cut-osm`, `Params.cut_pbf` and `cut_osm`.
 - **The elevation step, `--dem FILE`** (duckOSM `duckosm elevation --dem`): the build samples a DEM (a GeoTIFF in EPSG:4326, 32-bit
   floats, uncompressed or deflate) at every node and at every vertex of every edge, as rasterio's `sample` does (the pixel that holds
   the point, 2 decimals). It writes `elevation_nodes_<mode>.parquet`, `elevation_edges_<mode>.parquet` (`z_from`, `z_to` and

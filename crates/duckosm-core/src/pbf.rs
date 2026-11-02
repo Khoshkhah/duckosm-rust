@@ -232,17 +232,20 @@ fn cut<R: Read + Seek + Send>(
     let err = |e: osmpbf::Error| e.to_string();
     // pass 1
     let mut blobs = open()?;
-    let sorted = use_sort
-        && match blobs.next().transpose().map_err(err)? {
-            Some(h) => match h.decode().map_err(err)? {
-                BlobDecode::OsmHeader(h) => h
-                    .optional_features()
-                    .iter()
-                    .any(|f| f == "Sort.Type_then_ID"),
-                _ => false,
-            },
-            None => return Err("the PBF file is empty".into()),
-        };
+    let mut timestamp = None;
+    let sorted = match blobs.next().transpose().map_err(err)? {
+        Some(h) => match h.decode().map_err(err)? {
+            BlobDecode::OsmHeader(h) => {
+                timestamp = h.osmosis_replication_timestamp();
+                use_sort
+                    && h.optional_features()
+                        .iter()
+                        .any(|f| f == "Sort.Type_then_ID")
+            }
+            _ => false,
+        },
+        None => return Err("the PBF file is empty".into()),
+    };
     let (mut blocks, mut inside, mut inside_tags, mut ways_at) =
         (Vec::new(), Vec::new(), Vec::new(), None);
     'pass1: loop {
@@ -456,6 +459,7 @@ fn cut<R: Read + Seek + Send>(
             nodes,
             ways: raw_ways,
             relations: all_rels,
+            timestamp,
         });
     }
     // pass 3: the node blocks with a missing node

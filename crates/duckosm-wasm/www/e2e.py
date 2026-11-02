@@ -1,6 +1,6 @@
 """The page in headless Chromium (Playwright): build an area, run a query, show the roads map (a picture in
 map.png; a large area waits for "Show on map", which the test clicks), and download the zip and the Parquet files. The
-out folder gets make_duckdb.sql from the zip, and page.duckdb (the button "Download .duckdb"). Prints the times of
+out folder gets make_duckdb.sql from the zip, page.duckdb (the button "Download .duckdb") and, for a region file with the base-map layers, cut.osm.pbf (the button ".osm.pbf"). Prints the times of
 the page as JSON (docs/browser.md, steps B3 and B4).
 
     python crates/duckosm-wasm/www/e2e.py <file.osm.pbf> <out folder> [--boundary area.geojson] [--modes driving,walking,cycling] [--fixes file.yaml]
@@ -124,6 +124,15 @@ with sync_playwright() as p:
     seconds = time.time() - t
     d.value.save_as(out / "page.duckdb")
     print(f"duckdb: {d.value.suggested_filename}, {(out / 'page.duckdb').stat().st_size} bytes, {seconds:.2f} s")
+    # the cut area: the button .osm.pbf shows only when a region file was cut with the base-map layers (docs/app.md)
+    if source == "region" and not args.no_features:
+        t = time.time()
+        with page.expect_download(timeout=120_000) as d:
+            page.click("#cutpbf")
+        d.value.save_as(out / "cut.osm.pbf")
+        print(f"cut: {d.value.suggested_filename}, {(out / 'cut.osm.pbf').stat().st_size} bytes, {time.time() - t:.2f} s")
+    else:
+        assert page.is_hidden("#cutpbf"), "no raw cut, no .osm.pbf button"
     # the bytes of each file through its blob link (Chromium stops many downloads in a row)
     files = page.evaluate("""async () => Promise.all([...document.querySelectorAll('#files a[download]')].map(async (a) => {
         const b = new Blob([await (await fetch(a.href)).arrayBuffer()]);

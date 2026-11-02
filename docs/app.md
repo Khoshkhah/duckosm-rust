@@ -299,6 +299,20 @@ and the two download buttons between them. With three modes, the line takes thre
     DuckDB with direct IO, which the page sets when DuckDB starts (the cause:
     [browser.md](browser.md), "The .duckdb download"). If the file fails, a message says that the zip has
     `make_duckdb.sql`.
+  - **Download .osm.pbf** (next to the .duckdb button): `<area>.osm.pbf`, the area as it was cut from the region file. It
+    has the nodes, ways and relations of osmium's `smart` cut (the raw cut, [features.md](features.md)) with all their
+    tags, before the OSM fixes change them, and it keeps the replication time of the region file. Other tools can read it
+    (osmium, QGIS, `ST_READOSM`), and card 3 accepts it as the "Cut file", which gives the same networks. The build
+    makes it when a region file is cut and **Base map layers** is on (the raw cut is there only then). Without them
+    the button is hidden, and the help of the card says why. The file is not in the zip. `www/e2e.py` checks it.
+    The writer is `cutfile.rs` in `duckosm-core` (zlib blobs from `miniz_oxide`, the same bytes in the browser and
+    natively). The CLI has `--cut-pbf` and `--cut-osm` (`.osm` XML; the page does not use the XML).
+    Measured on 2026-11-02, natively (the browser file for Monaco has the same bytes): Monaco 552,200 bytes, written in
+    0.02 s (XML 7.1 MB); Tartu from the Estonia file 2,690,546 bytes, written in 0.15 s (XML 42.4 MB). The files
+    equal osmium's `smart` cut: `ST_READOSM` gives the same rows (kind, id, tags, refs, coordinates, roles, types) for
+    the Monaco file and for `tests/data/monaco_smart.osm.pbf`; osmium reads both files and says they are ordered.
+    A build of the Monaco and Tartu cut files gives the same `edges_driving` as the build from the region file (all
+    columns except the geometry, 2,765 and 28,340 rows).
   - One block for each table: its name, one sentence on what it holds, and a link for each mode with the number
     of rows. A link goes to duckOSM's reference of the columns. With the base-map layers, one more block,
     `features`, has a tile for each layer (its name and number of rows; a click downloads it); the zip has them as

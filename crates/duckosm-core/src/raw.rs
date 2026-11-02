@@ -29,6 +29,8 @@ pub struct Raw {
     pub nodes: Vec<RawNode>,
     pub ways: Vec<RawWay>,
     pub relations: Vec<Relation>,
+    /// The replication time of the region file's header (seconds since 1970), for the header of the cut file.
+    pub timestamp: Option<i64>,
 }
 
 /// DuckDB `map_concat(tags, new)`: a key that is there gets the new value in its place, a new key goes at the end.
