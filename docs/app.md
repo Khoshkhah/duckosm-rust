@@ -369,7 +369,7 @@ A change of format does not build the roads again. The map worker keeps its tile
 
 Each build is saved in the browser (OPFS, the origin private file system): the tables as Parquet files, `meta.json` (the
 name, the boundary, the fixes text, the summary and the table list) and a cache of the drawn roads (`viz_roads.parquet`,
-`viz_features.parquet`). The code is `www/app/area_store.js`. A new visit shows a banner above the cards: **Restore**
+`viz_features.parquet`). The code is `www/app/area_store.js`. A new visit shows a banner above the cards: **Open**
 loads the last area into DuckDB and draws the map again with no build (Monaco: 1.6 s). The **Saved** tab of card 1 lists all
 areas, with **Open** and **Delete**.
 
