@@ -161,7 +161,7 @@ with sync_playwright() as p:
     edges = int(sql(page, "SELECT count(*) FROM visualization.edge_levels")[0])
     before = sql(page, "SELECT count(*) FROM visualization.edge_levels WHERE head_end_m = 7 OR head_start_m = 7")[0]
 
-    # open the editor: the level area from the tables, the editor's roads on the page's map (tiles lv://), its panel on the right
+    # open the editor: the level area from the tables, the page's roads stay, its panel on the right
     # the longest task of the main thread while the editor opens (the editor's engine is in a worker: the page does not stop)
     page.evaluate("""window.longTask = 0; new PerformanceObserver((l) => l.getEntries().forEach((e) =>
         window.longTask = Math.max(window.longTask, e.duration))).observe({type: 'longtask'})""")
@@ -276,13 +276,14 @@ with sync_playwright() as p:
     assert page.evaluate("window.solves") == 0, "the second open of the same area starts from the stored levels"
     print("editor:", page.inner_text("#editnote"))
     assert made["roads"] > 6000 and made["pairs"] > 0, made      # Monaco: 6,830 roads (13,298 edges)
-    # the editor draws its own roads on the page's map (roadstyle's editor page: its own tiles lv://, the hover and the picks in its colours); the page's
-    # roads source is still there, and its road layers are off while the editor is open
-    assert page.evaluate("window.duckMap.getStyle().sources['rs-lv-roads'].tiles[0]").startswith("lv://"), "the editor's roads"
+    # the editor keeps the page's roads (roadstyle's `host` mode): it builds no roads or tiles of its own (no lv:// tiles, no `build` or `draw` call of
+    # its worker), and its panel and end markers are all that is new on the map. A change goes to replaceRoads (the page's map worker: relevel).
+    assert page.evaluate("window.duckMap.getStyle().sources['rs-roads'].tiles[0]").startswith("rs://"), "the page's roads stay"
+    assert not page.evaluate("Object.keys(window.duckMap.getStyle().sources).some((id) => id.startsWith('rs-lv-'))"), "the editor has no roads of its own"
     assert page.evaluate("'lv-ends' in window.duckMap.getStyle().sources"), "the editor's end markers"
-    assert page.evaluate("window.duckMap.getStyle().layers.some((l) => l.source === 'rs-lv-roads' && l['source-layer'] === 'simple')"), "the editor's road layers"
-    assert not page.evaluate("window.duckMap.getStyle().layers.some((l) => l.source === 'rs-roads' && l['source-layer'] === 'simple')"), "the page's road layers are off"
-    print("the editor draws its own roads (rs-lv-roads) on the page's map")
+    assert page.evaluate("window.duckMap.getStyle().layers.some((l) => l.source === 'rs-roads' && l['source-layer'] === 'simple')"), "the page's road layers stay"
+    assert "build" not in page.evaluate("window.workerSeconds") and "draw" not in page.evaluate("window.workerSeconds"), "the open builds no map"
+    print("the editor keeps the page's roads (rs-roads): no map of its own at open")
     assert page.is_visible("#lv"), "the editor's panel"
     page.evaluate("window.rsSelect(200)")          # a road picked, as a click on it does: the panel shows its card
     page.wait_for_function("window.duckMap.loaded()", timeout=120_000)
@@ -325,6 +326,10 @@ with sync_playwright() as p:
         said = page.evaluate("([r, c]) => window.lvApi('/api/apply', {ops: [{op: 'cap', road: r, end: 'start', cap: c}]})", [road, cap])
         assert said["ok"] and said["redrawn"], said
         print(f"edit: a cap ({cap or 'auto'}): {time.time() - t:.2f} s until the map is drawn again ({said['said']})")
+    assert "build" not in page.evaluate("window.workerSeconds"), "a change builds no new map of all tiles (the page's map worker redraws the changed edges: relevel)"
+    counts = page.evaluate("window.relevelCounts")
+    print("relevel counts of the last change:", counts)
+    assert counts["edges"] > 0 and not counts["style_changed"], ("a change redraws only the changed edges and keeps the page's style", counts)
     print("the worker's last times (s):", {k: round(v, 2) for k, v in page.evaluate("window.workerSeconds").items()})
     assert page.evaluate("window.solvedEvents") == 3
     page.click("#lv-back")

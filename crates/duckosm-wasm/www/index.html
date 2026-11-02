@@ -1947,7 +1947,9 @@ async function replaceRoads(rows) {
   if (r.style) {
     await useStyle(r.style);
   } else {
-    for (const id of Object.keys(map.getStyle().sources)) if (id.startsWith("rs-")) map.getSource(id).reload?.();
+    // MapLibre 5 has no source.reload(): setTiles with the same URLs drops the source's tiles and loads the visible ones again (the map worker's
+    // LiveMap keeps the other tiles, so only the pieces of the changed edges are cut again)
+    for (const [id, s] of Object.entries(map.getStyle().sources)) if (id.startsWith("rs-") && s.type === "vector") map.getSource(id).setTiles(s.tiles);
   }
   lap(r.style ? "new style" : "tiles reload", t);
   t = performance.now();
@@ -2012,14 +2014,11 @@ $("edit-open").onclick = async () => {
     document.querySelectorAll(".maplibregl-popup").forEach((p) => p.remove());
     // the worker loads roadstyle's module by this URL (the deploy puts its version on it, version_refs.py)
     const pkgUrl = new URL("./map/pkg/roadstyle_wasm.js", location.href);
-    // the view stays: the module fits the map to the area when it starts (level_editor.js, "else map.fitBounds"), which moves what the user sees
-    const fit = map.fitBounds;
-    map.fitBounds = () => map;
     t = performance.now();
-    // `look`: the page's saved look gives the editor's roads the page's palette, sections and colour options (roadstyle 0.26.2)
-    try { editor = await levelEditor({ map, panel: $("sb"), backLabel: "Steps", pkgUrl, store, dashboard: rs, prefix: "rs-", levels: levels ?? undefined,
-      look: await (lookText ??= fetch("map/look.json").then((r) => r.text())) }); }
-    finally { map.fitBounds = fit; }
+    // `host`: the editor keeps the page's roads (it builds no roads or tiles of its own) and gives replaceRoads the edges that a change redrew;
+    // `look`: the page's saved look, in which the editor finds the page's select and hover colours (it swaps them for its red and blue picks)
+    editor = await levelEditor({ map, panel: $("sb"), backLabel: "Steps", pkgUrl, store, dashboard: rs, prefix: "rs-", levels: levels ?? undefined,
+      host: { edgeIdCol: "edge_id", replaceRoads }, look: await (lookText ??= fetch("map/look.json").then((r) => r.text())) });
     lap("levelEditor()", t);
     lap("open, all", t0);
     editorStore = store;
