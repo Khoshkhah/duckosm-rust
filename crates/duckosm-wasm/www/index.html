@@ -1320,6 +1320,8 @@ const addImages = (images) => Promise.all(Object.entries(images).map(([n, v]) =>
 // "Show on map" and the network list are off while a draw runs or the level editor is open.
 let drawing = null, drawAgain = false;
 let opening = false;                              // the level editor is opening
+// "Opening the level editor…" in the map's busy box, as Build and Show on map show their progress (a draw that runs while it opens takes the box and puts it away)
+const openBusy = () => { $("mapbusy-text").textContent = "Opening the level editor…"; $("mapbusy").hidden = false; };
 const drawControls = () => {
   const why = drawing ? "Drawing the map…" : editor ? "Close the level editor first." : "";
   $("show").disabled = $("mapmode").disabled = !!why;
@@ -1788,6 +1790,7 @@ $("edit-open").onclick = async () => {
     `device it can show up to ${num(window.mapMaxRoads)}. Use a desktop browser, or a smaller area.`);
   opening = true;
   drawControls();
+  openBusy();
   try {
     editorStore = null;                           // the note of a store of an earlier area goes
     const t0 = performance.now();
@@ -1800,6 +1803,7 @@ $("edit-open").onclick = async () => {
     await loaded;
     if (!roadsShown) await showRoads();           // the editor draws on the page's roads
     else await drawing;
+    openBusy();                                   // the draw put the box away
     lap(`page's roads (shown before: ${roadsShown})`, t);
     editedMap = false;
     window.rsDeselect?.();
@@ -1835,6 +1839,8 @@ $("edit-open").onclick = async () => {
     areaPrep = null;
     if (stale) return $("edit-open").click();
     editNote("The level editor failed: " + e.message);
+  } finally {
+    if (!drawing) $("mapbusy").hidden = true;
   }
 };
 // "← Steps": the editor goes, and the edits that it applied (the editor's Apply and solve) go into the tables (visualization.edge_levels and the
