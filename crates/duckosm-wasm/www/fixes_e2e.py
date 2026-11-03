@@ -1,5 +1,6 @@
-"""The OSM fixes of the page (card 7, docs/app.md) in headless Chromium (Playwright): build Monaco, load a fixes file, make a road rule and a
-turn rule with the forms, break the YAML text and see the error, then build again and check the tables.
+"""The OSM fixes of the page (card 7, docs/app.md, docs/osm-editing.md) in headless Chromium (Playwright): build Monaco with the layers, open the panel,
+pick a road, a building and a node with real clicks (the form has the data of the object, and no popup shows), change them with the preset fields,
+add a turn rule, look at the list of changes (undo, select, delete), build again, and check the tables.
 
     python crates/duckosm-wasm/www/fixes_e2e.py [out folder]
 
@@ -18,6 +19,8 @@ out.mkdir(parents=True, exist_ok=True)
 server = start(0, quiet=True, directory=WWW)
 url = f"http://127.0.0.1:{server.server_address[1]}/index.html"
 errors = []
+ROAD = 503462470          # a secondary road of the sample: the walking network has it as shared_road
+LAYERS = "duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple') && l.layout?.visibility !== 'none').map((l) => l.id)"
 
 
 def rows(page, sql):
@@ -29,151 +32,201 @@ def built(page):
                            "!document.getElementById('step7-card').classList.contains('off')", timeout=600_000)
 
 
+def text(page):
+    return page.evaluate("window.fixesPanel.text() ?? ''")
+
+
+def amber(page):
+    return page.evaluate("window.fixesPanel.drawn().edits")
+
+
+def at(page, lon, lat):
+    """Move the map to the point and give the pixel of the point on the page."""
+    page.evaluate(f"window.duckMap.jumpTo({{center: [{lon}, {lat}], zoom: 18}})")
+    page.wait_for_function("!window.duckMap.isMoving()")
+    page.wait_for_timeout(1200)
+    return page.evaluate(f"(() => {{ const p = duckMap.project([{lon}, {lat}]), c = duckMap.getCanvas().getBoundingClientRect(); return [p.x + c.left, p.y + c.top]; }})()")
+
+
+def popups(page):
+    return page.evaluate("document.querySelectorAll('.maplibregl-popup:not(.rs-tip)').length")
+
+
 with sync_playwright() as p:
     browser = p.chromium.launch()
     page = browser.new_page(viewport={"width": 1400, "height": 900})
     page.on("pageerror", lambda e: errors.append(str(e)))
+    page.on("console", lambda m: "fixes panel" in m.text and print(m.text[:300]))
     page.goto(url)
     page.wait_for_function("window.mapReady && window.timings && window.timings.duckdbStart", timeout=120_000)
     page.evaluate("localStorage.clear()")
-    assert "off" in (page.get_attribute("#step7-card", "class") or ""), "card 7 waits for the build"
-    assert "after step 4" in page.inner_text("#step7-card .after")
+    assert "off" in (page.get_attribute("#step7-card", "class") or "") and "after step 4" in page.inner_text("#step7-card .after")
     page.set_input_files("#file", str(ROOT / "tests/data/monaco.geojson"))
     page.wait_for_function("window.areas >= 1", timeout=60_000)
     page.click("#tab-region")
     page.set_input_files("#region", str(ROOT / "tests/data/monaco_sample.osm.pbf"))
     page.click("#run")
     built(page)
+    page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=600_000)
     if "folded" in (page.get_attribute("#step7-card", "class") or ""):
         page.click("#step7")
     assert "No fixes" in page.inner_text("#fix-sum")
-    # the panel: the page's one panel holds it (the steps and the footer go), and ← Steps brings the steps back
-    page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=600_000)
+
+    # the panel is the page's one panel; ← Steps brings the steps back
     page.click("#fix-open")
     assert page.is_visible("#fix-panel") and not page.is_visible("#sb .sb-body") and not page.is_visible("#sb .sb-foot")
     page.click("#fix-back")
-    assert not page.is_visible("#fix-panel") and page.is_visible("#sb .sb-body") and page.is_visible("#sb .sb-foot")
+    assert not page.is_visible("#fix-panel") and page.is_visible("#sb .sb-body")
     page.click("#fix-open")
-    # a click on a road fills the way ID and shows no popup
-    point = page.evaluate("""() => { const m = window.duckMap, c = m.getCanvas().getBoundingClientRect();
-        for (const f of m.queryRenderedFeatures({layers: window.duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id)})) {
-          const g = f.geometry.type === 'LineString' ? f.geometry.coordinates : f.geometry.coordinates[0];
-          const p = m.project(g[Math.floor(g.length / 2)]);
-          const hit = m.queryRenderedFeatures(p, {layers: window.duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id)})[0];
-          if (hit && p.x > 440 && p.x < c.width - 80 && p.y > 40 && p.y < c.height - 60) {
-            // a two-way road is two halves (one feature for each direction, the same `r`): the hover lights the half that is nearest to the pointer
-            const halves = [...new Set(m.queryRenderedFeatures(p, {layers: window.duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id)}).filter((h) => h.properties.r === hit.properties.r).map((h) => h.id))];
-            return [p.x + c.left, p.y + c.top, halves]; } }
-        return null; }""")
+    assert page.is_visible("#fix-tab-edit") and page.is_visible("#fix-kind") and "Roads" in page.inner_text("#fix-kind")
+
+    # a click on a road: the form has the data of the road, all its tags are listed, and no popup shows
+    point = page.evaluate("""() => { const m = window.duckMap, c = m.getCanvas().getBoundingClientRect(), L = %s;
+        for (const f of m.queryRenderedFeatures({layers: L})) { const g = f.geometry.type === 'LineString' ? f.geometry.coordinates : f.geometry.coordinates[0];
+          const p = m.project(g[Math.floor(g.length / 2)]), hit = m.queryRenderedFeatures(p, {layers: L})[0];
+          if (hit && p.x > 440 && p.x < c.width - 100 && p.y > 60 && p.y < c.height - 80) return [p.x + c.left, p.y + c.top]; }
+        return null; }""" % LAYERS)
     assert point, "a road on the map"
-    page.mouse.move(point[0], point[1])
-    page.mouse.click(point[0], point[1])
-    page.wait_for_function("document.getElementById('fix-id').value !== ''", timeout=10_000)
+    page.mouse.move(*point)
+    page.mouse.click(*point)
+    page.wait_for_function("document.getElementById('fix-id').value !== '' && document.querySelector('#fix-obj .objhead') && document.querySelector('#fix-form select')", timeout=20_000)
     page.wait_for_timeout(700)
-    assert page.evaluate("document.querySelectorAll('.maplibregl-popup:not(.rs-tip)').length") == 0, "no popup in the fixes panel"
-    print("a click on a road fills the way ID:", page.input_value("#fix-id"), "(no popup)")
+    clicked = int(page.input_value("#fix-id"))
+    assert popups(page) == 0, "no popup in the fixes panel"
+    assert "Road way" in page.inner_text("#fix-obj .objhead"), page.inner_text("#fix-obj")
+    n_tags = int(page.inner_text("#fix-obj .alltags summary").split("(")[1].split(")")[0])
+    assert n_tags >= 2, ("all the tags of the road are listed", n_tags)
+    edges = rows(page, f"SELECT any_value(lanes)::INTEGER AS lanes, bool_or(oneway) AS oneway FROM driving.edges WHERE osm_id = {clicked}")[0]
+    if edges["lanes"] is not None:
+        assert page.input_value("#fixf-lanes") == str(edges["lanes"]), ("the form starts with the data", page.input_value("#fixf-lanes"), edges)
+    assert page.input_value("#fixf-oneway") == str(bool(edges["oneway"])).lower(), "the one-way field has the data"
+    print(f"a click on a road: way {clicked}, {n_tags} tags, the form has the data (lanes {edges['lanes']}), no popup")
     page.evaluate("window.rsDeselect?.()")
-    page.fill("#fix-id", "")
 
-    # a fixes file goes into the rules; the page writes the YAML again (the comment is gone), and the ids are numbers
-    fixes_file = out / "start.yaml"
-    fixes_file.write_text("# a comment\noverrides:\n  - osm_id: 1\n    lanes: 2\n    tags: {surface: '30'}\nturn_restrictions: []\n")
-    page.set_input_files("#fixes", str(fixes_file))
-    page.wait_for_function("document.getElementById('fix-count').textContent.includes('1 road rule')")
-    y = page.input_value("#fix-yaml")
-    assert "osm_id: 1" in y and "comment" not in y and "turn_restrictions" not in y, y
-    page.click("#fix-tab-yaml")
-    page.click("#fix-clear")
-    page.click("#fix-tab-roads")
-    assert "No fixes" in page.inner_text("#fix-count") and page.input_value("#fix-yaml") == ""
-
-    # a road rule from the form
-    way = rows(page, "SELECT osm_id FROM driving.edges WHERE lanes IS NOT NULL AND lanes != 7 AND osm_id IN (SELECT osm_id FROM walking.edges) LIMIT 1")[0]["osm_id"]
-    walk_before = rows(page, f"SELECT count(*)::INTEGER AS n FROM walking.edges WHERE osm_id = {way}")[0]["n"]
-    page.fill("#fix-id", str(way))
+    # a road rule with preset fields: lanes (a key of the rule), sidewalk and surface (tags)
+    page.fill("#fix-id", str(ROAD))
     page.click("#fix-load")
-    page.wait_for_function(f"document.getElementById('fix-road').textContent.startsWith('Way {way}:')")
-    assert "not in the networks" not in page.inner_text("#fix-road"), page.inner_text("#fix-road")
+    page.wait_for_function(f"document.querySelector('#fix-obj .objhead')?.textContent.includes('way {ROAD}') && document.querySelector('#fixf-sidewalk')", timeout=20_000)
+    assert page.input_value("#fixf-sidewalk") == "", "no sidewalk tag in the data"
+    page.select_option("#fixf-sidewalk", "both")
+    page.select_option("#fixf-surface", "paved")
+    page.fill("#fixf-lanes", "7")
     page.click("#fix-save")
-    assert "at least one value" in page.inner_text("#fix-yaml-err")
-    page.fill("#fix-lanes", "7")
-    page.fill("#fix-tags", "surface=paved, maxspeed=30")
-    page.check("input[name=fix-ex][value=walking]")
-    page.fill("#fix-note", "test")
-    page.click("#fix-save")
-    y = page.input_value("#fix-yaml")
-    assert f"osm_id: {way}" in y and "lanes: 7" in y and "walking" in y and "note: test" in y, y
-    assert "surface: paved" in y and "maxspeed: '30'" in y, ("the tag values are text", y)
-    assert "1 road rule" in page.inner_text("#fix-count")
-    # the form shows the saved rule again
-    page.click("#fix-del")
-    assert page.input_value("#fix-lanes") == "" and "No fixes" in page.inner_text("#fix-count")
-    page.fill("#fix-lanes", "7")
-    page.check("input[name=fix-ex][value=walking]")
-    page.click("#fix-save")
-    page.fill("#fix-lanes", "")
-    page.click("#fix-load")
-    page.wait_for_function("document.getElementById('fix-lanes').value === '7'")
-    assert "It has a rule" in page.inner_text("#fix-road"), page.inner_text("#fix-road")
+    y = text(page)
+    assert f"id: {ROAD}" in y and "sidewalk: both" in y and "surface: paved" in y and "tag_edits" in y and "lanes: 7" in y, y
+    assert page.inner_text("#fix-n") == "1" and "1 change" in page.inner_text("#fix-apply-n")
+    page.wait_for_function("window.fixesPanel.drawn().edits > 0", timeout=20_000)
+    print("a road rule: lanes in the rule, sidewalk and surface in extra.tag_edits; the road is in the amber layer")
+    # the label of an edited field shows the mark, and Reset form takes the edit out of the form
+    assert "edited" in (page.get_attribute("label[for=fixf-sidewalk]", "class") or "")
+    page.fill("#fixf-lanes", "9")
+    page.click("#fix-revert")
+    assert page.input_value("#fixf-lanes") == "7", "Reset form: the form shows the saved rule again"
 
-    # a key that the form does not own (keep_nodes) stays when the form saves the rule again
-    page.click("#fix-tab-yaml")
-    page.fill("#fix-yaml", page.input_value("#fix-yaml") + "  - osm_id: 999999999\n    keep_nodes: [1, 2]\n    layer: 1\n")
-    page.click("#fix-yaml-save")
-    assert "2 road rules" in page.inner_text("#fix-count"), page.inner_text("#fix-count")
-    page.click("#fix-tab-roads")
-    page.fill("#fix-id", "999999999")
-    page.click("#fix-load")
-    page.wait_for_function("document.getElementById('fix-layer').value === '1'")
-    page.fill("#fix-layer", "2")
+    # a building: the kind filter, a real click, the preset fields (floors, roof shape, roof color)
+    page.click("#fix-kind [data-kind=building]")
+    b = rows(page, "SELECT osm_id, ST_X(ST_PointOnSurface(geom)) AS x, ST_Y(ST_PointOnSurface(geom)) AS y FROM features.buildings WHERE osm_type = 'way' "
+                   "AND map_extract(tags, 'building:levels')[1] IS NULL ORDER BY ST_Area(geom) DESC LIMIT 1")[0]
+    px = at(page, b["x"], b["y"])
+    page.mouse.click(*px)
+    page.wait_for_function(f"document.getElementById('fix-id').value === '{b['osm_id']}' && document.querySelector('#fixf-building_levels')", timeout=20_000)
+    page.wait_for_timeout(500)
+    assert popups(page) == 0 and "Building way" in page.inner_text("#fix-obj .objhead"), page.inner_text("#fix-obj")
+    page.fill("#fixf-building_levels", "7")
+    page.select_option("#fixf-roof_shape", "gabled")
+    page.fill("#fixf-roof_colour", "#cc3300")
     page.click("#fix-save")
-    y = page.input_value("#fix-yaml")
-    assert "keep_nodes" in y and "layer: 2" in y, y
-    page.click("#fix-del")
-    assert "1 road rule" in page.inner_text("#fix-count")
+    y = text(page)
+    assert "type: way" in y and "building:levels: '7'" in y and "roof:shape: gabled" in y and "roof:colour: '#cc3300'" in y, y
+    print(f"a building: way {b['osm_id']}, floors 7, roof gabled, roof color #cc3300")
 
-    # a turn rule: a road that has a road leaving its end
+    # a node (a traffic signal): the Nodes filter, a real click
+    page.click("#fix-kind [data-kind=node]")
+    n = rows(page, "SELECT osm_id, ST_X(geom) AS lon, ST_Y(geom) AS lat FROM features.traffic WHERE map_extract(tags, 'highway')[1] = 'traffic_signals' LIMIT 1")[0]
+    px = at(page, n["lon"], n["lat"])
+    page.mouse.click(*px)
+    page.wait_for_function(f"document.getElementById('fix-id').value === '{n['osm_id']}' && document.querySelector('#fixf-traffic_signals_direction')", timeout=20_000)
+    page.select_option("#fixf-traffic_signals_direction", "backward")
+    page.click("#fix-save")
+    y = text(page)
+    assert "type: node" in y and "traffic_signals:direction: backward" in y, y
+    page.wait_for_timeout(500)
+    # a tag that the preset does not list: add it, then delete one of the data tags
+    page.fill("#fix-addkey", "note:test")
+    page.fill("#fix-addval", "hello")
+    page.click("#fix-add")
+    page.click("#fix-save")
+    assert "note:test: hello" in text(page)
+    page.click("#fix-form [data-clear='traffic_signals']")
+    page.click("#fix-save")
+    y = text(page)
+    assert "delete:" in y and "- traffic_signals" in y, y
+    print(f"a node: {n['osm_id']}, a preset field, an added tag and a deleted tag")
+
+    # a turn rule: the road that the road click gave has a junction; the rule goes into the list of changes (and into the file)
     frm = rows(page, "SELECT a.osm_id FROM driving.edges a JOIN driving.edges b ON b.source = a.target AND b.osm_id != a.osm_id LIMIT 1")[0]["osm_id"]
     page.click("#fix-tab-turns")
     page.fill("#fix-from", str(frm))
     page.click("#fix-turn-find")
     page.wait_for_selector("#fix-out .turn")
     page.select_option("#fix-out .turn select", "no_left_turn")
-    page.click("#fix-tab-yaml")
-    y = page.input_value("#fix-yaml")
+    assert "Saved" in page.inner_text("#fix-turn-note"), page.inner_text("#fix-turn-note")
+    y = text(page)
     assert "turn_restrictions" in y and "restriction: no_left_turn" in y and f"from_way: {frm}" in y, y
-    assert "1 turn rule" in page.inner_text("#fix-count")
-    page.click("#fix-tab-turns")
-    assert "No left turn" in page.inner_text("#fix-turn-list")
 
-    # a text that is not YAML: the error shows, and the rules stay
-    page.click("#fix-tab-yaml")
-    good = page.input_value("#fix-yaml")
-    page.fill("#fix-yaml", "overrides: [")
-    page.click("#fix-yaml-save")
-    assert "not valid" in page.inner_text("#fix-yaml-err")
-    assert "1 road rule" in page.inner_text("#fix-count")
-    page.fill("#fix-yaml", "- a\n- list\n")
-    page.click("#fix-yaml-save")
-    assert "map of keys" in page.inner_text("#fix-yaml-err")
-    page.fill("#fix-yaml", good)
-    page.click("#fix-yaml-save")
-    assert page.inner_text("#fix-yaml-err") == ""
-    page.screenshot(path=str(out / "fixes.png"))
+    # the list of changes
+    page.click("#fix-tab-changes")
+    page.wait_for_function("document.querySelectorAll('#fix-list .chg').length === 4", timeout=10_000)
+    lst = page.inner_text("#fix-list")
+    assert "Road" in lst and "Building" in lst and "Node" in lst and "Turn" in lst and "sidewalk=both" in lst and "building:levels=7" in lst, lst
+    assert page.inner_text("#fix-n") == "4"
+    page.screenshot(path=str(out / "changes.png"))
+    # a click on a change selects the object, with its data, and goes to the Edit tab
+    page.click(f"#fix-list .chg[data-id='{ROAD}']")
+    page.wait_for_function(f"document.getElementById('fix-id').value === '{ROAD}' && document.querySelector('#fixf-sidewalk')?.value === 'both'", timeout=20_000)
+    assert page.is_visible("#fix-edit")
+    page.screenshot(path=str(out / "edit-road.png"))
+    # delete a change, then undo and redo
+    page.click("#fix-tab-changes")
+    page.click("#fix-list .chg[data-type=node] [data-x]")
+    page.wait_for_function("document.querySelectorAll('#fix-list .chg').length === 3")
+    page.click("#fix-undo")
+    page.wait_for_function("document.querySelectorAll('#fix-list .chg').length === 4")
+    page.click("#fix-redo")
+    page.wait_for_function("document.querySelectorAll('#fix-list .chg').length === 3")
+    page.click("#fix-undo")
+    page.wait_for_function("document.querySelectorAll('#fix-list .chg').length === 4")
+    assert "traffic_signals:direction: backward" in text(page)
 
-    # a new build with the rules: the tables have them
+    # a file that is not valid does not change the rules; a duckOSM file (overrides with tags) loads
+    saved = text(page)
+    page.evaluate("window.fixesPanel.load('overrides: [')")
+    assert page.inner_text("#fix-n") == "4"
+    page.evaluate("window.fixesPanel.load('overrides:\\n  - osm_id: 1\\n    lanes: 3\\n    tags: {surface: asphalt}\\n')")
+    assert page.inner_text("#fix-n") == "1"
+    page.evaluate("(t) => window.fixesPanel.load(t)", saved)
+    page.wait_for_function("document.getElementById('fix-n').textContent === '4'")
+
+    # build again with the rules: Apply closes the panel; the tables have the changes, and the amber layer is drawn again
     page.click("#fix-apply")
     page.wait_for_function("document.getElementById('run').hasAttribute('aria-busy')", timeout=30_000)
     built(page)
     page.wait_for_function("document.getElementById('fix-why').textContent.includes('Built with these fixes')", timeout=60_000)
-    lanes = rows(page, f"SELECT DISTINCT lanes FROM driving.edges WHERE osm_id = {way}")
+    assert not page.is_visible("#fix-panel") and "4 changes" in page.inner_text("#fix-sum"), page.inner_text("#fix-sum")
+    lanes = rows(page, f"SELECT DISTINCT lanes::INTEGER AS lanes FROM driving.edges WHERE osm_id = {ROAD}")
     assert [r["lanes"] for r in lanes] == [7], lanes
-    walk = rows(page, f"SELECT count(*)::INTEGER AS n FROM walking.edges WHERE osm_id = {way}")[0]["n"]
-    assert walk_before > 0 and walk == 0, ("the road is out of the walking network", walk_before, walk)
-    assert not page.is_hidden("#step7-card .done"), "the done mark"
-    assert not page.is_visible("#fix-panel") and "1 road rule" in page.inner_text("#fix-sum"), "Apply closes the panel; the card shows the rules"
-    print(f"fixes_e2e.py: way {way} has 7 lanes after the build, turn rule from way {frm}; no page errors" if not errors else errors)
-
+    wt = {r["walk_type"] for r in rows(page, f"SELECT DISTINCT walk_type FROM walking.edges WHERE osm_id = {ROAD}")}
+    assert wt == {"sidewalk"}, ("the sidewalk tag changes the walking type", wt)
+    bt = rows(page, f"SELECT map_extract(tags, 'building:levels')[1] AS l, map_extract(tags, 'roof:shape')[1] AS r, map_extract(tags, 'roof:colour')[1] AS c "
+                    f"FROM features.buildings WHERE osm_id = {b['osm_id']} AND osm_type = 'way'")[0]
+    assert (bt["l"], bt["r"], bt["c"]) == ("7", "gabled", "#cc3300"), bt
+    nt = rows(page, f"SELECT map_extract(tags, 'traffic_signals:direction')[1] AS d, map_extract(tags, 'traffic_signals')[1] AS s, map_extract(tags, 'note:test')[1] AS n "
+                    f"FROM features.traffic WHERE osm_id = {n['osm_id']}")[0]
+    assert (nt["d"], nt["s"], nt["n"]) == ("backward", None, "hello"), nt
+    page.wait_for_function("window.fixesPanel.drawn().edits > 0", timeout=30_000)
+    assert not popups(page)
+    print(f"after the build: lanes 7, walk type sidewalk, building floors {bt['l']} roof {bt['r']} {bt['c']}, node tags changed; amber features: {amber(page)}")
     browser.close()
     server.shutdown()
 assert not errors, errors
+print("fixes_e2e.py: passed")

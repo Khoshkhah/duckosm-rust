@@ -406,24 +406,35 @@ areas, with **Open** and **Delete**.
 
 ### Step 7: fix OSM data
 
-The card holds rules that correct known errors of OpenStreetMap. The rules are a duckOSM fixes file (`overrides`, `turn_restrictions`, `new_ways`). The page keeps them as data
-(`app/fixes.js`) and writes the YAML from that data. It never edits the YAML text, so the text is always valid for the build.
-The card needs the build. It shows the number of rules and one button, **Edit fixes**, which opens the **fixes panel**.
+The card holds rules that correct known errors of OpenStreetMap and add information that OSM does not give in a usable form. The design is in [osm-editing.md](osm-editing.md).
+The rules are a fixes file: duckOSM's `overrides` and `turn_restrictions`, and the extension `extra.tag_edits` ([design.md](design.md), item 6c2). The page keeps the rules as data
+(`app/fixes.js`) and writes the YAML from them. It never edits the YAML text, and it does not show it. The card needs the build. It shows the number of changes and one button,
+**Edit fixes**, which opens the **fixes panel** (`app/fixes_panel.js`).
 
-- **The panel** is the page's one panel, as the level editor is: the steps, the title and the footer go while it is open, and **← Steps** brings them back.
-  A road click on the map fills the way ID, with no popup (the road's hover tooltip stays). **Apply and build again** closes the panel and runs step 4 with the rules.
-- **Roads.** Click a road on the map, or type its way ID, and press **Load**. The panel shows the road (name, class, one-way, lanes, layer, length) and fills the
-  form with its rule, if it has one. The form sets `oneway` (yes or no), `lanes`, `lanes_forward`, `lanes_backward`, `layer`, `turn_lanes_forward`, `turn_lanes_backward`,
-  `tags`, `exclude_modes`, `remove` and `note`. **Save rule** adds or replaces the rule of the way. **Delete rule** removes it. A `keep_nodes` key that is in the YAML stays when the form saves the rule.
-- **Turns.** Give a way ID (or click a road in this tab) and press **Find turns**. The panel lists the junctions at the end of the road and, for the junction you pick, the roads that leave it.
-  Each road has a select for the turn rule (`no_left_turn`, `only_straight_on` and the others of duckOSM). The rules are for the driving mode. The list below shows all rules, each with a **Delete** button.
-- **YAML.** The text of the file. **Use this text** reads your edit again: an error shows and the rules stay as they were. **Download** saves `osm_fixes.yaml`. **Clear all** removes every rule.
-  Comments in a file are not kept, because the page writes the YAML again.
-- The **Fixes** file of step 4 loads into the same rules. A build always reads the rules of card 7. A saved area keeps the text that it was built with.
-- The page reads the YAML with js-yaml (loaded from cdn.jsdelivr.net, as MapLibre is). The build reads it with the Rust parser (`crates/duckosm-build/src/config.rs`), which rejects keys it does not know.
+- **The panel** is the page's one panel, as the level editor is: the steps, the title and the footer go while it is open, and **← Steps** brings them back. **Apply and build again** is fixed at the bottom,
+  with the number of changes. It closes the panel and runs step 4 with the rules.
+- **Edit.** Three buttons say what a click on the map picks: **Roads**, **Buildings** or **Nodes**. A road comes from a click on the road (roadstyle's pick, with no popup), a building from a click in its footprint,
+  and a node from a click near it. Only the nodes of `features.traffic` can be picked: traffic signals and crossings. An OSM ID typed in the field and **Load** do the same. The panel then shows:
+  - the object's name and kind, and what the networks have of it (for a road: the edges, the length and the walk type of each mode);
+  - **All tags in the data**: every tag of the object (the `<mode>.ways` table for a road, `features.buildings` for a building, `features.traffic` for a node);
+  - the **preset fields** of its kind (`app/presets.json`: one list for each of road, building and node), each filled with the value that the data has now. A road has name, one-way, lanes, layer, max speed, surface, access,
+    sidewalk, cycleway, crossing, bridge, tunnel and turn lanes. A building has kind, floors (`building:levels`), height, roof shape, roof floors, roof color, facade color and the materials. A node has kind, crossing,
+    signal direction, kerb and tactile paving. A new field is a new line in the file;
+  - **Other tags**: all other tags, each with a value field and a delete button, and a row to add a tag;
+  - for a road: the modes that the road is not in, and **Remove the road**; and a note.
+  An edited field has an amber label and a **↺** button that takes the change back. **Save** writes the rule. **Reset form** shows the saved rule again. **Delete rule** removes every change of the object.
+  Only the fields that you change go into the rule. A value that you clear is a deleted tag (`delete`). A value that is the same as the data is not a change.
+- **Turns.** Click a road (or type its way ID) and press **Find turns**. The panel lists the junctions at the end of the road and, for the junction you pick, the roads that leave it. Each road has a select for the turn rule
+  (`no_left_turn`, `only_straight_on` and the others of duckOSM). The rules are for the driving mode. A saved rule shows a note and goes into **Changes**.
+- **Changes.** All rules in one list, with a count on the tab: roads, buildings, nodes and turns, each with a short text ("lanes 7, sidewalk=both"). A click on a change selects the object, zooms to it and opens it in **Edit**.
+  **Undo** and **Redo** act on the whole list. **Download** saves `osm_fixes.yaml`. **Clear all** removes every rule.
+- **The map.** Every object with a rule has an amber glow (a line for a road, a filled outline for a building, a ring for a node and for the junction of a turn rule). The selected object is blue.
+- The **Fixes** file of step 4 loads into the same rules. A build always reads the rules of card 7. A saved area keeps the text that it was built with. A file with an error shows a message and changes nothing.
+- The page reads and writes the YAML with js-yaml (loaded from cdn.jsdelivr.net, as MapLibre is). The build reads it with the Rust parser (`crates/duckosm-build/src/config.rs`), which rejects keys it does not know.
+- Limits: the changes act at the next build, not live. A node must be a traffic signal or a crossing to be picked. A building that is a multipolygon relation can be picked (its tags change through `relation` rules).
 
-The check: `fixes_e2e.py` (Monaco). It loads a file, opens the panel and goes back, clicks a real road (the way ID fills, no popup), makes a road rule and a turn rule with the forms,
-breaks the YAML text, builds again, and checks that the lanes are in `driving.edges` and that the road is not in `walking.edges`.
+The check: `fixes_e2e.py` (Monaco). It clicks a real road, a building and a node (the form has the data, no popup), changes them with the preset fields, adds a tag and deletes a tag, adds a turn rule, uses the list of changes
+(select, delete, undo, redo), loads a bad file and a duckOSM file, builds again, and checks the tables: the lanes of the road, its walking type (`sidewalk`), the floors, roof shape and color of the building, and the tags of the node.
 
 ### Step 8: edit the levels
 
