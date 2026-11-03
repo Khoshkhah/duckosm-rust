@@ -63,7 +63,9 @@ with sync_playwright() as p:
     browser = p.chromium.launch()
     ctx = browser.new_context(accept_downloads=True)   # one profile: the storage stays between the pages
     page = open_page(ctx)
+    assert page.evaluate("document.getElementById('tab-saved').hidden") and page.is_hidden("#tab-saved"), "no saved area, no Saved tab"
     before = build(page, ["driving", "walking"])
+    page.wait_for_function("!document.getElementById('tab-saved').hidden", timeout=10_000)   # the card can be folded: the attribute, not the sight
     s = saved(page)
     print("saved:", s[0]["slug"], s[0]["tables"][:40], s[0]["hasViz"])
     assert len(s) == 1 and s[0]["hasViz"] and any(t.startswith("walking.") for t in s[0]["tables"]), (len(s), s[0]["hasViz"], [t for t in s[0]["tables"] if "walk" in t][:3])
@@ -71,6 +73,7 @@ with sync_playwright() as p:
 
     page = open_page(ctx)                                 # a new visit
     page.wait_for_timeout(3000)
+    assert not page.evaluate("document.getElementById('tab-saved').hidden"), "the Saved tab shows on a new visit"
     page.wait_for_selector("#restore-banner", state="visible", timeout=30_000)
     page.click("#restore-btn")
     page.wait_for_function("document.getElementById('buildstatus').textContent.startsWith('Restored') || document.getElementById('buildstatus').textContent.startsWith('Failed')", timeout=300_000)
