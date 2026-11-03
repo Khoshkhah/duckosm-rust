@@ -17,7 +17,8 @@ export function dump(yaml, doc) {
 
 export const tagEdits = (doc) => doc.extra?.tag_edits ?? [];
 export const faceEdits = (doc) => doc.extra?.building_faces ?? [];
-export const counts = (doc) => ({ overrides: (doc.overrides ?? []).length, turns: (doc.turn_restrictions ?? []).length, tagEdits: tagEdits(doc).length, faces: faceEdits(doc).length });
+export const newWays = (doc) => doc.new_ways ?? [];
+export const counts = (doc) => ({ overrides: (doc.overrides ?? []).length, turns: (doc.turn_restrictions ?? []).length, tagEdits: tagEdits(doc).length, faces: faceEdits(doc).length, newWays: newWays(doc).length });
 
 export const findRule = (doc, id) => (doc.overrides ?? []).find((r) => r.osm_id === id) ?? null;
 
@@ -39,8 +40,9 @@ export const findTagEdit = (doc, type, id) => tagEdits(doc).find((e) => e.type =
 export function upsertTagEdit(doc, edit) {
   const list = tagEdits(doc).slice(), i = list.findIndex((e) => e.type === edit.type && e.id === edit.id);
   const set = edit.set ?? {}, del = edit.delete ?? [];
-  const clean = { type: edit.type, id: edit.id, ...(Object.keys(set).length ? { set } : {}), ...(del.length ? { delete: del } : {}), ...(edit.note ? { note: edit.note } : {}) };
-  const empty = !clean.set && !clean.delete;
+  const was = edit.was ?? {};
+  const clean = { type: edit.type, id: edit.id, ...(Object.keys(set).length ? { set } : {}), ...(del.length ? { delete: del } : {}), ...(Object.keys(was).length ? { was } : {}), ...(edit.note ? { note: edit.note } : {}) };
+  const empty = !clean.set && !clean.delete && !clean.was;
   if (i >= 0) empty ? list.splice(i, 1) : (list[i] = clean);
   else if (!empty) list.push(clean);
   if (list.length) (doc.extra ??= {}).tag_edits = list;
@@ -59,6 +61,17 @@ export function setFace(doc, building, a, b, type, computed) {
   else if (doc.extra) { delete doc.extra.building_faces; if (!Object.keys(doc.extra).length) delete doc.extra; }
 }
 
+// ---- new roads (duckOSM's `new_ways`): a way that OSM does not have. `nodes`: an OSM node id (a junction that the road joins) or [lon, lat]
+export const NEW_WAY_MIN = 9_000_000_000_000;               // the lowest id of a new way (duckOSM NEW_WAY_ID_MIN)
+export function addNewWay(doc, way) {
+  const id = Math.max(NEW_WAY_MIN - 1, ...newWays(doc).map((w) => w.id)) + 1;
+  (doc.new_ways ??= []).push({ id, nodes: way.nodes, tags: way.tags, ...(way.note ? { note: way.note } : {}) });
+  return id;
+}
+export function deleteNewWay(doc, id) {
+  doc.new_ways = newWays(doc).filter((w) => w.id !== id);
+}
+
 // ---- the rule of one object: what the person changed in it
 // `mode`: the keys of an `overrides` rule that act for each mode (oneway, lanes, layer, exclude_modes, remove, turn lanes); `set` and `delete`: the tags.
 // A way's tags from `overrides[].tags` count as set tags. Saving writes all tags to `extra.tag_edits` and takes them out of `overrides`.
@@ -68,10 +81,13 @@ export function ruleOf(doc, type, id) {
   const r = type === "way" ? findRule(doc, id) : null, e = findTagEdit(doc, type, id);
   const mode = {};
   for (const k of MODE_KEYS) if (r && r[k] != null) mode[k] = r[k];
-  return { mode, set: { ...(r?.tags ?? {}), ...(e?.set ?? {}) }, delete: [...(e?.delete ?? [])], note: e?.note ?? r?.note ?? "" };
+  return { mode, set: { ...(r?.tags ?? {}), ...(e?.set ?? {}) }, delete: [...(e?.delete ?? [])], was: { ...(e?.was ?? {}) }, note: e?.note ?? r?.note ?? "" };
 }
 
 export const isEmptyRule = (rule) => !Object.keys(rule.mode).length && !Object.keys(rule.set).length && !rule.delete.length;
+
+// `was` keeps what the data had before the change, for the keys that the rule still changes
+const pruneWas = (rule) => Object.fromEntries(Object.entries(rule.was ?? {}).filter(([k]) => k in rule.mode || k in rule.set || rule.delete.includes(k)));
 
 export function writeRule(doc, type, id, rule) {
   if (type === "way") {
@@ -79,7 +95,7 @@ export function writeRule(doc, type, id, rule) {
     if (Object.keys(mode).length || (old && "keep_nodes" in old)) upsertRule(doc, { osm_id: id, ...mode, ...(rule.note ? { note: rule.note } : {}) });
     else deleteRule(doc, id);
   }
-  upsertTagEdit(doc, { type, id, set: rule.set, delete: rule.delete, note: type === "way" ? "" : rule.note });
+  upsertTagEdit(doc, { type, id, set: rule.set, delete: rule.delete, was: pruneWas(rule), note: type === "way" ? "" : rule.note });
 }
 
 export function deleteObjectRule(doc, type, id) {
@@ -97,10 +113,11 @@ export function objects(doc) {
 
 // a short text of the rule, for the list of changes
 export function describe(doc, type, id) {
-  const { mode, set, delete: del } = ruleOf(doc, type, id), bits = [];
-  for (const [k, v] of Object.entries(mode)) bits.push(k === "exclude_modes" ? `not in ${v.join(", ")}` : k === "remove" ? "removed" : `${k} ${v}`);
-  for (const [k, v] of Object.entries(set)) bits.push(`${k}=${v}`);
-  for (const k of del) bits.push(`no ${k}`);
+  const { mode, set, delete: del, was } = ruleOf(doc, type, id), bits = [];
+  const from = (k) => (k in was ? ` (was ${was[k] === null || was[k] === "" ? "none" : was[k]})` : "");
+  for (const [k, v] of Object.entries(mode)) bits.push(k === "exclude_modes" ? `not in ${v.join(", ")}` : k === "remove" ? "removed" : `${k} ${v}${from(k)}`);
+  for (const [k, v] of Object.entries(set)) bits.push(`${k}=${v}${from(k)}`);
+  for (const k of del) bits.push(`no ${k}${from(k)}`);
   return bits.join(", ");
 }
 

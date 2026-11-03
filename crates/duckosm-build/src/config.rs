@@ -408,7 +408,8 @@ const FIX_TOP: [&str; 4] = ["overrides", "new_ways", "turn_restrictions", "extra
 /// The keys of `extra` (an extension of duckosm-rust: duckOSM reads only `overrides`, so it ignores the key `extra`).
 const FIX_EXTRA: [&str; 2] = ["tag_edits", "building_faces"];
 const FIX_FACE_EDIT: [&str; 5] = ["building", "from_node", "to_node", "type", "note"];
-const FIX_TAG_EDIT: [&str; 5] = ["type", "id", "set", "delete", "note"];
+/// `was`: what the data had before the change, kept by the page to show "was to now" (the build does not read it).
+const FIX_TAG_EDIT: [&str; 6] = ["type", "id", "set", "delete", "note", "was"];
 const FIX_RULE: [&str; 13] = [
     "osm_id",
     "oneway",
@@ -678,6 +679,9 @@ pub fn parse_osm_fixes(text: &str, label: &str) -> Result<OsmFixes, String> {
                             get("id").ok_or_else(|| err(format!("{what} has no id")))?,
                             &format!("{what}.id"),
                         )?;
+                        if !matches!(get("was"), None | Some(Yaml::Null) | Some(Yaml::Hash(_))) {
+                            return Err(err(format!("{what}.was must be a map")));
+                        }
                         let set = tags(get("set"), &format!("{what}.set"))?;
                         let delete = match get("delete") {
                             None | Some(Yaml::Null) => Vec::new(),
@@ -868,7 +872,7 @@ mod tests {
     fn extra_tag_edits() {
         let f = parse_osm_fixes(
             "overrides:\n  - osm_id: 1\n    lanes: 2\nextra:\n  tag_edits:\n    - type: way\n      id: 5\n      \
-             set: {\"building:levels\": 4, \"roof:shape\": gabled}\n      delete: [\"roof:colour\"]\n    - {type: node, id: 7, \
+             set: {\"building:levels\": 4, \"roof:shape\": gabled}\n      delete: [\"roof:colour\"]\n      was: {\"building:levels\": null, \"roof:colour\": red}\n    - {type: node, id: 7, \
              set: {crossing: marked}}\n    - {type: relation, id: 9, delete: [building], note: why}\n",
             "t",
         )
@@ -913,6 +917,7 @@ mod tests {
                 "unknown key 'nope'",
             ),
             ("extra: 3\n", "extra must be a map"),
+            ("extra:\n  tag_edits:\n    - {type: way, id: 1, was: 3}\n", "was must be a map"),
         ] {
             let e = parse_osm_fixes(text, "t").unwrap_err();
             assert!(e.contains(msg), "{text:?}: {e}");
