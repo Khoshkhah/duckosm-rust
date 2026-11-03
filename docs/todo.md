@@ -29,7 +29,7 @@ gzip; [tables.md](tables.md)). Kaveh chose it on 2026-10-23. Two other ways, for
   (about 20 MB the first time, the same sea as duckOSM), or make the sea from the coastline ways of the region file
   (no download, but no sea for Monaco, whose file has no coastline) ([features.md](features.md)).
 
-- **The level editor (card 7)**: done in part (2026-10-24, [app.md](app.md), "Step 7: edit the levels"). Still to do:
+- **The level editor (card 8)**: done in part (2026-10-24, [app.md](app.md), "Step 8: edit the levels"). Still to do:
   - The editor's place in the page's side panel (now on the right of the map). Done at roadstyle `8208486`: the
     duckOSM base-map layers stay while the editor is open, and the panel follows the page's theme.
   - `makeArea` runs in the main thread: a large area (Tartu) can stop the page while the level area is made. The

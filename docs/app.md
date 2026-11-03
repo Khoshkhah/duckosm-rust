@@ -60,7 +60,7 @@ and `docs/guides/dashboard-layout.md`). The page uses the template `dashboard` w
   The card behind the text of the panel starts at 70 % (`--rs-a-card`), and a button with a text has no tooltip box (roadstyle's `tip.js`).
 - **Disabled buttons.** An action button is `disabled` until its inputs are ready: Search (a name), GeoJSON (an area), Build (an area and a
   data file), Run (a query), Show on map and Edit levels (while a draw runs or the editor opens). A disabled button is grey (the panel's
-  tokens: the surface, the line and the muted text), has the cursor not-allowed and no hover, and the reason is the text under it ("Choose an
+  tokens: the surface, the line and the muted text), has the normal cursor (no forbidden sign) and no hover, and the reason is the text under it ("Choose an
   area in step 1."), not a tooltip. `buttons_e2e.py` checks each of them before and after its inputs, on a computer (light and dark) and on a phone.
 - **The help windows.** The panel's title has the "?" of roadstyle's help window (`rs.help.set`: the window and its button are roadstyle's, the page gives
   the words in Simplified Technical English). The window has the overview of the page, where the data stays (this browser only) and the links to the
@@ -152,7 +152,7 @@ On a screen of 700 px or less:
   the page's steps, its title and its footer are hidden while the editor is open, and **← Steps** at the top of the panel brings them
   back. The panel is roadstyle's: on a phone it is the sheet (closed, 40 %, full), and the editor's bar with **Apply and solve** is fixed at
   its bottom. A finger can pick a road (a wide line that takes the taps). After **← Steps**, the page's panel comes back in the
-  state it had, with card 7 in view and the map's padding for it.
+  state it had, with card 8 in view and the map's padding for it.
 - Before 2026-10-24 the editor's panel (400 px wide) covered the whole screen of a phone, and Apply and Close were
   under it.
 
@@ -227,11 +227,11 @@ Kaveh (2026-10-24): "the result card is not well designed and take many space an
   (it keeps only "collapse all", `duckosm.cards`).
 - A card whose inputs are not ready is disabled: its title is grey, its chevron does not open it, a click on it does nothing, and the title row says
   why ("after step 1"). Card 2 needs an area; card 3 is always active (a cut file needs no area); card 4 needs the data; cards 5 and 6 need the build;
-  card 7 needs the build and the table `visualization.edge_levels`.
+  card 7 needs the build; card 8 needs the build and the table `visualization.edge_levels`.
 - A finished step has a done mark (✓) and can still be opened: card 1 and card 2 with an area, card 3 with the data ready, card 4 with the build,
-  cards 5 and 6 with the map drawn, card 7 with the edits applied.
+  cards 5 and 6 with the map drawn, card 7 with a build that used fixes, card 8 with the edits applied.
 - When a step is finished, the next card that is ready and not done opens, and the others fold, unless the person opened or folded a card by hand
-  (then only the next card opens). So an area opens card 3, the data opens card 4, the build opens card 5, and the map opens card 7.
+  (then only the next card opens). So an area opens card 3, the data opens card 4, the build opens card 5, and the map opens card 8. Card 7 (fixes) is optional: the page never opens it by itself, and you open it by hand.
 - A heading, or its chevron, opens or folds an active card. Collapse all / Expand all acts on the active cards only.
 
 `panel_e2e.py` runs the flow from the start to the editor and checks each state; `dashboard_e2e.py` checks the grey look of the cards that are not ready.
@@ -404,7 +404,28 @@ areas, with **Open** and **Delete**.
 - The edits of the level editor are not here: roadstyle's own browser store keeps them.
 - Test: `python crates/duckosm-wasm/www/saved_e2e.py <out folder>` (build, new visit, restore, a smaller rebuild).
 
-### Step 7: edit the levels
+### Step 7: fix OSM data
+
+The card holds rules that correct known errors of OpenStreetMap. The rules are a duckOSM fixes file (`overrides`, `turn_restrictions`, `new_ways`). The page keeps them as data
+(`app/fixes.js`) and writes the YAML from that data. It never edits the YAML text, so the text is always valid for the build.
+The card needs the build. It shows the number of rules and one button, **Edit fixes**, which opens the **fixes panel**.
+
+- **The panel** is the page's one panel, as the level editor is: the steps, the title and the footer go while it is open, and **← Steps** brings them back.
+  A road click on the map fills the way ID, with no popup (the road's hover tooltip stays). **Apply and build again** closes the panel and runs step 4 with the rules.
+- **Roads.** Click a road on the map, or type its way ID, and press **Load**. The panel shows the road (name, class, one-way, lanes, layer, length) and fills the
+  form with its rule, if it has one. The form sets `oneway` (yes or no), `lanes`, `lanes_forward`, `lanes_backward`, `layer`, `turn_lanes_forward`, `turn_lanes_backward`,
+  `tags`, `exclude_modes`, `remove` and `note`. **Save rule** adds or replaces the rule of the way. **Delete rule** removes it. A `keep_nodes` key that is in the YAML stays when the form saves the rule.
+- **Turns.** Give a way ID (or click a road in this tab) and press **Find turns**. The panel lists the junctions at the end of the road and, for the junction you pick, the roads that leave it.
+  Each road has a select for the turn rule (`no_left_turn`, `only_straight_on` and the others of duckOSM). The rules are for the driving mode. The list below shows all rules, each with a **Delete** button.
+- **YAML.** The text of the file. **Use this text** reads your edit again: an error shows and the rules stay as they were. **Download** saves `osm_fixes.yaml`. **Clear all** removes every rule.
+  Comments in a file are not kept, because the page writes the YAML again.
+- The **Fixes** file of step 4 loads into the same rules. A build always reads the rules of card 7. A saved area keeps the text that it was built with.
+- The page reads the YAML with js-yaml (loaded from cdn.jsdelivr.net, as MapLibre is). The build reads it with the Rust parser (`crates/duckosm-build/src/config.rs`), which rejects keys it does not know.
+
+The check: `fixes_e2e.py` (Monaco). It loads a file, opens the panel and goes back, clicks a real road (the way ID fills, no popup), makes a road rule and a turn rule with the forms,
+breaks the YAML text, builds again, and checks that the lanes are in `driving.edges` and that the road is not in `walking.edges`.
+
+### Step 8: edit the levels
 
 Kaveh's words (2026-10-24): "Add editing dashboard to duckosm rust github io dashboard". The card **Edit levels** puts
 roadstyle's level editor on the page's map. The drawing order (`visualization.edge_levels`, [levels.md](levels.md)) comes
@@ -482,7 +503,7 @@ Limits:
   and Burnaby's `pairs.csv` (12.2 MB) was larger (Kaveh, 2026-10-25: "exceeded the quota"). Since `65af6e6` every file
   of the editor is in the site's private file system (OPFS); `localStorage` keeps only the save times. Burnaby's editor
   now opens with its files kept (76,189 roads, 232,831 pairs, 23 s). If the private file system fails too (a full
-  storage), a file that the browser cannot keep stays in memory for the page, the editor opens, and card 7 says: "The browser could not keep the area files (N MB): your edits stay only until you
+  storage), a file that the browser cannot keep stays in memory for the page, the editor opens, and card 8 says: "The browser could not keep the area files (N MB): your edits stay only until you
   close the page; download edits.csv to keep them." `editor_e2e.py` tests it with a private file system that refuses each file over 100 KB (Monaco: 2.7 MB stays in
   memory).
 - A build of the page has no `level_edits`, `level_heads` or `level_caps` tables. Thus the editor starts from the store
@@ -490,7 +511,7 @@ Limits:
 - Monaco takes 2.2 to 2.9 s to open (6,830 roads, 21,476 pairs). Since roadstyle `7d4534f`, the editor solves, makes
   its map and cuts its tiles in a Web Worker, so the page does not stop: the longest task of the main thread while
   Monaco opens is 0.16 s. `makeArea` still runs in the main thread. A larger area was not tested in the page.
-- If the editor's worker stops (no memory, a file that does not load), its waiting calls fail, and card 7 says so.
+- If the editor's worker stops (no memory, a file that does not load), its waiting calls fail, and card 8 says so.
   Close the editor and open it again.
 - `edge_levels_meta.roadstyle_version` keeps the value of the build: the page does not know the version of roadstyle's
   module.
@@ -596,7 +617,7 @@ Street View's Linked mode and Google 3D need a Google Maps JavaScript API key. K
   the tables, the roads style, SQL, `load.sql`. The page calls it.
 - `serve.py` does not change. `build_worker.js` sends the kept panic message after a panic. `map/map_worker.js` makes the
   style and the road table.
-- Card 7 is in `index.html`. `app/duck.js` has `levelEdges` (the edges of the level area) and `saveLevels` (Apply).
+- Cards 7 and 8 are in `index.html`. Card 7 keeps its rules in `app/fixes.js`. `app/duck.js` has `levelEdges` (the edges of the level area) and `saveLevels` (Apply).
 - `e2e.py` uses the new page: the boundary goes in through the File tab. `boundary_e2e.py` opens `index.html`
   and checks that **Build** is on after an area and a region file.
 

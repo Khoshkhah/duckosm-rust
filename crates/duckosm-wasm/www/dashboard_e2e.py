@@ -108,7 +108,7 @@ with sync_playwright() as p:
         seen = looks()
         assert len(seen) == 2 and all(x == seen[0] for x in seen) and seen[0][4] == "", (theme, seen)       # steps 1 and 3 are active at the start
         grey = page.evaluate("""() => [...document.querySelectorAll('.step.off')].map((s) => [getComputedStyle(s).backgroundColor, getComputedStyle(s.querySelector('.rs-sec-hd')).cursor])""")
-        assert len(grey) == 5 and all(g == grey[0] and g[1] == "not-allowed" for g in grey), (theme, grey)
+        assert len(grey) == 6 and all(g == grey[0] and g[1] == "default" for g in grey), (theme, grey)
     page.click(tool("theme"))
     page.wait_for_timeout(300)
     assert page.evaluate("document.documentElement.dataset.rsTheme") == "light"

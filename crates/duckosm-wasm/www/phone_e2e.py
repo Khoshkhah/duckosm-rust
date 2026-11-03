@@ -139,11 +139,11 @@ with sync_playwright() as p:
         page.wait_for_function("!window.levelEditorOpen && !window.mapDrawing && window.duckMap.loaded()", timeout=300_000)
         page.wait_for_timeout(400)
         same("closed")
-        assert page.is_visible("#step7-card") and page.is_visible("footer") and not page.is_visible("#lv")
-        # the page's sheet again, in the state it had, with the map's padding for it, and card 7 in view in it
+        assert page.is_visible("#step8-card") and page.is_visible("footer") and not page.is_visible("#lv")
+        # the page's sheet again, in the state it had, with the map's padding for it, and card 8 in view in it
         assert state() == before and abs(page.evaluate(BOX, "sb")[3] - H) < 1 and abs(padding() - under_grip()) < 2, (state(), padding(), under_grip())
-        top, card = page.evaluate(BOX, "sb")[1], page.evaluate(BOX, "step7-card")
-        assert min(card[3], H) - max(card[1], top) >= 100, ("card 7 in view again (100 px of it in the sheet)", top, card)
+        top, card = page.evaluate(BOX, "sb")[1], page.evaluate(BOX, "step8-card")
+        assert min(card[3], H) - max(card[1], top) >= 100, ("card 8 in view again (100 px of it in the sheet)", top, card)
         assert page.evaluate("scrollY") == 0
 
     ref = page.evaluate("(() => { const c = window.duckMap.getCenter(); return [c.lng + 0.001, c.lat + 0.001]; })()")

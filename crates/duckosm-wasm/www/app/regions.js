@@ -33,7 +33,19 @@ export async function download(x, onProgress, signal) {
   signal?.addEventListener("abort", () => ctl.abort());
   const get = (url, init) => fetch(`${relay}?url=${encodeURIComponent(url)}`, { signal: ctl.signal, ...init });
   const bad = async (r) => new Error(`the relay answered ${r.status}: ${(await r.text()).trim()}`);
-  const head = await get(x.pbf, { method: "HEAD" });
+  // "<region>-latest.osm.pbf" is a redirect that Geofabrik answers after about 30 s, each time (2026-11, a big region; 502 and 503 under
+  // load). A dated file that is there answers in 0.5 s, and one that is not there waits about 30 s. So ask for the files of the last
+  // days (UTC, the newest first) at the same time, wait 1.5 s, and take the newest that has answered: it is what "latest" is. If none has
+  // answered, the old request for "latest" is the fallback.
+  const dated = (back) => x.pbf.replace("-latest.", `-${new Date(Date.now() - back * 864e5).toISOString().slice(2, 10).replace(/-/g, "")}.`);
+  const tries = [0, 1, 2, 3, 4].map((back) => {
+    const t = { stop: new AbortController(), head: null };
+    t.done = get(dated(back), { method: "HEAD", signal: t.stop.signal }).then((h) => (t.head = h), () => null);
+    return t;
+  });
+  await Promise.race([Promise.all(tries.map((t) => t.done)), new Promise((ok) => setTimeout(ok, 1500))]);
+  for (const t of tries) t.stop.abort();
+  const head = tries.find((t) => t.head?.ok)?.head ?? await get(x.pbf, { method: "HEAD" });
   if (!head.ok) throw await bad(head);
   const total = Number(head.headers.get("Content-Length")) || 0;
   const url = head.headers.get("Content-Location");           // the dated file: all parts are of one version

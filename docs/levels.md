@@ -189,7 +189,7 @@ against it (complementary slackness). This is a proof that the flow is the best.
 The page's check (at roadstyle `083224c`: `levels_keyword` in roadstyle-io's `duckosm.rs`) accepts `area`, `tags`
 and `solve`. roadstyle's Python level editor (`load_area_levels`) accepts `area` only. To edit the levels of a Rust build:
 
-- in the page, card 7 **Edit levels** ([app.md](app.md), "Step 7: edit the levels"): roadstyle's level editor solves in
+- in the page, card 8 **Edit levels** ([app.md](app.md), "Step 8: edit the levels"): roadstyle's level editor solves in
   the page, and **Apply** replaces the two tables (`source` = `area`) and writes `level_edits`, `level_heads` and
   `level_caps`;
 - natively, run `duckosm levels` on the file: it makes a level area and replaces the two tables.
@@ -199,7 +199,7 @@ and `solve`. roadstyle's Python level editor (`load_area_levels`) accepts `area`
 These parts of roadstyle are off in duckOSM, or only roadstyle's level editor has them. Each one can come later in the
 Rust build, when a user needs it:
 
-- the edits, heads and caps (`level_edits`, `level_heads`, `level_caps`) in a build. The page's editor (card 7) now
+- the edits, heads and caps (`level_edits`, `level_heads`, `level_caps`) in a build. The page's editor (card 8) now
   makes them and solves with them, with roadstyle's own solver (roadstyle-wasm), but `duckosm-rust` does not read them in
   a build;
 - `auto_ends` (heads and caps from the geometry; duckOSM uses the fixed 5 m and the round caps);
