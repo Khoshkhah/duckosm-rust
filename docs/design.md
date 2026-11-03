@@ -351,6 +351,14 @@ Rule: a skipped test is not a pass.
    Limits: the reader keeps only highway ways and ferry lines, so a `tags` rule or `tags_from` on another
    way has no effect. A tag value that YAML reads as true or false is an error, so write it in quotes. The
    WebAssembly page does not take a fixes file yet.
+6c2. **Tag edits, `extra.tag_edits` (2026-11-03).** An extension of duckosm-rust for the page's fixes panel ([osm-editing.md](osm-editing.md)). The key `extra`
+   is new, so a file with only duckOSM keys has no change in its output, and duckOSM (Python) ignores the key: it reads only `overrides`. Each rule
+   sets and deletes tags of one way, node or relation: `{type: way|node|relation, id, set: {key: value}, delete: [key], note}`. The tags are set first, then
+   deleted. The rule acts at the same point as `tags` of a rule in `overrides`: on the ways as read (so the network sees them) and on `raw.*` (so the
+   base-map layers see them). A node edit and a relation edit act on `raw.*` only. So a crossing or a traffic signal (a node) and a multipolygon building (a
+   relation) can change. A rule for an element that is not in the area does nothing. `tests/tag_edits.rs`: a `sidewalk` tag on a road of Monaco changes the walking
+   type of its edges from `shared_road` to `sidewalk`.
+
 6d. **Estonia (done, 2026-10-22).** The scale test: `estonia-latest.osm.pbf` (121 MB), the three modes,
    everything of the network step on (merge, global junctions, the sidewalk rule, the connector, speeds,
    costs, the walk and cycle types), the OSM fixes of duckOSM, no boundary. The golden comes from duckOSM

@@ -12,7 +12,7 @@
 use crate::levels::Method;
 use crate::Params;
 use duckosm_core::filter::Mode;
-use duckosm_core::fixes::{NewNode, NewWay, OsmFixes, TurnFix, WayFix};
+use duckosm_core::fixes::{Elem, NewNode, NewWay, OsmFixes, TagEdit, TurnFix, WayFix};
 use duckosm_core::network::Options;
 use std::path::{Path, PathBuf};
 use yaml_rust2::{Yaml, YamlLoader};
@@ -403,7 +403,10 @@ pub fn read(path: &Path, pbf_is_cut: bool, strict: bool) -> Result<FromConfig, S
     })
 }
 
-const FIX_TOP: [&str; 3] = ["overrides", "new_ways", "turn_restrictions"];
+const FIX_TOP: [&str; 4] = ["overrides", "new_ways", "turn_restrictions", "extra"];
+/// The keys of `extra` (an extension of duckosm-rust: duckOSM reads only `overrides`, so it ignores the key `extra`).
+const FIX_EXTRA: [&str; 1] = ["tag_edits"];
+const FIX_TAG_EDIT: [&str; 5] = ["type", "id", "set", "delete", "note"];
 const FIX_RULE: [&str; 13] = [
     "osm_id",
     "oneway",
@@ -470,7 +473,7 @@ pub fn parse_osm_fixes(text: &str, label: &str) -> Result<OsmFixes, String> {
         let Some(v) = v else { return Ok(Vec::new()) };
         let h = v
             .as_hash()
-            .ok_or_else(|| err(format!("{what}.tags must be a map")))?;
+            .ok_or_else(|| err(format!("{what} must be a map")))?;
         h.iter()
             .map(|(k, v)| {
                 let val = match v {
@@ -479,7 +482,7 @@ pub fn parse_osm_fixes(text: &str, label: &str) -> Result<OsmFixes, String> {
                     Yaml::Real(r) => r.clone(),
                     _ => {
                         return Err(err(format!(
-                            "{what}.tags: write the value of '{k:?}' as a text in quotes"
+                            "{what}: write the value of '{k:?}' as a text in quotes"
                         )))
                     }
                 };
@@ -537,7 +540,7 @@ pub fn parse_osm_fixes(text: &str, label: &str) -> Result<OsmFixes, String> {
             osm_id,
             remove: s.bool("remove", false).map_err(err)?,
             keep_nodes,
-            tags: tags(s.get("tags"), &what)?,
+            tags: tags(s.get("tags"), &format!("{what}.tags"))?,
             oneway: s
                 .get("oneway")
                 .map(|_| s.bool("oneway", false))
@@ -605,7 +608,7 @@ pub fn parse_osm_fixes(text: &str, label: &str) -> Result<OsmFixes, String> {
         fixes.new_ways.push(NewWay {
             id,
             nodes,
-            tags: tags(s.get("tags"), &what)?,
+            tags: tags(s.get("tags"), &format!("{what}.tags"))?,
             tags_from: s
                 .get("tags_from")
                 .map(|v| int(v, "tags_from"))
@@ -643,6 +646,63 @@ pub fn parse_osm_fixes(text: &str, label: &str) -> Result<OsmFixes, String> {
             via_node,
             to_way,
         });
+    }
+    // `extra.tag_edits`: set and delete the tags of a way, a node or a relation (an extension: duckOSM ignores the key `extra`)
+    match root.get(&Yaml::String("extra".into())) {
+        None | Some(Yaml::Null) => {}
+        Some(Yaml::Hash(x)) => {
+            keys(x, &FIX_EXTRA, "extra")?;
+            match x.get(&Yaml::String("tag_edits".into())) {
+                None | Some(Yaml::Null) => {}
+                Some(Yaml::Array(a)) => {
+                    for (i, r) in a.iter().enumerate() {
+                        let what = format!("extra.tag_edits[{i}]");
+                        let h = r
+                            .as_hash()
+                            .ok_or_else(|| err(format!("{what} must be a map")))?;
+                        keys(h, &FIX_TAG_EDIT, &what)?;
+                        let get = |k: &str| h.get(&Yaml::String(k.into()));
+                        let elem = match get("type").and_then(|v| v.as_str()) {
+                            Some("way") => Elem::Way,
+                            Some("node") => Elem::Node,
+                            Some("relation") => Elem::Relation,
+                            _ => {
+                                return Err(err(format!(
+                                    "{what}.type must be way, node or relation"
+                                )))
+                            }
+                        };
+                        let id = int(
+                            get("id").ok_or_else(|| err(format!("{what} has no id")))?,
+                            &format!("{what}.id"),
+                        )?;
+                        let set = tags(get("set"), &format!("{what}.set"))?;
+                        let delete = match get("delete") {
+                            None | Some(Yaml::Null) => Vec::new(),
+                            Some(Yaml::Array(d)) => d
+                                .iter()
+                                .map(|k| {
+                                    k.as_str().map(String::from).ok_or_else(|| {
+                                        err(format!("{what}.delete must be a list of keys"))
+                                    })
+                                })
+                                .collect::<Result<_, _>>()?,
+                            Some(_) => {
+                                return Err(err(format!("{what}.delete must be a list of keys")))
+                            }
+                        };
+                        fixes.tag_edits.push(TagEdit {
+                            elem,
+                            id,
+                            set,
+                            delete,
+                        });
+                    }
+                }
+                Some(_) => return Err(err("extra.tag_edits must be a list".into())),
+            }
+        }
+        Some(_) => return Err(err("extra must be a map".into())),
     }
     Ok(fixes)
 }
@@ -767,5 +827,60 @@ mod tests {
         assert_eq!(r.params.modes, vec![Mode::Driving, Mode::Walking]);
         assert!(!r.params.options.merge_segments);
         assert_eq!(r.ignored.len(), 1);
+    }
+
+    #[test]
+    fn extra_tag_edits() {
+        let f = parse_osm_fixes(
+            "overrides:\n  - osm_id: 1\n    lanes: 2\nextra:\n  tag_edits:\n    - type: way\n      id: 5\n      \
+             set: {\"building:levels\": 4, \"roof:shape\": gabled}\n      delete: [\"roof:colour\"]\n    - {type: node, id: 7, \
+             set: {crossing: marked}}\n    - {type: relation, id: 9, delete: [building], note: why}\n",
+            "t",
+        )
+        .unwrap();
+        assert_eq!(f.ways.len(), 1);
+        let e = &f.tag_edits;
+        assert_eq!(e.len(), 3);
+        assert_eq!((e[0].elem, e[0].id), (Elem::Way, 5));
+        assert_eq!(
+            e[0].set,
+            [
+                ("building:levels".to_string(), "4".to_string()),
+                ("roof:shape".to_string(), "gabled".to_string())
+            ]
+        );
+        assert_eq!(e[0].delete, ["roof:colour"]);
+        assert_eq!((e[1].elem, e[1].id, e[1].set.len()), (Elem::Node, 7, 1));
+        assert_eq!(
+            (e[2].elem, e[2].delete.clone()),
+            (Elem::Relation, vec!["building".to_string()])
+        );
+        // a file with only duckOSM keys has no tag edit
+        assert!(
+            parse_osm_fixes("overrides:\n  - osm_id: 1\n    lanes: 2\n", "t")
+                .unwrap()
+                .tag_edits
+                .is_empty()
+        );
+        for (text, msg) in [
+            ("extra:\n  other: 1\n", "unknown key 'other' in extra"),
+            (
+                "extra:\n  tag_edits:\n    - {type: area, id: 1}\n",
+                "type must be way, node or relation",
+            ),
+            ("extra:\n  tag_edits:\n    - {type: way}\n", "has no id"),
+            (
+                "extra:\n  tag_edits:\n    - {type: way, id: 1, delete: x}\n",
+                "delete must be a list of keys",
+            ),
+            (
+                "extra:\n  tag_edits:\n    - {type: way, id: 1, nope: 1}\n",
+                "unknown key 'nope'",
+            ),
+            ("extra: 3\n", "extra must be a map"),
+        ] {
+            let e = parse_osm_fixes(text, "t").unwrap_err();
+            assert!(e.contains(msg), "{text:?}: {e}");
+        }
     }
 }
