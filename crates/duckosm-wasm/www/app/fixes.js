@@ -68,6 +68,10 @@ export function addNewWay(doc, way) {
   (doc.new_ways ??= []).push({ id, nodes: way.nodes, tags: way.tags, ...(way.note ? { note: way.note } : {}) });
   return id;
 }
+export function updateNewWayTags(doc, id, tags) {
+  const w = newWays(doc).find((x) => x.id === id);
+  if (w) w.tags = tags;
+}
 export function deleteNewWay(doc, id) {
   doc.new_ways = newWays(doc).filter((w) => w.id !== id);
 }

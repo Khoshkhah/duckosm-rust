@@ -280,7 +280,7 @@ export async function initFixesPanel(ctx) {
     $("fix-id").value = sel?.id ?? "";
     if (sel && !data) select(k, sel.type, sel.id, { go: false });       // an object that waited for its data (a build came between)
   }
-  function setTab(name) {
+  function setTab(name, { zoom = false } = {}) {
     if (EDIT.includes(name) && name !== kind) switchKind(name);
     current = name;
     for (const t of TABS) $(`fix-tab-${t}`).setAttribute("aria-selected", String(t === name));
@@ -293,7 +293,7 @@ export async function initFixesPanel(ctx) {
     if (name === "turns" && !$("fix-turnsec").hidden) outgoing();
     if (draw) map.getCanvas().style.cursor = name === "new" ? "crosshair" : "";
     paintDots();
-    if (open()) { drawSelected(false, { turn: name === "turns" && !$("fix-turnsec").hidden ? { via: $("fix-via").value } : null }); drawFaces(); }
+    if (open()) { drawSelected(zoom, { turn: name === "turns" && !$("fix-turnsec").hidden ? { via: $("fix-via").value } : null }); drawFaces(); }
   }
   // an amber dot on the tab that has edits that are not in the changes yet
   function paintDots() {
@@ -362,7 +362,7 @@ export async function initFixesPanel(ctx) {
       if (sel && !c.dataset.turn && sel.type === c.dataset.type && sel.id === Number(c.dataset.id) && data) { draft = initialDraft(); renderForm(); }
       return;
     }
-    if (c.dataset.newway) { const w = F.newWays(doc).find((x) => x.id === Number(c.dataset.newway)); if (w) zoomTo(await newWayLine(w)); return; }
+    if (c.dataset.newway) { setTab("new"); startEdit(Number(c.dataset.newway)); drawSelected(true); return; }
     if (c.dataset.face) { select("building", "way", Number(c.dataset.face.split("|")[0]), { zoom: true }); return; }
     if (c.dataset.turn) { const [a, b] = c.dataset.turn.split("|").map(Number); setTab("turns"); $("fix-from").value = a; findTurns(a, b); return; }
     select(c.dataset.kind, c.dataset.type, Number(c.dataset.id), { zoom: true });
@@ -541,6 +541,10 @@ export async function initFixesPanel(ctx) {
     if (turn) {
       feats = (await safe(`SELECT ST_AsGeoJSON(geom) AS g FROM driving.nodes WHERE node_id = ${Number(turn.via)}`)).map((r) => { try { return { type: "Feature", properties: {}, geometry: JSON.parse(r.g) }; } catch { return null; } }).filter(Boolean);
     } else if (sel && EDIT.includes(current)) feats = await shapes([{ type: sel.type, id: sel.id }]);
+    else if (current === "new" && editNew != null) {
+      const w = F.newWays(doc).find((x) => x.id === editNew), line = w ? await newWayLine(w) : [];
+      if (line.length > 1) feats = [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: line } }];
+    }
     if (my !== selToken) return;
     map.getSource("fix-sel")?.setData({ type: "FeatureCollection", features: feats }); drawnCount.sel = feats.length;
     if (zoom && feats.length) {
@@ -552,7 +556,7 @@ export async function initFixesPanel(ctx) {
   }
 
   // ---- a new road: click points on the map (a click near a junction joins it), set the kind, finish; the rule is in `new_ways`
-  let draw = null, newDraft = {};
+  let draw = null, newDraft = {}, editNew = null;          // editNew: the id of a new road of the changes that is open for edit (its points stay)
   const newFields = presets.new_road ?? [];
   function renderNewForm() {
     $("fix-newform").innerHTML = `<div class="grid2 fixgrid">${newFields.map((f) => `<label for="fixn-${f.key}" class="small">${esc(f.label)}</label>${control({ ...f }, newDraft[f.key] ?? "").replace(`id="fixf-${f.key.replace(/[^a-z0-9]/gi, "_")}"`, `id="fixn-${f.key}"`)}`).join("")}</div>`;
@@ -568,13 +572,31 @@ export async function initFixesPanel(ctx) {
   function startDraw() {
     draw = { pts: [] }; newDraft = { highway: "residential" };
     $("fix-drawbox").hidden = false; $("fix-draw").hidden = true;
-    renderNewForm(); drawn(); drawPreview();
+    renderNewForm(); paintNewMode(); drawn(); drawPreview();
     map.getCanvas().style.cursor = current === "new" ? "crosshair" : "";
   }
   function stopDraw() {
-    draw = null; $("fix-drawbox").hidden = true; $("fix-draw").hidden = false;
-    map.getCanvas().style.cursor = ""; drawn(); drawPreview();
+    draw = null; editNew = null; $("fix-drawbox").hidden = true; $("fix-draw").hidden = false;
+    paintNewMode(); map.getCanvas().style.cursor = ""; drawn(); drawPreview(); drawSelected(false);
   }
+  // the New road tab has two modes: draw (points and form) and edit (the form of a road that is in the changes)
+  function paintNewMode() {
+    const edit = editNew != null;
+    $("fix-draw-undo").hidden = edit;
+    $("fix-new-del").hidden = !edit;
+    $("fix-draw-done").textContent = edit ? "Update change" : "Add to changes";
+    $("fix-draw-help").innerHTML = edit ? "The points of this road stay. To change them, remove the road and draw it again." : "Click the points of the road on the map. <b>Enter</b> finishes, <b>Esc</b> cancels.";
+  }
+  function startEdit(id) {
+    const w = F.newWays(doc).find((x) => x.id === id);
+    if (!w) return;
+    if (draw) stopDraw();
+    editNew = id; newDraft = { ...w.tags };
+    $("fix-drawbox").hidden = false; $("fix-draw").hidden = true;
+    renderNewForm(); paintNewMode();
+    $("fix-draw-n").textContent = `${plural(w.nodes.length, "point")}${w.nodes.some(Number.isInteger) ? ", joins a junction" : ""}`;
+  }
+  $("fix-new-del").onclick = () => { const id = editNew; commit(() => F.deleteNewWay(doc, id)); stopDraw(); status(`Removed from the changes: new road ${id}.`); };
   async function addPoint(e) {
     const { lng, lat } = e.lngLat, d = px(e, 14);
     let best = null;
@@ -586,14 +608,20 @@ export async function initFixesPanel(ctx) {
     drawn(); drawPreview();
   }
   function finishDraw() {
-    if (!draw || draw.pts.length < 2) return status("Click at least two points on the map.");
-    const tags = {};
+    if (editNew == null && (!draw || draw.pts.length < 2)) return status("Click at least two points on the map.");
+    const w = editNew != null ? F.newWays(doc).find((x) => x.id === editNew) : null, tags = {};
     for (const f of newFields) {
       const v = (document.getElementById(`fixn-${f.key}`)?.value ?? "").trim();
       if (f.type === "int" && v !== "" && !/^\d+$/.test(v)) return status(`${f.label} is a whole number.`);
       if (v) tags[f.key] = v;
     }
     if (!tags.highway) return status("Pick the kind of road.");
+    if (w) {                                                          // the tags that the form has no field for stay as they are
+      const keep = Object.fromEntries(Object.entries(w.tags ?? {}).filter(([k]) => !newFields.some((f) => f.key === k)));
+      commit(() => F.updateNewWayTags(doc, w.id, { ...keep, ...tags }));
+      stopDraw();
+      return status(`Updated the change: new road ${w.id}.`);
+    }
     const nodes = draw.pts.map((q) => q.id ?? [Math.round(q.lng * 1e7) / 1e7, Math.round(q.lat * 1e7) / 1e7]);
     let id;
     commit(() => { id = F.addNewWay(doc, { nodes, tags }); });
@@ -657,7 +685,7 @@ export async function initFixesPanel(ctx) {
   $("fix-save").onclick = save;
   $("fix-revert").onclick = () => { touched = new Set(); draft = initialDraft(); renderForm(); };
   for (const b of document.querySelectorAll("#fix-panel [data-review]")) b.onclick = () => setTab("changes");
-  $("fix-pending").addEventListener("click", (e) => { const b = e.target.closest("[data-go]"); if (b) setTab(b.dataset.go); });
+  $("fix-pending").addEventListener("click", (e) => { const b = e.target.closest("[data-go]"); if (b) setTab(b.dataset.go, { zoom: true }); });
   $("fix-del").onclick = () => {
     if (!sel) return;
     commit(() => F.deleteObjectRule(doc, sel.type, sel.id));
@@ -667,7 +695,7 @@ export async function initFixesPanel(ctx) {
   $("fix-load").onclick = () => { const id = whole($("fix-id").value); id ? select(kind, KIND_OF[kind], id, { zoom: true }) : status("Type an OSM ID (a whole number)."); };
   $("fix-walls-row").onchange = drawFaces;
   $("fix-id").onkeydown = (e) => { if (e.key === "Enter") $("fix-load").click(); };
-  for (const t of TABS) $(`fix-tab-${t}`).onclick = () => setTab(t);
+  for (const t of TABS) $(`fix-tab-${t}`).onclick = () => setTab(t, { zoom: true });          // the tab shows its object on the map
 
   // ---- the numbers on the page
   function sync() {

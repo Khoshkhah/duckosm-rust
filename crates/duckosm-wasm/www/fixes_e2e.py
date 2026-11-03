@@ -80,6 +80,7 @@ with sync_playwright() as p:
     page.click("#fix-open")
     assert all(page.is_visible(f"#fix-tab-{t}") for t in ("road", "building", "node", "turns", "new", "changes")), "the six tabs"
     assert page.get_attribute("#fix-tab-road", "aria-selected") == "true", "the panel opens on the Road tab"
+    assert not page.is_visible("#fix-walls-all"), "the walls check box is only in the Building tab"
 
     # a click on a road: the form has the data of the road, all its tags are listed, and no popup shows
     point = page.evaluate("""() => { const m = window.duckMap, c = m.getCanvas().getBoundingClientRect(), L = %s;
@@ -126,11 +127,17 @@ with sync_playwright() as p:
 
     # the tabs are real: the Building tab has no road form, and the Road tab keeps its road, form and rule
     page.click("#fix-tab-building")
-    assert page.locator("#fixf-lanes").count() == 0 and "Nothing is picked" in page.inner_text("#fix-obj"), page.inner_text("#fix-obj")
+    assert page.is_visible("#fix-walls-all") and page.locator("#fixf-lanes").count() == 0 and "Nothing is picked" in page.inner_text("#fix-obj"), page.inner_text("#fix-obj")
     assert page.is_visible("#fixf-roof_shape") is False and page.input_value("#fix-id") == ""
     page.click("#fix-tab-road")
     assert page.input_value("#fix-id") == str(ROAD) and page.input_value("#fixf-lanes") == "7", "the Road tab keeps its road"
-    print("the tabs: Building has its own empty form, Road keeps its road and its rule")
+    assert page.evaluate("window.fixesPanel.drawn().sel") == 0, "the Building tab has nothing picked, so nothing is blue"
+    page.click("#fix-tab-road")
+    page.wait_for_function("window.fixesPanel.drawn().sel > 0", timeout=20_000)
+    pt = rows(page, f"SELECT ST_X(ST_PointOnSurface(ST_Union_Agg(geometry))) AS x, ST_Y(ST_PointOnSurface(ST_Union_Agg(geometry))) AS y FROM driving.edges WHERE osm_id = {ROAD}")[0]
+    page.wait_for_function("!window.duckMap.isMoving()")
+    assert page.evaluate(f"window.duckMap.getBounds().contains([{pt['x']}, {pt['y']}])"), "a switch to the Road tab shows its road on the map"
+    print("the tabs: Building has its own empty form, Road keeps its road and its rule, and the map shows the road of the tab")
 
     # a building: its tab, a real click, the preset fields (floors, roof shape, roof color)
     page.click("#fix-tab-building")
@@ -224,6 +231,16 @@ with sync_playwright() as p:
     page.wait_for_function(f"document.getElementById('fix-id').value === '{ROAD}' && document.querySelector('#fixf-sidewalk')?.value === 'both'", timeout=20_000)
     assert page.is_visible("#fix-edit")
     page.screenshot(path=str(out / "edit-road.png"))
+    # every kind of change opens in its own tab, for edit: a building, a node and a turn rule
+    for sel_, tab_, check in [(".chg[data-kind=building]:not([data-face])", "building", "document.querySelector('#fixf-building_levels')"),
+                              (".chg[data-type=node]", "node", "document.querySelector('#fixf-traffic_signals_direction')"),
+                              (".chg[data-turn]", "turns", "document.getElementById('fix-from').value !== ''")]:
+        page.click("#fix-tab-changes")
+        page.click(f"#fix-list {sel_}")
+        page.wait_for_function(check, timeout=20_000)
+        assert page.get_attribute(f"#fix-tab-{tab_}", "aria-selected") == "true", tab_
+    page.click("#fix-tab-changes")
+    print("a click on a change opens the road, the building, the node and the turn in their tabs")
     # delete a change, then undo and redo
     page.click("#fix-tab-changes")
     page.click("#fix-list .chg[data-type=node] [data-x]")
@@ -257,6 +274,18 @@ with sync_playwright() as p:
     assert "new_ways" in y and "id: 9000000000000" in y and "highway: service" in y and "name: Test Lane" in y, y
     assert not page.is_visible("#fix-drawbox") and page.inner_text("#fix-n") == "6"
     print("a new road: two points, the first joins a junction; it is in new_ways")
+    # a click on the new road in the Changes tab opens it in the New road tab, for edit (its points stay)
+    page.click("#fix-tab-changes")
+    page.click("#fix-list .chg[data-newway]")
+    assert page.get_attribute("#fix-tab-new", "aria-selected") == "true" and page.is_visible("#fix-drawbox") and page.input_value("#fixn-name") == "Test Lane"
+    assert page.inner_text("#fix-draw-done") == "Update change" and page.is_visible("#fix-new-del") and not page.is_visible("#fix-draw-undo")
+    page.wait_for_function("window.fixesPanel.drawn().sel > 0", timeout=20_000)
+    page.fill("#fixn-name", "Test Lane 2")
+    page.click("#fix-draw-done")
+    y = text(page)
+    assert "name: Test Lane 2" in y and "name: Test Lane\n" not in y and page.inner_text("#fix-n") == "6", y
+    assert not page.is_visible("#fix-drawbox")
+    print("a new road opens for edit in its tab: the name changed, the points stayed")
 
     # a file that is not valid does not change the rules; a duckOSM file (overrides with tags) loads
     saved = text(page)
@@ -290,7 +319,7 @@ with sync_playwright() as p:
                     f"FROM features.buildings WHERE osm_id = {b['osm_id']} AND osm_type = 'way'")[0]
     assert (bt["l"], bt["r"], bt["c"]) == ("7", "gabled", "#cc3300"), bt
     road = rows(page, "SELECT count(*)::INTEGER AS n, any_value(highway) AS h, any_value(name) AS nm FROM driving.edges WHERE osm_id = 9000000000000")[0]
-    assert (road["n"] > 0, road["h"], road["nm"]) == (True, "service", "Test Lane"), ("the new road is in driving.edges", road)
+    assert (road["n"] > 0, road["h"], road["nm"]) == (True, "service", "Test Lane 2"), ("the new road is in driving.edges", road)
     joined = rows(page, "SELECT count(*)::INTEGER AS n FROM driving.edges e JOIN driving.edges o ON o.osm_id <> e.osm_id AND (o.source IN (e.source, e.target) OR o.target IN (e.source, e.target)) WHERE e.osm_id = 9000000000000")[0]["n"]
     assert joined > 0, "the new road joins the network at the junction"
     faces = rows(page, f"SELECT face_type, computed_type, edited FROM main.building_faces WHERE building_id = {b['osm_id']} AND "
