@@ -107,7 +107,7 @@ bar, `rs.sheet()` and `rs.freeArea()`, each box (it must be inside the screen), 
 ```
 +----------------------------+
 | [#] duckOSM          [☾][<]|
-| (1) CHOOSE AN AREA         |   unchanged: Search | Draw | File
+| (1) CHOOSE AN AREA         |   Search | Draw | File | H3
 | (2) THE AREA               |   unchanged: name, km², polygons, vertices
 | (3) THE DATA               |   [Region file | Overpass | Cut file]
 |     Region file: [select]  |   the suggested extracts below, as today
@@ -243,6 +243,36 @@ many metres on all sides, in the UTM zone of its centre. The page makes the grow
 `ST_Buffer`, `ST_Transform` back, `bufferPolys` in `index.html`). The cut of the region file, the Overpass query, the list of extracts, the
 size in card 2 and the saved GeoJSON all use the grown area; the map shows it. The shape as chosen stays in `area.base`, so a new value (or 0)
 makes the area again from it. The saved GeoJSON has `buffer_m` in its properties when it is above 0. Card 2 stays open beside step 3 after an area is chosen (the other cards fold as before), so the buffer is in view; the card shows the size as "km² · +500 m". Test: `python crates/duckosm-wasm/www/buffer_e2e.py <out folder>`.
+
+### Step 1: the H3 tab
+
+Kaveh (2026-11-03): "in step 1, it is good if we can select an area based on hexagon in H3". The fourth tab of card 1 makes the area from
+the hexagons of the [H3](https://h3geo.org) grid:
+
+- **The level.** A list of the levels 5 to 10, each with the average edge and area of one cell, for example `Level 8: edge 531 m, 0.737 km²`.
+  The default is level 8. A new level removes the picked cells (cells of two levels do not mix), and the page says so.
+- **The picks.** A click on the map picks the cell at that point; a second click on the same cell removes it. The map shows the lines of
+  all picked cells, and the usual blue area (the union) under them. Under the list, the text gives the number of cells and the area in km²
+  (for example `6 cells, 0.63 km²`) and **Clear the cells** removes all. While no cell is picked, the button is off and the text under it
+  says what to do (no tooltip). The pointer on the map is a hand while the tab is open.
+- **The area.** The page joins the cells with `cellsToMultiPolygon` of [h3-js](https://github.com/uber/h3-js) (pinned: `h3-js@4.2.1`
+  from cdn.jsdelivr.net, in the import map; the page loads it at the first use of the tab). Cells that touch make one polygon. A ring of
+  cells keeps its hole. Cells that do not touch make a multipolygon. From here the area goes the same way as a file or a drawing:
+  card 2, the buffer, the extracts, the GeoJSON and the build. The GeoJSON has `source: "h3"`, `h3_level` and `h3_cells` in its properties.
+- **The cap.** At most 500 cells and 5,000 km² (the count of cells times the average area of a cell of the level). A click that goes over
+  a cap does nothing, and the text under the button says why. A mistake at a coarse level cannot ask for a huge build.
+- **Card 1 stays open** while the H3 tab is open, because the person clicks more cells. With the other tabs, card 1 folds when the area
+  is ready, as before.
+- Another way of making the area (a search result, a drawing, a file) removes the cells and their lines.
+
+On a phone the four tabs fit in the sheet. A tap on the map picks a cell. Two taps less than 500 ms apart are a double tap (MapLibre), and
+the map zooms in place of a pick.
+
+Test: `python crates/duckosm-wasm/www/h3_e2e.py <out folder>` (Monaco). On a computer: the six levels with their sizes; six clicks around
+one cell make one polygon with a hole, and the area of card 2 is the sum of the areas of the cells; a seventh click fills the hole; a click
+on a cell removes it; two cells apart make two polygons; Clear; another way of making the area removes the cells; another level removes them; the cap
+stops the 20th cell of level 5; a build of Monaco from seven cells gives driving roads that all lie near the cells. On a phone (390 × 844):
+the tabs fit, there is no sideways scroll, and taps pick the cells above the sheet.
 
 ### Step 3: the data
 

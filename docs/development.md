@@ -184,6 +184,12 @@ python crates/duckosm-wasm/www/panel_e2e.py out-panel
 python crates/duckosm-wasm/www/buttons_e2e.py out-buttons
 ```
 
+Check the H3 tab of card 1 (hexagons picked with clicks; the area, the cap and a build of Monaco from the cells; a phone too):
+
+```bash
+python crates/duckosm-wasm/www/h3_e2e.py out-h3
+```
+
 Check the generation of the tiles (the dashboard's red message and the hidden vector layers when the tiles are of another road set,
 and the normal path):
 
