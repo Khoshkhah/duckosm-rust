@@ -7,6 +7,7 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ### Added
 
+- **Card 7, Fix OSM data, in the browser page**: roads (one-way, lanes, layer, turn lanes, tags, exclude modes, remove), turn rules for the junctions of a road, and the YAML text. The page keeps the rules as data (`app/fixes.js`, js-yaml) and writes the YAML from them, so the text is always valid for the build. **Apply and build again** runs step 4 with the rules. The level editor is now card 8. Test: `fixes_e2e.py`.
 - **The cut area as a download, `.osm.pbf`**: after a build from a region file (with **Base map layers** on), card 5 has a button
   `.osm.pbf` with the nodes, ways and relations of the cut (osmium's `smart` cut, before the OSM fixes), and the page accepts the
   file again as the "Cut file". New: `cutfile.rs` (the PBF writer and an `.osm` XML writer, with `miniz_oxide`), the CLI options

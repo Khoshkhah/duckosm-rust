@@ -13,7 +13,7 @@ out = pathlib.Path(sys.argv[2] if len(sys.argv) > 2 else f"out-cards-{label}")
 out.mkdir(parents=True, exist_ok=True)
 server = start(0, quiet=True, directory=WWW)
 url = f"http://127.0.0.1:{server.server_address[1]}/index.html?maxroads=0"
-CARDS = {"step1": "step1-card", "step2": "step2-card", "step3": "extracts-box", "step4": "step4-card", "step5": "step5-card", "step6": "step6-card", "step7": "step7-card"}
+CARDS = {"step1": "step1-card", "step2": "step2-card", "step3": "extracts-box", "step4": "step4-card", "step5": "step5-card", "step6": "step6-card", "step7": "step7-card", "step8": "step8-card"}
 
 
 def page_of(browser, dark, phone):
@@ -76,7 +76,7 @@ def run(browser, name, dark=False, phone=False):
     page.wait_for_function("!document.getElementById('run').disabled", timeout=300_000)
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=600_000)
     page.wait_for_timeout(1000)
-    for key, tag in (("step4", "4b-built"), ("step5", "5-result"), ("step6", "6-visualization"), ("step7", "7-edit")):
+    for key, tag in (("step4", "4b-built"), ("step5", "5-result"), ("step6", "6-visualization"), ("step7", "7-fix"), ("step8", "8-edit")):
         card(page, name, key, tag)
     page.locator("footer.sb-foot").screenshot(path=str(out / f"{label}-{name}-8-footer.png"))
     page.context.close()

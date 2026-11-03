@@ -23,7 +23,7 @@ out.mkdir(parents=True, exist_ok=True)
 server = start(0, quiet=True, directory=WWW)
 url = f"http://127.0.0.1:{server.server_address[1]}/index.html?maxroads=0"
 errors = []
-CARDS = ["step1-card", "step2-card", "extracts-box", "step4-card", "step5-card", "step6-card", "step7-card"]
+CARDS = ["step1-card", "step2-card", "extracts-box", "step4-card", "step5-card", "step6-card", "step7-card", "step8-card"]
 STATE = """() => Object.fromEntries([...document.querySelectorAll('.step')].map((c) => [c.id, (c.classList.contains('folded') ? 'F' : 'O') + (c.classList.contains('off') ? '-off' : '') + (c.querySelector('.done').hidden ? '' : '-done')]))"""
 checked_links = {}
 
@@ -64,7 +64,7 @@ def run(browser, name, dark=False, **context):
     # ---- the start: all cards in view, folded; step 1 is open; the later steps are disabled with their reason
     assert [c for c in st()] == CARDS and st()["step1-card"] == "O", st()
     s = st()
-    assert s["step2-card"] == "F-off" and s["step4-card"] == "F-off" and s["step5-card"] == "F-off" and s["step6-card"] == "F-off" and s["step7-card"] == "F-off", s
+    assert s["step2-card"] == "F-off" and s["step4-card"] == "F-off" and s["step5-card"] == "F-off" and s["step6-card"] == "F-off" and s["step7-card"] == "F-off" and s["step8-card"] == "F-off", s
     assert s["extracts-box"] == "F", "step 3 is active (a cut file needs no area)"
     assert page.inner_text("#step2-card .after") == "after step 1" and page.inner_text("#step4-card .after") == "after step 3"
     assert page.evaluate("document.getElementById('step5').disabled"), "the title of a disabled card does not open it"
@@ -72,7 +72,7 @@ def run(browser, name, dark=False, **context):
     assert st()["step5-card"] == "F-off", "a click on a disabled card does nothing"
     page.screenshot(path=str(out / f"{name}-1-start.png"))
     # ---- the main button and the search field: only Build is filled with the accent (the standard's: the page has no accent of its own)
-    assert page.evaluate("[...document.querySelectorAll('#sb .btn.primary')].map((b) => b.id)") == ["run"]
+    assert page.evaluate("[...document.querySelectorAll('#sb .btn.primary')].filter((b) => b.offsetParent).map((b) => b.id)") == ["run"]   # (the banner's Open is hidden)
     # the accent is roadstyle's (0.26.1: the Sonocount teal; a lighter variant in the dark theme), and the page sets none
     assert page.evaluate("getComputedStyle(document.getElementById('sb')).getPropertyValue('--accent').trim()") == ("#42c2d7" if dark else "#0e7c8e")
     assert not page.evaluate("[...document.styleSheets].some((sh) => { try { return [...sh.cssRules].some((r) => r.style && r.cssText.includes('--accent:') && !sh.href); } catch (e) { return false; } })"), "the page has no --accent of its own"
@@ -133,7 +133,7 @@ def run(browser, name, dark=False, **context):
     page.set_input_files("#file", str(ROOT / "tests/data/monaco.geojson"))
     page.wait_for_function("window.areas >= 1", timeout=60_000)
     s = st()
-    assert s["step1-card"] == "F-done" and s["step2-card"] == "F-done" and s["extracts-box"] == "O", ("an area: step 3 opens, step 1 folds, steps 1 and 2 are done", s)
+    assert s["step1-card"] == "F-done" and s["step2-card"] == "O-done" and s["extracts-box"] == "O", ("an area: step 3 opens, step 1 folds, step 2 stays open beside it (the buffer), steps 1 and 2 are done", s)
     tap("#tab-region")
     page.set_input_files("#region", str(ROOT / "tests/data/monaco_sample.osm.pbf"))
     s = st()
@@ -151,10 +151,10 @@ def run(browser, name, dark=False, **context):
     tap("#run")
     page.wait_for_function("!document.getElementById('step5-card').classList.contains('off')", timeout=900_000)
     s = st()
-    assert s["step4-card"] == "F-done" and s["step5-card"] == "O" and "off" not in s["step6-card"] and "off" not in s["step7-card"], ("the build: step 5 opens", s)
+    assert s["step4-card"] == "F-done" and s["step5-card"] == "O" and "off" not in s["step6-card"] and "off" not in s["step7-card"] and "off" not in s["step8-card"], ("the build: step 5 opens", s)
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=600_000)
     s = st()
-    assert s["step6-card"].endswith("-done") and s["step7-card"] == "O", ("the map: step 7 opens", s)
+    assert s["step6-card"].endswith("-done") and s["step8-card"] == "O", ("the map: step 8 opens", s)
     page.screenshot(path=str(out / f"{name}-6-built.png"))
     # by hand: the person opens step 3; the next step that opens does not fold it
     page.evaluate("document.getElementById('step3').click()")

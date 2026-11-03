@@ -1,4 +1,4 @@
-"""The level editor of the page (card 7, docs/app.md) in headless Chromium (Playwright): build Monaco through the File tab, open the
+"""The level editor of the page (card 8, docs/app.md) in headless Chromium (Playwright): build Monaco through the File tab, open the
 editor, make one edit through its API (window.lvApi, as the panel does), Apply, and check the tables, the .duckdb download and the map.
 The out folder gets editor.png (the editor open) and page.duckdb.
 
@@ -87,7 +87,7 @@ with sync_playwright() as p:
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && document.getElementById('mapbusy').hidden",
                            timeout=600_000)
     assert "drawn" in page.inner_text("#mapnote"), page.inner_text("#mapnote")
-    assert page.is_visible("#step7-card"), "card 7 shows after a build with levels"
+    assert page.is_visible("#step8-card"), "card 8 shows after a build with levels"
     # the draw after the build: the blank base map (the light theme) and the area in view (Kaveh: "set base map to blank and zoom on
     # the selected area")
     page.wait_for_function("!window.duckMap.isMoving()", timeout=30_000)
