@@ -63,7 +63,12 @@ One request through the relay can be slow (2026-10-29, from Vancouver: 9 MB/s do
 path, while a direct download from Geofabrik is always 6 to 10 MB/s). `download()` in `regions.js` therefore reads
 the file in parts:
 
-1. `HEAD` of the `-latest` file: the size (`Content-Length`), the dated file (`Content-Location`) and the `ETag`.
+1. `HEAD` of the file: the size (`Content-Length`), the dated file (`Content-Location`) and the `ETag`. The page does not
+   ask for `-latest` first, because Geofabrik answers `-latest` of a big region after about 30 s, each time (2026-11-03,
+   `southcoast-admreg`: 29.8 s and 30.0 s, then 502 and 503 from the relay under load). A dated file that is there
+   answers in 0.5 s. A dated file that is not there waits about 30 s. So the page sends `HEAD` for the dated files of the
+   last 5 days (UTC) at the same time, waits 1.5 s, stops the others, and takes the newest one that has answered. If none
+   has answered, it sends `HEAD` for `-latest`, as before. First bytes of `southcoast-admreg` arrive in 2.7 s, not 30 s.
 2. Up to 8 parts of equal size (not less than 4 MB each) are read at the same time from the dated file, so all
    parts are of one version. Each part has a `Range` header and is written at its place in the stored file
    (`write({type: "write", position, data})`).

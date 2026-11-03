@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="map/roadstyle/popup.css">
 <link rel="preload" href="map/roadstyle/host_options.json" as="fetch" crossorigin>
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js" crossorigin></script>
+<script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js" crossorigin></script>   <!-- the OSM fixes of card 7 (app/fixes.js) -->
 <script src="coi-serviceworker.js"></script>   <!-- the COOP and COEP headers on GitHub Pages, for threads -->
 <script type="importmap">
 { "imports": {
@@ -64,7 +65,7 @@
      in the title; the card's own buttons ("?", the zoom to the area) are beside the chevron */
   .step { position: relative; margin: 0; }
   .step > .rs-sec-hd { justify-content: flex-start; padding: 6px 0; font-size: 12px; letter-spacing: 0.06em; color: var(--fg); }
-  .step > .rs-sec-hd:disabled { cursor: not-allowed; color: var(--muted); }
+  .step > .rs-sec-hd:disabled { cursor: default; color: var(--muted); }
   .step > .rs-sec-hd .after { margin-left: auto; margin-right: 30px; font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); }
   .step > .rs-sec-hd .done { color: var(--accent); font-size: 13px; font-weight: 700; text-transform: none; }
   .step > .tools { position: absolute; top: 14px; right: 40px; height: 32px; display: flex; align-items: center; gap: 2px; }
@@ -107,10 +108,10 @@
   .btn:hover:not(:disabled) { background: var(--surface); }
   .btn.primary { background: var(--accent-fill); border-color: var(--accent-fill); color: #ffffff; }
   .btn.primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent-fill); }
-  /* an action button is disabled until its inputs are ready: grey (the panel's tokens), no hover, not-allowed; the reason is the text under it (.why) */
+  /* an action button is disabled until its inputs are ready: grey (the panel's tokens), no hover, the normal cursor (no forbidden sign); the reason is the text under it (.why) */
   .btn.busy svg { display: none; }
   .btn.busy::after { content: ""; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--muted); animation: spin 0.8s linear infinite; }
-  .btn:disabled, .btn.primary:disabled { background: var(--surface); border-color: var(--line); color: var(--muted); opacity: 1; filter: none; cursor: not-allowed; }
+  .btn:disabled, .btn.primary:disabled { background: var(--surface); border-color: var(--line); color: var(--muted); opacity: 1; filter: none; cursor: default; }
   .why { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); }
   .why:empty { display: none; }
   .sb-foot .why { grid-column: 1 / -1; margin: 0; }
@@ -196,7 +197,24 @@
   .sb-foot { flex: none; display: grid; grid-template-columns: 1fr 1.5fr; gap: 8px; padding: 12px 15px 14px; border-top: 1px solid var(--line); }
 
   /* steps 3 to 5: the data, the build, the result (docs/app.md) */
-  #step7-card [hidden] { display: none; }
+  #step7-card [hidden], #step8-card [hidden], #fix-panel [hidden] { display: none; }
+  /* the fixes' own panel (like the level editor's): the steps, the title and the footer go while it is open, and the road popup is off */
+  #fix-panel { display: none; }
+  body.editing-fixes #sb .sb-top, body.editing-fixes #sb .sb-body, body.editing-fixes #sb .sb-foot { display: none; }
+  body.editing-fixes #fix-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  body.editing-fixes #sb #rs-fold-all { display: none; }
+  body.editing-fixes .maplibregl-popup:not(.rs-tip) { display: none !important; }
+  #fix-panel .fix-hd { flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 15px; border-bottom: 1px solid var(--line); }
+  #fix-panel .fix-hd h2 { margin: 0; font-size: 16px; text-transform: none; color: var(--fg); }
+  #fix-panel .fix-hd .btn svg { width: 14px; height: 14px; }
+  #fix-panel .fix-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 15px; overscroll-behavior: contain; }
+  #fix-panel .fix-foot { flex: none; padding: 12px 15px 14px; border-top: 1px solid var(--line); display: grid; }
+  #fix-panel .fix-pane { margin-top: 10px; }
+  #fix-panel .fix-pane .grid2 { grid-template-columns: 7.5em 1fr; }
+  #fix-panel .trio { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  #fix-panel textarea { min-height: 14em; }
+  #fix-panel .turn { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; margin-top: 6px; }
+  #fix-panel .turn select { max-width: 11em; }
   .grid2 [hidden] { display: none; }
   .pick { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 10px; cursor: pointer; margin-bottom: 10px; }
   .pick:hover { border-color: var(--accent); color: var(--accent); }
@@ -454,7 +472,14 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
 </section>
 
 <section id="step7-card" class="step" aria-labelledby="step7">
-  <h2 id="step7"><span class="n">7</span>Edit levels</h2>
+  <h2 id="step7"><span class="n">7</span>Fix OSM data</h2>
+  <p id="fix-sum" class="why" style="margin-top:0">No fixes.</p>
+  <div class="row"><button id="fix-open" class="btn" type="button">Edit fixes</button></div>
+  <p id="fix-why" class="why"></p>
+</section>
+
+<section id="step8-card" class="step" aria-labelledby="step8">
+  <h2 id="step8"><span class="n">8</span>Edit levels</h2>
   <div class="row"><button id="edit-open" class="btn">Edit levels</button></div>
   <p id="edit-why" class="why"></p>
   <p id="editnote" class="progress" aria-live="polite"></p>
@@ -467,6 +492,58 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
   <button id="run" class="btn primary" disabled>Build<svg><use href="#i-arrow"/></svg></button>
   <p id="buildhint" class="why" aria-live="polite"></p>
 </footer>
+<div id="fix-panel" aria-label="Fix OSM data">
+  <div class="fix-hd"><button id="fix-back" class="btn" type="button"><svg><use href="#i-chevron"/></svg>Steps</button><h2>Fix OSM data</h2></div>
+  <div class="fix-body">
+    <p id="fix-count" class="why" style="margin-top:0">No fixes.</p>
+    <div class="segmented" role="tablist" aria-label="The kinds of fixes" style="margin-top:8px">
+      <button role="tab" id="fix-tab-roads" aria-controls="fix-roads" aria-selected="true" type="button">Roads</button>
+      <button role="tab" id="fix-tab-turns" aria-controls="fix-turns" aria-selected="false" type="button">Turns</button>
+      <button role="tab" id="fix-tab-yaml" aria-controls="fix-yaml-pane" aria-selected="false" type="button">YAML</button>
+    </div>
+    <div id="fix-roads" class="fix-pane" role="tabpanel" aria-labelledby="fix-tab-roads">
+      <div class="row" style="margin-top:0"><input id="fix-id" type="text" inputmode="numeric" placeholder="OSM way ID, or click a road" aria-label="OSM way ID" style="flex:1"><button id="fix-load" class="btn" type="button">Load</button></div>
+      <p id="fix-road" class="why">Click a road on the map, or type its way ID.</p>
+      <div class="grid2" style="margin-top:8px">
+        <label for="fix-oneway" class="small">One-way</label>
+        <select id="fix-oneway"><option value="">As in the data</option><option value="true">Yes</option><option value="false">No</option></select>
+        <span class="small">Lanes</span>
+        <div class="trio"><input id="fix-lanes" type="text" inputmode="numeric" placeholder="All" aria-label="Lanes, all"><input id="fix-lanes-fwd" type="text" inputmode="numeric" placeholder="Forward" aria-label="Lanes, forward"><input id="fix-lanes-bwd" type="text" inputmode="numeric" placeholder="Back" aria-label="Lanes, back"></div>
+        <label for="fix-layer" class="small">Layer</label>
+        <input id="fix-layer" type="text" inputmode="numeric" placeholder="For example 1 or -1">
+        <label for="fix-tl-fwd" class="small">Turn lanes</label>
+        <div class="trio" style="grid-template-columns:1fr 1fr"><input id="fix-tl-fwd" type="text" placeholder="Forward: left|through" aria-label="Turn lanes, forward"><input id="fix-tl-bwd" type="text" placeholder="Back" aria-label="Turn lanes, back"></div>
+        <label for="fix-tags" class="small">Tags</label>
+        <input id="fix-tags" type="text" placeholder="surface=asphalt, maxspeed=30">
+        <label for="fix-note" class="small">Note</label>
+        <input id="fix-note" type="text" placeholder="Why">
+      </div>
+      <div class="checks" role="group" aria-label="Exclude from" style="margin-top:8px">
+        <span class="small">Exclude from</span>
+        <label><input type="checkbox" name="fix-ex" value="driving">Driving</label>
+        <label><input type="checkbox" name="fix-ex" value="walking">Walking</label>
+        <label><input type="checkbox" name="fix-ex" value="cycling">Cycling</label>
+        <label><input type="checkbox" id="fix-remove">Remove the road</label>
+      </div>
+      <div class="row"><button id="fix-save" class="btn" type="button">Save rule</button><button id="fix-del" class="btn" type="button">Delete rule</button></div>
+    </div>
+    <div id="fix-turns" class="fix-pane" role="tabpanel" aria-labelledby="fix-tab-turns" hidden>
+      <p class="why" style="margin-top:0">Pick the road that the turn starts on (Roads tab, or the map). Then pick the junction and the rule for each road that leaves it. Driving only.</p>
+      <div class="row"><input id="fix-from" type="text" inputmode="numeric" placeholder="From way ID" aria-label="From way ID" style="flex:1"><button id="fix-turn-find" class="btn" type="button">Find turns</button></div>
+      <div class="grid2" style="margin-top:8px" id="fix-via-row" hidden><label for="fix-via" class="small">Junction</label><select id="fix-via"></select></div>
+      <div id="fix-out"></div>
+      <p class="small" style="margin-top:10px;margin-bottom:0"><b>All turn rules</b></p>
+      <div id="fix-turn-list" class="small"></div>
+    </div>
+    <div id="fix-yaml-pane" class="fix-pane" role="tabpanel" aria-labelledby="fix-tab-yaml" hidden>
+      <textarea id="fix-yaml" spellcheck="false" aria-label="The fixes file (YAML)" placeholder="overrides:&#10;  - osm_id: 12345678&#10;    lanes: 2"></textarea>
+      <p id="fix-yaml-err" class="why" role="alert"></p>
+      <div class="row"><button id="fix-yaml-save" class="btn" type="button">Use this text</button><button id="fix-download" class="btn" type="button">Download</button><button id="fix-clear" class="btn" type="button">Clear all</button></div>
+      <p class="why">The page writes this text from your rules, so comments are not kept. To load a file, use <b>Fixes</b> in step 4.</p>
+    </div>
+  </div>
+  <div class="fix-foot"><button id="fix-apply" class="btn" type="button">Apply and build again</button></div>
+</div>
 </div>
 </div>
 <button id="sb-show" title="Show panel" aria-label="Show panel" aria-controls="sb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/><path d="m10.5 9.5-2.5 2.5 2.5 2.5"/></svg></button>
@@ -479,6 +556,7 @@ import * as duck from "./app/duck.js";
 window.duckApi = duck;   // for the tests (drawLaps, tileStats)
 import * as regions from "./app/regions.js";
 import * as areaStore from "./app/area_store.js";
+import * as fixesLib from "./app/fixes.js";
 import { rsDashboard } from "./map/roadstyle/dashboard/index.js";   // roadstyle's map dashboard (copied by build.sh at ROADSTYLE_COMMIT)
 import { rsFirstPaint } from "./map/roadstyle/dashboard/template.js";   // the classes of <html> before the first paint
 
@@ -1071,7 +1149,7 @@ $("save").onclick = () => {
 
 // ---- step 3: the data ----
 let source = "region", building = false;
-let stepsReady = false, netBuilt = false, levelsApplied = false, touched = false;   // the cards (below): the networks are netBuilt; the edits are in the tables; the person opened or folded a card by hand
+let stepsReady = false, netBuilt = false, fixesApplied = false, levelsApplied = false, touched = false;   // the cards (below): the networks are netBuilt; the edits are in the tables; the person opened or folded a card by hand
 const dataTabs = [...document.querySelectorAll("#extracts-box [role=tab]")];
 for (const t of dataTabs) t.onclick = () => {
   for (const u of dataTabs) { u.setAttribute("aria-selected", u === t); $(u.getAttribute("aria-controls")).hidden = u !== t; }
@@ -1099,6 +1177,7 @@ function canBuild() {
 for (const id of ["pbf", "fixes"]) $(id).onchange = () => {
   const f = $(id).files[0];
   if (f) $(`${id}-name`).textContent = `${f.name} (${mb(f.size)} MB)`;
+  if (id === "fixes" && f) f.text().then(loadFixesText);     // the file's rules go into card 7; a build reads them from there
   canBuild();
 };
 $("region").onchange = () => {
@@ -1234,6 +1313,7 @@ async function restoreSavedArea(slug) {
     }
 
     netBuilt = true;
+    fixesApplied = !!meta.fixesYaml;
     files();
     if (meta.summary) {
       buildDetails(meta.summary);
@@ -1434,7 +1514,7 @@ $("run").onclick = async () => {
   try {
     const start = performance.now();
     if (area) keep("duckosm.boundary", text());   // the area again after a reload
-    const fixes = $("fixes").files[0] ? await $("fixes").files[0].text() : null;
+    const fixes = fixesText();
     const threads = Number(new URLSearchParams(location.search).get("threads")) || undefined;  // ?threads=N: the size of the pool
     const levels = $("levels").value;   // visualization.edge_levels: the tags rule or the solver (docs/levels.md)
     let msg, download = null;
@@ -1500,7 +1580,7 @@ $("run").onclick = async () => {
         modes,
         featuresSql: out.featuresSql,
         fixesYaml: fixes,
-        fixesName: $("fixes").files[0]?.name,
+        fixesName: fixes ? $("fixes").files[0]?.name ?? "osm_fixes.yaml" : undefined,
         builtAt: Date.now()
       }, duck.tables);
     } catch (e) {
@@ -1515,6 +1595,8 @@ $("run").onclick = async () => {
       [...out.summary.matchAll(/^(\w+): (\d+) edges, (\d+) nodes/gm)].map((m) =>
         `<tr><td>${icon(NET[m[1]]?.[0] ?? "arrow")}${NET[m[1]]?.[1] ?? esc(m[1])}</td><td>${num(+m[2])}</td><td>${num(+m[3])}</td></tr>`).join("") + "</tbody></table>";
     netBuilt = true;
+    fixesApplied = !!fixes;
+    $("fix-why").textContent = fixes ? "Built with these fixes." : "";
     refreshSteps();
     if (phone.matches) {                          // a phone: the result shows in the sheet (its cards scroll, the page does not)
       if (rs.sheet() === 0) rs.sheet(1);
@@ -1804,7 +1886,8 @@ const HELP = {
     ["4 Build", "Select the networks and press Build. The page makes the tables."],
     ["5 The result", "Run SQL on the tables. Download the tables as a zip or as a .duckdb file."],
     ["6 Visualization", "Show the roads on the map."],
-    ["7 Edit levels", "Change the drawing order of the roads by hand."],
+    ["7 Fix OSM data", "Correct known errors of OpenStreetMap (one-way, lanes, layer, turn rules) and build the networks again."],
+    ["8 Edit levels", "Change the drawing order of the roads by hand."],
     ["Google key", "Street View (Linked) and Google 3D need a Google Maps key. The gear button of the map bar saves it in this browser only."],
   ],
   note: `Documentation: ${link(DOCS.app, "this page (docs/app.md)")} · ${link(DOCS.features, "duckOSM features tables")} · ${link(DOCS.fixes, "fix OpenStreetMap errors")} · ` +
@@ -1841,7 +1924,13 @@ const CARD_HELP = {
     ["Show on map", "Draws the roads with roadstyle. Click a road to see its data."],
     ["Google key", "Street View (Linked) and Google 3D need a Google Maps JavaScript API key. The gear button of the map bar saves it in this browser only."]],
     note: link(DOCS.google, "How to get a Google key") },
-  7: { title: "Edit levels", intro: "Change the drawing order of the roads by hand with roadstyle's level editor: which road goes over which one, where two roads join, the heads and the line ends.", terms: [
+  7: { title: "Fix OSM data", intro: "Correct known errors of OpenStreetMap with rules. A rule changes one road (by its way ID) or one turn. The rules are a duckOSM fixes file.", terms: [
+    ["Roads", "Click a road or type its way ID. Set the one-way, lanes, layer, tags, or remove the road, and save the rule."],
+    ["Turns", "Pick the road a turn starts on and the junction. Then give each road that leaves it a turn rule. Driving only."],
+    ["YAML", "The file that the rules make. You can edit it here, download it, or clear it."],
+    ["Apply and build again", "Runs step 4 again with the rules, and makes the tables again."]],
+    note: link(DOCS.fixes, "The format of the fixes file") },
+  8: { title: "Edit levels", intro: "Change the drawing order of the roads by hand with roadstyle's level editor: which road goes over which one, where two roads join, the heads and the line ends.", terms: [
     ["The editor", "It takes this panel (the sheet on a phone)."],
     ["← Steps", "Comes back to the steps and puts the applied edits into the tables."],
     ["Your edits", "They stay in this browser for this area."]],
@@ -1869,7 +1958,8 @@ const STEP = {
   4: { ready: () => (netBuilt || !missingInput() ? "" : "after step 3"), done: () => netBuilt },
   5: { ready: () => (netBuilt ? "" : "after step 4"), done: () => roadsShown },
   6: { ready: () => (netBuilt ? "" : "after step 4"), done: () => roadsShown },
-  7: { ready: () => (netBuilt && levelsTable() ? "" : "after step 4"), done: () => levelsApplied },
+  7: { ready: () => (netBuilt ? "" : "after step 4"), done: () => fixesApplied, optional: true },   // optional: the page does not open it by itself
+  8: { ready: () => (netBuilt && levelsTable() ? "" : "after step 4"), done: () => levelsApplied },
 };
 let current = null;                                // the step that the page opened last
 function refreshSteps() {
@@ -1882,7 +1972,7 @@ function refreshSteps() {
     c.querySelector(".done").hidden = !done || !!why;
     if (why && !c.classList.contains("folded")) autoFold(c, true);      // a card that is not ready keeps only its title
   }
-  const next = cards.find((c) => !STEP[cardN(c)].ready() && !STEP[cardN(c)].done());
+  const next = cards.find((c) => !STEP[cardN(c)].optional && !STEP[cardN(c)].ready() && !STEP[cardN(c)].done());
   if (next && next !== current) {
     current = next;
     autoFold(next, false);
@@ -1923,7 +2013,159 @@ stepsReady = true;
 rs.help.set(HELP);
 refreshSteps();
 
-// ---- card 7: roadstyle's level editor on the page's map (docs/app.md). The page makes the level area from the tables (makeArea) and keeps
+// ---- card 7: the OSM fixes (docs/app.md). The rules are data (fixDoc, app/fixes.js): the forms change the data, and the YAML text is written from it.
+// The file of step 4 and the YAML tab load into it. A build gets its text (fixesText). The build reads it with duckosm-build's parser, as it is. ----
+let fixDoc = {};
+const fixesText = () => fixesLib.dump(jsyaml, fixDoc) || null;
+const fixNum = (id) => { const v = $(id).value.trim(); return v === "" ? null : Number(v); };
+const fixErr = (t) => { $("fix-yaml-err").textContent = t; if (t) status(t); };
+function fixSync() {
+  $("fix-yaml").value = fixesLib.dump(jsyaml, fixDoc);
+  fixErr("");
+  const { overrides: o, turns: t } = fixesLib.counts(fixDoc), s = (n) => (n === 1 ? "" : "s");
+  const sum = o + t ? `${o} road rule${s(o)}, ${t} turn rule${s(t)}.` : "No fixes.";
+  $("fix-count").textContent = sum;
+  $("fix-sum").textContent = sum;
+  fixTurnList();
+}
+function loadFixesText(text) {
+  try { fixDoc = fixesLib.parse(jsyaml, text); fixSync(); }
+  catch (e) { $("fix-yaml").value = text; fixErr("The fixes text is not valid: " + e.message.split("\n")[0]); }
+}
+function setFixTab(name) {
+  for (const t of ["roads", "turns", "yaml"]) {
+    $(`fix-tab-${t}`).setAttribute("aria-selected", String(t === name));
+    $(t === "yaml" ? "fix-yaml-pane" : `fix-${t}`).hidden = t !== name;
+  }
+}
+for (const t of ["roads", "turns", "yaml"]) $(`fix-tab-${t}`).onclick = () => setFixTab(t);
+$("fix-yaml-save").onclick = () => loadFixesText($("fix-yaml").value);
+$("fix-clear").onclick = () => { fixDoc = {}; fixSync(); };
+$("fix-download").onclick = () => {
+  const a = Object.assign(document.createElement("a"), { download: "osm_fixes.yaml", href: URL.createObjectURL(new Blob([fixesText() ?? ""], { type: "text/yaml" })) });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href));
+};
+// a way ID goes into an SQL text: only a whole number
+const wayId = (id) => { const n = Number($(id).value.trim()); return Number.isSafeInteger(n) && n > 0 ? n : null; };
+const fixRows = async (sql) => (await duck.query(sql)).toArray().map((r) => r.toJSON());
+
+// the roads
+const FIX_EXCLUDE = () => [...document.querySelectorAll("input[name=fix-ex]")];
+function fixForm(rule) {
+  $("fix-oneway").value = rule?.oneway == null ? "" : String(rule.oneway);
+  for (const [id, k] of [["fix-lanes", "lanes"], ["fix-lanes-fwd", "lanes_forward"], ["fix-lanes-bwd", "lanes_backward"], ["fix-layer", "layer"]]) $(id).value = rule?.[k] ?? "";
+  $("fix-tl-fwd").value = rule?.turn_lanes_forward ?? "";
+  $("fix-tl-bwd").value = rule?.turn_lanes_backward ?? "";
+  $("fix-tags").value = fixesLib.tagsToText(rule?.tags);
+  $("fix-note").value = rule?.note ?? "";
+  for (const c of FIX_EXCLUDE()) c.checked = !!rule?.exclude_modes?.includes(c.value);
+  $("fix-remove").checked = !!rule?.remove;
+}
+async function fixLoad(id) {
+  $("fix-id").value = id;
+  const rule = fixesLib.findRule(fixDoc, id);
+  let info = null;
+  if (netBuilt) for (const m of ["driving", "cycling", "walking"]) {
+    try { info = (await fixRows(`SELECT name, highway, lanes, oneway, layer, round(length_m) AS m FROM ${m}.edges WHERE osm_id = ${id} LIMIT 1`))[0]; } catch (_) { /* a mode that was not built */ }
+    if (info) break;
+  }
+  const bits = info ? [info.name ? `“${info.name}”` : "No name", info.highway, info.oneway ? "one-way" : "two-way", info.lanes != null ? `${info.lanes} lanes` : null, info.layer ? `layer ${info.layer}` : null, `${info.m} m`] : [];
+  $("fix-road").textContent = `Way ${id}: ` + (info ? bits.filter(Boolean).join(", ") : "not in the networks") + (rule ? ". It has a rule." : ".");
+  fixForm(rule);
+}
+$("fix-load").onclick = () => { const id = wayId("fix-id"); id ? fixLoad(id) : fixErr("Type a way ID (a whole number)."); };
+$("fix-id").onkeydown = (e) => { if (e.key === "Enter") $("fix-load").click(); };
+$("fix-save").onclick = () => {
+  const osm_id = wayId("fix-id");
+  if (!osm_id) return fixErr("Type or pick a way ID first.");
+  const rule = { osm_id }, set = (k, v) => { if (v != null && v !== "") rule[k] = v; };
+  set("oneway", { true: true, false: false }[$("fix-oneway").value]);
+  set("lanes", fixNum("fix-lanes")); set("lanes_forward", fixNum("fix-lanes-fwd")); set("lanes_backward", fixNum("fix-lanes-bwd")); set("layer", fixNum("fix-layer"));
+  set("turn_lanes_forward", $("fix-tl-fwd").value.trim()); set("turn_lanes_backward", $("fix-tl-bwd").value.trim());
+  const ex = FIX_EXCLUDE().filter((c) => c.checked).map((c) => c.value);
+  if (ex.length) rule.exclude_modes = ex;
+  if ($("fix-remove").checked) rule.remove = true;
+  const tags = fixesLib.tagsFromText($("fix-tags").value);
+  if (Object.keys(tags).length) rule.tags = tags;
+  set("note", $("fix-note").value.trim());
+  if (Object.keys(rule).length === 1) return fixErr("Set at least one value in the rule.");
+  if ([rule.lanes, rule.lanes_forward, rule.lanes_backward, rule.layer].some((n) => n != null && !Number.isInteger(n))) return fixErr("Lanes and layer are whole numbers.");
+  fixesLib.upsertRule(fixDoc, rule);
+  fixSync();
+  $("fix-road").textContent = `Saved the rule for way ${osm_id}.`;
+};
+$("fix-del").onclick = () => {
+  const id = wayId("fix-id");
+  if (!id) return;
+  fixesLib.deleteRule(fixDoc, id);
+  fixSync();
+  fixForm(null);
+  $("fix-road").textContent = `Deleted the rule for way ${id}.`;
+};
+
+// the turns: the junctions at the end of a road, and a rule for each road that leaves one
+const TURN_TYPES = { no_left_turn: "No left turn", no_right_turn: "No right turn", no_straight_on: "No straight on", no_u_turn: "No U-turn", no_entry: "No entry", no_exit: "No exit",
+  only_left_turn: "Only left turn", only_right_turn: "Only right turn", only_straight_on: "Only straight on", only_u_turn: "Only U-turn" };
+const turnSelect = (cur) => `<select aria-label="Turn rule"><option value="">Allowed</option>${Object.entries(TURN_TYPES).map(([k, v]) => `<option value="${k}"${cur === k ? " selected" : ""}>${v}</option>`).join("")}</select>`;
+async function fixJunctions(from) {
+  $("fix-from").value = from;
+  const nodes = (await fixRows(`SELECT DISTINCT target AS n FROM driving.edges WHERE osm_id = ${from} ORDER BY n`)).map((r) => r.n);
+  $("fix-via-row").hidden = !nodes.length;
+  $("fix-via").innerHTML = nodes.map((n) => `<option value="${n}">Junction ${n}</option>`).join("");
+  $("fix-out").innerHTML = nodes.length ? "" : `<p class="why">Way ${from} is not in the driving network.</p>`;
+  if (nodes.length) await fixOutgoing();
+}
+async function fixOutgoing() {
+  const from = wayId("fix-from"), via = Number($("fix-via").value);
+  if (!from || !Number.isSafeInteger(via)) return;
+  const roads = await fixRows(`SELECT osm_id, any_value(name) AS name, any_value(highway) AS highway FROM driving.edges WHERE source = ${via} AND osm_id != ${from} GROUP BY osm_id ORDER BY osm_id LIMIT 30`);
+  $("fix-out").innerHTML = roads.length ? roads.map((r) => `<div class="turn" data-to="${r.osm_id}"><span class="small">To <b>${esc(r.name || "no name")}</b> (${esc(r.highway)}, way ${r.osm_id})</span>${turnSelect(fixesLib.findTurn(fixDoc, from, via, r.osm_id)?.restriction)}</div>`).join("")
+    : '<p class="why">No road leaves this junction.</p>';
+  for (const row of $("fix-out").querySelectorAll(".turn")) row.querySelector("select").onchange = (e) => {
+    const to = +row.dataset.to;
+    if (e.target.value) fixesLib.upsertTurn(fixDoc, { from_way: from, via_node: via, to_way: to, restriction: e.target.value });
+    else fixesLib.deleteTurn(fixDoc, from, via, to);
+    fixSync();
+  };
+}
+function fixTurnList() {
+  const list = fixDoc.turn_restrictions ?? [];
+  $("fix-turn-list").innerHTML = list.length ? list.map((t, i) => `<div class="turn"><span>${esc(TURN_TYPES[t.restriction] ?? t.restriction ?? "")}: way ${t.from_way}, junction ${t.via_node}, way ${t.to_way}</span><button class="btn" data-i="${i}" type="button">Delete</button></div>`).join("")
+    : '<span class="muted">None.</span>';
+  for (const b of $("fix-turn-list").querySelectorAll("button")) b.onclick = () => { fixDoc.turn_restrictions.splice(+b.dataset.i, 1); fixSync(); fixOutgoing(); };
+}
+$("fix-turn-find").onclick = () => { const id = wayId("fix-from"); id ? fixJunctions(id).catch((e) => fixErr(e.message)) : fixErr("Type a way ID (a whole number)."); };
+$("fix-via").onchange = () => fixOutgoing();
+
+// the panel: it holds the page's one panel while it is open (the steps, the title and the footer go; ← Steps brings them back)
+function editingFixes(on) {
+  document.body.classList.toggle("editing-fixes", on);
+  if (on) document.querySelectorAll(".maplibregl-popup:not(.rs-tip)").forEach((p) => p.remove());
+  else padMap();
+  map.resize();
+}
+$("fix-open").onclick = () => netBuilt && editingFixes(true);
+$("fix-back").onclick = () => editingFixes(false);
+// a click on a road fills the way ID while the panel is open, with no popup (the dashboard's row -> the road's OSM ID)
+const osmIdOf = (row) => { const p = window.RS_SIDE?.props?.[row]; return Array.isArray(p) ? p[ROAD_KEYS.indexOf("osm_id")] : p?.osm_id; };
+document.addEventListener("rs:select", (e) => {
+  if (!document.body.classList.contains("editing-fixes")) return;
+  setTimeout(() => document.querySelectorAll(".maplibregl-popup:not(.rs-tip)").forEach((p) => p.remove()));
+  const id = Number(osmIdOf(e.detail?.id));
+  if (!Number.isSafeInteger(id) || id <= 0) return;
+  fixLoad(id);
+  if (!$("fix-turns").hidden) fixJunctions(id).catch((err) => fixErr(err.message));
+});
+$("fix-apply").onclick = () => {
+  if ($("run").disabled) return status("The build cannot start yet: check step 3 and step 4.");
+  editingFixes(false);
+  $("fix-why").textContent = "Building the networks again with the fixes…";
+  $("run").click();
+};
+fixSync();
+
+// ---- card 8: roadstyle's level editor on the page's map (docs/app.md). The page makes the level area from the tables (makeArea) and keeps
 // it in this browser (browserStore, one for each area name). The editor uses the page's dashboard, map and roads (host mode): the page's roads
 // stay, and replaceRoads draws the edited edges again in the map worker. The editor solves and cuts no tiles of its own. Its pick adds
 // road and the line ends to the rows of window.RS_SIDE (destroy takes them off). Apply first writes the editor's levels.csv into the tables

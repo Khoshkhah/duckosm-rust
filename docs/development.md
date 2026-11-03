@@ -162,7 +162,7 @@ checkout, for example `duckosm-rust`). Compare them with `cmp` to the files of
 the page as JSON. The CLI writes zstd and the page writes snap, so compare `out-area` and `out-cli` by rows,
 not with `cmp`.
 
-Check the level editor of the page (card 7) in headless Chromium: open, one edit, Apply, the tables and the `.duckdb`
+Check the level editor of the page (card 8) in headless Chromium: open, one edit, Apply, the tables and the `.duckdb`
 download, "← Steps". It writes `editor.png` and `editor-dark.png` and prints the time to open the editor:
 
 ```bash
