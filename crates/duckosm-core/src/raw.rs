@@ -2,7 +2,7 @@
 //! `smart` cut gives them (`pbf::read_area_raw`). duckOSM's base-map layers (`features.*`) are made from them with
 //! duckOSM's own SQL (docs/features.md). The OSM fixes and the sidewalk rule change `raw.ways` as in duckOSM.
 
-use crate::fixes::{NewNode, OsmFixes, NEW_WAY_ID_MIN};
+use crate::fixes::{Elem, NewNode, OsmFixes, TagEdit, NEW_WAY_ID_MIN};
 use crate::graph::Relation;
 use crate::model::Way;
 use crate::util::FxHashMap;
@@ -43,6 +43,12 @@ pub fn set_tags<'a>(tags: &mut RawTags, new: impl IntoIterator<Item = (&'a str, 
     }
 }
 
+/// A tag edit (`extra.tag_edits`): set the tags, then delete the keys.
+fn edit_tags(tags: &mut RawTags, e: &TagEdit) {
+    set_tags(tags, e.set.iter().map(|(k, v)| (k.as_str(), v.as_str())));
+    tags.retain(|t| !e.delete.contains(&t.0));
+}
+
 impl Raw {
     fn way_mut(&mut self, id: i64) -> Option<&mut RawWay> {
         let i = self.ways.binary_search_by_key(&id, |w| w.id).ok()?;
@@ -77,6 +83,26 @@ impl Raw {
                 &mut w.tags,
                 r.tags.iter().map(|(k, v)| (k.as_str(), v.as_str())),
             );
+        }
+        // the tag edits of the page (`extra.tag_edits`): ways, nodes and relations, so crossings, signals and multipolygon buildings can change
+        for e in &fixes.tag_edits {
+            match e.elem {
+                Elem::Way => {
+                    if let Some(w) = self.way_mut(e.id) {
+                        edit_tags(&mut w.tags, e);
+                    }
+                }
+                Elem::Node => {
+                    if let Ok(i) = self.nodes.binary_search_by_key(&e.id, |n| n.id) {
+                        edit_tags(&mut self.nodes[i].tags, e);
+                    }
+                }
+                Elem::Relation => {
+                    if let Some(r) = self.relations.iter_mut().find(|r| r.id == e.id) {
+                        edit_tags(&mut r.tags, e);
+                    }
+                }
+            }
         }
         for n in &fixes.new_ways {
             // apply_to_ways has checked the ids
@@ -143,6 +169,62 @@ impl Raw {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tag_edits_on_ways_nodes_and_relations() {
+        let t = |v: &[(&str, &str)]| -> RawTags {
+            v.iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect()
+        };
+        let mut raw = Raw {
+            nodes: vec![RawNode {
+                id: 5,
+                lon: 0.0,
+                lat: 0.0,
+                tags: t(&[("highway", "crossing")]),
+            }],
+            ways: vec![RawWay {
+                id: 1,
+                tags: t(&[("building", "yes"), ("roof:colour", "red")]),
+                refs: vec![],
+            }],
+            relations: vec![Relation {
+                id: 9,
+                tags: t(&[("type", "multipolygon"), ("building", "yes")]),
+                members: vec![],
+            }],
+            timestamp: None,
+        };
+        let edit = |elem, id, set: &[(&str, &str)], delete: &[&str]| TagEdit {
+            elem,
+            id,
+            set: set
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+            delete: delete.iter().map(|k| k.to_string()).collect(),
+        };
+        let fixes = OsmFixes {
+            tag_edits: vec![
+                edit(Elem::Way, 1, &[("building:levels", "5")], &["roof:colour"]),
+                edit(Elem::Node, 5, &[("crossing", "marked")], &[]),
+                edit(Elem::Relation, 9, &[], &["building"]),
+                edit(Elem::Way, 404, &[("a", "b")], &[]), // not in this area: nothing happens
+            ],
+            ..Default::default()
+        };
+        raw.apply_fixes(&fixes);
+        assert_eq!(
+            raw.ways[0].tags,
+            t(&[("building", "yes"), ("building:levels", "5")])
+        );
+        assert_eq!(
+            raw.nodes[0].tags,
+            t(&[("highway", "crossing"), ("crossing", "marked")])
+        );
+        assert_eq!(raw.relations[0].tags, t(&[("type", "multipolygon")]));
+    }
 
     #[test]
     fn set_tags_is_map_concat() {
