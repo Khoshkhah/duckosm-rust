@@ -10,7 +10,7 @@ use duckosm_core::model::{Network, Way};
 use duckosm_core::network::{build_network_with, Coords, Options};
 use duckosm_core::osmjson::OsmJson;
 use duckosm_core::raw::Raw;
-use duckosm_core::{pbf, sidewalks};
+use duckosm_core::{cutfile, pbf, sidewalks};
 use levels::LevelEdges;
 use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
@@ -52,6 +52,10 @@ pub struct Params {
     /// Also write duckOSM's `raw.*` of the area (`raw_nodes.parquet`, ...), the input of the base-map layers
     /// (docs/features.md). Needs a boundary.
     pub raw: bool,
+    /// Also write the cut itself (the raw cut before the OSM fixes) as `cut.osm.pbf`, and with `cut_osm` as `cut.osm`
+    /// (XML). Needs a boundary and a region file (`Input::Area`). docs/app.md.
+    pub cut_pbf: bool,
+    pub cut_osm: bool,
     /// The boundary of the area for `main.boundary` and `main.visualization_metadata`, when the PBF is
     /// already cut to it (a config with `--pbf-is-cut`). `boundary` is used when this is None.
     pub area_boundary: Option<PathBuf>,
@@ -81,6 +85,8 @@ impl Default for Params {
             osm_fixes: None,
             boundary: None,
             raw: false,
+            cut_pbf: false,
+            cut_osm: false,
             area_boundary: None,
             built_at: None,
             timezone_entry: None,
@@ -376,8 +382,11 @@ pub fn run<W: Write + Send>(
     let need_relations = opts.extract_restrictions && driving;
     // the bus routes need the route relations and the member ways of the raw cut (docs/bus.md)
     let bus = p.bus_routes && driving;
-    if p.raw && !matches!(input, Input::Area(..)) {
-        return Err("raw.* (the base-map layers) needs a boundary".into());
+    let cut_file = p.cut_pbf || p.cut_osm;
+    if (p.raw || cut_file) && !matches!(input, Input::Area(..)) {
+        return Err(
+            "raw.* (the base-map layers) and the cut file need a boundary and a region file".into(),
+        );
     }
     let mut raw = None;
     let (mut ways, mut coords, relations) = match input {
@@ -399,15 +408,26 @@ pub fn run<W: Write + Send>(
         )?,
         // duckOSM with a boundary: cut the PBF (osmium complete_ways, or smart for raw.*), then the fixes on the raw ways
         Input::Area(open, boundary) => {
-            let (mut ways, coords, relations) = if p.raw || bus {
+            let (mut ways, coords, relations) = if p.raw || bus || cut_file {
                 let (w, c, r, mut rw) = pbf::read_area_raw(open, boundary)?;
+                log.step("cut to the boundary");
+                // the cut as osmium gives it: before the fixes change the ways
+                if p.cut_pbf {
+                    cutfile::write_pbf(&rw, rw.timestamp, &mut file("cut.osm.pbf")?)?;
+                    log.step("write cut.osm.pbf");
+                }
+                if p.cut_osm {
+                    cutfile::write_xml(&rw, &mut file("cut.osm")?)?;
+                    log.step("write cut.osm");
+                }
                 rw.apply_fixes(fixes);
                 raw = Some(rw);
                 (w, c, r)
             } else {
-                pbf::read_area(open, boundary)?
+                let cut = pbf::read_area(open, boundary)?;
+                log.step("cut to the boundary");
+                cut
             };
-            log.step("cut to the boundary");
             fixes.apply_to_ways(&mut ways)?;
             (ways, coords, relations)
         }
@@ -610,8 +630,8 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
             p,
             &mut log,
             |name| {
-                // raw.* is not in the .duckdb file, so it goes to the output folder
-                let path = if name.starts_with("raw_") {
+                // raw.* and the cut file are not in the .duckdb file, so they go to the output folder
+                let path = if name.starts_with("raw_") || name.starts_with("cut.") {
                     out
                 } else {
                     &pq_dir
@@ -644,7 +664,7 @@ pub fn build(pbf_path: &Path, out: &Path, p: &Params) -> Result<Summary, String>
     let mut sum = res?;
     if !p.geoparquet {
         sum.files
-            .retain(|(k, _)| k == "duckdb" || k.starts_with("raw_"));
+            .retain(|(k, _)| k == "duckdb" || k.starts_with("raw_") || k.starts_with("cut."));
     }
     sum.steps = log
         .rows

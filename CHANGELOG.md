@@ -7,6 +7,10 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ### Added
 
+- **The cut area as a download, `.osm.pbf`**: after a build from a region file (with **Base map layers** on), card 5 has a button
+  `.osm.pbf` with the nodes, ways and relations of the cut (osmium's `smart` cut, before the OSM fixes), and the page accepts the
+  file again as the "Cut file". New: `cutfile.rs` (the PBF writer and an `.osm` XML writer, with `miniz_oxide`), the CLI options
+  `--cut-pbf` and `--cut-osm`, `Params.cut_pbf` and `cut_osm`.
 - **A buffer around the area** in card 2 of the browser page: **Buffer around the area (m)**, 0 by default, as duckOSM's `boundary.buffer_m` (metres, in the UTM zone of the area's centre). The cut, the Overpass query and the saved GeoJSON use the grown area (docs/app.md, "The buffer"). `buffer_e2e.py` tests it.
 - **Saved areas in the browser page**: each build is saved in the browser (OPFS) with its drawing cache. A banner restores the last area with no build, and the **Saved** tab of card 1 lists, opens and deletes areas (docs/app.md, "Saved areas"). `saved_e2e.py` tests it.
 - **The elevation step, `--dem FILE`** (duckOSM `duckosm elevation --dem`): the build samples a DEM (a GeoTIFF in EPSG:4326, 32-bit

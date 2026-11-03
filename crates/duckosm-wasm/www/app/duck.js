@@ -19,6 +19,7 @@ CREATE OR REPLACE MACRO edge_id_hash_v1(osm_id, source, target, is_reverse) AS
     (hash(osm_id::BIGINT, source::BIGINT, target::BIGINT, is_reverse::BOOLEAN) >> 1)::BIGINT;`;
 
 let db = null, conn = null;
+export let cut = null;      // the bytes of cut.osm.pbf of the last build, or null (a region file was cut and the base-map layers were on)
 export let tables = [];   // {mode, table, name, bytes, rows} of the last build
 
 // the tables of a mode, in the order of the downloads, with what each one holds (duckOSM docs/reference/database.md, docs/edge_graph.md)
@@ -51,7 +52,7 @@ export const REFERENCE = "https://khoshkhah.github.io/duckOSM/reference/database
 export const FEATURES_TEXT = "The base-map layers (duckOSM features.*): water, land use, buildings, streets and railways, sites, paved areas, " +
   "public transport, points of interest, traffic signals and crossings, place names. The files have no tags column, as duckOSM's export.";
 export const FEATURES_REFERENCE = "https://khoshkhah.github.io/duckOSM/reference/features/";
-const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "area";
+export const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "area";
 
 // DuckDB starts when the page opens, while the user makes the area
 const t0 = performance.now();
@@ -128,9 +129,10 @@ export async function loadTables(files) {
   for (const t of tables) await conn.query(t.mode === "main" ? `DROP TABLE IF EXISTS main.${t.table}` : `DROP SCHEMA IF EXISTS ${t.mode} CASCADE`);
   await conn.query("DROP SCHEMA IF EXISTS raw CASCADE; SET enable_geoparquet_conversion = false");
   tables = [];
+  cut = files["cut.osm.pbf"] ?? null;
   forgetRoads();
   for (const [name, bytes] of Object.entries(files)) {
-    if (name.startsWith("raw_")) continue;     // loadFeatures reads them
+    if (name.startsWith("raw_") || name === "cut.osm.pbf") continue;     // loadFeatures reads them
     const { mode, table } = split(name);
     // registerFileBuffer moves the buffer into DuckDB's worker, so DuckDB gets a copy and the page keeps the file for its download.
     // DuckDB's copy goes away when the table is made (a phone has little memory).

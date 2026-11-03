@@ -163,7 +163,8 @@ pub fn features_sql() -> String {
 /// Build duckOSM's tables of an area: `region` is a `.osm.pbf` file (a `File` or `Blob`) that covers the
 /// `boundary` (GeoJSON, as `duckosm boundary` writes it). The file is cut to the boundary while it is read. With
 /// `raw`, the output also has `raw_nodes.parquet`, `raw_ways.parquet` and `raw_relations.parquet`: duckOSM's
-/// `raw.*` of the area, cut as osmium's `smart` does, the input of [`features_sql`].
+/// `raw.*` of the area, cut as osmium's `smart` does, the input of [`features_sql`], and the cut itself as
+/// `cut.osm.pbf` (the file for the user to download).
 #[wasm_bindgen]
 pub fn build_area(
     region: Blob,
@@ -288,6 +289,7 @@ fn js_build(
     let mut p = Params {
         modes: Mode::parse_all(&modes.split(',').collect::<Vec<_>>()).map_err(e)?,
         raw,
+        cut_pbf: raw,
         built_at: Some((js_sys::Date::now() * 1000.0) as i64),
         timezone_entry: TIMEZONE_ENTRY.with(|e| e.borrow().clone()),
         ..Params::default()

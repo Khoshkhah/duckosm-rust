@@ -2,6 +2,7 @@
 
 pub mod boundary;
 pub mod bus;
+pub mod cutfile;
 pub mod filter;
 pub mod fixes;
 pub mod geom;
