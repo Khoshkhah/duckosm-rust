@@ -7,6 +7,7 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ### Added
 
+- **Saved areas in the browser page**: each build is saved in the browser (OPFS) with its drawing cache. A banner restores the last area with no build, and the **Saved** tab of card 1 lists, opens and deletes areas (docs/app.md, "Saved areas"). `saved_e2e.py` tests it.
 - **The elevation step, `--dem FILE`** (duckOSM `duckosm elevation --dem`): the build samples a DEM (a GeoTIFF in EPSG:4326, 32-bit
   floats, uncompressed or deflate) at every node and at every vertex of every edge, as rasterio's `sample` does (the pixel that holds
   the point, 2 decimals). It writes `elevation_nodes_<mode>.parquet`, `elevation_edges_<mode>.parquet` (`z_from`, `z_to` and
