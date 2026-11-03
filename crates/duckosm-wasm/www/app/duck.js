@@ -47,6 +47,7 @@ export const TABLES = {
   level_edits: "Your edits of the drawing order in the level editor (card 7): one rule for each row.",
   level_heads: "The head lengths that you set in the level editor, for each road.",
   level_caps: "The line ends that you set in the level editor, for each road.",
+  building_info: "One row for each building: floors, height, roof shape, roof and facade colors (as #rrggbb) and materials, read from its OSM tags.",
 };
 export const REFERENCE = "https://khoshkhah.github.io/duckOSM/reference/database/";
 export const FEATURES_TEXT = "The base-map layers (duckOSM features.*): water, land use, buildings, streets and railways, sites, paved areas, " +
@@ -205,7 +206,51 @@ export async function loadFeatures(files, sql) {
     const rows = Number((await conn.query(`SELECT count(*) AS n FROM features.${table}`)).toArray()[0].n);
     tables.push({ mode: "features", table, name, bytes, rows });
   }
+  await buildingInfo();
   await conn.query("DROP SCHEMA IF EXISTS raw CASCADE");
+}
+
+// main.building_info (docs/osm-editing.md, M3): the floors, the height, the roof and the colors of each building, from its tags. It is not in duckOSM's
+// output: the page makes it for the fixes panel and for SQL. A value that does not parse is NULL; the text stays in features.buildings.tags.
+const BUILDING_INFO_SQL = String.raw`
+CREATE OR REPLACE TEMP MACRO css_color(c) AS CASE
+  WHEN c IS NULL THEN NULL
+  WHEN regexp_matches(c, '^#[0-9a-f]{6}$') THEN c
+  WHEN regexp_matches(c, '^#[0-9a-f]{3}$') THEN '#' || repeat(c[2], 2) || repeat(c[3], 2) || repeat(c[4], 2)
+  ELSE map_extract(MAP {'white': '#ffffff', 'black': '#000000', 'red': '#ff0000', 'green': '#008000', 'blue': '#0000ff', 'yellow': '#ffff00', 'orange': '#ffa500',
+    'brown': '#a52a2a', 'grey': '#808080', 'gray': '#808080', 'silver': '#c0c0c0', 'beige': '#f5f5dc', 'pink': '#ffc0cb', 'purple': '#800080', 'cyan': '#00ffff',
+    'tan': '#d2b48c', 'maroon': '#800000', 'olive': '#808000', 'navy': '#000080', 'teal': '#008080', 'lightgray': '#d3d3d3', 'lightgrey': '#d3d3d3',
+    'darkgray': '#a9a9a9', 'darkgrey': '#a9a9a9', 'ivory': '#fffff0', 'khaki': '#f0e68c', 'salmon': '#fa8072', 'gold': '#ffd700', 'cream': '#fffdd0'}, c)[1]
+END;
+CREATE OR REPLACE TABLE main.building_info AS
+WITH t AS (
+  SELECT osm_id, osm_type, kind, name,
+         map_extract(tags, 'building:levels')[1] AS lv, map_extract(tags, 'roof:levels')[1] AS rlv, map_extract(tags, 'height')[1] AS h,
+         map_extract(tags, 'roof:shape')[1] AS roof_shape, lower(trim(map_extract(tags, 'roof:colour')[1])) AS rc,
+         lower(trim(map_extract(tags, 'building:colour')[1])) AS fc, map_extract(tags, 'building:material')[1] AS material,
+         map_extract(tags, 'roof:material')[1] AS roof_material
+  FROM features.buildings)
+SELECT osm_id, osm_type, kind, name,
+       TRY_CAST(regexp_extract(lv, '^\s*(\d+)', 1) AS INTEGER) AS levels,
+       TRY_CAST(regexp_extract(rlv, '^\s*(\d+)', 1) AS INTEGER) AS roof_levels,
+       CASE WHEN h IS NULL THEN NULL
+            WHEN regexp_matches(h, '^\s*\d+(\.\d+)?\s*(m|meter|meters)?\s*$') THEN TRY_CAST(regexp_extract(h, '\d+(\.\d+)?') AS DOUBLE)
+            WHEN regexp_matches(h, '^\s*\d+(\.\d+)?\s*(ft|feet|'')\s*$') THEN TRY_CAST(regexp_extract(h, '\d+(\.\d+)?') AS DOUBLE) * 0.3048 END AS height_m,
+       roof_shape, css_color(rc) AS roof_color, css_color(fc) AS facade_color, material, roof_material
+FROM t;`;
+async function buildingInfo() {
+  try {
+    await conn.query(BUILDING_INFO_SQL);
+    const name = "building_info_main.parquet";
+    await db.dropFile(name).catch(() => {});
+    await conn.query(`COPY (SELECT * FROM main.building_info) TO '${name}' (FORMAT parquet)`);
+    const bytes = await db.copyFileToBuffer(name);
+    await db.dropFile(name);
+    const rows = Number((await conn.query("SELECT count(*) AS n FROM main.building_info")).toArray()[0].n);
+    tables.push({ mode: "main", table: "building_info", name, bytes, rows });
+  } catch (e) {
+    console.warn("building_info was not made:", e.message);       // the build goes on without it
+  }
 }
 
 // the .duckdb file of the tables of the build, as make_duckdb.sql makes it: the tables, mm.edges and the macros. DuckDB writes it

@@ -9,6 +9,23 @@ const TURN_TYPES = { no_left_turn: "No left turn", no_right_turn: "No right turn
 const KIND_OF = { road: "way", building: "way", node: "node" };      // what a click on the map picks, and the OSM type of it (a building can be a relation)
 const KIND_NAME = { road: "Road", building: "Building", node: "Node", relation: "Relation" };
 
+// the height and the color of a building from its tags, for the 3D preview of the edited buildings (the same reading as main.building_info in app/duck.js)
+const NAMED = { white: "#ffffff", black: "#000000", red: "#ff0000", green: "#008000", blue: "#0000ff", yellow: "#ffff00", orange: "#ffa500", brown: "#a52a2a", grey: "#808080", gray: "#808080",
+  silver: "#c0c0c0", beige: "#f5f5dc", pink: "#ffc0cb", purple: "#800080", cyan: "#00ffff", tan: "#d2b48c", maroon: "#800000", olive: "#808000", navy: "#000080", teal: "#008080",
+  lightgray: "#d3d3d3", lightgrey: "#d3d3d3", darkgray: "#a9a9a9", darkgrey: "#a9a9a9", ivory: "#fffff0", khaki: "#f0e68c", salmon: "#fa8072", gold: "#ffd700", cream: "#fffdd0" };
+export function cssColor(c) {
+  c = String(c ?? "").trim().toLowerCase();
+  if (/^#[0-9a-f]{6}$/.test(c)) return c;
+  if (/^#[0-9a-f]{3}$/.test(c)) return "#" + [...c.slice(1)].map((x) => x + x).join("");
+  return NAMED[c] ?? null;
+}
+export function heightOf(tags) {
+  const h = String(tags.height ?? "").trim(), m = /^(\d+(?:\.\d+)?)\s*(m|meter|meters|ft|feet|')?$/i.exec(h);
+  if (m) return Number(m[1]) * (/^(ft|feet|')$/i.test(m[2] ?? "") ? 0.3048 : 1);
+  const lv = /^\s*(\d+)/.exec(tags["building:levels"] ?? "");
+  return lv ? Number(lv[1]) * 3.2 : 6;                         // 3.2 m for a floor; 6 m when the data has neither
+}
+
 export async function initFixesPanel(ctx) {
   const { $, duck, map, status, esc, yaml } = ctx;
   const presets = await fetch("app/presets.json").then((r) => r.json());
@@ -282,6 +299,10 @@ export async function initFixesPanel(ctx) {
       map.addLayer({ id: `${src}-line`, type: "line", source: src, filter: ["!=", ["geometry-type"], "Point"], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": color, "line-width": w, "line-opacity": 0.95 } });
       map.addLayer({ id: `${src}-pt`, type: "circle", source: src, filter: ["==", ["geometry-type"], "Point"], paint: { "circle-radius": w + 3, "circle-color": color, "circle-opacity": 0.35, "circle-stroke-color": color, "circle-stroke-width": 3 } });
     }
+    if (!map.getSource("fix-3d")) {                  // the edited buildings, as extrusions with their height and facade color (tilt the map to see them)
+      map.addSource("fix-3d", { type: "geojson", data: EMPTY });
+      map.addLayer({ id: "fix-3d", type: "fill-extrusion", source: "fix-3d", paint: { "fill-extrusion-height": ["get", "h"], "fill-extrusion-color": ["get", "c"], "fill-extrusion-opacity": 0.85 } }, "fix-edits-fill");
+    }
   }
 
   // the lines, polygons and points of some objects: [{type, id, kind}] -> Feature[]
@@ -300,7 +321,21 @@ export async function initFixesPanel(ctx) {
     return out.filter(Boolean);
   }
 
-  const drawnCount = { edits: 0, sel: 0 };      // what the panel put in the map's sources (the tests read it)
+  const drawnCount = { edits: 0, sel: 0, heights: [] };      // what the panel put in the map's sources (the tests read it)
+  // the edited buildings with their height and color: the tags of the data with the rule on top, so a change shows before the next build
+  async function extrusions() {
+    await classify();
+    const ids = F.objects(doc).filter((o) => o.type === "way" && kinds.get("way" + o.id) === "building").map((o) => o.id);
+    if (!ids.length) return [];
+    const out = [];
+    for (const r of await safe(`SELECT osm_id AS id, ST_AsGeoJSON(geom) AS g, ${TAGS} FROM features.buildings WHERE osm_type = 'way' AND osm_id IN (${ids.join(",")})`)) {
+      const rule = F.ruleOf(doc, "way", Number(r.id)), tags = { ...tagMap(r), ...rule.set };
+      for (const k of rule.delete) delete tags[k];
+      try { out.push({ type: "Feature", properties: { h: Math.round(heightOf(tags) * 10) / 10, c: cssColor(tags["building:colour"]) ?? cssColor(tags["roof:colour"]) ?? AMBER }, geometry: JSON.parse(r.g) }); } catch { /* no geometry */ }
+    }
+    return out;
+  }
+
   let mapToken = 0;
   async function drawEdits() {
     const my = ++mapToken;
@@ -309,7 +344,11 @@ export async function initFixesPanel(ctx) {
     const list = F.objects(doc), feats = await shapes(list);
     const via = [...new Set((doc.turn_restrictions ?? []).map((t) => t.via_node))].filter((n) => Number.isSafeInteger(n));
     if (via.length) for (const r of await safe(`SELECT node_id AS id, ST_AsGeoJSON(geom) AS g FROM driving.nodes WHERE node_id IN (${via.join(",")})`)) { try { feats.push({ type: "Feature", properties: { turn: 1 }, geometry: JSON.parse(r.g) }); } catch { /* no geometry */ } }
-    if (my === mapToken) { map.getSource("fix-edits")?.setData({ type: "FeatureCollection", features: feats }); drawnCount.edits = feats.length; }
+    const solids = await extrusions();
+    if (my === mapToken) {
+      map.getSource("fix-edits")?.setData({ type: "FeatureCollection", features: feats }); drawnCount.edits = feats.length;
+      map.getSource("fix-3d")?.setData({ type: "FeatureCollection", features: solids }); drawnCount.heights = solids.map((f) => f.properties.h);
+    }
   }
 
   let selToken = 0;

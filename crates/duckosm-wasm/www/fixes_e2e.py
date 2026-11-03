@@ -138,7 +138,9 @@ with sync_playwright() as p:
     page.click("#fix-save")
     y = text(page)
     assert "type: way" in y and "building:levels: '7'" in y and "roof:shape: gabled" in y and "roof:colour: '#cc3300'" in y, y
-    print(f"a building: way {b['osm_id']}, floors 7, roof gabled, roof color #cc3300")
+    page.wait_for_function("window.fixesPanel.drawn().heights.length > 0", timeout=20_000)
+    assert 22.4 in page.evaluate("window.fixesPanel.drawn().heights"), ("7 floors are 22.4 m in the 3D preview", page.evaluate("window.fixesPanel.drawn().heights"))
+    print(f"a building: way {b['osm_id']}, floors 7 (3D preview 22.4 m), roof gabled, roof color #cc3300")
 
     # a node (a traffic signal): the Nodes filter, a real click
     page.click("#fix-kind [data-kind=node]")
@@ -220,6 +222,11 @@ with sync_playwright() as p:
     bt = rows(page, f"SELECT map_extract(tags, 'building:levels')[1] AS l, map_extract(tags, 'roof:shape')[1] AS r, map_extract(tags, 'roof:colour')[1] AS c "
                     f"FROM features.buildings WHERE osm_id = {b['osm_id']} AND osm_type = 'way'")[0]
     assert (bt["l"], bt["r"], bt["c"]) == ("7", "gabled", "#cc3300"), bt
+    info = rows(page, f"SELECT levels, roof_shape, roof_color, height_m FROM main.building_info WHERE osm_id = {b['osm_id']} AND osm_type = 'way'")[0]
+    assert (info["levels"], info["roof_shape"], info["roof_color"]) == (7, "gabled", "#cc3300"), info
+    cc = rows(page, "SELECT css_color('red') AS a, css_color('#f0a') AS b, css_color('nope') AS c")[0]
+    assert (cc["a"], cc["b"], cc["c"]) == ("#ff0000", "#ff00aa", None), cc
+    assert rows(page, "SELECT count(*)::INTEGER AS n FROM main.building_info")[0]["n"] == rows(page, "SELECT count(*)::INTEGER AS n FROM features.buildings")[0]["n"]
     nt = rows(page, f"SELECT map_extract(tags, 'traffic_signals:direction')[1] AS d, map_extract(tags, 'traffic_signals')[1] AS s, map_extract(tags, 'note:test')[1] AS n "
                     f"FROM features.traffic WHERE osm_id = {n['osm_id']}")[0]
     assert (nt["d"], nt["s"], nt["n"]) == ("backward", None, "hello"), nt
