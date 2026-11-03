@@ -11,6 +11,8 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
   `.osm.pbf` with the nodes, ways and relations of the cut (osmium's `smart` cut, before the OSM fixes), and the page accepts the
   file again as the "Cut file". New: `cutfile.rs` (the PBF writer and an `.osm` XML writer, with `miniz_oxide`), the CLI options
   `--cut-pbf` and `--cut-osm`, `Params.cut_pbf` and `cut_osm`.
+- **A buffer around the area** in card 2 of the browser page: **Buffer around the area (m)**, 0 by default, as duckOSM's `boundary.buffer_m` (metres, in the UTM zone of the area's centre). The cut, the Overpass query and the saved GeoJSON use the grown area (docs/app.md, "The buffer"). `buffer_e2e.py` tests it.
+- **Saved areas in the browser page**: each build is saved in the browser (OPFS) with its drawing cache. A banner restores the last area with no build, and the **Saved** tab of card 1 lists, opens and deletes areas (docs/app.md, "Saved areas"). `saved_e2e.py` tests it.
 - **The elevation step, `--dem FILE`** (duckOSM `duckosm elevation --dem`): the build samples a DEM (a GeoTIFF in EPSG:4326, 32-bit
   floats, uncompressed or deflate) at every node and at every vertex of every edge, as rasterio's `sample` does (the pixel that holds
   the point, 2 decimals). It writes `elevation_nodes_<mode>.parquet`, `elevation_edges_<mode>.parquet` (`z_from`, `z_to` and
@@ -20,7 +22,7 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ### Changed
 
-- The page uses roadstyle `0.26.2` (`14b40d0f2bd221200a9444a592f96d2febb0b9f5`): the level editor's map follows the dashboard theme, and the area's layers (the **Map layers** switch and the legend list) stay inside the editor. The page gives the editor its look (`look`: `map/look.json`), so the editor's roads have the page's palette and colour options. `editor_path_e2e.py` checks the theme, the layers, the Base map box, the legend box and a theme change inside the open editor.
+- The page uses roadstyle `6e025cd4119425a6e5d998c13192757ab817d475` (`0.26.3` and the level editor that opens in the page's map, branch `editor-fast-open`): the level editor's map follows the dashboard theme, and the area's layers (the **Map layers** switch and the legend list) stay inside the editor. The page gives the editor its look (`look`: `map/look.json`), so the editor's roads have the page's palette and colour options. `editor_path_e2e.py` checks the theme, the layers, the Base map box, the legend box and a theme change inside the open editor. `map/look.json` has `roads.split.overlap_px` (0.15), which this version needs: the map failed without it. A two-way road is two halves, one for each direction, so the editor test accepts a hover on either half.
 - **Card 5: the networks of the build are a table** (Network with its icon, Roads, Junctions; numbers right-aligned), in roadstyle's table, in place of the line "driving 57,765 / 26,535 · ... (edges / nodes)".
 - **The progress of a build is in one place**: the map's busy box (also on a phone: the page opens the sheet only to its middle height, so the box is in view). The Build button is off with a small spinner, and there is no text line under it. Card 4 has only the result of the build or its error. `buttons_e2e.py` checks that only one element says "Building" during a build, that it is in the map's busy box, and (on a phone) that the box is above the sheet.
 

@@ -115,7 +115,11 @@ const GEOM = "ST_GeomFromWKB(geometry)";
 const selectWkb = (table, cols) => {
   const sql = select(table);
   if (sql.includes("geometry AS geom")) return sql.replace("geometry AS geom", `${GEOM} AS geom`);
-  return sql === "SELECT *" && cols.includes("geometry") ? `SELECT * REPLACE (${GEOM} AS geometry)` : sql;
+  if (sql === "SELECT *") {
+    if (cols.includes("geometry")) return `SELECT * REPLACE (${GEOM} AS geometry)`;
+    if (cols.includes("geom")) return `SELECT * REPLACE (ST_GeomFromWKB(geom) AS geom)`;
+  }
+  return sql;
 };
 
 // the files of a build into DuckDB, one schema for each mode; the old tables go away
@@ -138,6 +142,31 @@ export async function loadTables(files) {
     const cols = (await conn.query(`DESCRIBE SELECT * FROM read_parquet('${name}')`)).toArray().map((r) => r.column_name);
     await conn.query(`CREATE OR REPLACE TABLE ${mode}.${table} AS ${selectWkb(table, cols)} FROM read_parquet('${name}')`);
     const rows = Number((await conn.query(`SELECT count(*) AS n FROM ${mode}.${table}`)).toArray()[0].n);
+    await db.dropFile(name);
+    tables.push({ mode, table, name, bytes, rows });
+  }
+  await conn.query("SET enable_geoparquet_conversion = true");
+  const modes = MODES.filter((m) => tables.some((t) => t.mode === m && t.table === "edges"));
+  if (tables.some((t) => t.mode === "mm")) await conn.query(mmEdges(modes));
+  await conn.query(MACROS);
+}
+
+// Restore saved tables from OPFS persistent storage directly into DuckDB
+export async function restoreTables(savedTables) {
+  await duckReady;
+  await loadSpatial();
+  for (const t of tables) await conn.query(t.mode === "main" ? `DROP TABLE IF EXISTS main.${t.table}` : `DROP SCHEMA IF EXISTS ${t.mode} CASCADE`);
+  await conn.query("DROP SCHEMA IF EXISTS raw CASCADE; DROP SCHEMA IF EXISTS features CASCADE; SET enable_geoparquet_conversion = false");
+  tables = [];
+  forgetRoads();
+  for (const item of savedTables) {
+    const { mode, table, name, bytes, rows: savedRows } = item;
+    if (!name || !bytes) continue;
+    await db.registerFileBuffer(name, bytes.slice());
+    await conn.query(`CREATE SCHEMA IF NOT EXISTS ${mode}`);
+    const cols = (await conn.query(`DESCRIBE SELECT * FROM read_parquet('${name}')`)).toArray().map((r) => r.column_name);
+    await conn.query(`CREATE OR REPLACE TABLE ${mode}.${table} AS ${selectWkb(table, cols)} FROM read_parquet('${name}')`);
+    const rows = typeof savedRows === "number" ? savedRows : Number((await conn.query(`SELECT count(*) AS n FROM ${mode}.${table}`)).toArray()[0].n);
     await db.dropFile(name);
     tables.push({ mode, table, name, bytes, rows });
   }
@@ -330,6 +359,28 @@ export function prepareRoads(mode) {
   }
   return inputsCache.get(mode);
 }
+
+// Get cached visualization inputs for a mode (viz_roads.parquet and viz_features.parquet buffers)
+export async function getVizInputs(mode) {
+  try {
+    return await prepareRoads(mode);
+  } catch (_) {
+    return null;
+  }
+}
+
+// Seed the visualization cache with saved buffers from OPFS so roadsStyle skips SQL queries
+export function setVizInputs(mode, viz) {
+  if (!viz || !viz.roads) return;
+  const val = {
+    roads: viz.roads instanceof Uint8Array ? viz.roads : new Uint8Array(viz.roads),
+    features: viz.features ? (viz.features instanceof Uint8Array ? viz.features : new Uint8Array(viz.features)) : undefined,
+    levels: viz.levels || "tags",
+    seconds: 0
+  };
+  inputsCache.set(mode, Promise.resolve(val));
+}
+
 export async function roadsStyle(mode, name, keep = []) {
   const t = performance.now();
   drawLaps.length = tileStats.length = 0;
