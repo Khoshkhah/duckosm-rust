@@ -91,6 +91,10 @@ struct Cli {
     /// With --boundary: also write the cut area as cut.osm (XML).
     #[arg(long, requires = "boundary")]
     cut_osm: bool,
+    /// With --boundary: also write main.building_faces (building_faces_main.parquet): the walls of the buildings, each with a type
+    /// (front, back, side, party), from the streets of the driving and walking modes (docs/osm-editing.md). Not in duckOSM.
+    #[arg(long, requires = "boundary")]
+    building_faces: bool,
     /// The drawing order of the roads (visualization.edge_levels, docs/levels.md): tags (a rule on layer,
     /// bridge and tunnel), solve (roadstyle's optimization) or none. Default: tags, or the config's
     /// options.levels (on: solve).
@@ -163,6 +167,7 @@ fn run() -> Result<(), String> {
         p.raw = cli.raw;
         p.cut_pbf = cli.cut_pbf;
         p.cut_osm = cli.cut_osm;
+        p.building_faces = cli.building_faces;
     }
     if let Some(f) = &cli.format {
         p.set_formats(&f.split(',').collect::<Vec<_>>())?;

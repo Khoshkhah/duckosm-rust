@@ -6,6 +6,7 @@ use arrow_array::builder::{
 };
 use arrow_array::{ArrayRef, RecordBatch};
 use arrow_schema::{DataType, Field, Fields, Schema, TimeUnit};
+use duckosm_core::building_faces::BuildingFace;
 use duckosm_core::bus::{Route, RouteEdge};
 use duckosm_core::filter::{Mode, ModeWay};
 use duckosm_core::geom::Pt;
@@ -1059,6 +1060,77 @@ pub fn write_route_edges_to<W: Write + Send>(out: W, rows: &[RouteEdge]) -> Resu
             bools(c.iter().map(|r| r.bus_lane)),
         ]
     })
+}
+
+/// The columns of `main.building_faces` (`building_faces_main.parquet`): one row for each wall of a building (`duckosm_core::building_faces`).
+pub fn building_faces_schema() -> Schema {
+    Schema::new(vec![
+        Field::new("building_id", DataType::Int64, false),
+        Field::new("face_index", DataType::Int32, false),
+        Field::new("from_node", DataType::Int64, false),
+        Field::new("to_node", DataType::Int64, false),
+        Field::new("face_type", DataType::Utf8, false),
+        Field::new("computed_type", DataType::Utf8, false),
+        Field::new("edited", DataType::Boolean, false),
+        Field::new("length_m", DataType::Float32, false),
+        Field::new("azimuth_deg", DataType::Float32, false),
+        Field::new("street_osm_id", DataType::Int64, true),
+        Field::new("street_edge_id", DataType::Int64, true),
+        Field::new("street_name", DataType::Utf8, true),
+        Field::new("distance_m", DataType::Float32, true),
+        Field::new("geometry", DataType::Binary, false),
+    ])
+}
+
+/// Write `building_faces_main.parquet` as GeoParquet with a LineString for each wall.
+pub fn write_building_faces_to<W: Write + Send>(out: W, rows: &[BuildingFace]) -> Result<(), String> {
+    let schema = Arc::new(building_faces_schema());
+    let mut w = ArrowWriter::try_new(out, schema.clone(), Some(props("LineString"))).map_err(err)?;
+    for chunk in rows.chunks(ROW_GROUP) {
+        let n = chunk.len();
+        let (mut building_id, mut from_node, mut to_node) = (Int64Builder::with_capacity(n), Int64Builder::with_capacity(n), Int64Builder::with_capacity(n));
+        let mut face_index = Int32Builder::with_capacity(n);
+        let (mut face_type, mut computed_type, mut street_name) = (StringBuilder::new(), StringBuilder::new(), StringBuilder::new());
+        let mut edited = BooleanBuilder::with_capacity(n);
+        let (mut length_m, mut azimuth_deg, mut distance_m) = (Float32Builder::with_capacity(n), Float32Builder::with_capacity(n), Float32Builder::with_capacity(n));
+        let (mut street_osm_id, mut street_edge_id) = (Int64Builder::with_capacity(n), Int64Builder::with_capacity(n));
+        let mut geometry = BinaryBuilder::new();
+        for r in chunk {
+            building_id.append_value(r.building_id);
+            face_index.append_value(r.face_index);
+            from_node.append_value(r.from_node);
+            to_node.append_value(r.to_node);
+            face_type.append_value(r.face_type.name());
+            computed_type.append_value(r.computed_type.name());
+            edited.append_value(r.edited);
+            length_m.append_value(r.length_m);
+            azimuth_deg.append_value(r.azimuth_deg);
+            street_osm_id.append_option(r.street_osm_id);
+            street_edge_id.append_option(r.street_edge_id);
+            street_name.append_option(r.street_name.as_deref());
+            distance_m.append_option(r.distance_m);
+            geometry.append_value(line_wkb(&r.geometry));
+        }
+        let cols: Vec<ArrayRef> = vec![
+            Arc::new(building_id.finish()),
+            Arc::new(face_index.finish()),
+            Arc::new(from_node.finish()),
+            Arc::new(to_node.finish()),
+            Arc::new(face_type.finish()),
+            Arc::new(computed_type.finish()),
+            Arc::new(edited.finish()),
+            Arc::new(length_m.finish()),
+            Arc::new(azimuth_deg.finish()),
+            Arc::new(street_osm_id.finish()),
+            Arc::new(street_edge_id.finish()),
+            Arc::new(street_name.finish()),
+            Arc::new(distance_m.finish()),
+            Arc::new(geometry.finish()),
+        ];
+        w.write(&RecordBatch::try_new(schema.clone(), cols).map_err(err)?).map_err(err)?;
+    }
+    w.close().map_err(err)?;
+    Ok(())
 }
 
 /// Write the heights of the nodes of a mode (`elevation_nodes_<mode>.parquet`): `node_id`, `ele`.

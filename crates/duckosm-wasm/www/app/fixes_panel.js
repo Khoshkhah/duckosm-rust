@@ -8,6 +8,8 @@ const TURN_TYPES = { no_left_turn: "No left turn", no_right_turn: "No right turn
   only_left_turn: "Only left turn", only_right_turn: "Only right turn", only_straight_on: "Only straight on", only_u_turn: "Only U-turn" };
 const KIND_OF = { road: "way", building: "way", node: "node" };      // what a click on the map picks, and the OSM type of it (a building can be a relation)
 const KIND_NAME = { road: "Road", building: "Building", node: "Node", relation: "Relation" };
+const FACE_COLORS = { front: "#16a34a", back: "#dc2626", side: "#6b7280", party: "#7c3aed" };
+const FACE_NAMES = { front: "Front", back: "Back", side: "Side", party: "Party wall" };
 
 // the height and the color of a building from its tags, for the 3D preview of the edited buildings (the same reading as main.building_info in app/duck.js)
 const NAMED = { white: "#ffffff", black: "#000000", red: "#ff0000", green: "#008000", blue: "#0000ff", yellow: "#ffff00", orange: "#ffa500", brown: "#a52a2a", grey: "#808080", gray: "#808080",
@@ -31,6 +33,7 @@ export async function initFixesPanel(ctx) {
   const presets = await fetch("app/presets.json").then((r) => r.json());
   let doc = {}, hist = [], future = [];
   let sel = null, data = null, draft = {}, touched = new Set(), kind = "road", token = 0;
+  let walls = [];                              // the walls of the selected building (main.building_faces), with their lines
   const kinds = new Map();                     // "way123" -> "road" | "building": what an edited way is (the list of changes)
   const names = new Map();
 
@@ -123,6 +126,14 @@ export async function initFixesPanel(ctx) {
     box.insertAdjacentHTML("beforeend", `<p class="small" style="margin:12px 0 4px"><b>Other tags</b></p><div class="other">${other.map((k) => `<div class="otherrow${k in rule.set || rule.delete.includes(k) ? " edited" : ""}"><span class="k" title="${esc(k)}">${esc(k)}</span><input type="text" data-key="${esc(k)}" value="${esc(draft[k])}" aria-label="${esc(k)}"><button type="button" class="btn sm" data-clear="${esc(k)}" title="Delete this tag" aria-label="Delete ${esc(k)}">×</button></div>`).join("") || '<span class="small muted">None.</span>'}
       <div class="otherrow add"><input type="text" id="fix-addkey" placeholder="key" aria-label="New tag, key"><input type="text" id="fix-addval" placeholder="value" aria-label="New tag, value"><button type="button" class="btn sm" id="fix-add">Add</button></div></div>
       <div class="grid2 fixgrid" style="margin-top:8px"><label for="fix-note" class="small">Note</label><input type="text" id="fix-note" value="${esc(draft.note)}" placeholder="Why"></div>`);
+    if (sel.kind === "building" && walls.length) {
+      box.insertAdjacentHTML("beforeend", `<p class="small" style="margin:14px 0 4px"><b>Walls</b> <span class="muted">(${walls.length})</span> ${Object.entries(FACE_COLORS).map(([t, c]) => `<span class="legend"><i style="background:${c}"></i>${FACE_NAMES[t]}</span>`).join("")}</p>
+        <div class="walls">${walls.map((w) => { const t = wallType(w), ruled = !!F.findFace(doc, sel.id, w.from_node, w.to_node);
+          return `<div class="wallrow${ruled ? " edited" : ""}" data-a="${w.from_node}" data-b="${w.to_node}" data-computed="${w.computed_type}"><span class="k">#${w.face_index + 1}</span><span class="small">${Number(w.length_m).toFixed(1)} m${w.street_name ? ` · ${esc(w.street_name)}` : ""}</span>
+          <select data-wall aria-label="Type of wall ${w.face_index + 1}">${Object.entries(FACE_NAMES).map(([k, v]) => `<option value="${k}"${k === t ? " selected" : ""}>${v}${k === w.computed_type ? " (computed)" : ""}</option>`).join("")}</select></div>`; }).join("")}</div>`);
+    } else if (sel.kind === "building" && !hasFaces() && sel.type === "way") {
+      box.insertAdjacentHTML("beforeend", '<p class="why">Build with the layers on to see the walls of a building and to give them a type.</p>');
+    }
     $("fix-actions").hidden = false;
     $("fix-del").disabled = F.isEmptyRule(rule);
   }
@@ -150,15 +161,33 @@ export async function initFixesPanel(ctx) {
     const d = await loadData(sel.type, id, k);
     if (my !== token) return;
     sel.type = d.type; data = d; draft = initialDraft();
-    renderObject(); renderForm();
+    walls = k === "building" && d.type === "way" ? await loadWalls(id) : [];
+    if (my !== token) return;
+    renderObject(); renderForm(); drawFaces();
     await drawSelected(zoom);
   }
+
+  // the walls of a building: main.building_faces has them after a build with the layers (docs/osm-editing.md, M4)
+  const hasFaces = () => built("main", "building_faces");
+  async function loadWalls(id) {
+    if (!hasFaces()) return [];
+    return (await safe(`SELECT from_node, to_node, face_index, face_type, computed_type, edited, length_m, street_name, ST_AsGeoJSON(geometry) AS g FROM main.building_faces WHERE building_id = ${id} ORDER BY face_index`))
+      .map((r) => ({ ...r, from_node: Number(r.from_node), to_node: Number(r.to_node), face_index: Number(r.face_index) }));
+  }
+  const wallType = (w) => F.findFace(doc, sel.id, w.from_node, w.to_node)?.type ?? w.face_type;
 
   function chips() { for (const b of $("fix-kind").querySelectorAll("[data-kind]")) b.classList.toggle("on", b.dataset.kind === kind); }
 
   // ---- edits in the form
   function onInput(e) {
     const el = e.target;
+    if (el.dataset?.wall !== undefined) {                                        // the type of a wall: a rule at once (a Save button is for tags)
+      const row = el.closest(".wallrow"), a = Number(row.dataset.a), b = Number(row.dataset.b);
+      commit(() => F.setFace(doc, sel.id, a, b, el.value, row.dataset.computed));
+      row.classList.toggle("edited", !!F.findFace(doc, sel.id, a, b));
+      drawFaces();
+      return;
+    }
     if (el.name === "fix-ex") { draft.exclude_modes = [...document.querySelectorAll("input[name=fix-ex]:checked")].map((c) => c.value); touched.add("exclude_modes"); return; }
     if (el.id === "fix-remove") { draft.remove = el.checked; touched.add("remove"); return; }
     if (el.id === "fix-note") { draft.note = el.value; touched.add("note"); return; }
@@ -228,28 +257,31 @@ export async function initFixesPanel(ctx) {
 
   async function renderChanges() {
     await classify();
-    const objs = F.objects(doc), turns = doc.turn_restrictions ?? [];
+    const objs = F.objects(doc), turns = doc.turn_restrictions ?? [], faces = F.faceEdits(doc);
     const item = (attrs, label, text, extra = "") => `<div class="chg" ${attrs} tabindex="0" role="button"><div class="chgtop"><b>${label}</b><button type="button" class="btn sm" data-x aria-label="Delete this change">×</button></div><div class="small">${esc(text)}</div>${extra}</div>`;
-    $("fix-list").innerHTML = (objs.length || turns.length) ? [
+    $("fix-list").innerHTML = (objs.length || turns.length || faces.length) ? [
       ...objs.map((o) => {
         const k = o.type === "way" ? kinds.get("way" + o.id) ?? "road" : o.type, nm = names.get(o.type + o.id);
         return item(`data-type="${o.type}" data-id="${o.id}" data-kind="${k}"`, `${KIND_NAME[k] ?? k} ${o.id}${nm ? ` · ${esc(nm)}` : ""}`, F.describe(doc, o.type, o.id) || "(no change in it)");
       }),
+      ...faces.map((f) => item(`data-face="${f.building}|${f.from_node}|${f.to_node}"`, `Wall · building ${f.building}`, `${FACE_NAMES[f.type] ?? f.type}, between nodes ${f.from_node} and ${f.to_node}`)),
       ...turns.map((t) => item(`data-turn="${t.from_way}|${t.via_node}|${t.to_way}"`, `Turn · ${esc(TURN_TYPES[t.restriction] ?? t.restriction)}`, `way ${t.from_way}, at junction ${t.via_node}, to way ${t.to_way}`)),
     ].join("") : '<p class="why" style="margin:0">No changes yet. Pick an object on the map and change it.</p>';
     $("fix-undo").disabled = !hist.length; $("fix-redo").disabled = !future.length;
-    $("fix-clear").disabled = !(objs.length || turns.length);
+    $("fix-clear").disabled = !(objs.length || turns.length || faces.length);
   }
 
   $("fix-list").addEventListener("click", (e) => {
     const c = e.target.closest(".chg");
     if (!c) return;
     if (e.target.closest("[data-x]")) {
+      if (c.dataset.face) { const [bd, a, b] = c.dataset.face.split("|").map(Number); commit(() => F.setFace(doc, bd, a, b, "side", "side")); if (sel?.id === bd) { renderForm(); drawFaces(); } return; }
       if (c.dataset.turn) { const [a, b, d] = c.dataset.turn.split("|").map(Number); commit(() => F.deleteTurn(doc, a, b, d)); }
       else commit(() => F.deleteObjectRule(doc, c.dataset.type, Number(c.dataset.id)));
       if (sel && !c.dataset.turn && sel.type === c.dataset.type && sel.id === Number(c.dataset.id) && data) { draft = initialDraft(); renderForm(); }
       return;
     }
+    if (c.dataset.face) { select("building", "way", Number(c.dataset.face.split("|")[0]), { zoom: true }); return; }
     if (c.dataset.turn) { const [a, b] = c.dataset.turn.split("|").map(Number); setTab("turns"); $("fix-from").value = a; findTurns(a, b); return; }
     select(c.dataset.kind, c.dataset.type, Number(c.dataset.id), { zoom: true });
   });
@@ -299,6 +331,12 @@ export async function initFixesPanel(ctx) {
       map.addLayer({ id: `${src}-line`, type: "line", source: src, filter: ["!=", ["geometry-type"], "Point"], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": color, "line-width": w, "line-opacity": 0.95 } });
       map.addLayer({ id: `${src}-pt`, type: "circle", source: src, filter: ["==", ["geometry-type"], "Point"], paint: { "circle-radius": w + 3, "circle-color": color, "circle-opacity": 0.35, "circle-stroke-color": color, "circle-stroke-width": 3 } });
     }
+    if (!map.getSource("fix-faces")) {                // the walls of buildings, one color for each type; a wall with a rule has an amber glow
+      map.addSource("fix-faces", { type: "geojson", data: EMPTY });
+      map.addLayer({ id: "fix-faces-edit", type: "line", source: "fix-faces", filter: ["==", ["get", "e"], 1], paint: { "line-color": AMBER, "line-width": 10, "line-opacity": 0.55 } });
+      map.addLayer({ id: "fix-faces-line", type: "line", source: "fix-faces", layout: { "line-cap": "round" },
+        paint: { "line-color": ["match", ["get", "t"], "front", FACE_COLORS.front, "back", FACE_COLORS.back, "party", FACE_COLORS.party, FACE_COLORS.side], "line-width": 4.5 } });
+    }
     if (!map.getSource("fix-3d")) {                  // the edited buildings, as extrusions with their height and facade color (tilt the map to see them)
       map.addSource("fix-3d", { type: "geojson", data: EMPTY });
       map.addLayer({ id: "fix-3d", type: "fill-extrusion", source: "fix-3d", paint: { "fill-extrusion-height": ["get", "h"], "fill-extrusion-color": ["get", "c"], "fill-extrusion-opacity": 0.85 } }, "fix-edits-fill");
@@ -321,7 +359,7 @@ export async function initFixesPanel(ctx) {
     return out.filter(Boolean);
   }
 
-  const drawnCount = { edits: 0, sel: 0, heights: [] };      // what the panel put in the map's sources (the tests read it)
+  const drawnCount = { edits: 0, sel: 0, heights: [], faces: 0 };      // what the panel put in the map's sources (the tests read it)
   // the edited buildings with their height and color: the tags of the data with the rule on top, so a change shows before the next build
   async function extrusions() {
     await classify();
@@ -335,6 +373,30 @@ export async function initFixesPanel(ctx) {
     }
     return out;
   }
+
+  // the walls on the map: those of the selected building (with the types of the rules on top), and with the check box all walls in view (the types of the data)
+  let faceToken = 0;
+  async function drawFaces() {
+    const my = ++faceToken;
+    ensureLayers();
+    let feats = [];
+    const asFeature = (g, t, e) => { try { return { type: "Feature", properties: { t, e: e ? 1 : 0 }, geometry: JSON.parse(g) }; } catch { return null; } };
+    if (hasFaces()) {
+      if ($("fix-walls-all").checked && map.getZoom() >= 16) {
+        const b = map.getBounds();
+        feats = (await safe(`SELECT face_type AS t, edited AS e, ST_AsGeoJSON(geometry) AS g FROM main.building_faces WHERE ST_Intersects(geometry, ST_MakeEnvelope(${b.getWest()}, ${b.getSouth()}, ${b.getEast()}, ${b.getNorth()})) LIMIT 30000`))
+          .map((r) => asFeature(r.g, r.t, r.e));
+      } else if (sel?.kind === "building" && walls.length) {
+        feats = walls.map((w) => asFeature(w.g, wallType(w), !!F.findFace(doc, sel.id, w.from_node, w.to_node) || w.edited));
+      }
+    }
+    if (my !== faceToken) return;
+    feats = feats.filter(Boolean);
+    map.getSource("fix-faces")?.setData({ type: "FeatureCollection", features: feats });
+    drawnCount.faces = feats.length;
+  }
+  $("fix-walls-all").onchange = drawFaces;
+  map.on("moveend", () => { if (open() && $("fix-walls-all").checked) drawFaces(); });
 
   let mapToken = 0;
   async function drawEdits() {
@@ -431,13 +493,14 @@ export async function initFixesPanel(ctx) {
 
   // ---- the numbers on the page
   function sync() {
-    const { overrides, turns, tagEdits } = F.counts(doc), n = F.objects(doc).length + turns;
+    const { turns, faces } = F.counts(doc), n = F.objects(doc).length + turns + faces;
     $("fix-n").textContent = n ? String(n) : "";
     $("fix-apply-n").textContent = n ? ` (${n} change${n === 1 ? "" : "s"})` : "";
     const s = (x) => (x === 1 ? "" : "s");
-    ctx.onChange(n ? `${n} change${s(n)}: ${F.objects(doc).length} object${s(F.objects(doc).length)}, ${turns} turn rule${s(turns)}.` : "No fixes.", n);
+    ctx.onChange(n ? `${n} change${s(n)}: ${F.objects(doc).length} object${s(F.objects(doc).length)}, ${turns} turn rule${s(turns)}, ${faces} wall${s(faces)}.` : "No fixes.", n);
     if (!$("fix-changes").hidden) renderChanges();
     drawEdits();
+    drawFaces();
   }
 
   // ---- what the page uses
@@ -449,8 +512,8 @@ export async function initFixesPanel(ctx) {
   function openPanel() { document.body.classList.add("editing-fixes"); ensureLayers(); renderObject(); renderForm(); drawEdits(); if (!$("fix-changes").hidden) renderChanges(); }
   async function openFrom() { await duck.loadSpatial(); openPanel(); }
   function close() { document.body.classList.remove("editing-fixes"); }
-  const rebuilt = () => { kinds.clear(); names.clear(); sel = null; data = null; draft = {}; renderObject(); drawSelected(false); drawEdits(); };
+  const rebuilt = () => { kinds.clear(); names.clear(); sel = null; data = null; draft = {}; walls = []; renderObject(); drawSelected(false); drawEdits(); drawFaces(); };
 
   renderObject(); chips(); sync();
-  return { text, load, open: openFrom, close, isOpen: open, rebuilt, select, drawn: () => ({ ...drawnCount }), count: () => F.objects(doc).length + (doc.turn_restrictions ?? []).length };
+  return { text, load, open: openFrom, close, isOpen: open, rebuilt, select, drawn: () => ({ ...drawnCount }), count: () => F.objects(doc).length + (doc.turn_restrictions ?? []).length + F.faceEdits(doc).length };
 }

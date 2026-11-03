@@ -92,20 +92,23 @@ A value that does not parse is NULL. The raw text stays in `tags`. A rule that s
 
 ### Building faces
 
-A face is one wall of a building: one segment of the outer ring.
+A face is one wall of a building: one segment of the outer ring. `crates/duckosm-core/src/building_faces.rs` makes them from the raw cut and the street edges. Built in M4 (2026-11-03).
 
-- **The key.** A face is `(building id, from node, to node)`. This key does not change when the ring has more nodes elsewhere. A position number does.
-- **The types.** `front` (faces a street and is the nearest wall to it), `back` (opposite a front wall), `side` (the other walls), `party` (a wall shared with another building) and `court` (a wall of an inner ring).
-  A corner building can have two `front` walls.
-- **The method.** Make the outer ring counter-clockwise. For each segment, compute the outward normal. Look up the nearest street edges in an R-tree (the driving and walking edges).
-  A wall is `front` when a street is within a set distance and the normal points at it, within a set angle. All lengths are in meters in a local projection.
-  The walls get types in a fixed order, and ties break on the node ids, so a rebuild gives the same rows.
-- **The table.** `features.building_faces`: `building_id`, `from_node`, `to_node`, `face_type`, `length_m`, `azimuth_deg`, `street_osm_id`, `street_edge_id`, `street_name`, `distance_m`,
-  `geometry`. It is made on request (option `building_faces`), after the network, because it needs the street edges.
-- **Face edits.** `extra.building_faces: [{building, from_node, to_node, type, note}]` replaces the computed type of a wall. The build writes the new type and keeps the computed type in a column `computed_type`.
-- **The map.** The faces draw as lines, one color for each type, over the buildings. A face edited by the user has the amber mark.
-- **Colors of walls.** The facade color is for the whole building (`facade_color`). A color for one wall is a later step (M5), because the 3D buildings tool of roadstyle seems to draw one color for each building. M3 checks this.
-- **Known fault.** The earlier branch (`osm-fixes-editor`) has `building_faces.rs`. My review found a fault in it, and my notes do not hold the cause. M4 starts with a test on Monaco that shows the fault.
+- **The key.** A face is `(building id, from node, to node)`. This key does not change when the ring has more nodes elsewhere. A position number does, so `face_index` is only a place in the ring. The two nodes of a rule can be in either order.
+- **The types.** `front` (faces a street that the wall can see), `back` (opposite the front wall and faces no street), `party` (two buildings have the same two nodes) and `side` (all other walls). A corner building has two or more `front` walls.
+  A building with no street near it has no front and no back. The type `court` (a wall of an inner ring) waits for buildings that are multipolygon relations (M5).
+- **The method.** One local scale for the whole area (the middle of the buildings). Each ring is made counter-clockwise, so the outward normal of a wall is `(dy, -dx)`.
+  For each wall, the streets within 60 m that the wall points at (the cosine of the angle is more than 0) are candidates, with the score `align / sqrt(distance + 1) * (1 + ln(length + 1))`. The best candidate that the wall can **see** is its street:
+  the line from the wall to the street must cross no wall of any building. The front wall is the wall with the best score among those with a cosine of at least 0.5. Another wall is a front wall too when its cosine is at least 0.65 and its street is within 30 m.
+  A back wall is a wall whose normal has a cosine of at most -0.4 with the front wall's normal, and whose street cosine is at most 0.1. These numbers are named constants in the file.
+  The streets are the edges of the driving and walking modes, except footways, paths, steps, corridors, bridleways, cycleways and tracks.
+- **The same rows each time.** The order is the order of the ways and of the ring. A tie between two streets goes to the lower `edge_id`.
+- **The table.** `main.building_faces` ([tables.md](tables.md)). It is made on request (`Params.building_faces`; the CLI option `--building-faces`; the page always makes it with the layers). A wall that is shorter than 0.1 m has no row.
+- **Rules.** `extra.building_faces: [{building, from_node, to_node, type, note}]` gives a wall another type. The table has the new type in `face_type`, the computed type in `computed_type`, and `edited` true. A rule that gives the computed type is not an edit.
+- **The map.** The walls of the selected building show in the panel with one color for each type (front green, back red, side grey, party wall purple), and a wall with a rule has an amber glow. A check box shows the walls of all buildings in view (zoom 16 or more).
+- **What the first version did wrong.** The earlier branch (`osm-fixes-editor`) used one origin from the first node, gave a front wall to a building with no street near it (the best of zero scores), wrote the distance 0 for a wall with no street, and numbered the walls after it skipped the short ones.
+  It did not look at the line of sight: on Monaco, 5,743 of 9,907 walls were `front`. With the line of sight: 4,869 `front`, 970 `back`, 1,055 `party`, 3,013 `side`.
+- **Limits.** The method is a rule of thumb. A curved building has many short front walls. A building behind a courtyard can have no front. A wall color for one wall waits for M5.
 
 ### The panel
 
@@ -136,7 +139,7 @@ Each milestone is one pull request. Each one has tests on Monaco, a phone-viewpo
 | M1 | Rust core: `extra.tag_edits` (set and delete tags of a way, a node or a relation); the parser. Then the wasm rebuild. The table `main.fixes_applied` moved to M5. | `config.rs`, `fixes.rs`, `raw.rs`, `duckosm-build` | Unit tests. Goldens unchanged. A Monaco file with a sidewalk tag changes the walking network. |
 | M2 (built, 2026-11-03) | Panel version 2: selection with a kind filter, full data, preset tag editor, **Changes** tab with map colors, undo and redo, no YAML text, the turn flow fixed. Presets for roads and crossings. | `index.html`, `app/fixes.js`, `app/presets.json` | `fixes_e2e.py` extended: select a road, the form has its data; `sidewalk` and `cycleway` change the tables; a change shows amber. |
 | M3 (built, 2026-11-03) | Building info: preset fields for buildings and `features.building_info`. Check that the 3D buildings tool shows height and levels. | `features` SQL step, `presets.json` | A rule that sets `building:levels` changes `levels` in the table. |
-| M4 | Building faces: `building_faces.rs` (port, fix, tests), the table, the map layer, face edits in the panel. | `duckosm-core`, `duckosm-parquet`, `index.html` | A Monaco test of the faces (counts for each type, the fault of the old branch). The same rows on two builds. |
+| M4 (built, 2026-11-03) | Building faces: `building_faces.rs` (port, fix, tests), the table, the map layer, face edits in the panel. | `duckosm-core`, `duckosm-parquet`, `index.html` | A Monaco test of the faces (counts for each type, the fault of the old branch). The same rows on two builds. |
 | M5 | Later: draw a new road, a color for one wall, an `.osc` export. | | |
 
 Order: M0, M1, M2, M3, M4. M2 can start while M1 is in review, because the page can use the tag rules that exist today.

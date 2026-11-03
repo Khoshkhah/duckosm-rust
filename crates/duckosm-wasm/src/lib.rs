@@ -290,6 +290,7 @@ fn js_build(
         modes: Mode::parse_all(&modes.split(',').collect::<Vec<_>>()).map_err(e)?,
         raw,
         cut_pbf: raw,
+        building_faces: raw, // with the layers: the walls of the buildings (main.building_faces)
         built_at: Some((js_sys::Date::now() * 1000.0) as i64),
         timezone_entry: TIMEZONE_ENTRY.with(|e| e.borrow().clone()),
         ..Params::default()

@@ -16,7 +16,8 @@ export function dump(yaml, doc) {
 }
 
 export const tagEdits = (doc) => doc.extra?.tag_edits ?? [];
-export const counts = (doc) => ({ overrides: (doc.overrides ?? []).length, turns: (doc.turn_restrictions ?? []).length, tagEdits: tagEdits(doc).length });
+export const faceEdits = (doc) => doc.extra?.building_faces ?? [];
+export const counts = (doc) => ({ overrides: (doc.overrides ?? []).length, turns: (doc.turn_restrictions ?? []).length, tagEdits: tagEdits(doc).length, faces: faceEdits(doc).length });
 
 export const findRule = (doc, id) => (doc.overrides ?? []).find((r) => r.osm_id === id) ?? null;
 
@@ -44,6 +45,18 @@ export function upsertTagEdit(doc, edit) {
   else if (!empty) list.push(clean);
   if (list.length) (doc.extra ??= {}).tag_edits = list;
   else if (doc.extra) { delete doc.extra.tag_edits; if (!Object.keys(doc.extra).length) delete doc.extra; }
+}
+
+// ---- the type of a wall of a building (`extra.building_faces`): the build writes it in main.building_faces and keeps the computed type
+const sameWall = (e, building, a, b) => e.building === building && ((e.from_node === a && e.to_node === b) || (e.from_node === b && e.to_node === a));
+export const findFace = (doc, building, a, b) => faceEdits(doc).find((e) => sameWall(e, building, a, b)) ?? null;
+
+// a rule that gives the computed type is not a change: it is removed
+export function setFace(doc, building, a, b, type, computed) {
+  const list = faceEdits(doc).filter((e) => !sameWall(e, building, a, b));
+  if (type !== computed) list.push({ building, from_node: a, to_node: b, type });
+  if (list.length) (doc.extra ??= {}).building_faces = list;
+  else if (doc.extra) { delete doc.extra.building_faces; if (!Object.keys(doc.extra).length) delete doc.extra; }
 }
 
 // ---- the rule of one object: what the person changed in it

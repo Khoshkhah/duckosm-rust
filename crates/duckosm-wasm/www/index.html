@@ -239,6 +239,12 @@
   #fix-panel .fix-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
   #fix-panel .chg { border: 1px solid var(--line); border-left: 4px solid #f59e0b; border-radius: 10px; padding: 6px 10px; cursor: pointer; background: var(--bg); }
   #fix-panel .chg:hover, #fix-panel .chg:focus-visible { background: var(--surface); }
+  #fix-panel .walls { display: flex; flex-direction: column; gap: 4px; }
+  #fix-panel .wallrow { display: grid; grid-template-columns: 2.4em 1fr auto; gap: 6px; align-items: center; padding: 2px 4px; border-left: 3px solid transparent; }
+  #fix-panel .wallrow.edited { border-left-color: #f59e0b; background: rgba(245, 158, 11, 0.12); }
+  #fix-panel .wallrow select { max-width: 11.5em; }
+  #fix-panel .legend { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; font-size: 11.5px; color: var(--muted); }
+  #fix-panel .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
   #fix-panel .chgtop { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .grid2 [hidden] { display: none; }
   .pick { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 10px; cursor: pointer; margin-bottom: 10px; }
@@ -528,6 +534,7 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
     <div id="fix-edit" class="fix-pane" role="tabpanel" aria-labelledby="fix-tab-edit">
       <div class="chips" id="fix-kind" role="group" aria-label="What a click on the map picks"><span class="small">A click picks</span>
         <button type="button" class="chip on" data-kind="road">Roads</button><button type="button" class="chip" data-kind="building">Buildings</button><button type="button" class="chip" data-kind="node">Nodes</button></div>
+      <label class="small" style="display:flex;gap:6px;align-items:center;margin-bottom:6px"><input type="checkbox" id="fix-walls-all">Show the walls of all buildings in view (zoom 16 or more)</label>
       <div class="row"><input id="fix-id" type="text" inputmode="numeric" placeholder="OSM ID, or click the map" aria-label="OSM ID" style="flex:1"><button id="fix-load" class="btn" type="button">Load</button></div>
       <div id="fix-obj" class="fix-obj"></div>
       <div id="fix-form"></div>

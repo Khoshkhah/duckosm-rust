@@ -12,6 +12,7 @@
 use crate::levels::Method;
 use crate::Params;
 use duckosm_core::filter::Mode;
+use duckosm_core::building_faces::{FaceEdit, FaceType};
 use duckosm_core::fixes::{Elem, NewNode, NewWay, OsmFixes, TagEdit, TurnFix, WayFix};
 use duckosm_core::network::Options;
 use std::path::{Path, PathBuf};
@@ -405,7 +406,8 @@ pub fn read(path: &Path, pbf_is_cut: bool, strict: bool) -> Result<FromConfig, S
 
 const FIX_TOP: [&str; 4] = ["overrides", "new_ways", "turn_restrictions", "extra"];
 /// The keys of `extra` (an extension of duckosm-rust: duckOSM reads only `overrides`, so it ignores the key `extra`).
-const FIX_EXTRA: [&str; 1] = ["tag_edits"];
+const FIX_EXTRA: [&str; 2] = ["tag_edits", "building_faces"];
+const FIX_FACE_EDIT: [&str; 5] = ["building", "from_node", "to_node", "type", "note"];
 const FIX_TAG_EDIT: [&str; 5] = ["type", "id", "set", "delete", "note"];
 const FIX_RULE: [&str; 13] = [
     "osm_id",
@@ -701,6 +703,39 @@ pub fn parse_osm_fixes(text: &str, label: &str) -> Result<OsmFixes, String> {
                 }
                 Some(_) => return Err(err("extra.tag_edits must be a list".into())),
             }
+            // `extra.building_faces`: the type of a wall (`building_faces.rs`)
+            match x.get(&Yaml::String("building_faces".into())) {
+                None | Some(Yaml::Null) => {}
+                Some(Yaml::Array(a)) => {
+                    for (i, r) in a.iter().enumerate() {
+                        let what = format!("extra.building_faces[{i}]");
+                        let h = r
+                            .as_hash()
+                            .ok_or_else(|| err(format!("{what} must be a map")))?;
+                        keys(h, &FIX_FACE_EDIT, &what)?;
+                        let get = |k: &str| h.get(&Yaml::String(k.into()));
+                        let id = |k: &str| -> Result<i64, String> {
+                            int(
+                                get(k).ok_or_else(|| err(format!("{what} has no {k}")))?,
+                                &format!("{what}.{k}"),
+                            )
+                        };
+                        let face_type = get("type")
+                            .and_then(|v| v.as_str())
+                            .and_then(FaceType::parse)
+                            .ok_or_else(|| {
+                                err(format!("{what}.type must be front, back, side or party"))
+                            })?;
+                        fixes.face_edits.push(FaceEdit {
+                            building: id("building")?,
+                            from_node: id("from_node")?,
+                            to_node: id("to_node")?,
+                            face_type,
+                        });
+                    }
+                }
+                Some(_) => return Err(err("extra.building_faces must be a list".into())),
+            }
         }
         Some(_) => return Err(err("extra must be a map".into())),
     }
@@ -878,6 +913,28 @@ mod tests {
                 "unknown key 'nope'",
             ),
             ("extra: 3\n", "extra must be a map"),
+        ] {
+            let e = parse_osm_fixes(text, "t").unwrap_err();
+            assert!(e.contains(msg), "{text:?}: {e}");
+        }
+    }
+
+    #[test]
+    fn extra_building_faces() {
+        let f = parse_osm_fixes(
+            "extra:\n  building_faces:\n    - {building: 5, from_node: 1, to_node: 2, type: front}\n    - {building: 5, from_node: 2, to_node: 3, type: party, note: shared}\n",
+            "t",
+        )
+        .unwrap();
+        let e = &f.face_edits;
+        assert_eq!(e.len(), 2);
+        assert_eq!((e[0].building, e[0].from_node, e[0].to_node, e[0].face_type), (5, 1, 2, FaceType::Front));
+        assert_eq!(e[1].face_type, FaceType::Party);
+        for (text, msg) in [
+            ("extra:\n  building_faces:\n    - {building: 5, from_node: 1, to_node: 2, type: roof}\n", "type must be front, back, side or party"),
+            ("extra:\n  building_faces:\n    - {building: 5, from_node: 1, type: front}\n", "has no to_node"),
+            ("extra:\n  building_faces:\n    - {building: 5, from_node: 1, to_node: 2, type: front, x: 1}\n", "unknown key 'x'"),
+            ("extra:\n  building_faces: 3\n", "extra.building_faces must be a list"),
         ] {
             let e = parse_osm_fixes(text, "t").unwrap_err();
             assert!(e.contains(msg), "{text:?}: {e}");

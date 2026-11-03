@@ -47,5 +47,16 @@ F.upsertTurn(doc, { from_way: 1, via_node: 2, to_way: 3, restriction: "no_left_t
 F.upsertTurn(doc, { from_way: 1, via_node: 2, to_way: 3, restriction: "no_entry" });
 eq(doc.turn_restrictions, [{ from_way: 1, via_node: 2, to_way: 3, restriction: "no_entry" }], "a turn rule is replaced, not repeated");
 F.deleteTurn(doc, 1, 2, 3);
-eq(F.counts(doc), { overrides: 0, turns: 0, tagEdits: 2 }, "counts");
+eq(F.counts(doc), { overrides: 0, turns: 0, tagEdits: 2, faces: 0 }, "counts");
+// the type of a wall: the nodes can be in either order; the computed type is no change; an empty `extra` goes away
+doc = {};
+F.setFace(doc, 5, 1, 2, "side", "front");
+eq(doc.extra.building_faces, [{ building: 5, from_node: 1, to_node: 2, type: "side" }], "a wall rule");
+eq(F.findFace(doc, 5, 2, 1)?.type, "side", "found with the nodes in the other order");
+F.setFace(doc, 5, 2, 1, "party", "front");
+eq(F.faceEdits(doc).length, 1, "a rule for the same wall is replaced");
+F.setFace(doc, 5, 1, 2, "front", "front");
+eq([F.faceEdits(doc), doc.extra], [[], undefined], "the computed type removes the rule and the empty extra");
+F.setFace(doc, 5, 1, 2, "back", "side"); F.writeRule(doc, "way", 9, { mode: {}, set: { a: "b" }, delete: [], note: "" });
+eq(F.counts(doc), { overrides: 0, turns: 0, tagEdits: 1, faces: 1 }, "counts have the walls");
 console.log("fixes_units.mjs: ok");

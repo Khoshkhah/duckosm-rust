@@ -9,6 +9,7 @@
 //! network step. The reader keeps only highway ways and ferry lines, so a `tags` rule on another way
 //! has no effect here.
 
+use crate::building_faces::FaceEdit;
 use crate::filter::{Mode, ModeWay};
 use crate::geom::Pt;
 use crate::model::Way;
@@ -95,6 +96,8 @@ pub struct OsmFixes {
     pub new_ways: Vec<NewWay>,
     pub turn_restrictions: Vec<TurnFix>,
     pub tag_edits: Vec<TagEdit>,
+    /// `extra.building_faces`: the type of a wall of a building (`building_faces.rs`).
+    pub face_edits: Vec<FaceEdit>,
 }
 
 impl OsmFixes {
@@ -333,6 +336,7 @@ mod tests {
             ],
             turn_restrictions: vec![],
             tag_edits: vec![],
+            face_edits: vec![],
         };
         fixes.apply_to_ways(&mut ways).unwrap();
         assert_eq!(
@@ -456,6 +460,7 @@ mod tests {
             new_ways: vec![],
             turn_restrictions: vec![],
             tag_edits: vec![],
+            face_edits: vec![],
         };
         assert_eq!(fixes.apply_to_mode(&mut mw, Mode::Driving), 3);
         assert_eq!((mw[0].lanes_fwd, mw[0].lanes_bwd), (Some(1), None));
