@@ -1963,7 +1963,7 @@ let areaPrep = null;
 async function prepareArea() {
   window.lvTimes = [];
   const timed = (name, p) => { const t = performance.now(); return p.then((v) => { lap(name, t); return v; }); };
-  const [pkg, { levelEditor, browserStore, saveArea, areaIsFor }, levels] = await Promise.all([timed("roadstyle wasm", duck.roadstyle()),
+  const [pkg, { levelEditor, prepareEditor, browserStore, saveArea, areaIsFor }, levels] = await Promise.all([timed("roadstyle wasm", duck.roadstyle()),
     timed("import level_editor.js", import("./map/roadstyle/dashboard/editor/level_editor.js")), timed("storedLevels (CSV from DuckDB)", duck.storedLevels())]);
   const store = fallbackStore(browserStore("duckosm:" + areaName, areaName));
   // roadstyle's docs/rust/browser.md, "The level editor in a page": the area is made only when its edges changed (the store's
@@ -1986,8 +1986,14 @@ async function prepareArea() {
     if (a.warnings.length) warnings = `. Warnings: ${a.warnings.join("; ")}`;
     a.free();
   }
+  // the editor's engine (its worker and the area in it), made now in the background, so that the open only draws the panel; the open finds it by the
+  // edge hash (it is the same until the edges change), also after Apply
+  if (levels?.edge_hash) prepareEditor({ store, pkgUrl: editorPkgUrl(), look: await editorLook(), edgeHash: levels.edge_hash }).catch(() => {});
   return { levelEditor, store, levels, warnings };
 }
+// the worker loads roadstyle's module by this URL (the deploy puts its version on it, version_refs.py)
+const editorPkgUrl = () => new URL("./map/pkg/roadstyle_wasm.js", location.href);
+const editorLook = () => (lookText ??= fetch("map/look.json").then((r) => r.text()));
 $("edit-open").onclick = async () => {
   // the editor draws every road of the area (all networks): the same limit as the map on a small device
   if (roadCount.all > window.mapMaxRoads) return editNote(`The level editor shows all ${num(roadCount.all)} roads of the area; on this ` +
@@ -2012,8 +2018,7 @@ $("edit-open").onclick = async () => {
     editedMap = false;
     window.rsDeselect?.();
     document.querySelectorAll(".maplibregl-popup").forEach((p) => p.remove());
-    // the worker loads roadstyle's module by this URL (the deploy puts its version on it, version_refs.py)
-    const pkgUrl = new URL("./map/pkg/roadstyle_wasm.js", location.href);
+    const pkgUrl = editorPkgUrl();
     t = performance.now();
     // `host`: the editor keeps the page's roads (it builds no roads or tiles of its own) and gives replaceRoads the edges that a change redrew;
     // `look`: the page's saved look, in which the editor finds the page's select and hover colours (it swaps them for its red and blue picks)
@@ -2047,7 +2052,8 @@ $("edit-open").onclick = async () => {
 // "← Steps": the editor goes, and the edits that it applied (the editor's Apply and solve) go into the tables (visualization.edge_levels and the
 // downloads). Nothing applied: the tables stay as they are.
 async function leaveEditor() {
-  if (!editedMap) { closeEditor(); return editNote("Closed. No change."); }
+  const tClose = performance.now();
+  if (!editedMap) { closeEditor(); lap("← Steps (no change)", tClose); return editNote("Closed. No change."); }
   try {
     editNote("writing the drawing order into the tables…");
     const text = async (n) => (await editorStore.load(n))?.body ?? "";
@@ -2055,13 +2061,15 @@ async function leaveEditor() {
     const t = performance.now();
     await duck.saveLevels(await text("levels.csv"), inputs, "this browser: " + areaName);
     lap("saveLevels (write the tables)", t);
-    areaPrep = null;                              // the tables have the new levels
+    // the tables have the new levels: the next open gets them (the area and the editor's engine stay: the edges are the same)
+    if (areaPrep) areaPrep = areaPrep.then(async (p) => ({ ...p, levels: await duck.storedLevels() })).catch(() => null);
     files();                                      // the download links of the new files
     levelsApplied = true;
     // the map already shows the new levels (the map worker redrew each changed edge: replaceRoads), so it is not drawn again
     editedMap = false;
     closeEditor();
     refreshSteps();
+    lap("← Steps (all)", tClose);
     const n = (f) => Math.max(0, inputs[f].trim().split("\n").length - 1);
     editNote(`Applied. Rules: ${num(n("edits.csv"))}, heads: ${num(n("heads.csv"))}, line ends: ${num(n("caps.csv"))}. The map has it.`);
   } catch (e) {
