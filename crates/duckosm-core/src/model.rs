@@ -42,6 +42,16 @@ impl Tags {
         *self = new;
     }
 
+    /// Remove an OSM key, with all its values (a tag edit of the page, `extra.tag_edits`).
+    pub fn remove(&mut self, k: &str) {
+        let Some(key) = Key::of(k) else {
+            return;
+        };
+        let found: Vec<(Key, &str)> = self.pairs().filter(|p| p.0 != key).collect();
+        let new = Tags::build(&found);
+        *self = new;
+    }
+
     fn build(found: &[(Key, &str)]) -> Tags {
         let mut text = String::with_capacity(found.iter().map(|f| f.1.len()).sum());
         let keys = found
@@ -188,6 +198,15 @@ impl Way {
         }
     }
 
+    /// Remove a tag (a tag edit of the page, `extra.tag_edits`).
+    pub fn remove_tag(&mut self, k: &str) {
+        if Key::of(k).is_some() {
+            self.tags.remove(k);
+        } else {
+            self.other.remove(k);
+        }
+    }
+
     /// All tags of the way: the `tags` column of duckOSM's `ways` table.
     pub fn all_tags(&self) -> impl Iterator<Item = (&str, &str)> {
         self.tags.osm_pairs().chain(self.other.pairs())
@@ -225,6 +244,11 @@ impl OtherTags {
     pub fn set(&mut self, k: &str, v: &str) {
         let rest: Vec<(&str, &str)> = self.pairs().filter(|p| p.0 != k).collect();
         *self = OtherTags::of(rest.into_iter().chain([(k, v)]));
+    }
+
+    pub fn remove(&mut self, k: &str) {
+        let rest: Vec<(&str, &str)> = self.pairs().filter(|p| p.0 != k).collect();
+        *self = OtherTags::of(rest);
     }
 }
 

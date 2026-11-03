@@ -70,16 +70,36 @@ pub struct TurnFix {
     pub to_way: i64,
 }
 
+/// What a tag edit changes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Elem {
+    Way,
+    Node,
+    Relation,
+}
+
+/// One rule of `extra.tag_edits`: set and delete tags of a way, a node or a relation. duckOSM reads only `overrides`, so it
+/// ignores the key `extra`: this is an extension of duckosm-rust. The rule acts on the network ways and on `raw.*`, so the base-map
+/// layers (`features.*`) see the edited tags too. The tags are set first, then deleted: a key in both is deleted.
+#[derive(Clone, Debug)]
+pub struct TagEdit {
+    pub elem: Elem,
+    pub id: i64,
+    pub set: Vec<(String, String)>,
+    pub delete: Vec<String>,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct OsmFixes {
     pub ways: Vec<WayFix>,
     pub new_ways: Vec<NewWay>,
     pub turn_restrictions: Vec<TurnFix>,
+    pub tag_edits: Vec<TagEdit>,
 }
 
 impl OsmFixes {
     pub fn is_empty(&self) -> bool {
-        self.ways.is_empty() && self.new_ways.is_empty()
+        self.ways.is_empty() && self.new_ways.is_empty() && self.tag_edits.is_empty()
     }
 
     /// Before pass 2 (the coordinates): remove ways, keep a part of a way, set tags, and add the new
@@ -119,6 +139,17 @@ impl OsmFixes {
             }
             for (k, v) in &r.tags {
                 w.set_tag(k, v);
+            }
+        }
+        for e in self.tag_edits.iter().filter(|e| e.elem == Elem::Way) {
+            let Some(w) = find_mut(ways, e.id) else {
+                continue;
+            };
+            for (k, v) in &e.set {
+                w.set_tag(k, v);
+            }
+            for k in &e.delete {
+                w.remove_tag(k);
             }
         }
         let mut seen = Vec::new();
@@ -301,6 +332,7 @@ mod tests {
                 },
             ],
             turn_restrictions: vec![],
+            tag_edits: vec![],
         };
         fixes.apply_to_ways(&mut ways).unwrap();
         assert_eq!(
@@ -331,6 +363,54 @@ mod tests {
             ..Default::default()
         };
         assert!(bad.apply_to_ways(&mut ways).is_err());
+    }
+
+    #[test]
+    fn tag_edits_on_ways() {
+        let mut ways = vec![
+            way(
+                1,
+                &[10, 11],
+                &[
+                    ("highway", "residential"),
+                    ("sidewalk", "no"),
+                    ("roof:shape", "flat"),
+                ],
+            ),
+            way(2, &[11, 12], &[("highway", "service")]),
+        ];
+        let edit = |elem, id, set: &[(&str, &str)], delete: &[&str]| TagEdit {
+            elem,
+            id,
+            set: set
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+            delete: delete.iter().map(|k| k.to_string()).collect(),
+        };
+        let fixes = OsmFixes {
+            tag_edits: vec![
+                edit(
+                    Elem::Way,
+                    1,
+                    &[("sidewalk", "both"), ("roof:shape", "gabled")],
+                    &["roof:shape", "absent"],
+                ),
+                edit(Elem::Way, 404, &[("a", "b")], &[]), // not in this area
+                edit(Elem::Node, 1, &[("a", "b")], &[]),  // a node: the network ways do not change
+            ],
+            ..Default::default()
+        };
+        assert!(!fixes.is_empty());
+        fixes.apply_to_ways(&mut ways).unwrap();
+        let tags: Vec<_> = ways[0].all_tags().collect();
+        assert!(tags.contains(&("sidewalk", "both")), "{tags:?}");
+        assert!(
+            !tags.iter().any(|t| t.0 == "roof:shape"),
+            "set, then deleted: {tags:?}"
+        );
+        assert_eq!(ways[0].tags.highway(), Some("residential"));
+        assert_eq!(ways[1].all_tags().count(), 1);
     }
 
     #[test]
@@ -375,6 +455,7 @@ mod tests {
             ],
             new_ways: vec![],
             turn_restrictions: vec![],
+            tag_edits: vec![],
         };
         assert_eq!(fixes.apply_to_mode(&mut mw, Mode::Driving), 3);
         assert_eq!((mw[0].lanes_fwd, mw[0].lanes_bwd), (Some(1), None));
