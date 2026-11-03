@@ -429,6 +429,10 @@ export async function initFixesPanel(ctx) {
       map.addSource("fix-nodes", { type: "geojson", data: EMPTY });
       map.addLayer({ id: "fix-nodes-pt", type: "circle", source: "fix-nodes", paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 14, 4, 19, 8],
         "circle-color": ["match", ["get", "k"], "signal", NODE_COLORS.signal, "crossing", NODE_COLORS.crossing, NODE_COLORS.other], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });
+      map.addLayer({ id: "fix-nodes-hover", type: "circle", source: "fix-nodes", filter: ["==", ["get", "id"], -1], paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 14, 9, 19, 14],
+        "circle-color": "rgba(255, 255, 255, 0.55)", "circle-stroke-color": "#111827", "circle-stroke-width": 2.5 } });
+      map.on("mousemove", "fix-nodes-pt", hoverNode);
+      map.on("mouseleave", "fix-nodes-pt", leaveNode);
     }
     for (const [src, color, w, fa] of [["fix-edits", AMBER, 5, 0.28], ["fix-sel", BLUE, 7, 0.2]]) {
       if (map.getSource(src)) continue;
@@ -500,6 +504,23 @@ export async function initFixesPanel(ctx) {
     map.fitBounds(b, { padding: { top: 80, bottom: 80, left: innerWidth > 700 ? 440 : 40, right: 90 }, maxZoom: 18, duration: 600 });
   }
 
+  // hover on a node dot: a ring around it, the pointer cursor and a tooltip (roadstyle's tooltip look, `rs-tip`) with its kind, its OSM id and its name
+  let nodeTip = null, hoverNodeId = null;
+  function hoverNode(e) {
+    const f = e.features?.[0];
+    if (!f || !open() || current !== "node") return;
+    map.getCanvas().style.cursor = "pointer";
+    const { id, k, kind, name } = f.properties;
+    if (hoverNodeId !== id) { hoverNodeId = id; map.setFilter("fix-nodes-hover", ["==", ["get", "id"], id]); }
+    nodeTip ??= new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: "rs-tip fix-tip", offset: 12, maxWidth: "240px" });
+    nodeTip.setLngLat(f.geometry.coordinates).setHTML(`<b>${esc(k === "signal" ? "Traffic signal" : k === "crossing" ? "Crossing" : kind || "Node")}</b><br>node ${id}${name ? `<br>${esc(name)}` : ""}<br><span class="muted">Click to pick it</span>`).addTo(map);
+  }
+  function leaveNode() {
+    hoverNodeId = null;
+    if (map.getLayer("fix-nodes-hover")) map.setFilter("fix-nodes-hover", ["==", ["get", "id"], -1]);
+    map.getCanvas().style.cursor = "";
+    nodeTip?.remove();
+  }
   // the nodes that a click in the Node tab can pick (the traffic signals and the crossings of features.traffic) in view, as dots with a color for each kind
   let nodeToken = 0;
   async function drawNodes() {
@@ -510,14 +531,15 @@ export async function initFixesPanel(ctx) {
       if (map.getZoom() < 14) info = "Zoom in to see the dots (zoom 14 or more).";
       else {
         const b = map.getBounds();
-        feats = (await safe(`SELECT osm_id AS id, CASE WHEN kind LIKE '%signal%' THEN 'signal' WHEN kind LIKE '%crossing%' THEN 'crossing' ELSE 'other' END AS k, ST_X(geom) AS x, ST_Y(geom) AS y
+        feats = (await safe(`SELECT osm_id AS id, kind, name, CASE WHEN kind LIKE '%signal%' THEN 'signal' WHEN kind LIKE '%crossing%' THEN 'crossing' ELSE 'other' END AS k, ST_X(geom) AS x, ST_Y(geom) AS y
           FROM features.traffic WHERE ST_X(geom) BETWEEN ${b.getWest()} AND ${b.getEast()} AND ST_Y(geom) BETWEEN ${b.getSouth()} AND ${b.getNorth()} LIMIT 5000`))
-          .map((r) => ({ type: "Feature", properties: { id: Number(r.id), k: r.k }, geometry: { type: "Point", coordinates: [r.x, r.y] } }));
+          .map((r) => ({ type: "Feature", properties: { id: Number(r.id), k: r.k, kind: r.kind ?? "", name: r.name ?? "" }, geometry: { type: "Point", coordinates: [r.x, r.y] } }));
         const n = (k) => feats.filter((f) => f.properties.k === k).length;
         info = `In view: ${plural(n("signal"), "traffic signal")}, ${plural(n("crossing"), "crossing")}${n("other") ? `, ${n("other")} other` : ""}.`;
       }
     }
     if (my !== nodeToken) return;
+    if (!feats.length) leaveNode();
     map.getSource("fix-nodes")?.setData({ type: "FeatureCollection", features: feats });
     $("fix-nodes-info").textContent = info;
     drawnCount.nodes = feats.length;

@@ -131,7 +131,7 @@ with sync_playwright() as p:
     assert page.is_visible("#fixf-roof_shape") is False and page.input_value("#fix-id") == ""
     page.click("#fix-tab-road")
     assert page.input_value("#fix-id") == str(ROAD) and page.input_value("#fixf-lanes") == "7", "the Road tab keeps its road"
-    assert page.evaluate("window.fixesPanel.drawn().sel") == 0, "the Building tab has nothing picked, so nothing is blue"
+    page.wait_for_function("window.fixesPanel.drawn().sel === 0", timeout=10_000)             # the Building tab has nothing picked, so nothing is blue
     page.click("#fix-tab-road")
     page.wait_for_function("window.fixesPanel.drawn().sel > 0", timeout=20_000)
     pt = rows(page, f"SELECT ST_X(ST_PointOnSurface(ST_Union_Agg(geometry))) AS x, ST_Y(ST_PointOnSurface(ST_Union_Agg(geometry))) AS y FROM driving.edges WHERE osm_id = {ROAD}")[0]
@@ -179,6 +179,14 @@ with sync_playwright() as p:
     assert page.is_visible("#fix-nodes-legend") and "Traffic signal" in page.inner_text("#fix-nodes-legend")
     page.wait_for_function("window.fixesPanel.drawn().nodes > 0 && duckMap.queryRenderedFeatures({layers: ['fix-nodes-pt']}).length > 0", timeout=20_000)
     assert "In view:" in page.inner_text("#fix-nodes-info"), page.inner_text("#fix-nodes-info")
+    page.mouse.move(*px)                       # hover: a ring, the pointer cursor and a tooltip with the kind and the id
+    page.wait_for_selector(".maplibregl-popup.fix-tip", timeout=10_000)
+    tip = page.inner_text(".maplibregl-popup.fix-tip")
+    assert "Traffic signal" in tip and f"node {n['osm_id']}" in tip, tip
+    assert page.evaluate("duckMap.getCanvas().style.cursor") == "pointer"
+    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['fix-nodes-hover']}).length > 0", timeout=10_000)
+    page.mouse.move(px[0] + 300, px[1] + 200)    # away from the dot: no tooltip
+    page.wait_for_function("document.querySelectorAll('.maplibregl-popup.fix-tip').length === 0", timeout=10_000)
     page.mouse.click(*px)
     page.wait_for_function(f"document.getElementById('fix-id').value === '{n['osm_id']}' && document.querySelector('#fixf-traffic_signals_direction')", timeout=20_000)
     page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['fix-sel-pt']}).length > 0", timeout=20_000)    # the picked node has its blue ring
