@@ -61,11 +61,10 @@
   /* the panel's title: h2 (roadstyle's help window puts its "?" in it); the buttons of the title row */
   .sb-top h2 { margin: 0; font-size: 16px; letter-spacing: -0.01em; text-transform: none; color: var(--fg); display: block; }
   body.editing #sb #rs-fold-all { display: none; }
-  /* the cards are roadstyle's sections that fold (the title is its button with the chevron): the number, the done mark and the reason of a disabled card are
-     in the title; the card's own buttons ("?", the zoom to the area) are beside the chevron */
-  .step { position: relative; margin: 0; }
-  .step > .rs-sec-hd { justify-content: flex-start; padding: 6px 0; font-size: 12px; letter-spacing: 0.06em; color: var(--fg); }
-  .step > .rs-sec-hd:disabled { cursor: default; color: var(--muted); }
+  /* the cards are roadstyle's cards that fold (the title row: the title button and the chevron; the box, the padding and the gap are roadstyle's card standard):
+     the number, the done mark and the reason of a disabled card are in the title row; the card's own buttons ("?", the zoom to the area) are beside the chevron */
+  .step { position: relative; }
+  .step > .rs-sec-hd .rs-sec-title:disabled { cursor: default; color: var(--muted); }
   .step > .rs-sec-hd .after { margin-left: auto; margin-right: 30px; font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); }
   .step > .rs-sec-hd .done { color: var(--accent); font-size: 13px; font-weight: 700; text-transform: none; }
   .step > .tools { position: absolute; top: 14px; right: 40px; height: 32px; display: flex; align-items: center; gap: 2px; }
@@ -76,12 +75,9 @@
   /* the panel's sections give their text the ink (dashboard.css); the muted lines of the cards stay muted */
   #sb .muted, #sb .why { color: var(--muted); }
   .sb-top p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
-  .sb-body { display: flex; flex-direction: column; gap: 12px; }
   /* the panel's type: the cards' own sizes (roadstyle's template sets 13px for its controls) */
   :where(#sb) h2 { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 10px; }
   :where(#sb) button { font: inherit; color: inherit; cursor: pointer; }
-  /* a step is a section of the panel: one neutral box that follows the panel's theme (the colors of the old cards went with the old panel) */
-  .step { border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
   .icon-btn:disabled { visibility: hidden; }
   .icon-btn { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 8px; background: none; color: var(--muted); flex: none; }
   .icon-btn:hover { background: var(--bg); color: var(--fg); }
@@ -640,11 +636,11 @@ maplibregl.setWorkerCount(Math.min(4, navigator.hardwareConcurrency || 1));   //
 const keep = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* no storage */ } };
 const kept = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
 // The options of roadstyle's dashboard are roadstyle's (data/host_options.json, copied by build.sh: the typed `dashboard`, its first paint, the base
-// maps and the layers on top, as a page that roadstyle writes has them). The page gives only what is its own: the panel's width, no panel section
-// of roadstyle's (the page has none of them), and the base map that the person chose for the next visit (its light key; the dark twin comes with the
+// maps and the layers on top, as a page that roadstyle writes has them). The page gives only what is its own: the panel's width (the panel starts empty:
+// its sections are the page's own cards), and the base map that the person chose for the next visit (its light key; the dark twin comes with the
 // theme). The active base map is the first of the list.
 const host = await (await fetch("map/roadstyle/host_options.json")).json();
-host.dashboard.panel = { ...host.dashboard.panel, width_px: 370, hide: [] };
+host.dashboard.panel = { ...host.dashboard.panel, width_px: 370 };
 host.first_paint.panel_width_px = 370;
 {
   const key = (k) => host.basemaps.some((b) => b.key === k) ? k : "ofm_liberty";
@@ -757,7 +753,7 @@ function pin() {
 }
 
 // ---- the free part of the map: the panel, the bar and the phone's sheet cover a part of the full-window map (roadstyle's overlay layout) ----
-const phone = matchMedia(`(max-width: ${host.dashboard.phone.max_width_px}px)`);
+const phone = matchMedia("(max-width: 700px)")      // roadstyle turns to its phone form at 700 px;
 // the insets from the edges of the window of what the panel, the bar and the sheet cover: rs.freeArea() is the part that they leave free
 function freeInsets() {
   const a = rs.freeArea();
@@ -1985,7 +1981,7 @@ function refreshSteps() {
   for (const c of cards) {
     const n = cardN(c), why = STEP[n].ready(), done = STEP[n].done();
     c.classList.toggle("off", !!why);
-    c.querySelector(".rs-sec-hd").disabled = !!why;
+    c.querySelector(".rs-sec-title").disabled = !!why;
     c.querySelector(".after").textContent = why;
     c.querySelector(".done").hidden = !done || !!why;
     if (why && !c.classList.contains("folded")) autoFold(c, true);      // a card that is not ready keeps only its title
@@ -2015,9 +2011,10 @@ for (const old of [...document.querySelectorAll("section.step")]) {
   c.classList.add("step");
   c.id = old.id;
   const hd = c.querySelector(":scope > .rs-sec-hd");
-  hd.id = `step${n}`;
-  hd.insertAdjacentHTML("afterbegin", `<span class="n">${n}</span>`);
-  hd.querySelector("span:not(.n)").insertAdjacentHTML("afterend", '<span class="done" hidden title="Done">✓</span><span class="after"></span>');
+  const title = hd.querySelector(".rs-sec-title");
+  title.id = `step${n}`;
+  title.insertAdjacentHTML("beforebegin", `<span class="n">${n}</span>`);
+  title.insertAdjacentHTML("afterend", '<span class="done" hidden title="Done">✓</span><span class="after"></span>');
   const tools = document.createElement("span");    // the card's own buttons, beside the chevron: the zoom to the area (card 2) and the "?" of roadstyle's help window
   tools.className = "tools";
   if (own) tools.append(own);

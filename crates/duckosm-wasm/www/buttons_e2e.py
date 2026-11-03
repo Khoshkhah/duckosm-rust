@@ -76,7 +76,7 @@ def run(browser, name, dark=False, **context):
     assert page.evaluate("document.getElementById('run').classList.contains('busy')"), "Build shows a spinner while it builds"
     assert why("buildhint") == "", ("no text line under Build while it builds", why("buildhint"))
     # the progress of the build is in one place (the map's busy box): during the build only one visible element says "Building", and it is in #mapbusy
-    says = "[...document.querySelectorAll('body *')].filter((e) => !e.children.length && /building/i.test(e.textContent) && e.getBoundingClientRect().height > 0).map((e) => !!e.closest('#mapbusy'))"
+    says = "[...document.querySelectorAll('body *')].filter((e) => !e.children.length && /building/i.test(e.textContent) && e.tagName !== 'TD' && e.getBoundingClientRect().height > 0).map((e) => !!e.closest('#mapbusy'))"
     box = "(() => { const e = document.getElementById('mapbusy-text'), r = e.getBoundingClientRect(), s = document.getElementById('sb').getBoundingClientRect(); return {w: r.width, h: r.height, top: r.top, bottom: r.bottom, left: r.left, right: r.right, sbTop: s.top, sbLeft: s.left, sbRight: s.right, vw: innerWidth, vh: innerHeight}; })()"
     seen = []
     while not page.evaluate("!document.getElementById('step5-card').classList.contains('off')") and len(seen) < 3000:
