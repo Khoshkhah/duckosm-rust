@@ -16,7 +16,8 @@
 { "imports": {
   "terra-draw": "https://cdn.jsdelivr.net/npm/terra-draw@1.38.0/dist/terra-draw.modern.js",
   "terra-draw-maplibre-gl-adapter": "https://cdn.jsdelivr.net/npm/terra-draw-maplibre-gl-adapter@1.5.0/dist/terra-draw-maplibre-gl-adapter.modern.js",
-  "polyclip-ts": "https://cdn.jsdelivr.net/npm/polyclip-ts@0.16.8/+esm"
+  "polyclip-ts": "https://cdn.jsdelivr.net/npm/polyclip-ts@0.16.8/+esm",
+  "h3-js": "https://cdn.jsdelivr.net/npm/h3-js@4.2.1/+esm"
 } }
 </script>
 <style>
@@ -155,7 +156,8 @@
   .toolbox button:hover:not(:disabled) { background: var(--surface); }
   .toolbox button[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
   .toolbox button:disabled { opacity: 0.4; cursor: default; }
-  #hint { margin: 0; padding: 9px 11px; background: var(--bg); border-radius: 9px; font-size: 12.5px; color: var(--muted); }
+  #h3-panel .rs-sel, #h3-clear { margin-bottom: 8px; }
+  #hint, #h3-hint { margin: 0; padding: 9px 11px; background: var(--bg); border-radius: 9px; font-size: 12.5px; color: var(--muted); }
 
   #drop { display: grid; place-items: center; gap: 6px; text-align: center; padding: 26px 14px; border: 2px dashed var(--line); border-radius: 12px; color: var(--muted); cursor: pointer; }
   #drop:hover, body.dragging #drop { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
@@ -357,6 +359,7 @@
   #status { position: fixed; left: calc(var(--free-l, 0px) + (100% - var(--free-l, 0px) - var(--free-r, 0px)) / 2); top: 14px; transform: translateX(-50%); z-index: 9; background: var(--fg); color: var(--bg); padding: 7px 14px; border-radius: 99px; font-size: 13px; box-shadow: var(--shadow); }
   #status:empty { display: none; }
   body.picking #map canvas { cursor: crosshair; }
+  body.h3 #map canvas { cursor: pointer; }
   /* the level editor holds the page's one panel: roadstyle's editor hides the steps (.sb-body) and the title; the footer goes too */
   body.editing .sb-foot { display: none; }
   @media (max-width: 700px) {
@@ -379,6 +382,7 @@
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
   <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
   <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6"/></symbol>
+  <symbol id="i-hex" viewBox="0 0 24 24"><path d="M12 2.5 20.2 7.2v9.6L12 21.5l-8.2-4.7V7.2Z"/></symbol>
   <symbol id="i-select" viewBox="0 0 24 24"><path d="m4 4 7 17 2.5-7.5L21 11Z"/></symbol>
   <symbol id="i-rect" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="13" rx="1"/></symbol>
   <symbol id="i-poly" viewBox="0 0 24 24"><path d="m12 3 8.5 6.2-3.2 10.3H6.7L3.5 9.2Z"/></symbol>
@@ -422,6 +426,7 @@
   <button role="tab" id="tab-find" aria-controls="find" aria-selected="true"><svg><use href="#i-search"/></svg>Search</button>
   <button role="tab" id="tab-draw" aria-controls="draw" aria-selected="false"><svg><use href="#i-pen"/></svg>Draw</button>
   <button role="tab" id="tab-file" aria-controls="file-panel" aria-selected="false"><svg><use href="#i-file"/></svg>File</button>
+  <button role="tab" id="tab-h3" aria-controls="h3-panel" aria-selected="false"><svg><use href="#i-hex"/></svg>H3</button>
 </div>
 
 <section id="find" role="tabpanel" aria-labelledby="tab-find">
@@ -454,6 +459,12 @@
     <span><strong>Select a GeoJSON file</strong> or drop it on the map</span>
     <input id="file" type="file" accept=".geojson,.json">
   </label>
+</section>
+
+<section id="h3-panel" role="tabpanel" aria-labelledby="tab-h3" hidden>
+  <select id="h3-level" aria-label="The size of a hexagon (H3 level)"></select>
+  <button id="h3-clear" class="btn" type="button" disabled>Clear the cells</button>
+  <p id="h3-hint" aria-live="polite">Click a hexagon on the map to add it to the area.</p>
 </section>
 
 <div id="areas-src" hidden>
@@ -907,6 +918,8 @@ const tabs = [...document.querySelectorAll("#step1-card [role=tab]")];
 for (const t of tabs) t.onclick = () => {
   for (const u of tabs) { u.setAttribute("aria-selected", u === t); $(u.getAttribute("aria-controls")).hidden = u !== t; }
   if (t.id !== "tab-find") picking(false);
+  document.body.classList.toggle("h3", t.id === "tab-h3");
+  if (t.id === "tab-h3") h3Open();
   // the drawing tools work only in the Draw tab
   tool(t.id === "tab-draw" ? (draw.getSnapshot().length ? "select" : "rectangle") : null);
 };
@@ -922,6 +935,7 @@ function clearArea() {
   $("save").disabled = true;
   canBuild();
   $("summary").innerHTML = "";
+  if (cells.size) h3Forget();
 }
 
 // The buffer (duckOSM's boundary.buffer_m, 0 by default): the area grows by this many metres on all sides, in the UTM zone of its centre, as
@@ -939,6 +953,7 @@ async function bufferPolys(polys, m) {
 async function setArea(polys, props, { zoom = true, findExtracts = true } = {}) {
   if (!polys.length) return clearArea();
   if (props.source !== "drawn" && draw.enabled) draw.clear();
+  if (props.source !== "h3" && cells.size) h3Forget();
   if (props.name) $("name").value = props.name;
   const base = polys, m = bufferM();
   if (m > 0) {
@@ -1235,6 +1250,76 @@ addEventListener("drop", (ev) => {
   document.body.classList.remove("dragging");
   if (ev.dataTransfer.files[0]) openFile(ev.dataTransfer.files[0]);
 });
+
+// ---- H3: the area is the union of the hexagons that the user clicks on the map. h3-js loads at the first use of the tab. ----
+const H3_MAX_CELLS = 500, H3_MAX_KM2 = 5000;   // a mistake cannot ask for a huge build
+const cells = new Set();                       // the picked cells, all at level h3Level
+window.h3Cells = cells;                        // for h3_e2e.py
+let h3Level = 8, h3Mod;
+const h3Lib = () => (h3Mod ??= import("h3-js"));
+const metres = (km) => (km < 1 ? `${Math.round(km * 1000)} m` : `${num(km, 1)} km`);
+
+async function h3Open() {
+  let h3;
+  try { h3 = await h3Lib(); } catch (e) { h3Mod = null; return status(`H3 did not load: ${e.message}`, 8000); }
+  if ($("h3-level").options.length) return;
+  $("h3-level").innerHTML = [5, 6, 7, 8, 9, 10].map((l) => {
+    const km2 = h3.getHexagonAreaAvg(l, "km2");
+    return `<option value="${l}">Level ${l}: edge ${metres(h3.getHexagonEdgeLengthAvg(l, "km"))}, ${num(km2, km2 < 1 ? 3 : 1)} km²</option>`;
+  }).join("");
+  $("h3-level").value = h3Level;
+}
+
+// the text under the buttons: what to do, the size of the picks, or why the last click did nothing
+function h3Text(km2, note) {
+  const n = cells.size;
+  $("h3-clear").disabled = !n;
+  $("h3-hint").textContent = note ?? (n ? `${num(n)} cell${n > 1 ? "s" : ""}, ${num(km2, 2)} km². Click a hexagon to add or remove it.` : "Click a hexagon on the map to add it to the area.");
+}
+
+function h3Update(h3, note) {
+  const ids = [...cells], closed = (id) => h3.cellToBoundary(id, true);   // [lng, lat] pairs, closed ring
+  setData("h3cells", { type: "FeatureCollection", features: ids.map((id) => ({ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [closed(id)] } })) });
+  if (!ids.length) {
+    if (area?.props.source === "h3") clearArea();
+    return h3Text(0, note);
+  }
+  const polys = h3.cellsToMultiPolygon(ids, true);   // touching cells merge; a ring of cells keeps its hole
+  setArea(polys, { name: area?.props.source === "h3" ? $("name").value : `H3 level ${h3Level} area`, osm_id: null, admin_level: null, source: "h3", h3_level: h3Level, h3_cells: ids.length }, { zoom: false });
+  h3Text(areaKm2(polys), note);
+}
+
+// another way of making the area replaced the cells
+function h3Forget() {
+  cells.clear();
+  setData("h3cells", null);
+  h3Text(0);
+}
+
+loaded.then(() => {
+  map.addSource("h3cells", { type: "geojson", data: empty });
+  map.addLayer({ id: "h3-line", type: "line", source: "h3cells", paint: { "line-color": blue, "line-width": 1.5, "line-opacity": 0.7 } });
+});
+map.on("click", async (ev) => {
+  if (!document.body.classList.contains("h3")) return;
+  let h3;
+  try { h3 = await h3Lib(); } catch (e) { return status(`H3 did not load: ${e.message}`, 8000); }
+  const { lat, lng } = ev.lngLat.wrap(), id = h3.latLngToCell(lat, lng, h3Level);
+  let note;
+  if (!cells.delete(id)) {
+    if (cells.size >= H3_MAX_CELLS) note = `The area has the most cells: ${num(H3_MAX_CELLS)}. Remove a cell or clear them.`;
+    else if ((cells.size + 1) * h3.getHexagonAreaAvg(h3Level, "km2") > H3_MAX_KM2) note = `The area has the most km²: ${num(H3_MAX_KM2)}. Remove a cell, clear them or use a smaller level.`;
+    else cells.add(id);
+  }
+  h3Update(h3, note);
+});
+$("h3-level").onchange = async () => {
+  const h3 = await h3Lib(), had = cells.size;
+  h3Level = Number($("h3-level").value);
+  cells.clear();
+  h3Update(h3, had ? "You changed the level. The cells are removed." : undefined);
+};
+$("h3-clear").onclick = async () => { cells.clear(); h3Update(await h3Lib()); };
 
 // ---- the output: the format of `duckosm boundary`, a FeatureCollection with one Feature ----
 const text = () => JSON.stringify({ type: "FeatureCollection", features: [
@@ -2068,7 +2153,8 @@ function refreshSteps() {
     current = next;
     autoFold(next, false);
     // the area card (the name, the buffer) stays open beside the data step: the person sets the buffer there, after the area is chosen
-    const keep = (c) => cardN(next) === 3 && cardN(c) === 2 && !!area;
+    // card 1 stays open in the H3 tab: the person clicks more cells, and the level and Clear are in it
+    const keep = (c) => (cardN(next) === 3 && cardN(c) === 2 && !!area) || (cardN(c) === 1 && document.body.classList.contains("h3"));
     if (!touched) for (const c of cards) if (c !== next) autoFold(c, !keep(c));
   }
 }
