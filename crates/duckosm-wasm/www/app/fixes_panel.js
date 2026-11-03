@@ -18,6 +18,7 @@ const HINTS = {
   building: ["Change the tags of a building: floors, height, roof and facade. Give each wall a type.", "Click a building on the map, or type its OSM ID."],
   node: ["A node is one point of OSM. Here it is a traffic signal or a crossing. A change shows in the layer table features.traffic, not in the road edges.", "Click a dot on the map, or type the OSM node ID. Zoom in to see the dots (zoom 14 or more)."],
 };
+const TURN_OUT = "#16a34a";                  // the roads that leave the junction of the Turn tab
 const NODE_COLORS = { signal: "#e11d48", crossing: "#0d9488", other: "#6b7280" };
 const FACE_COLORS = { front: "#16a34a", back: "#dc2626", side: "#6b7280", party: "#7c3aed" };
 const FACE_NAMES = { front: "Front", back: "Back", side: "Side", party: "Party wall" };
@@ -47,6 +48,7 @@ export async function initFixesPanel(ctx) {
   let current = "road";                        // the tab that shows
   const stash = {};                            // the state of the other two edit tabs: { sel, data, draft, touched, walls }
   let walls = [];                              // the walls of the selected building (main.building_faces), with their lines
+  let wallSel = null;                          // the selected wall of that building: "from_node|to_node"
   const kinds = new Map();                     // "way123" -> "road" | "building": what an edited way is (the list of changes)
   const names = new Map();
 
@@ -150,11 +152,13 @@ export async function initFixesPanel(ctx) {
       html += section("Modes", `<div class="checks" role="group" aria-label="Exclude from"><span class="small">Not in</span>${["driving", "walking", "cycling"].map((m) => `<label><input type="checkbox" name="fix-ex" value="${m}"${draft.exclude_modes.includes(m) ? " checked" : ""}>${m[0].toUpperCase() + m.slice(1)}</label>`).join("")}<label><input type="checkbox" id="fix-remove"${draft.remove ? " checked" : ""}>Remove the road</label></div>`);
     }
     if (sel.kind === "building" && walls.length) {
-      html += section(`Walls <span class="muted">(${walls.length})</span>`, `<p class="small" style="margin:0 0 6px">${Object.entries(FACE_COLORS).map(([t, c]) => `<span class="legend"><i style="background:${c}"></i>${FACE_NAMES[t]}</span>`).join("")}</p>
+      html += section(`Walls <span class="muted">(${walls.length})</span>`, `<div class="wallbar"><button type="button" class="btn sm" data-wall-nav="-1">‹ Previous</button><button type="button" class="btn sm" data-wall-nav="1">Next ›</button><button type="button" class="btn sm" data-wall-nav="0" id="fix-wall-off">Unselect</button></div>
+        <p class="small" id="fix-wallpos" style="margin:6px 0"></p>
+        <p class="small" style="margin:0 0 6px">${Object.entries(FACE_COLORS).map(([t, c]) => `<span class="legend" style="margin-left:0;margin-right:8px"><i style="background:${c}"></i>${FACE_NAMES[t]}</span>`).join("")}</p>
         <div class="walls">${walls.map((w) => { const t = wallType(w), ruled = !!F.findFace(doc, sel.id, w.from_node, w.to_node);
-          return `<div class="wallrow${ruled ? " edited" : ""}" data-a="${w.from_node}" data-b="${w.to_node}" data-computed="${w.computed_type}"><span class="k">#${w.face_index + 1}</span><span class="small">${Number(w.length_m).toFixed(1)} m${w.street_name ? ` · ${esc(w.street_name)}` : ""}</span>
+          return `<div class="wallrow${ruled ? " edited" : ""}${wallKey(w) === wallSel ? " sel" : ""}" tabindex="0" data-key="${wallKey(w)}" data-a="${w.from_node}" data-b="${w.to_node}" data-computed="${w.computed_type}"><span class="k">#${w.face_index + 1}</span><span class="small">${Number(w.length_m).toFixed(1)} m${w.street_name ? ` · ${esc(w.street_name)}` : ""}</span>
           <select data-wall aria-label="Type of wall ${w.face_index + 1}">${Object.entries(FACE_NAMES).map(([k, v]) => `<option value="${k}"${k === t ? " selected" : ""}>${v}${k === w.computed_type ? " (computed)" : ""}</option>`).join("")}</select></div>`; }).join("")}</div>
-        <p class="why" style="margin:6px 0 0">A wall type goes to the changes when you pick it.</p>`);
+        <p class="why" style="margin:6px 0 0">Click a wall in the list or on the map to select it. A wall type goes to the changes when you pick it.</p>`);
     } else if (sel.kind === "building" && !hasFaces() && sel.type === "way") {
       html += section("Walls", '<p class="why" style="margin:0">Build with the layers on to see the walls of a building and to give them a type.</p>');
     }
@@ -165,11 +169,22 @@ export async function initFixesPanel(ctx) {
       <div class="grid2 fixgrid" style="margin-top:8px"><label for="fix-note" class="small">Note</label><input type="text" id="fix-note" value="${esc(draft.note)}" placeholder="Why"></div>`);
     box.innerHTML = html;
     $("fix-actions").hidden = false;
-    paintBar();
+    paintBar(); paintWalls();
+  }
+
+  // take the picked object out of the tab: the form, the draft and the blue on the map go (a field that is not added is dropped)
+  function unselect() {
+    if (!sel) return;
+    const dropped = touched.size;
+    ++token; sel = null; data = null; draft = {}; touched = new Set(); walls = []; wallSel = null;
+    $("fix-id").value = "";
+    renderObject(); drawSelected(false); drawFaces(); clearMapSelection();
+    status(dropped ? `Unselected. ${plural(dropped, "field")} that you did not add ${dropped === 1 ? "was" : "were"} dropped.` : "Unselected.");
   }
 
   function renderObject() {
     const box = $("fix-obj");
+    $("fix-unselect").hidden = !sel;
     if (!sel) { box.innerHTML = `<p class="why" style="margin:0">Nothing is picked in this tab.</p>`; renderForm(); return; }
     if (!data) { box.innerHTML = '<p class="why" style="margin:0">Loading…</p>'; return; }
     const name = data.tags.name ? ` “${esc(data.tags.name)}”` : "";
@@ -184,7 +199,7 @@ export async function initFixesPanel(ctx) {
     if (go) setTab(k);                                // saves the state of the tab that shows, and shows the tab of the object
     kind = k;
     const my = ++token;
-    sel = { kind: k, type: type ?? KIND_OF[k], id }; data = null; draft = {}; touched = new Set();
+    sel = { kind: k, type: type ?? KIND_OF[k], id }; data = null; draft = {}; touched = new Set(); wallSel = null;
     $("fix-id").value = id;
     renderObject();
     const d = await loadData(sel.type, id, k);
@@ -202,6 +217,30 @@ export async function initFixesPanel(ctx) {
     if (!hasFaces()) return [];
     return (await safe(`SELECT from_node, to_node, face_index, face_type, computed_type, edited, length_m, street_name, ST_AsGeoJSON(geometry) AS g FROM main.building_faces WHERE building_id = ${id} ORDER BY face_index`))
       .map((r) => ({ ...r, from_node: Number(r.from_node), to_node: Number(r.to_node), face_index: Number(r.face_index) }));
+  }
+  const wallKey = (w) => `${w.from_node}|${w.to_node}`;
+  const wallLine = (w) => (w._line ??= JSON.parse(w.g).coordinates);
+  // the selected wall: its row has a mark, the bar tells which wall it is, and the map outlines it (the layer fix-faces-sel)
+  function paintWalls() {
+    for (const row of $("fix-form").querySelectorAll(".wallrow")) row.classList.toggle("sel", row.dataset.key === wallSel);
+    const pos = $("fix-wallpos"), i = walls.findIndex((w) => wallKey(w) === wallSel);
+    if (pos) {
+      const w = walls[i];
+      pos.textContent = w ? `Wall ${i + 1} of ${walls.length} · ${Number(w.length_m).toFixed(1)} m${w.street_name ? ` · faces ${w.street_name}` : ""} · ${FACE_NAMES[wallType(w)]}` : "No wall is selected.";
+    }
+    if ($("fix-wall-off")) $("fix-wall-off").disabled = i < 0;
+  }
+  function selectWall(key, { zoom = false } = {}) {
+    wallSel = key; paintWalls(); drawFaces();
+    $("fix-form").querySelector(".wallrow.sel")?.scrollIntoView({ block: "nearest" });
+    const w = walls.find((x) => wallKey(x) === key);
+    if (zoom && w) zoomTo(wallLine(w), 20);
+  }
+  function stepWall(dir) {
+    if (!walls.length) return;
+    if (dir === 0) { wallSel = null; paintWalls(); drawFaces(); return; }
+    const i = walls.findIndex((w) => wallKey(w) === wallSel);
+    selectWall(wallKey(walls[i < 0 ? (dir > 0 ? 0 : walls.length - 1) : (i + dir + walls.length) % walls.length]), { zoom: true });
   }
   const wallType = (w) => F.findFace(doc, sel.id, w.from_node, w.to_node)?.type ?? w.face_type;
 
@@ -275,13 +314,21 @@ export async function initFixesPanel(ctx) {
 
   // ---- the tabs: Road, Building and Node share one editor, and each has its own object, form and draft (the stash holds the two that do not show)
   function switchKind(k) {
-    stash[kind] = { sel, data, draft, touched, walls };
-    const st = stash[k] ?? { sel: null, data: null, draft: {}, touched: new Set(), walls: [] };
-    kind = k; ({ sel, data, draft, touched, walls } = st); ++token;
+    stash[kind] = { sel, data, draft, touched, walls, wallSel };
+    const st = stash[k] ?? { sel: null, data: null, draft: {}, touched: new Set(), walls: [], wallSel: null };
+    kind = k; ({ sel, data, draft, touched, walls, wallSel = null } = st); ++token;
     $("fix-id").value = sel?.id ?? "";
     if (sel && !data) select(k, sel.type, sel.id, { go: false });       // an object that waited for its data (a build came between)
   }
+  // nothing stays selected on the map from the tab that was left: roadstyle's road selection (the glow and the popup) and the hover marks go
+  function clearMapSelection() {
+    window.rsDeselect?.();
+    document.querySelectorAll(".maplibregl-popup:not(.rs-tip)").forEach((p) => p.remove());
+    leaveNode();
+    if (map.getLayer("fix-turn-hl")) map.setFilter("fix-turn-hl", ["==", ["get", "id"], -1]);
+  }
   function setTab(name, { zoom = false } = {}) {
+    if (name !== current) clearMapSelection();
     if (EDIT.includes(name) && name !== kind) switchKind(name);
     current = name;
     for (const t of TABS) $(`fix-tab-${t}`).setAttribute("aria-selected", String(t === name));
@@ -294,7 +341,7 @@ export async function initFixesPanel(ctx) {
     if (name === "turns" && !$("fix-turnsec").hidden) outgoing();
     if (draw) map.getCanvas().style.cursor = name === "new" ? "crosshair" : "";
     paintDots();
-    if (open()) { drawSelected(zoom, { turn: name === "turns" && !$("fix-turnsec").hidden ? { via: $("fix-via").value } : null }); drawFaces(); drawNodes(); }
+    if (open()) { drawSelected(zoom, { turn: name === "turns" && !$("fix-turnsec").hidden ? { via: $("fix-via").value } : null }); drawFaces(); drawNodes(); drawTurnRoads(); }
   }
   // an amber dot on the tab that has edits that are not in the changes yet
   function paintDots() {
@@ -365,7 +412,7 @@ export async function initFixesPanel(ctx) {
     }
     if (c.dataset.newway) { setTab("new"); startEdit(Number(c.dataset.newway)); drawSelected(true); return; }
     if (c.dataset.face) { select("building", "way", Number(c.dataset.face.split("|")[0]), { zoom: true }); return; }
-    if (c.dataset.turn) { const [a, b] = c.dataset.turn.split("|").map(Number); setTab("turns"); $("fix-from").value = a; findTurns(a, b); return; }
+    if (c.dataset.turn) { const [a, b] = c.dataset.turn.split("|").map(Number); setTab("turns"); $("fix-from").value = a; findTurns(a, b, { zoom: true }); return; }
     select(c.dataset.kind, c.dataset.type, Number(c.dataset.id), { zoom: true });
   });
   $("fix-undo").onclick = () => { if (hist.length) { future.push(snap()); doc = hist.pop(); persist(); sync(); if (sel && data) { draft = initialDraft(); renderForm(); } } };
@@ -379,20 +426,23 @@ export async function initFixesPanel(ctx) {
 
   // ---- the turns: the junctions at the end of a road, and a rule for each road that leaves one
   const turnSelect = (cur) => `<select aria-label="Turn rule"><option value="">Allowed</option>${Object.entries(TURN_TYPES).map(([k, v]) => `<option value="${k}"${cur === k ? " selected" : ""}>${v}</option>`).join("")}</select>`;
-  async function findTurns(from, via = null) {
+  async function findTurns(from, via = null, { zoom = false } = {}) {
     $("fix-from").value = from;
     const nodes = (await safe(`SELECT DISTINCT target AS n FROM driving.edges WHERE osm_id = ${from} ORDER BY n`)).map((r) => String(r.n));
     $("fix-via-row").hidden = $("fix-turnsec").hidden = $("fix-turn-bar").hidden = !nodes.length;
+    $("fix-turn-clear").hidden = false; $("fix-turn-legend").hidden = !nodes.length;
     $("fix-via").innerHTML = nodes.map((n) => `<option value="${n}">Junction ${n}</option>`).join("");
     if (via != null && nodes.includes(String(via))) $("fix-via").value = String(via);
     $("fix-out").innerHTML = nodes.length ? "" : `<p class="why">Way ${from} is not in the driving network.</p>`;
     if (nodes.length) await outgoing();
-    drawSelected(false, { turn: nodes.length ? { via: $("fix-via").value } : null });
+    drawSelected(zoom, { turn: nodes.length ? { via: $("fix-via").value } : null });
+    if (!nodes.length) { turnOut = []; drawTurnRoads(); }
   }
   async function outgoing() {
     const from = whole($("fix-from").value), via = Number($("fix-via").value);
     if (!from || !Number.isSafeInteger(via)) return;
     const roads = await safe(`SELECT osm_id, any_value(name) AS name, any_value(highway) AS highway FROM driving.edges WHERE source = ${via} AND osm_id != ${from} GROUP BY osm_id ORDER BY osm_id LIMIT 30`);
+    turnOut = roads.map((r) => Number(r.osm_id)); drawTurnRoads();
     $("fix-out").innerHTML = roads.length ? roads.map((r) => `<div class="turn" data-to="${r.osm_id}"><span class="small">To <b>${esc(r.name || "no name")}</b> (${esc(r.highway)}, way ${r.osm_id})</span>${turnSelect(F.findTurn(doc, from, via, Number(r.osm_id))?.restriction)}</div>`).join("") : '<p class="why">No road leaves this junction.</p>';
     for (const row of $("fix-out").querySelectorAll(".turn")) row.querySelector("select").onchange = paintTurnBar;
     paintTurnBar();
@@ -419,7 +469,13 @@ export async function initFixesPanel(ctx) {
     commit(() => { for (const x of d) x.want ? F.upsertTurn(doc, { from_way: x.from, via_node: x.via, to_way: x.to, restriction: x.want }) : F.deleteTurn(doc, x.from, x.via, x.to); });
     status(`Added to the changes: ${plural(d.length, "turn rule")}.`);
   };
-  $("fix-turn-find").onclick = () => { const id = whole($("fix-from").value); id ? findTurns(id) : status("Type a way ID (a whole number)."); };
+  function clearTurns() {
+    $("fix-from").value = ""; $("fix-via").innerHTML = ""; $("fix-out").innerHTML = "";
+    $("fix-via-row").hidden = $("fix-turnsec").hidden = $("fix-turn-bar").hidden = $("fix-turn-clear").hidden = $("fix-turn-legend").hidden = true;
+    turnOut = []; drawTurnRoads(); paintTurnBar(); drawSelected(false);
+  }
+  $("fix-turn-clear").onclick = clearTurns;
+  $("fix-turn-find").onclick = () => { const id = whole($("fix-from").value); id ? findTurns(id, null, { zoom: true }) : status("Type a way ID (a whole number)."); };
   $("fix-via").onchange = () => { outgoing(); drawSelected(false, { turn: { via: $("fix-via").value } }); };
 
   // ---- the map: edited objects are amber, the selected object is blue
@@ -434,13 +490,18 @@ export async function initFixesPanel(ctx) {
       map.on("mousemove", "fix-nodes-pt", hoverNode);
       map.on("mouseleave", "fix-nodes-pt", leaveNode);
     }
+    if (!map.getSource("fix-turn")) {                 // the roads that leave the junction of the Turn tab; the one under the pointer in the list has a dark outline
+      map.addSource("fix-turn", { type: "geojson", data: EMPTY });
+      map.addLayer({ id: "fix-turn-hl", type: "line", source: "fix-turn", filter: ["==", ["get", "id"], -1], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#111827", "line-width": 12, "line-opacity": 0.85 } });
+      map.addLayer({ id: "fix-turn-line", type: "line", source: "fix-turn", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": TURN_OUT, "line-width": 6, "line-opacity": 0.95 } });
+    }
     for (const [src, color, w, fa] of [["fix-edits", AMBER, 5, 0.28], ["fix-sel", BLUE, 7, 0.2]]) {
       if (map.getSource(src)) continue;
       map.addSource(src, { type: "geojson", data: EMPTY });
       map.addLayer({ id: `${src}-fill`, type: "fill", source: src, filter: ["==", ["geometry-type"], "Polygon"], paint: { "fill-color": color, "fill-opacity": fa } });
       map.addLayer({ id: `${src}-glow`, type: "line", source: src, filter: ["!=", ["geometry-type"], "Point"], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": color, "line-width": w * 2 + 8, "line-opacity": 0.3, "line-blur": 2 } });
       map.addLayer({ id: `${src}-line`, type: "line", source: src, filter: ["!=", ["geometry-type"], "Point"], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": color, "line-width": w, "line-opacity": 0.95 } });
-      map.addLayer({ id: `${src}-pt`, type: "circle", source: src, filter: ["==", ["geometry-type"], "Point"], paint: { "circle-radius": w + 3, "circle-color": color, "circle-opacity": 0.35, "circle-stroke-color": color, "circle-stroke-width": 3 } });
+      map.addLayer({ id: `${src}-pt`, type: "circle", source: src, filter: ["==", ["geometry-type"], "Point"], paint: { "circle-radius": src === "fix-sel" ? ["case", ["==", ["get", "j"], 1], 17, w + 3] : w + 3, "circle-color": color, "circle-opacity": 0.35, "circle-stroke-color": color, "circle-stroke-width": src === "fix-sel" ? ["case", ["==", ["get", "j"], 1], 5, 3] : 3 } });
     }
     if (!map.getSource("fix-draw")) {                 // the new road that is being drawn
       map.addSource("fix-draw", { type: "geojson", data: EMPTY });
@@ -450,6 +511,7 @@ export async function initFixesPanel(ctx) {
     if (!map.getSource("fix-faces")) {                // the walls of buildings, one color for each type; a wall with a rule has an amber glow
       map.addSource("fix-faces", { type: "geojson", data: EMPTY });
       map.addLayer({ id: "fix-faces-edit", type: "line", source: "fix-faces", filter: ["==", ["get", "e"], 1], paint: { "line-color": AMBER, "line-width": 10, "line-opacity": 0.55 } });
+      map.addLayer({ id: "fix-faces-sel", type: "line", source: "fix-faces", filter: ["==", ["get", "s"], 1], layout: { "line-cap": "round" }, paint: { "line-color": "#111827", "line-width": 14, "line-opacity": 0.9 } });
       map.addLayer({ id: "fix-faces-line", type: "line", source: "fix-faces", layout: { "line-cap": "round" },
         paint: { "line-color": ["match", ["get", "t"], "front", FACE_COLORS.front, "back", FACE_COLORS.back, "party", FACE_COLORS.party, FACE_COLORS.side], "line-width": 4.5 } });
     }
@@ -475,7 +537,7 @@ export async function initFixesPanel(ctx) {
     return out.filter(Boolean);
   }
 
-  const drawnCount = { edits: 0, sel: 0, heights: [], faces: 0, draw: 0, nodes: 0 };      // what the panel put in the map's sources (the tests read it)
+  const drawnCount = { edits: 0, sel: 0, heights: [], faces: 0, draw: 0, nodes: 0, turn: 0 };      // what the panel put in the map's sources (the tests read it)
   // the edited buildings with their height and color: the tags of the data with the rule on top, so a change shows before the next build
   async function extrusions() {
     await classify();
@@ -497,11 +559,11 @@ export async function initFixesPanel(ctx) {
     if (ids.length) for (const m of modes()) for (const r of await safe(`SELECT node_id AS id, ST_X(geom) AS x, ST_Y(geom) AS y FROM ${m}.nodes WHERE node_id IN (${ids.join(",")})`)) at.set(Number(r.id), [r.x, r.y]);
     return w.nodes.map((n) => (Array.isArray(n) ? n : at.get(n))).filter(Boolean);
   }
-  function zoomTo(coords) {
+  function zoomTo(coords, maxZoom = 18) {
     if (!coords.length) return;
     const b = new maplibregl.LngLatBounds();
     coords.forEach((c) => b.extend(c));
-    map.fitBounds(b, { padding: { top: 80, bottom: 80, left: innerWidth > 700 ? 440 : 40, right: 90 }, maxZoom: 18, duration: 600 });
+    map.fitBounds(b, { padding: { top: 80, bottom: 80, left: innerWidth > 700 ? 440 : 40, right: 90 }, maxZoom, duration: 600 });
   }
 
   // hover on a node dot: a ring around it, the pointer cursor and a tooltip (roadstyle's tooltip look, `rs-tip`) with its kind, its OSM id and its name
@@ -547,18 +609,18 @@ export async function initFixesPanel(ctx) {
 
   let faceToken = 0;
   async function drawFaces() {
-    if (!open() && !total()) return;
     const my = ++faceToken;
+    if (!open()) { map.getSource("fix-faces")?.setData({ type: "FeatureCollection", features: [] }); drawnCount.faces = 0; return; }       // closed: no walls on the map
     ensureLayers();
     let feats = [];
-    const asFeature = (g, t, e) => { try { return { type: "Feature", properties: { t, e: e ? 1 : 0 }, geometry: JSON.parse(g) }; } catch { return null; } };
+    const asFeature = (g, t, e, s = 0) => { try { return { type: "Feature", properties: { t, e: e ? 1 : 0, s: s ? 1 : 0 }, geometry: JSON.parse(g) }; } catch { return null; } };
     if (hasFaces()) {
       if (current === "building" && $("fix-walls-all").checked && map.getZoom() >= 16) {
         const b = map.getBounds();
-        feats = (await safe(`SELECT face_type AS t, edited AS e, ST_AsGeoJSON(geometry) AS g FROM main.building_faces WHERE ST_Intersects(geometry, ST_MakeEnvelope(${b.getWest()}, ${b.getSouth()}, ${b.getEast()}, ${b.getNorth()})) LIMIT 30000`))
-          .map((r) => asFeature(r.g, r.t, r.e));
+        feats = (await safe(`SELECT face_type AS t, edited AS e, building_id AS b, from_node AS f, to_node AS n, ST_AsGeoJSON(geometry) AS g FROM main.building_faces WHERE ST_Intersects(geometry, ST_MakeEnvelope(${b.getWest()}, ${b.getSouth()}, ${b.getEast()}, ${b.getNorth()})) LIMIT 30000`))
+          .map((r) => asFeature(r.g, r.t, r.e, sel?.kind === "building" && Number(r.b) === sel.id && `${Number(r.f)}|${Number(r.n)}` === wallSel));
       } else if (current === "building" && sel?.kind === "building" && walls.length) {
-        feats = walls.map((w) => asFeature(w.g, wallType(w), !!F.findFace(doc, sel.id, w.from_node, w.to_node) || w.edited));
+        feats = walls.map((w) => asFeature(w.g, wallType(w), !!F.findFace(doc, sel.id, w.from_node, w.to_node) || w.edited, wallKey(w) === wallSel));
       }
     }
     if (my !== faceToken) return;
@@ -586,13 +648,37 @@ export async function initFixesPanel(ctx) {
     }
   }
 
+  // the roads that leave the junction (the Turn tab), in green; a hover on a row of the list outlines its road
+  let turnOut = [], turnToken = 0;
+  async function drawTurnRoads() {
+    const my = ++turnToken;
+    let feats = [];
+    if (open() && current === "turns" && turnOut.length) {
+      ensureLayers();
+      feats = (await safe(`SELECT osm_id AS id, ST_AsGeoJSON(geometry) AS g FROM driving.edges WHERE osm_id IN (${turnOut.join(",")})`))
+        .map((r) => { try { return { type: "Feature", properties: { id: Number(r.id) }, geometry: JSON.parse(r.g) }; } catch { return null; } }).filter(Boolean);
+    }
+    if (my !== turnToken) return;
+    map.getSource("fix-turn")?.setData({ type: "FeatureCollection", features: feats });
+    drawnCount.turn = feats.length;
+  }
+  $("fix-out").addEventListener("mouseover", (e) => { const r = e.target.closest(".turn"); if (r && map.getLayer("fix-turn-hl")) map.setFilter("fix-turn-hl", ["==", ["get", "id"], Number(r.dataset.to)]); });
+  $("fix-out").addEventListener("mouseout", (e) => { if (!e.relatedTarget?.closest?.(".turn") && map.getLayer("fix-turn-hl")) map.setFilter("fix-turn-hl", ["==", ["get", "id"], -1]); });
+
   let selToken = 0;
   async function drawSelected(zoom, { turn = null } = {}) {
     const my = ++selToken;
     ensureLayers();
     let feats = [];
+    if (!open()) {                                    // the panel is closed: nothing is selected on the map
+      map.getSource("fix-sel")?.setData({ type: "FeatureCollection", features: [] }); drawnCount.sel = 0;
+      return;
+    }
     if (turn) {
-      feats = (await safe(`SELECT ST_AsGeoJSON(geom) AS g FROM driving.nodes WHERE node_id = ${Number(turn.via)}`)).map((r) => { try { return { type: "Feature", properties: {}, geometry: JSON.parse(r.g) }; } catch { return null; } }).filter(Boolean);
+      const from = whole($("fix-from").value), feat = (g, props) => { try { return { type: "Feature", properties: props, geometry: JSON.parse(g) }; } catch { return null; } };
+      const road = from ? await safe(`SELECT ST_AsGeoJSON(geometry) AS g FROM driving.edges WHERE osm_id = ${from}`) : [];
+      const junction = await safe(`SELECT ST_AsGeoJSON(geom) AS g FROM driving.nodes WHERE node_id = ${Number(turn.via)}`);
+      feats = [...road.map((r) => feat(r.g, {})), ...junction.map((r) => feat(r.g, { j: 1 }))].filter(Boolean);
     } else if (sel && EDIT.includes(current)) feats = await shapes([{ type: sel.type, id: sel.id }]);
     else if (current === "new" && editNew != null) {
       const w = F.newWays(doc).find((x) => x.id === editNew), line = w ? await newWayLine(w) : [];
@@ -690,11 +776,37 @@ export async function initFixesPanel(ctx) {
   // ---- what a click on the map picks
   const open = () => document.body.classList.contains("editing-fixes");
   const px = (e, n) => { const a = map.unproject([e.point.x - n, e.point.y]), c = map.unproject([e.point.x + n, e.point.y]); return Math.abs(c.lng - a.lng) / 2; };
+  // the distance in pixels from a point to a line of the map
+  function pixelsToLine(pt, coords) {
+    const q = coords.map((c) => map.project(c));
+    let best = Infinity;
+    for (let i = 1; i < q.length; i++) {
+      const ax = q[i - 1].x, ay = q[i - 1].y, dx = q[i].x - ax, dy = q[i].y - ay, len = dx * dx + dy * dy;
+      const t = len ? Math.max(0, Math.min(1, ((pt.x - ax) * dx + (pt.y - ay) * dy) / len)) : 0;
+      best = Math.min(best, Math.hypot(pt.x - (ax + t * dx), pt.y - (ay + t * dy)));
+    }
+    return best;
+  }
+  // a click within 10 px of a wall: a wall of the picked building, or (with "Show the walls of all buildings") of another building, which gets picked too
+  async function wallAt(e) {
+    let best = null;
+    for (const w of walls) { const d = pixelsToLine(e.point, wallLine(w)); if (d <= 10 && (!best || d < best.d)) best = { d, key: wallKey(w) }; }
+    if (best) { selectWall(best.key); return true; }
+    if (!hasFaces() || !$("fix-walls-all").checked || map.getZoom() < 16) return false;
+    const { lng, lat } = e.lngLat, dd = px(e, 10);
+    const r = (await safe(`SELECT building_id AS b, from_node AS f, to_node AS n FROM main.building_faces WHERE ST_Distance(geometry, ST_Point(${lng}, ${lat})) < ${dd} ORDER BY ST_Distance(geometry, ST_Point(${lng}, ${lat})) LIMIT 1`))[0];
+    if (!r) return false;
+    const key = `${Number(r.f)}|${Number(r.n)}`;
+    if (!(sel?.kind === "building" && sel.id === Number(r.b))) await select("building", "way", Number(r.b));
+    selectWall(key);
+    return true;
+  }
   async function onMapClick(e) {
     if (open() && draw && current === "new") return addPoint(e);
     if (!open() || (current !== "building" && current !== "node")) return;        // a road is picked by the dashboard's click (rs:select), a turn too
     const { lng, lat } = e.lngLat;
     if (current === "building") {
+      if (await wallAt(e)) return;
       const d = px(e, 6);
       const r = (await safe(`SELECT osm_id, osm_type FROM features.buildings WHERE ST_Intersects(geom, ST_Buffer(ST_Point(${lng}, ${lat}), ${d})) ORDER BY ST_Distance(geom, ST_Point(${lng}, ${lat})) LIMIT 1`))[0];
       if (r) select("building", r.osm_type === "relation" ? "relation" : "way", Number(r.osm_id));
@@ -722,9 +834,14 @@ export async function initFixesPanel(ctx) {
   });
 
   // ---- wiring
+  $("fix-form").addEventListener("keydown", (e) => { const row = e.target.closest?.(".wallrow"); if (row && e.target === row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); selectWall(row.dataset.key, { zoom: true }); } });
   $("fix-form").addEventListener("input", onInput);
   $("fix-form").addEventListener("change", onInput);
   $("fix-form").addEventListener("click", (e) => {
+    const nav = e.target.closest("[data-wall-nav]");
+    if (nav) return stepWall(Number(nav.dataset.wallNav));
+    const row = e.target.closest(".wallrow");
+    if (row && !e.target.closest("select")) return selectWall(row.dataset.key, { zoom: true });
     const t = e.target.closest("button");
     if (!t) return;
     if (t.dataset.revert) return revertKey(t.dataset.revert);
@@ -736,6 +853,7 @@ export async function initFixesPanel(ctx) {
     }
   });
   $("fix-save").onclick = save;
+  $("fix-unselect").onclick = unselect;
   $("fix-revert").onclick = () => { touched = new Set(); draft = initialDraft(); renderForm(); };
   for (const b of document.querySelectorAll("#fix-panel [data-review]")) b.onclick = () => setTab("changes");
   $("fix-pending").addEventListener("click", (e) => { const b = e.target.closest("[data-go]"); if (b) setTab(b.dataset.go, { zoom: true }); });
@@ -778,6 +896,7 @@ export async function initFixesPanel(ctx) {
     catch (e) { status("The fixes file is not valid: " + e.message.split("\n")[0], 8000); }
   }
   function openPanel() {
+    clearMapSelection();                             // what was selected before (roadstyle's road selection and its popup) is not selected in this panel
     document.body.classList.add("editing-fixes"); ensureLayers();
     const back = restore();
     if (back) status(`${plural(back, "change")} from your last visit ${back === 1 ? "is" : "are"} back.`, 6000);
@@ -786,12 +905,17 @@ export async function initFixesPanel(ctx) {
   async function openFrom() { await duck.loadSpatial(); openPanel(); }
   // after a build: the data is new, so each tab loads its object again (the changes and the picked objects stay)
   const rebuilt = () => {
-    kinds.clear(); names.clear(); walls = [];
-    for (const k of EDIT) if (k !== kind && stash[k]?.sel) stash[k] = { sel: stash[k].sel, data: null, draft: {}, touched: new Set(), walls: [] };
+    kinds.clear(); names.clear(); walls = []; wallSel = null;
+    for (const k of EDIT) if (k !== kind && stash[k]?.sel) stash[k] = { sel: stash[k].sel, data: null, draft: {}, touched: new Set(), walls: [], wallSel: null };
     if (sel) select(kind, sel.type, sel.id, { go: false }); else { renderObject(); drawSelected(false); }
     drawEdits(); drawFaces(); drawNodes();
   };
-  function close() { if (draw) stopDraw(); document.body.classList.remove("editing-fixes"); drawNodes(); }
+  // leaving the panel unselects everything on the map: the blue objects, roadstyle's road selection, the node dots, the turn roads and the walls (the amber changes stay)
+  function close() {
+    if (draw) stopDraw();
+    document.body.classList.remove("editing-fixes");
+    clearMapSelection(); drawSelected(false); drawFaces(); drawNodes(); drawTurnRoads();
+  }
 
   setTab("road"); sync();
   return { text, load, restore, open: openFrom, close, isOpen: open, rebuilt, select, tab: setTab, drawn: () => ({ ...drawnCount }), count: () => F.objects(doc).length + (doc.turn_restrictions ?? []).length + F.faceEdits(doc).length + F.newWays(doc).length };

@@ -211,6 +211,8 @@
   #fix-panel .fix-tabs .dot { position: absolute; top: 6px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; }
   #fix-panel .fsec { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin: 0 0 10px; }
   #fix-panel .walls-all:not([hidden]) { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
+  #fix-panel .fsec-hd { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+  #fix-panel .fsec-hd h3 { margin: 0; }
   #fix-panel .fsec h3 { margin: 0 0 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
   #fix-panel .fsec .fixgrid { margin-top: 0; grid-template-columns: 8.5em 1fr; }
   #fix-panel .fsec > .row:first-of-type, #fix-panel .fsec > p.why + .row { margin-top: 0; }
@@ -266,6 +268,9 @@
   #fix-panel .chg:hover, #fix-panel .chg:focus-visible { background: var(--surface); }
   #fix-panel .walls { display: flex; flex-direction: column; gap: 4px; }
   #fix-panel .wallrow { display: grid; grid-template-columns: 2.4em 1fr auto; gap: 6px; align-items: center; padding: 2px 4px; border-left: 3px solid transparent; }
+  #fix-panel .wallbar { display: flex; gap: 6px; flex-wrap: wrap; }
+  #fix-panel .wallrow { cursor: pointer; border-radius: 6px; }
+  #fix-panel .wallrow.sel { background: rgba(17, 24, 39, 0.1); outline: 2px solid #111827; }
   #fix-panel .wallrow.edited { border-left-color: #f59e0b; background: rgba(245, 158, 11, 0.12); }
   #fix-panel .wallrow select { max-width: 11.5em; }
   #fix-panel .legend { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; font-size: 11.5px; color: var(--muted); }
@@ -567,7 +572,7 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
         <div class="row"><input id="fix-id" type="text" inputmode="numeric" placeholder="OSM ID" aria-label="OSM ID" style="flex:1"><button id="fix-load" class="btn" type="button">Load</button></div>
         <label id="fix-walls-row" class="small walls-all" hidden><input type="checkbox" id="fix-walls-all">Show the walls of all buildings in view (zoom 16 or more)</label>
       </section>
-      <section class="fsec" id="fix-objsec"><h3>Selected</h3><div id="fix-obj" class="fix-obj"></div></section>
+      <section class="fsec" id="fix-objsec"><div class="fsec-hd"><h3>Selected</h3><button id="fix-unselect" class="btn sm" type="button" hidden>Unselect</button></div><div id="fix-obj" class="fix-obj"></div></section>
       <div id="fix-form"></div>
       <div class="fix-bar" id="fix-actions" hidden>
         <div class="barline"><span id="fix-state" class="small" role="status"></span><button type="button" class="link" data-review>Review changes →</button></div>
@@ -578,7 +583,8 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
       <p class="why">A turn rule says that a driver cannot make a turn (or must make it) at a junction. The rules are for the driving network.</p>
       <section class="fsec"><h3>Pick the road</h3>
         <p class="why">Click the road that the turn starts on, or type its way ID.</p>
-        <div class="row"><input id="fix-from" type="text" inputmode="numeric" placeholder="From way ID" aria-label="From way ID" style="flex:1"><button id="fix-turn-find" class="btn" type="button">Find turns</button></div>
+        <div class="row"><input id="fix-from" type="text" inputmode="numeric" placeholder="From way ID" aria-label="From way ID" style="flex:1"><button id="fix-turn-find" class="btn" type="button">Find turns</button><button id="fix-turn-clear" class="btn" type="button" hidden>Clear</button></div>
+        <p id="fix-turn-legend" class="small" hidden><span class="legend" style="margin-left:0"><i style="background:#2563eb"></i>The road the turn starts on</span><span class="legend"><i style="background:#16a34a"></i>Roads that leave the junction</span><span class="legend"><i style="border:3px solid #2563eb;border-radius:50%;background:rgba(37,99,235,.25)"></i>The junction</span><br><span class="muted">Point at a road in the list to outline it on the map.</span></p>
         <div class="grid2" style="margin-top:8px" id="fix-via-row" hidden><label for="fix-via" class="small">Junction</label><select id="fix-via"></select></div>
       </section>
       <section class="fsec" id="fix-turnsec" hidden><h3>Rule for each road that leaves the junction</h3><div id="fix-out"></div></section>

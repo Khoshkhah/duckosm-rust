@@ -126,12 +126,14 @@ with sync_playwright() as p:
     assert page.input_value("#fixf-lanes") == "7", "Reset form: the form shows the saved rule again"
 
     # the tabs are real: the Building tab has no road form, and the Road tab keeps its road, form and rule
+    page.evaluate("window.__desel = 0; const o = window.rsDeselect; window.rsDeselect = (...a) => { window.__desel++; return o?.(...a); }")
     page.click("#fix-tab-building")
+    assert page.evaluate("window.__desel") >= 1, "a switch of tab clears roadstyle's selection on the map"
     assert page.is_visible("#fix-walls-all") and page.locator("#fixf-lanes").count() == 0 and "Nothing is picked" in page.inner_text("#fix-obj"), page.inner_text("#fix-obj")
     assert page.is_visible("#fixf-roof_shape") is False and page.input_value("#fix-id") == ""
+    page.wait_for_function("window.fixesPanel.drawn().sel === 0", timeout=10_000)             # the Building tab has nothing picked, so nothing is blue
     page.click("#fix-tab-road")
     assert page.input_value("#fix-id") == str(ROAD) and page.input_value("#fixf-lanes") == "7", "the Road tab keeps its road"
-    page.wait_for_function("window.fixesPanel.drawn().sel === 0", timeout=10_000)             # the Building tab has nothing picked, so nothing is blue
     page.click("#fix-tab-road")
     page.wait_for_function("window.fixesPanel.drawn().sel > 0", timeout=20_000)
     pt = rows(page, f"SELECT ST_X(ST_PointOnSurface(ST_Union_Agg(geometry))) AS x, ST_Y(ST_PointOnSurface(ST_Union_Agg(geometry))) AS y FROM driving.edges WHERE osm_id = {ROAD}")[0]
@@ -140,6 +142,24 @@ with sync_playwright() as p:
     page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['fix-sel-line']}).length > 0", timeout=20_000)     # the blue road is drawn, not only counted
     page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['fix-edits-line']}).length > 0", timeout=20_000)   # and the amber one (the rule of the road)
     print("the tabs: Building has its own empty form, Road keeps its road and its rule, and the map shows the road of the tab")
+    # Unselect takes the road out of the tab (the form, the id and the blue road), and Load picks it again
+    assert page.is_visible("#fix-unselect")
+    page.click("#fix-unselect")
+    assert page.locator("#fixf-lanes").count() == 0 and page.input_value("#fix-id") == "" and not page.is_visible("#fix-unselect")
+    page.wait_for_function("window.fixesPanel.drawn().sel === 0", timeout=10_000)
+    page.fill("#fix-id", str(ROAD)); page.click("#fix-load")
+    page.wait_for_function(f"document.querySelector('#fix-obj .objhead')?.textContent.includes('way {ROAD}') && document.querySelector('#fixf-lanes')?.value === '7'", timeout=20_000)
+    print("Unselect: the road goes out of the tab, and Load brings it back")
+    # leaving the panel (← Steps) unselects everything on the map; the tabs keep their objects, and the blue comes back when the panel opens
+    page.wait_for_function("window.fixesPanel.drawn().sel > 0", timeout=20_000)
+    page.evaluate("window.__desel = 0")
+    page.click("#fix-back")
+    assert page.evaluate("window.__desel") >= 1, "closing the panel clears roadstyle's selection"
+    page.wait_for_function("window.fixesPanel.drawn().sel === 0 && window.fixesPanel.drawn().faces === 0 && window.fixesPanel.drawn().nodes === 0", timeout=10_000)
+    assert page.evaluate("duckMap.queryRenderedFeatures({layers: ['fix-sel-line', 'fix-sel-fill', 'fix-sel-pt']}).length") == 0
+    page.click("#fix-open")
+    page.wait_for_function("window.fixesPanel.drawn().sel > 0", timeout=20_000)
+    print("← Steps unselects everything on the map, and the panel shows the picked road again when it opens")
 
     # a building: its tab, a real click, the preset fields (floors, roof shape, roof color)
     page.click("#fix-tab-building")
@@ -170,6 +190,26 @@ with sync_playwright() as p:
     assert "building_faces" in y and f"type: {new_type}" in y and f"building: {b['osm_id']}" in y, y
     assert "edited" in (page.get_attribute("#fix-form .wallrow", "class") or "")
     print(f"a wall: nodes {wall[0]} and {wall[1]} were {wall[2]}, now {new_type}")
+
+    # select each wall: a row of the list, the bar (Next, Previous, Unselect), and a click on the wall on the map
+    assert "No wall is selected" in page.inner_text("#fix-wallpos")
+    page.click("#fix-form .wallrow >> nth=1 >> .small")
+    assert "Wall 2 of" in page.inner_text("#fix-wallpos") and page.locator("#fix-form .wallrow.sel").count() == 1
+    page.wait_for_function("!duckMap.isMoving()")
+    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['fix-faces-sel']}).length > 0", timeout=20_000)     # the selected wall has its outline on the map
+    page.click("[data-wall-nav='1']")
+    assert "Wall 3 of" in page.inner_text("#fix-wallpos")
+    page.click("[data-wall-nav='-1']"); page.click("[data-wall-nav='-1']")
+    assert "Wall 1 of" in page.inner_text("#fix-wallpos")
+    w3 = rows(page, f"SELECT ST_X(ST_LineInterpolatePoint(geometry, 0.5)) AS x, ST_Y(ST_LineInterpolatePoint(geometry, 0.5)) AS y FROM main.building_faces WHERE building_id = {b['osm_id']} AND face_index = 2")[0]
+    px = at(page, w3["x"], w3["y"])
+    page.mouse.click(*px)                                  # a real click on the third wall of the picked building
+    page.wait_for_function("document.getElementById('fix-wallpos').textContent.startsWith('Wall 3 of')", timeout=20_000)
+    page.click("#fix-wall-off")
+    assert "No wall is selected" in page.inner_text("#fix-wallpos")
+    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['fix-faces-sel']}).length === 0", timeout=10_000)
+    assert page.locator("#fix-form .wallrow.sel").count() == 0 and f"{b['osm_id']}" in page.input_value("#fix-id")
+    print("select each wall: a click on a row, Next and Previous, a click on the wall on the map, and Unselect")
     page.screenshot(path=str(out / "walls.png"))
 
     # a node (a traffic signal): its tab, a real click
@@ -214,6 +254,14 @@ with sync_playwright() as p:
     page.fill("#fix-from", str(frm))
     page.click("#fix-turn-find")
     page.wait_for_selector("#fix-out .turn")
+    # the map: the road that the turn starts on (blue), the junction (a ring) and the roads that leave it (green); a hover on a row outlines its road
+    page.wait_for_function("window.fixesPanel.drawn().sel >= 2 && window.fixesPanel.drawn().turn > 0", timeout=20_000)
+    page.wait_for_function("!duckMap.isMoving()")
+    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['fix-sel-line']}).length > 0 && duckMap.queryRenderedFeatures({layers: ['fix-sel-pt']}).length > 0 && duckMap.queryRenderedFeatures({layers: ['fix-turn-line']}).length > 0", timeout=20_000)
+    page.hover("#fix-out .turn")
+    assert page.get_attribute("#fix-out .turn", "data-to") in page.evaluate("JSON.stringify(duckMap.getFilter('fix-turn-hl'))"), "a hover on a row outlines its road"
+    assert page.is_visible("#fix-turn-legend")
+    print("the Turn tab draws the start road, the junction ring and the roads that leave it")
     page.select_option("#fix-out .turn select", "no_left_turn")
     assert "not added yet" in page.inner_text("#fix-turn-note") and "restriction" not in text(page), "a choice is not a change until Add to changes"
     assert page.is_visible("#fix-tab-turns .dot")
@@ -221,6 +269,8 @@ with sync_playwright() as p:
     assert not page.is_visible("#fix-tab-turns .dot")
     y = text(page)
     assert "turn_restrictions" in y and "restriction: no_left_turn" in y and f"from_way: {frm}" in y, y
+    page.click("#fix-turn-clear")                  # Clear takes the road out of the Turn tab (the rule stays in the changes)
+    assert not page.is_visible("#fix-turnsec") and page.input_value("#fix-from") == "" and "turn_restrictions" in text(page)
 
     # the one Build button waits while a tab has edits that are not in the changes
     page.click("#fix-tab-road")
