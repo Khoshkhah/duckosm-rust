@@ -212,21 +212,43 @@ with sync_playwright() as p:
     page.wait_for_function("document.querySelectorAll('#fix-list .chg').length === 5")
     assert "traffic_signals:direction: backward" in text(page)
 
+    # the Changes list shows what the data had before ("was")
+    assert "(was" in lst, lst
+
+    # a new road: the first click is near a junction (it joins it), the second is a free point; Enter-free path: the Finish button
+    page.click("#fix-tab-edit")
+    page.click("#fix-draw")
+    assert page.is_visible("#fix-drawbox")
+    j = rows(page, "SELECT node_id, ST_X(geom) AS x, ST_Y(geom) AS y FROM driving.nodes WHERE node_id IN (SELECT node_id FROM driving.way_nodes) LIMIT 1")[0]
+    px = at(page, j["x"], j["y"])
+    page.mouse.click(*px)
+    page.wait_for_function("window.fixesPanel.drawn().draw === 1", timeout=20_000)
+    assert "joins a junction" in page.inner_text("#fix-draw-n"), page.inner_text("#fix-draw-n")
+    page.mouse.click(px[0] + 150, px[1] - 80)
+    page.wait_for_function("window.fixesPanel.drawn().draw === 2", timeout=20_000)
+    page.select_option("#fixn-highway", "service")
+    page.fill("#fixn-name", "Test Lane")
+    page.click("#fix-draw-done")
+    y = text(page)
+    assert "new_ways" in y and "id: 9000000000000" in y and "highway: service" in y and "name: Test Lane" in y, y
+    assert not page.is_visible("#fix-drawbox") and page.inner_text("#fix-n") == "6"
+    print("a new road: two points, the first joins a junction; it is in new_ways")
+
     # a file that is not valid does not change the rules; a duckOSM file (overrides with tags) loads
     saved = text(page)
     page.evaluate("window.fixesPanel.load('overrides: [')")
-    assert page.inner_text("#fix-n") == "5"
+    assert page.inner_text("#fix-n") == "6"
     page.evaluate("window.fixesPanel.load('overrides:\\n  - osm_id: 1\\n    lanes: 3\\n    tags: {surface: asphalt}\\n')")
     assert page.inner_text("#fix-n") == "1"
     page.evaluate("(t) => window.fixesPanel.load(t)", saved)
-    page.wait_for_function("document.getElementById('fix-n').textContent === '5'")
+    page.wait_for_function("document.getElementById('fix-n').textContent === '6'")
 
     # build again with the rules: Apply closes the panel; the tables have the changes, and the amber layer is drawn again
     page.click("#fix-apply")
     page.wait_for_function("document.getElementById('run').hasAttribute('aria-busy')", timeout=30_000)
     built(page)
     page.wait_for_function("document.getElementById('fix-why').textContent.includes('Built with these fixes')", timeout=60_000)
-    assert not page.is_visible("#fix-panel") and "5 changes" in page.inner_text("#fix-sum"), page.inner_text("#fix-sum")
+    assert not page.is_visible("#fix-panel") and "6 changes" in page.inner_text("#fix-sum"), page.inner_text("#fix-sum")
     lanes = rows(page, f"SELECT DISTINCT lanes::INTEGER AS lanes FROM driving.edges WHERE osm_id = {ROAD}")
     assert [r["lanes"] for r in lanes] == [7], lanes
     wt = {r["walk_type"] for r in rows(page, f"SELECT DISTINCT walk_type FROM walking.edges WHERE osm_id = {ROAD}")}
@@ -234,6 +256,10 @@ with sync_playwright() as p:
     bt = rows(page, f"SELECT map_extract(tags, 'building:levels')[1] AS l, map_extract(tags, 'roof:shape')[1] AS r, map_extract(tags, 'roof:colour')[1] AS c "
                     f"FROM features.buildings WHERE osm_id = {b['osm_id']} AND osm_type = 'way'")[0]
     assert (bt["l"], bt["r"], bt["c"]) == ("7", "gabled", "#cc3300"), bt
+    road = rows(page, "SELECT count(*)::INTEGER AS n, any_value(highway) AS h, any_value(name) AS nm FROM driving.edges WHERE osm_id = 9000000000000")[0]
+    assert (road["n"] > 0, road["h"], road["nm"]) == (True, "service", "Test Lane"), ("the new road is in driving.edges", road)
+    joined = rows(page, "SELECT count(*)::INTEGER AS n FROM driving.edges e JOIN driving.edges o ON o.osm_id <> e.osm_id AND (o.source IN (e.source, e.target) OR o.target IN (e.source, e.target)) WHERE e.osm_id = 9000000000000")[0]["n"]
+    assert joined > 0, "the new road joins the network at the junction"
     faces = rows(page, f"SELECT face_type, computed_type, edited FROM main.building_faces WHERE building_id = {b['osm_id']} AND "
                        f"least(from_node, to_node) = least({wall[0]}, {wall[1]}) AND greatest(from_node, to_node) = greatest({wall[0]}, {wall[1]})")[0]
     assert (faces["face_type"], faces["computed_type"], faces["edited"]) == (new_type, wall[2], True), ("the rule is in main.building_faces", faces)

@@ -534,6 +534,12 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
     <div id="fix-edit" class="fix-pane" role="tabpanel" aria-labelledby="fix-tab-edit">
       <div class="chips" id="fix-kind" role="group" aria-label="What a click on the map picks"><span class="small">A click picks</span>
         <button type="button" class="chip on" data-kind="road">Roads</button><button type="button" class="chip" data-kind="building">Buildings</button><button type="button" class="chip" data-kind="node">Nodes</button></div>
+      <div class="row" style="margin:0 0 8px"><button id="fix-draw" class="btn" type="button">Draw a new road</button></div>
+      <div id="fix-drawbox" class="fix-obj" hidden style="margin:0 0 10px">
+        <p class="why" style="margin-top:0">Click the points of the road on the map. A click near a junction joins it. <b>Enter</b> finishes, <b>Esc</b> cancels. <span id="fix-draw-n"></span></p>
+        <div id="fix-newform"></div>
+        <div class="row"><button id="fix-draw-done" class="btn" type="button">Finish the road</button><button id="fix-draw-undo" class="btn" type="button">Undo point</button><button id="fix-draw-cancel" class="btn" type="button">Cancel</button></div>
+      </div>
       <label class="small" style="display:flex;gap:6px;align-items:center;margin-bottom:6px"><input type="checkbox" id="fix-walls-all">Show the walls of all buildings in view (zoom 16 or more)</label>
       <div class="row"><input id="fix-id" type="text" inputmode="numeric" placeholder="OSM ID, or click the map" aria-label="OSM ID" style="flex:1"><button id="fix-load" class="btn" type="button">Load</button></div>
       <div id="fix-obj" class="fix-obj"></div>

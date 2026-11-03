@@ -18,7 +18,7 @@ let doc = {};
 F.writeRule(doc, "way", 5, { mode: { lanes: 3, oneway: true }, set: { sidewalk: "both" }, delete: ["roof:shape"], note: "why" });
 eq(doc.overrides, [{ osm_id: 5, lanes: 3, oneway: true, note: "why" }], "overrides has the mode keys and the note");
 eq(doc.extra.tag_edits, [{ type: "way", id: 5, set: { sidewalk: "both" }, delete: ["roof:shape"] }], "tag_edits has the tags");
-eq(F.ruleOf(doc, "way", 5), { mode: { oneway: true, lanes: 3 }, set: { sidewalk: "both" }, delete: ["roof:shape"], note: "why" }, "ruleOf reads both");
+eq(F.ruleOf(doc, "way", 5), { mode: { oneway: true, lanes: 3 }, set: { sidewalk: "both" }, delete: ["roof:shape"], was: {}, note: "why" }, "ruleOf reads both");
 eq(F.describe(doc, "way", 5), "oneway true, lanes 3, sidewalk=both, no roof:shape", "describe");
 
 // a rule with only tags has no `overrides` entry; a rule with nothing is removed, and an empty `extra` goes away
@@ -47,7 +47,7 @@ F.upsertTurn(doc, { from_way: 1, via_node: 2, to_way: 3, restriction: "no_left_t
 F.upsertTurn(doc, { from_way: 1, via_node: 2, to_way: 3, restriction: "no_entry" });
 eq(doc.turn_restrictions, [{ from_way: 1, via_node: 2, to_way: 3, restriction: "no_entry" }], "a turn rule is replaced, not repeated");
 F.deleteTurn(doc, 1, 2, 3);
-eq(F.counts(doc), { overrides: 0, turns: 0, tagEdits: 2, faces: 0 }, "counts");
+eq(F.counts(doc), { overrides: 0, turns: 0, tagEdits: 2, faces: 0, newWays: 0 }, "counts");
 // the type of a wall: the nodes can be in either order; the computed type is no change; an empty `extra` goes away
 doc = {};
 F.setFace(doc, 5, 1, 2, "side", "front");
@@ -58,5 +58,20 @@ eq(F.faceEdits(doc).length, 1, "a rule for the same wall is replaced");
 F.setFace(doc, 5, 1, 2, "front", "front");
 eq([F.faceEdits(doc), doc.extra], [[], undefined], "the computed type removes the rule and the empty extra");
 F.setFace(doc, 5, 1, 2, "back", "side"); F.writeRule(doc, "way", 9, { mode: {}, set: { a: "b" }, delete: [], note: "" });
-eq(F.counts(doc), { overrides: 0, turns: 0, tagEdits: 1, faces: 1 }, "counts have the walls");
+eq(F.counts(doc), { overrides: 0, turns: 0, tagEdits: 1, faces: 1, newWays: 0 }, "counts have the walls");
+// `was`: the data before the change, for the keys that the rule still changes; a was-only edit goes when no key is left
+doc = {};
+F.writeRule(doc, "way", 4, { mode: { lanes: 3 }, set: { surface: "paved" }, delete: [], was: { lanes: "2", surface: null, gone: "x" }, note: "" });
+eq(doc.extra.tag_edits, [{ type: "way", id: 4, set: { surface: "paved" }, was: { lanes: "2", surface: null } }], "was keeps the keys that are changed");
+eq(F.describe(doc, "way", 4), "lanes 3 (was 2), surface=paved (was none)", "describe shows was");
+F.writeRule(doc, "way", 4, { mode: {}, set: {}, delete: [], was: { lanes: "2" }, note: "" });
+eq([F.objects(doc), doc.extra], [[], undefined], "no key left: no was either");
+// new roads: ids from NEW_WAY_MIN up, the next id after the highest one; a deleted road leaves no empty list in the file
+doc = {};
+const n1 = F.addNewWay(doc, { nodes: [5, [7.4, 43.7]], tags: { highway: "service" } }), n2 = F.addNewWay(doc, { nodes: [[7.4, 43.7], [7.5, 43.7]], tags: { highway: "path" }, note: "x" });
+eq([n1, n2], [F.NEW_WAY_MIN, F.NEW_WAY_MIN + 1], "new ids");
+F.deleteNewWay(doc, n1);
+eq(F.addNewWay(doc, { nodes: [1, 2], tags: {} }), F.NEW_WAY_MIN + 2, "an id is not used again while a higher one is there");
+F.deleteNewWay(doc, n2); F.deleteNewWay(doc, F.NEW_WAY_MIN + 2);
+eq([F.newWays(doc), F.dump({ dump: (x) => JSON.stringify(x) }, doc)], [[], ""], "no new road, no file");
 console.log("fixes_units.mjs: ok");
