@@ -332,7 +332,7 @@ pub fn write_lane_profile<W: Write + Send>(
 }
 
 /// Microseconds since 1970 as roadstyle writes a time: `2026-10-22T00:20:45+00:00`.
-fn iso_time(micros: i64) -> String {
+pub(crate) fn iso_time(micros: i64) -> String {
     let secs = micros.div_euclid(1_000_000);
     let (days, s) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));
     // the civil date of a day number (Howard Hinnant's days_from_civil, inverted)
