@@ -137,6 +137,8 @@ with sync_playwright() as p:
     pt = rows(page, f"SELECT ST_X(ST_PointOnSurface(ST_Union_Agg(geometry))) AS x, ST_Y(ST_PointOnSurface(ST_Union_Agg(geometry))) AS y FROM driving.edges WHERE osm_id = {ROAD}")[0]
     page.wait_for_function("!window.duckMap.isMoving()")
     assert page.evaluate(f"window.duckMap.getBounds().contains([{pt['x']}, {pt['y']}])"), "a switch to the Road tab shows its road on the map"
+    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['fix-sel-line']}).length > 0", timeout=20_000)     # the blue road is drawn, not only counted
+    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['fix-edits-line']}).length > 0", timeout=20_000)   # and the amber one (the rule of the road)
     print("the tabs: Building has its own empty form, Road keeps its road and its rule, and the map shows the road of the tab")
 
     # a building: its tab, a real click, the preset fields (floors, roof shape, roof color)
@@ -174,8 +176,13 @@ with sync_playwright() as p:
     page.click("#fix-tab-node")
     n = rows(page, "SELECT osm_id, ST_X(geom) AS lon, ST_Y(geom) AS lat FROM features.traffic WHERE map_extract(tags, 'highway')[1] = 'traffic_signals' LIMIT 1")[0]
     px = at(page, n["lon"], n["lat"])
+    assert page.is_visible("#fix-nodes-legend") and "Traffic signal" in page.inner_text("#fix-nodes-legend")
+    page.wait_for_function("window.fixesPanel.drawn().nodes > 0 && duckMap.queryRenderedFeatures({layers: ['fix-nodes-pt']}).length > 0", timeout=20_000)
+    assert "In view:" in page.inner_text("#fix-nodes-info"), page.inner_text("#fix-nodes-info")
     page.mouse.click(*px)
     page.wait_for_function(f"document.getElementById('fix-id').value === '{n['osm_id']}' && document.querySelector('#fixf-traffic_signals_direction')", timeout=20_000)
+    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['fix-sel-pt']}).length > 0", timeout=20_000)    # the picked node has its blue ring
+    print("the Node tab draws the traffic signals and crossings in view as dots, and the picked node has a ring")
     page.select_option("#fixf-traffic_signals_direction", "backward")
     page.click("#fix-save")
     y = text(page)
@@ -221,6 +228,7 @@ with sync_playwright() as p:
     # the list of changes
     page.click("#fix-tab-changes")
     assert not page.is_visible("#fix-pending") and page.is_enabled("#fix-apply")
+    assert page.evaluate("window.fixesPanel.drawn().nodes") == 0, "the dots go when the Node tab is not shown"
     page.wait_for_function("document.querySelectorAll('#fix-list .chg').length === 5", timeout=10_000)
     lst = page.inner_text("#fix-list")
     assert "Road" in lst and "Building" in lst and "Node" in lst and "Turn" in lst and "Wall" in lst and "sidewalk" in lst and "both" in lst and "building:levels" in lst and "roads (1)" in lst.lower(), lst

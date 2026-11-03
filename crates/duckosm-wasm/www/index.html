@@ -65,10 +65,11 @@
      the number, the done mark and the reason of a disabled card are in the title row; the card's own buttons ("?", the zoom to the area) are beside the chevron */
   .step { position: relative; }
   .step > .rs-sec-hd .rs-sec-title:disabled { cursor: default; color: var(--muted); }
-  .step > .rs-sec-hd .after { margin-left: auto; margin-right: 30px; font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); }
+  .step > .rs-sec-hd .after { font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); }
   .step > .rs-sec-hd .done { color: var(--accent); font-size: 13px; font-weight: 700; text-transform: none; }
-  .step > .tools { position: absolute; top: 14px; right: 40px; height: 32px; display: flex; align-items: center; gap: 2px; }
-  .step.off > .tools { opacity: 0.5; }
+  .step > .rs-sec-hd .icon-btn { width: 22px; height: 22px; margin: -3px 0; }          /* the card's own button (the zoom to the area): the size of roadstyle's "?" */
+  .step > .rs-sec-hd .icon-btn svg { width: 16px; height: 16px; }
+  .step.off > .rs-sec-hd .icon-btn, .step.off > .rs-sec-hd .rs-help-btn { opacity: 0.5; }
   .step.off { background: var(--surface); }
   .step.off .n { background: var(--line); color: var(--muted); }
   .step .icon-btn { margin: 0; }
@@ -562,6 +563,7 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
       <p id="fix-intro" class="why"></p>
       <section class="fsec"><h3>Pick</h3>
         <p id="fix-pickhint" class="why"></p>
+        <p id="fix-nodes-legend" class="small" hidden><span class="legend" style="margin-left:0"><i style="background:#e11d48"></i>Traffic signal</span><span class="legend"><i style="background:#0d9488"></i>Crossing</span><span class="legend"><i style="background:#6b7280"></i>Other</span><br><span id="fix-nodes-info" class="muted"></span></p>
         <div class="row"><input id="fix-id" type="text" inputmode="numeric" placeholder="OSM ID" aria-label="OSM ID" style="flex:1"><button id="fix-load" class="btn" type="button">Load</button></div>
         <label id="fix-walls-row" class="small walls-all" hidden><input type="checkbox" id="fix-walls-all">Show the walls of all buildings in view (zoom 16 or more)</label>
       </section>
@@ -1970,6 +1972,11 @@ const CARD_HELP = {
     ["File", "Open a GeoJSON file with the polygons of the area."],
     ["What is here?", "Click a point on the map to see the areas around it."]],
     note: `Search: ${link("https://photon.komoot.io", "Photon")} (komoot). Boundaries: ${link("https://nominatim.openstreetmap.org", "Nominatim")}. Data © OpenStreetMap contributors.` },
+  2: { title: "The area", intro: "The area that the page builds.", terms: [
+    ["Name", "The name of the area. The page uses it for the saved area and its files."],
+    ["Buffer", "An extra distance around the area, in meters."],
+    ["Numbers", "The size of the area in km², its polygons and its vertices."],
+    ["Zoom button", "Moves the map to the area."]] },
   3: { title: "The data", intro: "The OpenStreetMap data of the area.", terms: [
     ["Region file", "A .osm.pbf file that covers the area. The page lists the Geofabrik files that cover it: click a file to see it on the map, and Get to download it (the page keeps it in this browser)."],
     ["Overpass", "Data from the Overpass API. Use it for a city or a smaller area. The public servers are often busy."],
@@ -2071,11 +2078,9 @@ for (const old of [...document.querySelectorAll("section.step")]) {
   title.id = `step${n}`;
   title.insertAdjacentHTML("beforebegin", `<span class="n">${n}</span>`);
   title.insertAdjacentHTML("afterend", '<span class="done" hidden title="Done">✓</span><span class="after"></span>');
-  const tools = document.createElement("span");    // the card's own buttons, beside the chevron: the zoom to the area (card 2) and the "?" of roadstyle's help window
-  tools.className = "tools";
-  if (own) tools.append(own);
-  if (n in CARD_HELP) rs.help.button(tools, { ...CARD_HELP[n], button: `Help: ${label}` });
-  c.append(tools);
+  const chev = hd.querySelector(":scope > svg");        // the title row ends with: the card's own button (the zoom to the area, card 2), roadstyle's "?", the chevron
+  if (own) chev.before(own);
+  if (n in CARD_HELP) chev.before(rs.help.button(c, { ...CARD_HELP[n], button: `Help: ${label}` }));   // roadstyle's "?" goes to the end of the row: the page puts it before the chevron
   old.remove();
   cards.push(c);
   autoFold(c, true);

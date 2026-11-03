@@ -414,7 +414,7 @@ The rules are a fixes file: duckOSM's `overrides` and `turn_restrictions`, and t
 - **The panel** is the page's one panel, as the level editor is: the steps and the title go while it is open, and **← Steps** brings them back. It has six tabs: **Road**, **Building**, **Node**, **Turn**, **New road** and **Changes**
   (the design is in [osm-editing.md](osm-editing.md), "The panel"). The one **Build again** button is at the bottom of **Changes**. It closes the panel and runs step 4 with the rules.
 - **Road, Building and Node.** Each tab has its own picked object, form and draft. A road comes from a click on the road (roadstyle's pick, with no popup), a building from a click in its footprint, and a node from a click near it.
-  Only the nodes of `features.traffic` can be picked: traffic signals and crossings. An OSM ID typed in the field and **Load** do the same. The tab shows sections:
+  Only the nodes of `features.traffic` can be picked: traffic signals and crossings. The Node tab draws them as dots in view (zoom 14 or more). An OSM ID typed in the field and **Load** do the same. The tab shows sections:
   - **Pick** and **Selected**: the name and kind, what the networks have of the object (for a road: the edges, the length and the walk type of each mode), and **All tags in the data** (the `<mode>.ways` table for a road,
     `features.buildings` for a building, `features.traffic` for a node);
   - the **preset fields** of its kind (`app/presets.json`: one list for each of road, building and node, each field with a `group` that is its section), filled with the value that the data has now. A road has Basics (name, one-way),

@@ -16,8 +16,9 @@ const PANE = { road: "fix-edit", building: "fix-edit", node: "fix-edit", turns: 
 const HINTS = {
   road: ["Change the tags of a road: lanes, speed, sidewalk, surface and more.", "Click a road on the map, or type its OSM way ID."],
   building: ["Change the tags of a building: floors, height, roof and facade. Give each wall a type.", "Click a building on the map, or type its OSM ID."],
-  node: ["A node is one point of OSM. Here it is a traffic signal or a crossing. A change shows in the layer table features.traffic, not in the road edges.", "Click a traffic signal or a crossing on the map, or type its OSM node ID."],
+  node: ["A node is one point of OSM. Here it is a traffic signal or a crossing. A change shows in the layer table features.traffic, not in the road edges.", "Click a dot on the map, or type the OSM node ID. Zoom in to see the dots (zoom 14 or more)."],
 };
+const NODE_COLORS = { signal: "#e11d48", crossing: "#0d9488", other: "#6b7280" };
 const FACE_COLORS = { front: "#16a34a", back: "#dc2626", side: "#6b7280", party: "#7c3aed" };
 const FACE_NAMES = { front: "Front", back: "Back", side: "Side", party: "Party wall" };
 
@@ -286,14 +287,14 @@ export async function initFixesPanel(ctx) {
     for (const t of TABS) $(`fix-tab-${t}`).setAttribute("aria-selected", String(t === name));
     for (const id of new Set(Object.values(PANE))) $(id).hidden = id !== PANE[name];
     if (EDIT.includes(name)) {
-      $("fix-intro").textContent = HINTS[name][0]; $("fix-pickhint").textContent = HINTS[name][1]; $("fix-walls-row").hidden = name !== "building";
+      $("fix-intro").textContent = HINTS[name][0]; $("fix-pickhint").textContent = HINTS[name][1]; $("fix-walls-row").hidden = name !== "building"; $("fix-nodes-legend").hidden = name !== "node";
       renderObject(); renderForm();
     }
     if (name === "changes") renderChanges();
     if (name === "turns" && !$("fix-turnsec").hidden) outgoing();
     if (draw) map.getCanvas().style.cursor = name === "new" ? "crosshair" : "";
     paintDots();
-    if (open()) { drawSelected(zoom, { turn: name === "turns" && !$("fix-turnsec").hidden ? { via: $("fix-via").value } : null }); drawFaces(); }
+    if (open()) { drawSelected(zoom, { turn: name === "turns" && !$("fix-turnsec").hidden ? { via: $("fix-via").value } : null }); drawFaces(); drawNodes(); }
   }
   // an amber dot on the tab that has edits that are not in the changes yet
   function paintDots() {
@@ -424,6 +425,11 @@ export async function initFixesPanel(ctx) {
   // ---- the map: edited objects are amber, the selected object is blue
   const EMPTY = { type: "FeatureCollection", features: [] };
   function ensureLayers() {
+    if (!map.getSource("fix-nodes")) {                // the nodes of the Node tab (the lowest of the panel's layers)
+      map.addSource("fix-nodes", { type: "geojson", data: EMPTY });
+      map.addLayer({ id: "fix-nodes-pt", type: "circle", source: "fix-nodes", paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 14, 4, 19, 8],
+        "circle-color": ["match", ["get", "k"], "signal", NODE_COLORS.signal, "crossing", NODE_COLORS.crossing, NODE_COLORS.other], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });
+    }
     for (const [src, color, w, fa] of [["fix-edits", AMBER, 5, 0.28], ["fix-sel", BLUE, 7, 0.2]]) {
       if (map.getSource(src)) continue;
       map.addSource(src, { type: "geojson", data: EMPTY });
@@ -453,7 +459,7 @@ export async function initFixesPanel(ctx) {
   async function shapes(list) {
     const out = [], ways = list.filter((o) => o.type === "way" || o.type === "relation");
     const ids = (t) => list.filter((o) => o.type === t).map((o) => o.id).filter((n) => Number.isSafeInteger(n) && n > 0);
-    const geo = (r) => { try { return { type: "Feature", properties: { id: r.id }, geometry: JSON.parse(r.g) }; } catch { return null; } };
+    const geo = (r) => { try { return { type: "Feature", properties: { id: Number(r.id) }, geometry: JSON.parse(r.g) }; } catch { return null; } };   // a BigInt in a property stops the map's source: nothing is drawn
     const wayIds = ids("way"), relIds = ids("relation");
     if (wayIds.length) {
       for (const m of modes()) for (const r of await safe(`SELECT osm_id AS id, ST_AsGeoJSON(geometry) AS g FROM ${m}.edges WHERE osm_id IN (${wayIds.join(",")})`)) out.push(geo(r));
@@ -465,7 +471,7 @@ export async function initFixesPanel(ctx) {
     return out.filter(Boolean);
   }
 
-  const drawnCount = { edits: 0, sel: 0, heights: [], faces: 0, draw: 0 };      // what the panel put in the map's sources (the tests read it)
+  const drawnCount = { edits: 0, sel: 0, heights: [], faces: 0, draw: 0, nodes: 0 };      // what the panel put in the map's sources (the tests read it)
   // the edited buildings with their height and color: the tags of the data with the rule on top, so a change shows before the next build
   async function extrusions() {
     await classify();
@@ -494,8 +500,32 @@ export async function initFixesPanel(ctx) {
     map.fitBounds(b, { padding: { top: 80, bottom: 80, left: innerWidth > 700 ? 440 : 40, right: 90 }, maxZoom: 18, duration: 600 });
   }
 
+  // the nodes that a click in the Node tab can pick (the traffic signals and the crossings of features.traffic) in view, as dots with a color for each kind
+  let nodeToken = 0;
+  async function drawNodes() {
+    const my = ++nodeToken;
+    let feats = [], info = "";
+    if (open() && current === "node") {
+      ensureLayers();
+      if (map.getZoom() < 14) info = "Zoom in to see the dots (zoom 14 or more).";
+      else {
+        const b = map.getBounds();
+        feats = (await safe(`SELECT osm_id AS id, CASE WHEN kind LIKE '%signal%' THEN 'signal' WHEN kind LIKE '%crossing%' THEN 'crossing' ELSE 'other' END AS k, ST_X(geom) AS x, ST_Y(geom) AS y
+          FROM features.traffic WHERE ST_X(geom) BETWEEN ${b.getWest()} AND ${b.getEast()} AND ST_Y(geom) BETWEEN ${b.getSouth()} AND ${b.getNorth()} LIMIT 5000`))
+          .map((r) => ({ type: "Feature", properties: { id: Number(r.id), k: r.k }, geometry: { type: "Point", coordinates: [r.x, r.y] } }));
+        const n = (k) => feats.filter((f) => f.properties.k === k).length;
+        info = `In view: ${plural(n("signal"), "traffic signal")}, ${plural(n("crossing"), "crossing")}${n("other") ? `, ${n("other")} other` : ""}.`;
+      }
+    }
+    if (my !== nodeToken) return;
+    map.getSource("fix-nodes")?.setData({ type: "FeatureCollection", features: feats });
+    $("fix-nodes-info").textContent = info;
+    drawnCount.nodes = feats.length;
+  }
+
   let faceToken = 0;
   async function drawFaces() {
+    if (!open() && !total()) return;
     const my = ++faceToken;
     ensureLayers();
     let feats = [];
@@ -515,10 +545,11 @@ export async function initFixesPanel(ctx) {
     drawnCount.faces = feats.length;
   }
   $("fix-walls-all").onchange = drawFaces;
-  map.on("moveend", () => { if (open() && current === "building" && $("fix-walls-all").checked) drawFaces(); });
+  map.on("moveend", () => { if (open() && current === "building" && $("fix-walls-all").checked) drawFaces(); if (open() && current === "node") drawNodes(); });
 
   let mapToken = 0;
   async function drawEdits() {
+    if (!open() && !total()) return;                    // no layers before the panel opens or a change exists: they would go under the page's own layers
     const my = ++mapToken;
     if (!map.isStyleLoaded?.() && !map.getSource("fix-edits")) await new Promise((ok) => map.once("idle", ok));
     ensureLayers();
@@ -731,14 +762,14 @@ export async function initFixesPanel(ctx) {
     setTab(current); drawEdits();
   }
   async function openFrom() { await duck.loadSpatial(); openPanel(); }
-  function close() { if (draw) stopDraw(); document.body.classList.remove("editing-fixes"); }
   // after a build: the data is new, so each tab loads its object again (the changes and the picked objects stay)
   const rebuilt = () => {
     kinds.clear(); names.clear(); walls = [];
     for (const k of EDIT) if (k !== kind && stash[k]?.sel) stash[k] = { sel: stash[k].sel, data: null, draft: {}, touched: new Set(), walls: [] };
     if (sel) select(kind, sel.type, sel.id, { go: false }); else { renderObject(); drawSelected(false); }
-    drawEdits(); drawFaces();
+    drawEdits(); drawFaces(); drawNodes();
   };
+  function close() { if (draw) stopDraw(); document.body.classList.remove("editing-fixes"); drawNodes(); }
 
   setTab("road"); sync();
   return { text, load, restore, open: openFrom, close, isOpen: open, rebuilt, select, tab: setTab, drawn: () => ({ ...drawnCount }), count: () => F.objects(doc).length + (doc.turn_restrictions ?? []).length + F.faceEdits(doc).length + F.newWays(doc).length };

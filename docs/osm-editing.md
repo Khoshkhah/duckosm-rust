@@ -119,6 +119,7 @@ Six tabs in two rows: **Road**, **Building**, **Node**, **Turn**, **New road** a
   A map click picks the kind of the active tab. A tab has these sections: **Pick** (a click, or an OSM ID and **Load**), **Selected** (the name, the ids, the data of the networks, all tags), then the fields in sections
   (`group` in `app/presets.json`), **Other tags**, and for a road **Modes** (not in a mode, remove the road) and for a building **Walls**.
   The Node tab says what a node is: one point of OSM, here a traffic signal or a crossing. Its changes show in `features.traffic`, not in the road edges.
+  The Node tab draws the nodes that a click can pick, as dots in view (zoom 14 or more): red for a traffic signal, teal for a crossing, gray for the others. A legend and the count in view are in the tab. The picked node has a blue ring.
 - **The map follows the tab.** A switch of tab zooms the map to the picked object of that tab (blue), or to the junction of the Turn tab. A tab with nothing picked shows nothing in blue.
 - **Add to changes.** The bar at the bottom of each tab has **Add to changes**. The button is disabled until a field differs from the data. It says **Update change** when the object has a change already.
   **Reset form** shows the saved change again. **Remove from changes** takes every change of the object away. The bar says how many fields wait.
