@@ -63,9 +63,9 @@ with sync_playwright() as p:
     browser = p.chromium.launch()
     ctx = browser.new_context(accept_downloads=True)   # one profile: the storage stays between the pages
     page = open_page(ctx)
-    assert page.evaluate("document.getElementById('tab-saved').hidden") and page.is_hidden("#tab-saved"), "no saved area, no Saved tab"
+    assert page.evaluate("document.getElementById('areas-card').hidden") and page.is_hidden("#areas-card"), "no saved area, no card \"Your areas\""
     before = build(page, ["driving", "walking"])
-    page.wait_for_function("!document.getElementById('tab-saved').hidden", timeout=10_000)   # the card can be folded: the attribute, not the sight
+    page.wait_for_function("!document.getElementById('areas-card').hidden", timeout=10_000)   # the card can be folded: the attribute, not the sight
     s = saved(page)
     print("saved:", s[0]["slug"], s[0]["tables"][:40], s[0]["hasViz"])
     assert len(s) == 1 and s[0]["hasViz"] and any(t.startswith("walking.") for t in s[0]["tables"]), (len(s), s[0]["hasViz"], [t for t in s[0]["tables"] if "walk" in t][:3])
@@ -73,9 +73,10 @@ with sync_playwright() as p:
 
     page = open_page(ctx)                                 # a new visit
     page.wait_for_timeout(3000)
-    assert not page.evaluate("document.getElementById('tab-saved').hidden"), "the Saved tab shows on a new visit"
-    page.wait_for_selector("#restore-banner", state="visible", timeout=30_000)
-    page.click("#restore-btn")
+    assert not page.evaluate("document.getElementById('areas-card').hidden"), "the card \"Your areas\" shows on a new visit"
+    assert page.get_attribute("#tab-find", "aria-selected") == "true", "Search stays the first tab"
+    page.wait_for_selector("#areas-card .load-saved-area-btn", state="visible", timeout=30_000)
+    page.click(".load-saved-area-btn")
     page.wait_for_function("document.getElementById('buildstatus').textContent.startsWith('Restored') || document.getElementById('buildstatus').textContent.startsWith('Failed')", timeout=300_000)
     status = page.inner_text("#buildstatus")
     print(status)
@@ -94,8 +95,8 @@ with sync_playwright() as p:
     assert len(s) == 1 and not any(t.startswith("walking.") for t in s[0]["tables"]), s
     page.close()
     page = open_page(ctx)
-    page.wait_for_selector("#restore-banner", state="visible", timeout=30_000)
-    page.click("#restore-btn")
+    page.wait_for_selector("#areas-card .load-saved-area-btn", state="visible", timeout=30_000)
+    page.click(".load-saved-area-btn")
     page.wait_for_function("document.getElementById('buildstatus').textContent.startsWith('Restored') || document.getElementById('buildstatus').textContent.startsWith('Failed')", timeout=300_000)
     assert page.inner_text("#buildstatus").startswith("Restored")
     n = page.evaluate("""async () => (await (await import('./app/duck.js')).query("select count(*) n from information_schema.schemata where schema_name = 'walking'")).toArray()[0].n""")
@@ -113,12 +114,23 @@ with sync_playwright() as p:
     build(page, ["driving"])
     page.close()
     page = open_page(ctx)
-    page.wait_for_selector("#restore-banner", state="visible", timeout=30_000)
-    page.click("#restore-btn")
+    page.wait_for_selector("#areas-card .load-saved-area-btn", state="visible", timeout=30_000)
+    page.click(".load-saved-area-btn")
     page.wait_for_function("document.getElementById('buildstatus').textContent.startsWith('Restored')", timeout=300_000)
     assert page.input_value("#buffer") == "300", page.input_value("#buffer")
     assert abs(km2(page) - grown) < 0.01, ("the restored area is not the grown area", km2(page), grown)
     print(f"restore with a buffer: {km2(page)} km2, as before the build ({grown} km2)")
+    # the card folds when an area is chosen (the restore chose one); the page has no Saved tab
+    assert "folded" in (page.get_attribute("#areas-card", "class") or ""), "the list folds when an area is chosen"
+    assert page.locator("#tab-saved").count() == 0
+    # Delete asks for a second click on the same button, in place; then the area is gone
+    page.click("#areas-card .rs-sec-title")               # open the card again
+    page.click("#areas-card .del-saved-area-btn")
+    assert "Click again" in page.inner_text("#areas-card .del-saved-area-btn") and len(saved(page)) == 1, "one click does not delete"
+    page.click("#areas-card .del-saved-area-btn")
+    page.wait_for_function("document.getElementById('areas-card').hidden", timeout=20_000)
+    assert saved(page) == [], saved(page)
+    print("Delete: the first click asks in place, the second deletes the area, and the card goes when no area is left")
     browser.close()
 
 assert not errors, errors

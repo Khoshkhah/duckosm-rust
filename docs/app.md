@@ -260,8 +260,8 @@ The page keeps the selected file only in memory. After a reload, the user select
 
 - The modes (three check boxes) and, under **Advanced: corrections to the map data**, the OSM fixes file
   (duckOSM `osm_overrides`), with one sentence that tells what it is (Kaveh found the first label unclear).
-- **Drawing order**: "Optimized (slower)" (roadstyle's solver) by default since 2026-10-24, or "From the tags (fast)"
-  ([levels.md](levels.md)). Monaco: the build takes about 0.5 s more with the solver.
+- **Drawing order**: the build always uses "Optimized" (roadstyle's solver; the page has no choice since 2026-11-04,
+  [levels.md](levels.md)). Monaco: the build takes about 0.5 s more with the solver.
 - **Base map layers** (a check box, on): with a region file, the build also makes duckOSM's base-map layers
   (`features.*`), see [features.md](features.md).
 - **Build** (in the footer) starts the build in the Web Worker (`build_worker.js`, with threads when the page
@@ -307,6 +307,9 @@ and the two download buttons between them. With three modes, the line takes thre
     DuckDB with direct IO, which the page sets when DuckDB starts (the cause:
     [browser.md](browser.md), "The .duckdb download"). If the file fails, a message says that the zip has
     `make_duckdb.sql`.
+  - **Download .yaml** (next to the other buttons): `osm_fixes.yaml`, the fixes file that the build used (the rules of
+    card 7). The button shows only when the build used fixes. A restored area has it too, because the saved area keeps the
+    text that it was built with.
   - **Download .osm.pbf** (next to the .duckdb button): `<area>.osm.pbf`, the area as it was cut from the region file. It
     has the nodes, ways and relations of osmium's `smart` cut (the raw cut, [features.md](features.md)) with all their
     tags, before the OSM fixes change them, and it keeps the replication time of the region file. Other tools can read it
@@ -391,9 +394,10 @@ A change of format does not build the roads again. The map worker keeps its tile
 
 Each build is saved in the browser (OPFS, the origin private file system): the tables as Parquet files, `meta.json` (the
 name, the boundary, the fixes text, the summary and the table list) and a cache of the drawn roads (`viz_roads.parquet`,
-`viz_features.parquet`). The code is `www/app/area_store.js`. A new visit shows a banner above the cards: **Open**
-loads the last area into DuckDB and draws the map again with no build (Monaco: 1.6 s). The **Saved** tab of card 1 lists all
-areas, with **Open** and **Delete**.
+`viz_features.parquet`). The code is `www/app/area_store.js`. A new visit opens the **Saved** tab of card 1 when an area is saved
+(until 2026-11-04 a banner asked "Open your last area?"). The tab lists all areas, with **Open** and **Delete**. **Open**
+loads the area into DuckDB and draws the map again with no build (Monaco: 1.6 s). The tab bar of card 1 has one row for all
+its tabs.
 
 - A save replaces the area: it removes all old files first, and writes `meta.json` last. A restore reads only the files that
   `meta.json` lists, so the tables of an older build (other modes) never come back.

@@ -426,7 +426,58 @@ with sync_playwright() as p:
     page.click("#fix-tab-changes")
     assert page.locator("#fix-list .chg").count() == 6, "the list of changes after the build"
     print("out and back: 6 changes in the list, the Road tab has its road")
+
+    # add a traffic signal at a junction of the roads: a gray dot, a click on it, the quick button, Add to changes, build again, and the node is in features.traffic
+    j = rows(page, "SELECT n.node_id AS id, ST_X(n.geom) AS x, ST_Y(n.geom) AS y FROM driving.nodes n WHERE n.node_id IN (SELECT node_id FROM driving.way_nodes GROUP BY node_id HAVING count(DISTINCT way_id) >= 2) "
+                   "AND NOT EXISTS (SELECT 1 FROM features.traffic t WHERE abs(ST_X(t.geom) - ST_X(n.geom)) < 0.0004 AND abs(ST_Y(t.geom) - ST_Y(n.geom)) < 0.0004) LIMIT 1")[0]
+    page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=60_000)
+    page.wait_for_function("!window.duckMap.isMoving()")
+    page.click("#fix-tab-node")
+    page.wait_for_function("window.fixesPanel.drawn().sel > 0", timeout=20_000)       # the tab shows its node and zooms to it: let that end before the jump
+    page.wait_for_timeout(1500)
+    page.wait_for_function("!window.duckMap.isMoving()")
+    px = at(page, j["x"], j["y"])
+    try:
+        page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['fix-nodes-pt']}).some((f) => f.properties.k === 'junction' && f.properties.id === " + str(j['id']) + ")", timeout=20_000)
+    except Exception:
+        print("DEBUG", page.evaluate("[window.fixesPanel.drawn(), document.getElementById('fix-nodes-info').textContent, duckMap.getZoom(), duckMap.getCenter(), document.querySelector('#fix-tab-node').getAttribute('aria-selected')]"), j)
+        raise
+    page.mouse.click(*px)
+    page.wait_for_function(f"document.querySelector('#fix-obj .objhead')?.textContent.includes('node {j['id']}') && document.querySelector('[data-quick=traffic_signals]')", timeout=20_000)
+    assert "no traffic tag" in page.inner_text("#fix-obj"), page.inner_text("#fix-obj")
+    page.click("[data-quick=traffic_signals]")
+    assert page.input_value("#fixf-highway") == "traffic_signals"
+    page.click("#fix-save")
+    y = text(page)
+    assert f"id: {j['id']}" in y and "highway: traffic_signals" in y, y
+    page.click("#fix-tab-changes")
+    page.click("#fix-apply")
+    page.wait_for_function("document.getElementById('run').hasAttribute('aria-busy')", timeout=30_000)
+    built(page)
+    page.wait_for_function("document.getElementById('fix-why').textContent.includes('Built with these fixes')", timeout=60_000)
+    kind = rows(page, f"SELECT map_extract(tags, 'highway')[1] AS h FROM features.traffic WHERE osm_id = {j['id']}")
+    assert kind and kind[0]["h"] == "traffic_signals", ("the new signal is in features.traffic", kind)
+    # card 5 has the fixes file of this build (.yaml)
+    assert not page.evaluate("document.getElementById('fixesyaml').hidden"), "the .yaml button shows after a build with fixes"
+    with page.expect_download() as dl:
+        page.evaluate("document.getElementById('fixesyaml').click()")
+    body = pathlib.Path(dl.value.path()).read_text()
+    assert dl.value.suggested_filename == "osm_fixes.yaml" and "tag_edits" in body and f"id: {j['id']}" in body, (dl.value.suggested_filename, body[:200])
+    print(f"a traffic signal at the junction {j['id']}: a gray dot, a click, Add a traffic signal here, Add to changes, build again: it is in features.traffic")
     print(f"after the build: lanes 7, walk type sidewalk, building floors {bt['l']} roof {bt['r']} {bt['c']}, node tags changed; amber features: {amber(page)}")
+    # the Arrows switch in roadstyle's base-map box: on while the roads show, a click hides the one-way arrows, a second click brings them back
+    ARROWS = "duckMap.getStyle().layers.filter((l) => l.type === 'symbol' && (JSON.stringify((l.layout || {})['icon-image'] || '').includes('oneway') || /arrows/.test(l.id)))"
+    page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=120_000)      # the roads of the new build
+    page.wait_for_function(f"{ARROWS}.length > 0", timeout=30_000)
+    assert page.evaluate(f"{ARROWS}.length") > 0, "the roads style has arrow layers"
+    page.click("#rs-toolbar .bm-ctrl .bm-icon")
+    page.wait_for_selector("#rs-top-arrows", state="visible", timeout=10_000)
+    assert page.is_checked("#rs-top-arrows") and page.is_enabled("#rs-top-arrows")
+    page.click("#rs-top-arrows")
+    page.wait_for_function(f"{ARROWS}.every((l) => duckMap.getLayoutProperty(l.id, 'visibility') === 'none')", timeout=10_000)
+    page.click("#rs-top-arrows")
+    page.wait_for_function(f"{ARROWS}.every((l) => duckMap.getLayoutProperty(l.id, 'visibility') !== 'none')", timeout=10_000)
+    print("the Arrows switch hides and shows the one-way arrows")
     browser.close()
     server.shutdown()
 assert not errors, errors

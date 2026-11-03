@@ -38,7 +38,6 @@ a.add_argument("out")
 a.add_argument("--modes", default="driving,walking,cycling")
 a.add_argument("--fixes")
 a.add_argument("--no-features", action="store_true", help="the box 'Base map layers' off")
-a.add_argument("--levels", choices=["tags", "solve"], default="tags", help="the drawing order (docs/levels.md)")
 a.add_argument("--one-thread", action="store_true", help="serve the page without the COOP and COEP headers")
 a.add_argument("--threads", type=int, help="the size of the thread pool (default: the cores, at most 8)")
 a.add_argument("--view", help="lng,lat,zoom: move the map there before the picture (map.png)")
@@ -90,11 +89,6 @@ with sync_playwright() as p:
     for box in page.query_selector_all("input[name=mode]"):
         box.set_checked(box.get_attribute("value") in args.modes.split(","))
     page.set_checked("#features", not args.no_features)
-    assert page.input_value("#levels") == "solve", "the drawing order of a new page is Optimized (Kaveh, 2026-10-24)"
-    # the list is roadstyle's (selectbox.js: a button and a list in place of the select)
-    page.locator(".rs-sel:has(#levels) .rs-sel-btn").click()
-    page.locator(".rs-sel-opt", has_text={"tags": "From the tags", "solve": "Optimized"}[args.levels]).first.click()
-    assert page.input_value("#levels") == args.levels
     page.click("#run")
     page.wait_for_function("!document.getElementById('step5-card').classList.contains('off') || document.getElementById('buildstatus').textContent.startsWith('Error')",
                            timeout=1_800_000)

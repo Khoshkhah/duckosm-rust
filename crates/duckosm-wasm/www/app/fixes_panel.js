@@ -16,10 +16,10 @@ const PANE = { road: "fix-edit", building: "fix-edit", node: "fix-edit", turns: 
 const HINTS = {
   road: ["Change the tags of a road: lanes, speed, sidewalk, surface and more.", "Click a road on the map, or type its OSM way ID."],
   building: ["Change the tags of a building: floors, height, roof and facade. Give each wall a type.", "Click a building on the map, or type its OSM ID."],
-  node: ["A node is one point of OSM. Here it is a traffic signal or a crossing. A change shows in the layer table features.traffic, not in the road edges.", "Click a dot on the map, or type the OSM node ID. Zoom in to see the dots (zoom 14 or more)."],
+  node: ["A node is one point of OSM. Here it is a traffic signal, a crossing, or a junction of the roads. To add a traffic signal, pick the junction (a gray dot) and press Add a traffic signal here. A change shows in the layer table features.traffic, not in the road edges.", "Click a dot on the map, or type the OSM node ID. The signals and crossings show at zoom 14 or more, and the junctions at zoom 16 or more."],
 };
 const TURN_OUT = "#16a34a";                  // the roads that leave the junction of the Turn tab
-const NODE_COLORS = { signal: "#e11d48", crossing: "#0d9488", other: "#6b7280" };
+const NODE_COLORS = { signal: "#e11d48", crossing: "#0d9488", other: "#6b7280", junction: "#9ca3af" };
 const FACE_COLORS = { front: "#16a34a", back: "#dc2626", side: "#6b7280", party: "#7c3aed" };
 const FACE_NAMES = { front: "Front", back: "Back", side: "Side", party: "Party wall" };
 
@@ -69,7 +69,15 @@ export async function initFixesPanel(ctx) {
     const out = { type, id, kind: k, tags: {}, mode: {}, facts: [], found: false, lonlat: null };
     if (type === "node") {
       const r = (await safe(`SELECT ST_X(geom) AS lon, ST_Y(geom) AS lat, ${TAGS} FROM features.traffic WHERE osm_id = ${id}`))[0];
-      if (r) { out.found = true; out.tags = tagMap(r); out.lonlat = [r.lon, r.lat]; out.facts.push(`Node ${id}, at ${r.lon.toFixed(5)}, ${r.lat.toFixed(5)}`); }
+      if (r) { out.found = true; out.tags = tagMap(r); out.lonlat = [r.lon, r.lat]; out.facts.push(`Node ${id}, at ${r.lon.toFixed(5)}, ${r.lat.toFixed(5)}`); return out; }
+      for (const m of modes()) {                      // a node of the roads (a junction) with no traffic tag in the data
+        const q = (await safe(`SELECT ST_X(geom) AS lon, ST_Y(geom) AS lat FROM ${m}.nodes WHERE node_id = ${id} AND node_id IN (SELECT node_id FROM ${m}.way_nodes)`))[0];
+        if (!q) continue;
+        const w = (await safe(`SELECT count(DISTINCT way_id)::INTEGER AS n FROM ${m}.way_nodes WHERE node_id = ${id}`))[0];
+        out.found = out.junction = true; out.lonlat = [q.lon, q.lat];
+        out.facts.push(`Node ${id}, at ${q.lon.toFixed(5)}, ${q.lat.toFixed(5)}`, `A node of the roads${w ? `: ${plural(w.n, "road")} meet${w.n === 1 ? "s" : ""} here` : ""}. It has no traffic tag in the data.`);
+        break;
+      }
       return out;
     }
     if (k === "building") {
@@ -190,8 +198,9 @@ export async function initFixesPanel(ctx) {
     const name = data.tags.name ? ` “${esc(data.tags.name)}”` : "";
     const head = `${KIND_NAME[sel.kind === "building" && sel.type === "relation" ? "relation" : sel.kind]} ${sel.type} ${sel.id}${name}`;
     const tagCount = Object.keys(data.tags).length;
+    const quick = sel.kind === "node" && data.found && !data.tags.highway ? `<div class="row" style="margin-top:8px"><button type="button" class="btn sm" data-quick="traffic_signals">Add a traffic signal here</button><button type="button" class="btn sm" data-quick="crossing">Add a crossing here</button></div>` : "";
     box.innerHTML = `<div class="objhead">${head}</div>${data.found ? "" : '<p class="why">Not found in this area. A rule for this ID still works if the ID is right.</p>'}${data.facts.map((f) => `<div class="small muted">${esc(f)}</div>`).join("")}
-      <details class="alltags"><summary>All tags in the data (${tagCount})</summary><table>${Object.entries(data.tags).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("") || '<tr><td colspan="2" class="muted">No tags (build with the layers on to see them all).</td></tr>'}</table></details>`;
+      <details class="alltags"><summary>All tags in the data (${tagCount})</summary><table>${Object.entries(data.tags).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("") || '<tr><td colspan="2" class="muted">No tags (build with the layers on to see them all).</td></tr>'}</table></details>${quick}`;
   }
 
   async function select(k, type, id, { zoom = false, go = true } = {}) {
@@ -491,8 +500,8 @@ export async function initFixesPanel(ctx) {
   function ensureLayers() {
     if (!map.getSource("fix-nodes")) {                // the nodes of the Node tab (the lowest of the panel's layers)
       map.addSource("fix-nodes", { type: "geojson", data: EMPTY });
-      map.addLayer({ id: "fix-nodes-pt", type: "circle", source: "fix-nodes", paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 14, 4, 19, 8],
-        "circle-color": ["match", ["get", "k"], "signal", NODE_COLORS.signal, "crossing", NODE_COLORS.crossing, NODE_COLORS.other], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });
+      map.addLayer({ id: "fix-nodes-pt", type: "circle", source: "fix-nodes", paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 14, ["case", ["==", ["get", "k"], "junction"], 3, 4], 19, ["case", ["==", ["get", "k"], "junction"], 6, 8]],
+        "circle-color": ["match", ["get", "k"], "signal", NODE_COLORS.signal, "crossing", NODE_COLORS.crossing, "junction", NODE_COLORS.junction, NODE_COLORS.other], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });
       map.addLayer({ id: "fix-nodes-hover", type: "circle", source: "fix-nodes", filter: ["==", ["get", "id"], -1], paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 14, 9, 19, 14],
         "circle-color": "rgba(255, 255, 255, 0.55)", "circle-stroke-color": "#111827", "circle-stroke-width": 2.5 } });
       map.on("mousemove", "fix-nodes-pt", hoverNode);
@@ -541,7 +550,12 @@ export async function initFixesPanel(ctx) {
     }
     if (relIds.length) for (const r of await safe(`SELECT osm_id AS id, ST_AsGeoJSON(geom) AS g FROM features.buildings WHERE osm_type = 'relation' AND osm_id IN (${relIds.join(",")})`)) out.push(geo(r));
     const nodeIds = ids("node");
-    if (nodeIds.length) for (const r of await safe(`SELECT osm_id AS id, ST_AsGeoJSON(geom) AS g FROM features.traffic WHERE osm_id IN (${nodeIds.join(",")})`)) out.push(geo(r));
+    if (nodeIds.length) {
+      const got = new Set();
+      for (const r of await safe(`SELECT osm_id AS id, ST_AsGeoJSON(geom) AS g FROM features.traffic WHERE osm_id IN (${nodeIds.join(",")})`)) { out.push(geo(r)); got.add(Number(r.id)); }
+      const missing = nodeIds.filter((n) => !got.has(n));                  // a junction of the roads that has no traffic tag
+      if (missing.length) for (const m of modes()) for (const r of await safe(`SELECT node_id AS id, ST_AsGeoJSON(geom) AS g FROM ${m}.nodes WHERE node_id IN (${missing.join(",")})`)) out.push(geo(r));
+    }
     return out.filter(Boolean);
   }
 
@@ -583,7 +597,7 @@ export async function initFixesPanel(ctx) {
     const { id, k, kind, name } = f.properties;
     if (hoverNodeId !== id) { hoverNodeId = id; map.setFilter("fix-nodes-hover", ["==", ["get", "id"], id]); }
     nodeTip ??= new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: "rs-tip fix-tip", offset: 12, maxWidth: "240px" });
-    nodeTip.setLngLat(f.geometry.coordinates).setHTML(`<b>${esc(k === "signal" ? "Traffic signal" : k === "crossing" ? "Crossing" : kind || "Node")}</b><br>node ${id}${name ? `<br>${esc(name)}` : ""}<br><span class="muted">Click to pick it</span>`).addTo(map);
+    nodeTip.setLngLat(f.geometry.coordinates).setHTML(`<b>${esc(k === "signal" ? "Traffic signal" : k === "crossing" ? "Crossing" : k === "junction" ? "Junction (no traffic tag)" : kind || "Node")}</b><br>node ${id}${name ? `<br>${esc(name)}` : ""}<br><span class="muted">${k === "junction" ? "Click to add a signal or a crossing here" : "Click to pick it"}</span>`).addTo(map);
   }
   function leaveNode() {
     hoverNodeId = null;
@@ -604,8 +618,14 @@ export async function initFixesPanel(ctx) {
         feats = (await safe(`SELECT osm_id AS id, kind, name, CASE WHEN kind LIKE '%signal%' THEN 'signal' WHEN kind LIKE '%crossing%' THEN 'crossing' ELSE 'other' END AS k, ST_X(geom) AS x, ST_Y(geom) AS y
           FROM features.traffic WHERE ST_X(geom) BETWEEN ${b.getWest()} AND ${b.getEast()} AND ST_Y(geom) BETWEEN ${b.getSouth()} AND ${b.getNorth()} LIMIT 5000`))
           .map((r) => ({ type: "Feature", properties: { id: Number(r.id), k: r.k, kind: r.kind ?? "", name: r.name ?? "" }, geometry: { type: "Point", coordinates: [r.x, r.y] } }));
+        if (map.getZoom() >= 16 && modes().length) {                  // the junctions of the roads (OSM nodes where two ways meet) that have no traffic tag: a place for a new signal
+          const m = modes()[0];
+          feats.push(...(await safe(`SELECT n.node_id AS id, ST_X(n.geom) AS x, ST_Y(n.geom) AS y FROM ${m}.nodes n WHERE ST_X(n.geom) BETWEEN ${b.getWest()} AND ${b.getEast()} AND ST_Y(n.geom) BETWEEN ${b.getSouth()} AND ${b.getNorth()}
+            AND n.node_id IN (SELECT node_id FROM ${m}.way_nodes GROUP BY node_id HAVING count(DISTINCT way_id) >= 2) AND n.node_id NOT IN (SELECT osm_id FROM features.traffic) LIMIT 5000`))
+            .map((r) => ({ type: "Feature", properties: { id: Number(r.id), k: "junction", kind: "", name: "" }, geometry: { type: "Point", coordinates: [r.x, r.y] } })));
+        }
         const n = (k) => feats.filter((f) => f.properties.k === k).length;
-        info = `In view: ${plural(n("signal"), "traffic signal")}, ${plural(n("crossing"), "crossing")}${n("other") ? `, ${n("other")} other` : ""}.`;
+        info = `In view: ${plural(n("signal"), "traffic signal")}, ${plural(n("crossing"), "crossing")}${n("other") ? `, ${n("other")} other` : ""}${n("junction") ? `, ${plural(n("junction"), "junction")}` : map.getZoom() < 16 ? ". Zoom in to 16 to see the junctions" : ""}.`;
       }
     }
     if (my !== nodeToken) return;
@@ -824,7 +844,15 @@ export async function initFixesPanel(ctx) {
       const r = (await safe(`SELECT osm_id FROM features.traffic WHERE ST_X(geom) BETWEEN ${lng - d} AND ${lng + d} AND ST_Y(geom) BETWEEN ${lat - d} AND ${lat + d}
         ORDER BY (ST_X(geom) - ${lng}) ^ 2 + (ST_Y(geom) - ${lat}) ^ 2 LIMIT 1`))[0];
       if (r) select("node", "node", Number(r.osm_id));
-      else status("No traffic signal or crossing here (only these nodes can be picked).");
+      else {
+        let best = null;
+        for (const m of modes()) for (const q of await safe(`SELECT node_id AS id, ST_X(geom) AS x, ST_Y(geom) AS y FROM ${m}.nodes WHERE node_id IN (SELECT node_id FROM ${m}.way_nodes) AND ST_X(geom) BETWEEN ${lng - d} AND ${lng + d} AND ST_Y(geom) BETWEEN ${lat - d} AND ${lat + d}`)) {
+          const dist = (q.x - lng) ** 2 + (q.y - lat) ** 2;
+          if (!best || dist < best.dist) best = { id: Number(q.id), dist };
+        }
+        if (best) select("node", "node", best.id);
+        else status("No node here. Click a dot, or a junction of the roads.");
+      }
     }
     setTimeout(() => { window.rsDeselect?.(); document.querySelectorAll(".maplibregl-popup:not(.rs-tip)").forEach((p) => p.remove()); });
   }
@@ -862,6 +890,12 @@ export async function initFixesPanel(ctx) {
   });
   $("fix-save").onclick = save;
   $("fix-unselect").onclick = unselect;
+  $("fix-obj").addEventListener("click", (e) => {                       // the quick buttons of a node that has no traffic tag: they fill the Kind field; Add to changes keeps it
+    const q = e.target.closest("[data-quick]");
+    if (!q || sel?.kind !== "node" || !data) return;
+    draft.highway = q.dataset.quick; touched.add("highway"); renderForm();
+    status(`Kind is ${q.dataset.quick === "crossing" ? "Crossing" : "Traffic signals"} now. Press Add to changes to keep it.`);
+  });
   $("fix-revert").onclick = () => { touched = new Set(); draft = initialDraft(); renderForm(); };
   for (const b of document.querySelectorAll("#fix-panel [data-review]")) b.onclick = () => setTab("changes");
   $("fix-pending").addEventListener("click", (e) => { const b = e.target.closest("[data-go]"); if (b) setTab(b.dataset.go, { zoom: true }); });
