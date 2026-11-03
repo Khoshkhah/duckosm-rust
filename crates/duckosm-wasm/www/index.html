@@ -272,6 +272,10 @@
   #fix-panel .chg:hover, #fix-panel .chg:focus-visible { background: var(--surface); }
   #fix-panel .walls { display: flex; flex-direction: column; gap: 4px; }
   #fix-panel .wallrow { display: grid; grid-template-columns: 2.4em 1fr auto; gap: 6px; align-items: center; padding: 2px 4px; border-left: 3px solid transparent; }
+  #fix-panel .doors { display: flex; flex-direction: column; gap: 4px; }
+  #fix-panel .doorrow { display: grid; grid-template-columns: 2.4em 1fr auto; gap: 6px; align-items: center; padding: 2px 4px; border-left: 3px solid transparent; border-radius: 6px; cursor: pointer; }
+  #fix-panel .doorrow.edited { border-left-color: #f59e0b; background: rgba(245, 158, 11, 0.12); }
+  #fix-panel .doorrow select { max-width: 11.5em; }
   #fix-panel .wallbar { display: flex; gap: 6px; flex-wrap: wrap; }
   #fix-panel .wallrow { cursor: pointer; border-radius: 6px; }
   #fix-panel .wallrow.sel { background: rgba(17, 24, 39, 0.1); outline: 2px solid #111827; }
@@ -584,6 +588,7 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
       <p id="fix-intro" class="why"></p>
       <section class="fsec"><h3>Pick</h3>
         <p id="fix-pickhint" class="why"></p>
+        <p id="fix-doors-legend" class="small" hidden><span class="legend" style="margin-left:0"><i style="background:#92400e;border-radius:50%"></i>Door (an entrance node)</span><br><span id="fix-doors-info" class="muted"></span></p>
         <p id="fix-nodes-legend" class="small" hidden><span class="legend" style="margin-left:0"><i style="background:#e11d48"></i>Traffic signal</span><span class="legend"><i style="background:#0d9488"></i>Crossing</span><span class="legend"><i style="background:#6b7280"></i>Other</span><span class="legend"><i style="background:#9ca3af"></i>Junction</span><br><span id="fix-nodes-info" class="muted"></span></p>
         <div class="row"><input id="fix-id" type="text" inputmode="numeric" placeholder="OSM ID" aria-label="OSM ID" style="flex:1"><button id="fix-load" class="btn" type="button">Load</button></div>
         <label id="fix-walls-row" class="small walls-all" hidden><input type="checkbox" id="fix-walls-all">Show the walls of all buildings in view (zoom 16 or more)</label>
@@ -751,10 +756,13 @@ try {
 // no `pick` option: roadstyle picks the road layers of the style (RS_LEANS: roads-simple and one layer for each band of zooms),
 // so the hover, the tooltip and the click work at every zoom
 host.dashboard.credits = [...(host.dashboard.credits ?? []), { text: "Search: Photon (komoot)", href: "https://photon.komoot.io" }, { text: "Boundaries: Nominatim", href: "https://nominatim.openstreetmap.org" }];   // roadstyle's credits box (the corner "i")
+// the keys for a test on a local server: www/local_keys.json ({"google": "...", "mapillary": "..."}) is in .gitignore, and only a page on localhost reads it. The keys that the person
+// saves in the settings of the map bar (this browser only) are over these.
+const localKeys = ["localhost", "127.0.0.1"].includes(location.hostname) ? await fetch("local_keys.json").then((r) => (r.ok ? r.json() : {})).catch(() => ({})) : {};
 const rs = rsDashboard(map, { style: null, prefix: "rs-", tiles: true,
   basemaps, ontop: host.ontop, basemap_switcher: true,
   select_color: "#7c4dff",   // the look's theme.selection.select
-  street_view: "window", street_view_key: "", google_3d: true, dashboard: host.dashboard });
+  street_view: "window", street_view_key: localKeys.google ?? "", mapillary_token: localKeys.mapillary ?? "", google_3d: true, dashboard: host.dashboard });
 // no road popup or selection while the user draws a shape or picks a point (the dashboard has its own click on the roads)
 document.addEventListener("rs:select", () => {
   if ($("draw").hidden && $("here").getAttribute("aria-pressed") !== "true") return;
@@ -2084,10 +2092,10 @@ for (const old of [...document.querySelectorAll("section.step")]) {
   title.id = `step${n}`;
   title.insertAdjacentHTML("beforebegin", `<span class="n">${n}</span>`);
   title.insertAdjacentHTML("afterend", '<span class="after"></span>');
-  const chev = hd.querySelector(":scope > svg");        // the title row: the number, the title, the "?" (roadstyle's help button, put by the page next to the title), the reason of a card that is off, the card's own button (the zoom to the area, card 2), the done mark, the chevron
-  if (n in CARD_HELP) title.after(rs.help.button(c, { ...CARD_HELP[n], button: `Help: ${label}` }));
+  const chev = hd.querySelector(":scope > svg");        // the title row: the number, the title, the reason of a card that is off, the card's own button (the zoom to the area, card 2), the done mark, roadstyle's "?" (help button), the chevron
   if (own) chev.before(own);
   chev.insertAdjacentHTML("beforebegin", '<span class="done" hidden title="Done">✓</span>');
+  if (n in CARD_HELP) chev.before(rs.help.button(c, { ...CARD_HELP[n], button: `Help: ${label}` }));
   old.remove();
   cards.push(c);
   autoFold(c, true);

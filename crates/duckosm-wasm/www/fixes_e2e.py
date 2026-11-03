@@ -156,7 +156,7 @@ with sync_playwright() as p:
     page.click("#fix-back")
     assert page.evaluate("window.__desel") >= 1, "closing the panel clears roadstyle's selection"
     page.wait_for_function("window.fixesPanel.drawn().sel === 0 && window.fixesPanel.drawn().faces === 0 && window.fixesPanel.drawn().nodes === 0", timeout=10_000)
-    assert page.evaluate("duckMap.queryRenderedFeatures({layers: ['fix-sel-line', 'fix-sel-fill', 'fix-sel-pt']}).length") == 0
+    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['fix-sel-line', 'fix-sel-fill', 'fix-sel-pt']}).length === 0", timeout=10_000)      # the map draws again after the data goes
     page.click("#fix-open")
     page.wait_for_function("window.fixesPanel.drawn().sel > 0", timeout=20_000)
     print("← Steps unselects everything on the map, and the panel shows the picked road again when it opens")
@@ -427,6 +427,30 @@ with sync_playwright() as p:
     assert page.locator("#fix-list .chg").count() == 6, "the list of changes after the build"
     print("out and back: 6 changes in the list, the Road tab has its road")
 
+    # doors: the Building tab lists the doors of a building (main.building_entrances), draws them as dots, and a door kind is a node edit
+    bid = rows(page, "SELECT building_id FROM main.building_entrances WHERE building_id IS NOT NULL GROUP BY building_id ORDER BY count(*) DESC LIMIT 1")[0]["building_id"]
+    n_doors = rows(page, f"SELECT count(*)::INTEGER AS n FROM main.building_entrances WHERE building_id = {bid}")[0]["n"]
+    door = rows(page, f"SELECT osm_id, kind FROM main.building_entrances WHERE building_id = {bid} ORDER BY osm_id LIMIT 1")[0]
+    page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=60_000)      # the page fits the area after a build: let that end
+    page.wait_for_function("!window.duckMap.isMoving()")
+    page.click("#fix-tab-building")
+    page.evaluate(f"window.fixesPanel.select('building', 'way', {bid}, {{zoom: true}})")
+    page.wait_for_function("document.querySelectorAll('#fix-form .doorrow').length > 0", timeout=20_000)
+    assert page.locator("#fix-form .doorrow").count() == n_doors, (page.locator("#fix-form .doorrow").count(), n_doors)
+    page.wait_for_timeout(1500)
+    page.wait_for_function("!window.duckMap.isMoving()")
+    try:
+        page.wait_for_function("window.fixesPanel.drawn().doors > 0 && duckMap.queryRenderedFeatures({layers: ['fix-doors-pt']}).length > 0", timeout=20_000)
+    except Exception:
+        print("DEBUG doors", page.evaluate("[window.fixesPanel.drawn(), document.getElementById('fix-doors-info').textContent, duckMap.getZoom(), document.querySelector('#fix-tab-building').getAttribute('aria-selected'), document.body.classList.contains('editing-fixes')]"), bid)
+        raise
+    assert page.is_visible("#fix-doors-legend") and "In view" in page.inner_text("#fix-doors-info")
+    new_kind = "service" if door["kind"] != "service" else "main"
+    page.select_option("#fix-form .doorrow >> nth=0 >> select", new_kind)
+    y = text(page)
+    assert f"id: {door['osm_id']}" in y and "type: node" in y and f"entrance: {new_kind}" in y, y
+    print(f"doors: building {bid} has {n_doors} door(s), drawn as dots; the kind of door {door['osm_id']} is {door['kind']} now {new_kind}")
+
     # add a traffic signal at a junction of the roads: a gray dot, a click on it, the quick button, Add to changes, build again, and the node is in features.traffic
     ARMS = "(SELECT nid FROM (SELECT source AS nid, target AS o FROM driving.edges UNION ALL SELECT target, source FROM driving.edges) GROUP BY nid HAVING count(DISTINCT o) >= 3)"
     j = rows(page, "SELECT n.node_id AS id, ST_X(n.geom) AS x, ST_Y(n.geom) AS y FROM driving.nodes n WHERE n.node_id IN " + ARMS + " AND n.node_id IN (SELECT node_id FROM driving.way_nodes) "
@@ -492,6 +516,8 @@ with sync_playwright() as p:
     page.wait_for_function("document.getElementById('fix-why').textContent.includes('Built with these fixes')", timeout=60_000)
     assert rows(page, f"SELECT count(*)::INTEGER AS n FROM features.buildings WHERE osm_id = {ob} AND osm_type = 'way'")[0]["n"] == 0, "the deleted building is not in features.buildings"
     assert rows(page, f"SELECT count(*)::INTEGER AS n FROM driving.edges WHERE osm_id = {orr}")[0]["n"] == 0, "the deleted road is not in driving.edges"
+    dk = rows(page, f"SELECT kind FROM main.building_entrances WHERE osm_id = {door['osm_id']}")
+    assert dk and dk[0]["kind"] == new_kind, ("the door kind is in main.building_entrances after the build", dk)
     kind = rows(page, f"SELECT map_extract(tags, 'highway')[1] AS h FROM features.traffic WHERE osm_id = {j['id']}")
     assert kind and kind[0]["h"] == "traffic_signals", ("the new signal is in features.traffic", kind)
     # card 5 has the fixes file of this build (.yaml)

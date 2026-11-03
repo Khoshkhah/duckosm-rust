@@ -15,10 +15,12 @@ const TAB_NAME = { road: "Road", building: "Building", node: "Node", turns: "Tur
 const PANE = { road: "fix-edit", building: "fix-edit", node: "fix-edit", turns: "fix-turns", new: "fix-new", changes: "fix-changes" };
 const HINTS = {
   road: ["Change the tags of a road: lanes, speed, sidewalk, surface and more.", "Click a road on the map, or type its OSM way ID."],
-  building: ["Change the tags of a building: floors, height, roof and facade. Give each wall a type.", "Click a building on the map, or type its OSM ID."],
+  building: ["Change the tags of a building: floors, height, roof and facade. Give each wall a type, and look at its doors.", "Click a building on the map, or type its OSM ID. The doors show as brown dots at zoom 17 or more."],
   node: ["A node is one point of OSM. Here it is a traffic signal, a crossing, or a junction of the roads. To add a traffic signal, pick the junction (a gray dot) and press Add a traffic signal here. A change shows in the layer table features.traffic, not in the road edges.", "Click a dot on the map, or type the OSM node ID. The signals and crossings show at zoom 14 or more, and the junctions at zoom 16 or more."],
 };
 const TURN_OUT = "#16a34a";                  // the roads that leave the junction of the Turn tab
+const DOOR_COLOR = "#92400e";                  // the doors of the Building tab: brown dots
+const DOOR_KINDS = [["", "(no entrance tag)"], ["yes", "Entrance"], ["main", "Main entrance"], ["service", "Service entrance"], ["home", "Home entrance"], ["emergency", "Emergency exit"], ["exit", "Exit"], ["staircase", "Staircase"], ["garage", "Garage"]];
 const DELETED = "#dc2626";                     // an object that the changes delete: red on the map and in the list
 const NO_SIGNAL = new Set(["motorway", "motorway_link", "trunk", "trunk_link"]);
 const CROSSABLE = new Set(["residential", "living_street", "service", "unclassified", "tertiary", "secondary", "primary"]);
@@ -52,6 +54,7 @@ export async function initFixesPanel(ctx) {
   const stash = {};                            // the state of the other two edit tabs: { sel, data, draft, touched, walls }
   let walls = [];                              // the walls of the selected building (main.building_faces), with their lines
   let wallSel = null;                          // the selected wall of that building: "from_node|to_node"
+  let doors = [];                              // the doors of the selected building (main.building_entrances)
   const kinds = new Map();                     // "way123" -> "road" | "building": what an edited way is (the list of changes)
   const names = new Map();
 
@@ -223,6 +226,15 @@ export async function initFixesPanel(ctx) {
     } else if (sel.kind === "building" && !hasFaces() && sel.type === "way") {
       html += section("Walls", '<p class="why" style="margin:0">Build with the layers on to see the walls of a building and to give them a type.</p>');
     }
+    if (sel.kind === "building" && sel.type === "way" && hasDoors()) {
+      const addr = (d) => [d.street, d.housenumber].filter(Boolean).join(" ");
+      html += section(`Doors <span class="muted">(${doors.length})</span>`, doors.length ? `<div class="doors">${doors.map((d, i) => {
+        const orig = d.kind === "door" ? "" : d.kind, cur = doorKind(d), opts = DOOR_KINDS.some(([v]) => v === cur) ? DOOR_KINDS : [...DOOR_KINDS, [cur, cur]];
+        return `<div class="doorrow${cur !== orig ? " edited" : ""}" data-id="${d.osm_id}" data-was="${esc(orig)}" tabindex="0"><span class="k">#${i + 1}</span><span class="small">${esc(addr(d) || d.name || `node ${d.osm_id}`)}${d.access ? ` · access ${esc(d.access)}` : ""}${d.level ? ` · level ${esc(d.level)}` : ""}${d.wheelchair ? ` · wheelchair ${esc(d.wheelchair)}` : ""}</span>
+          <select data-door aria-label="Kind of door ${i + 1}">${opts.map(([v, n]) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(n)}</option>`).join("")}</select></div>`; }).join("")}</div>
+        <p class="why" style="margin:6px 0 0">Click a door to zoom to it. A door kind goes to the changes when you pick it. A new door needs a new node, which the fixes file cannot add yet.</p>`
+        : '<p class="why" style="margin:0">No door is mapped on this building in OSM.</p>');
+    }
     const preset = new Set(fields.map((f) => f.key));
     const other = Object.keys(draft).filter((k) => !preset.has(k) && !["exclude_modes", "remove", "note"].includes(k));
     html += section("Other tags", `<div class="other">${other.map((k) => `<div class="otherrow${k in rule.set || rule.delete.includes(k) ? " edited" : ""}"><span class="k" title="${esc(k)}">${esc(k)}</span><input type="text" data-key="${esc(k)}" value="${esc(draft[k])}" aria-label="${esc(k)}"><button type="button" class="btn sm" data-clear="${esc(k)}" title="Delete this tag" aria-label="Delete ${esc(k)}">×</button></div>`).join("") || '<span class="small muted">None.</span>'}
@@ -238,7 +250,7 @@ export async function initFixesPanel(ctx) {
   function unselect() {
     if (!sel) return;
     const dropped = touched.size;
-    ++token; sel = null; data = null; draft = {}; touched = new Set(); walls = []; wallSel = null;
+    ++token; sel = null; data = null; draft = {}; touched = new Set(); walls = []; wallSel = null; doors = [];
     $("fix-id").value = "";
     renderObject(); drawSelected(false); drawFaces(); clearMapSelection();
     status(dropped ? `Unselected. ${plural(dropped, "field")} that you did not add ${dropped === 1 ? "was" : "were"} dropped.` : "Unselected.");
@@ -267,13 +279,14 @@ export async function initFixesPanel(ctx) {
     if (go) setTab(k);                                // saves the state of the tab that shows, and shows the tab of the object
     kind = k;
     const my = ++token;
-    sel = { kind: k, type: type ?? KIND_OF[k], id }; data = null; draft = {}; touched = new Set(); wallSel = null;
+    sel = { kind: k, type: type ?? KIND_OF[k], id }; data = null; draft = {}; touched = new Set(); wallSel = null; doors = [];
     $("fix-id").value = id;
     renderObject();
     const d = await loadData(sel.type, id, k);
     if (my !== token) return;
     sel.type = d.type; data = d; draft = initialDraft();
     walls = k === "building" && d.type === "way" ? await loadWalls(id) : [];
+    doors = k === "building" && d.type === "way" ? await loadDoors(id) : [];
     if (my !== token) return;
     renderObject(); renderForm(); drawFaces();
     await drawSelected(zoom);
@@ -281,6 +294,22 @@ export async function initFixesPanel(ctx) {
 
   // the walls of a building: main.building_faces has them after a build with the layers (docs/osm-editing.md, M4)
   const hasFaces = () => built("main", "building_faces");
+  // the doors of a building: main.building_entrances has them after a build with the layers (the nodes with `entrance` or `door` on its outline)
+  const hasDoors = () => built("main", "building_entrances");
+  async function loadDoors(id) {
+    if (!hasDoors()) return [];
+    return (await safe(`SELECT osm_id, kind, door, access, housenumber, street, level, wheelchair, name, ST_X(geom) AS lon, ST_Y(geom) AS lat FROM main.building_entrances WHERE building_id = ${id} ORDER BY osm_id`))
+      .map((r) => ({ ...r, osm_id: Number(r.osm_id) }));
+  }
+  // the kind of a door now: the rule of the node on top of the data (a door with only a `door` tag has no entrance tag: "")
+  const doorKind = (d) => { const r = F.ruleOf(doc, "node", d.osm_id); return "entrance" in r.set ? String(r.set.entrance) : r.delete.includes("entrance") ? "" : d.kind === "door" ? "" : d.kind; };
+  function setDoorKind(id, v, orig) {
+    const rule = structuredClone(F.ruleOf(doc, "node", id));
+    if (!("entrance" in rule.was) && !("entrance" in rule.set) && !rule.delete.includes("entrance")) rule.was.entrance = orig === "" ? null : orig;
+    delete rule.set.entrance; rule.delete = rule.delete.filter((x) => x !== "entrance");
+    if (v === orig) delete rule.was.entrance; else if (v === "") rule.delete.push("entrance"); else rule.set.entrance = v;
+    commit(() => F.writeRule(doc, "node", id, rule));
+  }
   async function loadWalls(id) {
     if (!hasFaces()) return [];
     return (await safe(`SELECT from_node, to_node, face_index, face_type, computed_type, edited, length_m, street_name, ST_AsGeoJSON(geometry) AS g FROM main.building_faces WHERE building_id = ${id} ORDER BY face_index`))
@@ -316,6 +345,12 @@ export async function initFixesPanel(ctx) {
   // ---- edits in the form
   function onInput(e) {
     const el = e.target;
+    if (el.dataset?.door !== undefined) {                                        // the kind of a door: a node edit at once
+      const row = el.closest(".doorrow");
+      setDoorKind(Number(row.dataset.id), el.value, row.dataset.was);
+      row.classList.toggle("edited", el.value !== row.dataset.was);
+      return;
+    }
     if (el.dataset?.wall !== undefined) {                                        // the type of a wall: a rule at once (a Save button is for tags)
       const row = el.closest(".wallrow"), a = Number(row.dataset.a), b = Number(row.dataset.b);
       commit(() => F.setFace(doc, sel.id, a, b, el.value, row.dataset.computed));
@@ -385,9 +420,9 @@ export async function initFixesPanel(ctx) {
 
   // ---- the tabs: Road, Building and Node share one editor, and each has its own object, form and draft (the stash holds the two that do not show)
   function switchKind(k) {
-    stash[kind] = { sel, data, draft, touched, walls, wallSel };
-    const st = stash[k] ?? { sel: null, data: null, draft: {}, touched: new Set(), walls: [], wallSel: null };
-    kind = k; ({ sel, data, draft, touched, walls, wallSel = null } = st); ++token;
+    stash[kind] = { sel, data, draft, touched, walls, wallSel, doors };
+    const st = stash[k] ?? { sel: null, data: null, draft: {}, touched: new Set(), walls: [], wallSel: null, doors: [] };
+    kind = k; ({ sel, data, draft, touched, walls, wallSel = null, doors = [] } = st); ++token;
     $("fix-id").value = sel?.id ?? "";
     if (sel && !data) select(k, sel.type, sel.id, { go: false });       // an object that waited for its data (a build came between)
   }
@@ -405,14 +440,14 @@ export async function initFixesPanel(ctx) {
     for (const t of TABS) $(`fix-tab-${t}`).setAttribute("aria-selected", String(t === name));
     for (const id of new Set(Object.values(PANE))) $(id).hidden = id !== PANE[name];
     if (EDIT.includes(name)) {
-      $("fix-intro").textContent = HINTS[name][0]; $("fix-pickhint").textContent = HINTS[name][1]; $("fix-walls-row").hidden = name !== "building"; $("fix-nodes-legend").hidden = name !== "node";
+      $("fix-intro").textContent = HINTS[name][0]; $("fix-pickhint").textContent = HINTS[name][1]; $("fix-walls-row").hidden = name !== "building"; $("fix-nodes-legend").hidden = name !== "node"; $("fix-doors-legend").hidden = name !== "building";
       renderObject(); renderForm();
     }
     if (name === "changes") renderChanges();
     if (name === "turns" && !$("fix-turnsec").hidden) outgoing();
     if (draw) map.getCanvas().style.cursor = name === "new" ? "crosshair" : "";
     paintDots();
-    if (open()) { drawSelected(zoom, { turn: name === "turns" && !$("fix-turnsec").hidden ? { via: $("fix-via").value } : null }); drawFaces(); drawNodes(); drawTurnRoads(); }
+    if (open()) { drawSelected(zoom, { turn: name === "turns" && !$("fix-turnsec").hidden ? { via: $("fix-via").value } : null }); drawFaces(); drawNodes(); drawTurnRoads(); drawDoors(); }
   }
   // an amber dot on the tab that has edits that are not in the changes yet
   function paintDots() {
@@ -569,6 +604,13 @@ export async function initFixesPanel(ctx) {
       map.on("mousemove", "fix-nodes-pt", hoverNode);
       map.on("mouseleave", "fix-nodes-pt", leaveNode);
     }
+    if (!map.getSource("fix-doors")) {                // the doors of the Building tab
+      map.addSource("fix-doors", { type: "geojson", data: EMPTY });
+      map.addLayer({ id: "fix-doors-pt", type: "circle", source: "fix-doors", paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 17, ["case", ["==", ["get", "k"], "main"], 4.5, 3.5], 20, ["case", ["==", ["get", "k"], "main"], 8, 6]],
+        "circle-color": DOOR_COLOR, "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5 } });
+      map.on("mousemove", "fix-doors-pt", hoverDoor);
+      map.on("mouseleave", "fix-doors-pt", leaveDoor);
+    }
     if (!map.getSource("fix-turn")) {                 // the roads that leave the junction of the Turn tab; the one under the pointer in the list has a dark outline
       map.addSource("fix-turn", { type: "geojson", data: EMPTY });
       map.addLayer({ id: "fix-turn-hl", type: "line", source: "fix-turn", filter: ["==", ["get", "id"], -1], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#111827", "line-width": 12, "line-opacity": 0.85 } });
@@ -617,12 +659,14 @@ export async function initFixesPanel(ctx) {
       const got = new Set();
       for (const r of await safe(`SELECT osm_id AS id, ST_AsGeoJSON(geom) AS g FROM features.traffic WHERE osm_id IN (${nodeIds.join(",")})`)) { out.push(geo(r)); got.add(Number(r.id)); }
       const missing = nodeIds.filter((n) => !got.has(n));                  // a junction of the roads that has no traffic tag
-      if (missing.length) for (const m of modes()) for (const r of await safe(`SELECT node_id AS id, ST_AsGeoJSON(geom) AS g FROM ${m}.nodes WHERE node_id IN (${missing.join(",")})`)) out.push(geo(r));
+      if (missing.length) for (const m of modes()) for (const r of await safe(`SELECT node_id AS id, ST_AsGeoJSON(geom) AS g FROM ${m}.nodes WHERE node_id IN (${missing.join(",")})`)) { out.push(geo(r)); got.add(Number(r.id)); }
+      const doorsMissing = missing.filter((n) => !got.has(n));
+      if (doorsMissing.length && hasDoors()) for (const r of await safe(`SELECT osm_id AS id, ST_AsGeoJSON(geom) AS g FROM main.building_entrances WHERE osm_id IN (${doorsMissing.join(",")})`)) out.push(geo(r));
     }
     return out.filter(Boolean);
   }
 
-  const drawnCount = { edits: 0, sel: 0, heights: [], faces: 0, draw: 0, nodes: 0, turn: 0 };      // what the panel put in the map's sources (the tests read it)
+  const drawnCount = { edits: 0, sel: 0, heights: [], faces: 0, draw: 0, nodes: 0, turn: 0, doors: 0 };      // what the panel put in the map's sources (the tests read it)
   // the edited buildings with their height and color: the tags of the data with the rule on top, so a change shows before the next build
   async function extrusions() {
     await classify();
@@ -667,6 +711,39 @@ export async function initFixesPanel(ctx) {
     if (map.getLayer("fix-nodes-hover")) map.setFilter("fix-nodes-hover", ["==", ["get", "id"], -1]);
     map.getCanvas().style.cursor = "";
     nodeTip?.remove();
+  }
+  // hover on a door dot: the pointer cursor and a tooltip with the kind, the address and the access
+  let doorTip = null;
+  function hoverDoor(e) {
+    const f = e.features?.[0];
+    if (!f || !open() || current !== "building") return;
+    map.getCanvas().style.cursor = "pointer";
+    const { id, k, a, acc } = f.properties;
+    doorTip ??= new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: "rs-tip fix-tip", offset: 10, maxWidth: "240px" });
+    doorTip.setLngLat(f.geometry.coordinates).setHTML(`<b>Door · ${esc(k === "door" ? "no entrance tag" : k)}</b><br>node ${id}${a ? `<br>${esc(a)}` : ""}${acc ? `<br>access ${esc(acc)}` : ""}`).addTo(map);
+  }
+  function leaveDoor() { map.getCanvas().style.cursor = ""; doorTip?.remove(); }
+  // the doors in view (zoom 17 or more) while the Building tab shows
+  let doorToken = 0;
+  async function drawDoors() {
+    const my = ++doorToken;
+    let feats = [], info = "";
+    if (open() && current === "building" && hasDoors()) {
+      ensureLayers();
+      if (map.getZoom() < 17) info = "Zoom in to 17 to see the doors.";
+      else {
+        const b = map.getBounds();
+        feats = (await safe(`SELECT osm_id AS id, kind AS k, building_id AS b, access AS acc, trim(concat_ws(' ', street, housenumber)) AS a, ST_X(geom) AS x, ST_Y(geom) AS y FROM main.building_entrances
+          WHERE ST_X(geom) BETWEEN ${b.getWest()} AND ${b.getEast()} AND ST_Y(geom) BETWEEN ${b.getSouth()} AND ${b.getNorth()} LIMIT 5000`))
+          .map((r) => ({ type: "Feature", properties: { id: Number(r.id), k: r.k, b: r.b == null ? 0 : Number(r.b), a: r.a ?? "", acc: r.acc ?? "" }, geometry: { type: "Point", coordinates: [r.x, r.y] } }));
+        info = `In view: ${plural(feats.length, "door")}.`;
+      }
+    }
+    if (my !== doorToken) return;
+    if (!feats.length) leaveDoor();
+    map.getSource("fix-doors")?.setData({ type: "FeatureCollection", features: feats });
+    if ($("fix-doors-info")) $("fix-doors-info").textContent = info;
+    drawnCount.doors = feats.length;
   }
   // the nodes that a click in the Node tab can pick (the traffic signals and the crossings of features.traffic) in view, as dots with a color for each kind
   let nodeToken = 0;
@@ -721,7 +798,7 @@ export async function initFixesPanel(ctx) {
     drawnCount.faces = feats.length;
   }
   $("fix-walls-all").onchange = drawFaces;
-  map.on("moveend", () => { if (open() && current === "building" && $("fix-walls-all").checked) drawFaces(); if (open() && current === "node") drawNodes(); });
+  map.on("moveend", () => { if (open() && current === "building" && $("fix-walls-all").checked) drawFaces(); if (open() && current === "node") drawNodes(); if (open() && current === "building") drawDoors(); });
 
   let mapToken = 0;
   async function drawEdits() {
@@ -900,6 +977,14 @@ export async function initFixesPanel(ctx) {
     if (!open() || (current !== "building" && current !== "node")) return;        // a road is picked by the dashboard's click (rs:select), a turn too
     const { lng, lat } = e.lngLat;
     if (current === "building") {
+      const door = map.queryRenderedFeatures(e.point, { layers: ["fix-doors-pt"] })[0];
+      if (door) {
+        const bid = door.properties.b;
+        if (bid && !(sel?.kind === "building" && sel.id === bid)) select("building", "way", bid);
+        else if (bid) status(`Door ${door.properties.id}: change its kind in the Doors section.`);
+        else status(`Door ${door.properties.id} is not on a building outline.`);
+        return;
+      }
       if (await wallAt(e)) return;
       const d = px(e, 6);
       const r = (await safe(`SELECT osm_id, osm_type FROM features.buildings WHERE ST_Intersects(geom, ST_Buffer(ST_Point(${lng}, ${lat}), ${d})) ORDER BY ST_Distance(geom, ST_Point(${lng}, ${lat})) LIMIT 1`))[0];
@@ -942,6 +1027,8 @@ export async function initFixesPanel(ctx) {
   $("fix-form").addEventListener("click", (e) => {
     const nav = e.target.closest("[data-wall-nav]");
     if (nav) return stepWall(Number(nav.dataset.wallNav));
+    const drow = e.target.closest(".doorrow");
+    if (drow && !e.target.closest("select")) { const d = doors.find((x) => x.osm_id === Number(drow.dataset.id)); if (d) zoomTo([[d.lon, d.lat]], 20); return; }
     const row = e.target.closest(".wallrow");
     if (row && !e.target.closest("select")) return selectWall(row.dataset.key, { zoom: true });
     const t = e.target.closest("button");
@@ -1017,13 +1104,13 @@ export async function initFixesPanel(ctx) {
     kinds.clear(); names.clear(); walls = []; wallSel = null;
     for (const k of EDIT) if (k !== kind && stash[k]?.sel) stash[k] = { sel: stash[k].sel, data: null, draft: {}, touched: new Set(), walls: [], wallSel: null };
     if (sel) select(kind, sel.type, sel.id, { go: false }); else { renderObject(); drawSelected(false); }
-    drawEdits(); drawFaces(); drawNodes();
+    drawEdits(); drawFaces(); drawNodes(); drawDoors();
   };
   // leaving the panel unselects everything on the map: the blue objects, roadstyle's road selection, the node dots, the turn roads and the walls (the amber changes stay)
   function close() {
     if (draw) stopDraw();
     document.body.classList.remove("editing-fixes");
-    clearMapSelection(); drawSelected(false); drawFaces(); drawNodes(); drawTurnRoads();
+    clearMapSelection(); drawSelected(false); drawFaces(); drawNodes(); drawTurnRoads(); drawDoors();
   }
 
   setTab("road"); sync();

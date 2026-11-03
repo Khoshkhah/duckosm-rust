@@ -341,3 +341,10 @@ maturin sdist -m crates/duckosm-py/Cargo.toml -o sdist                          
 The `manylinux2014` wheel with DuckDB needs only glibc 2.17 (it has no libstdc++ dependency) and passed
 `tests/test_wheel.py` in a new virtual environment. The wheel from a plain `maturin build` needs glibc 2.35.
 Not checked: macOS, Windows, aarch64, and a real old Linux distribution.
+
+## Keys for a local test of the page
+
+Street View (Linked) and Google 3D need a Google Maps JavaScript API key, and the Mapillary photos need a Mapillary client token. The page does not have them in its code. Two ways to give them in a test:
+
+- **The settings of the map bar** (the gear button): paste each key. The browser keeps it for this site only (`localStorage`).
+- **`crates/duckosm-wasm/www/local_keys.json`**, a file that `.gitignore` leaves out of git: `{"google": "<key>", "mapillary": "<token>"}`. A page on `localhost` or `127.0.0.1` reads it at the start and gives the keys to roadstyle's dashboard as the page's keys. A key that the person saved in the settings is over it. The deployed page never reads the file.
