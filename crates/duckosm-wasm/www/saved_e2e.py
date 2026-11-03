@@ -100,6 +100,25 @@ with sync_playwright() as p:
     assert page.inner_text("#buildstatus").startswith("Restored")
     n = page.evaluate("""async () => (await (await import('./app/duck.js')).query("select count(*) n from information_schema.schemata where schema_name = 'walking'")).toArray()[0].n""")
     assert int(n) == 0, "the old walking tables came back"
+
+    # an area with a buffer: the restore gives the same grown area, not an area grown twice
+    km2 = lambda pg: float(pg.inner_text("#summary .stat b").replace(",", ""))
+    page.close()
+    page = open_page(ctx)
+    page.set_input_files("#file", str(DATA / "monaco.geojson"))
+    page.wait_for_function("window.areas >= 1", timeout=60_000)
+    page.fill("#buffer", "300")
+    page.wait_for_function("document.getElementById('summary').textContent.includes('+300 m')", timeout=60_000)
+    grown = km2(page)
+    build(page, ["driving"])
+    page.close()
+    page = open_page(ctx)
+    page.wait_for_selector("#restore-banner", state="visible", timeout=30_000)
+    page.click("#restore-btn")
+    page.wait_for_function("document.getElementById('buildstatus').textContent.startsWith('Restored')", timeout=300_000)
+    assert page.input_value("#buffer") == "300", page.input_value("#buffer")
+    assert abs(km2(page) - grown) < 0.01, ("the restored area is not the grown area", km2(page), grown)
+    print(f"restore with a buffer: {km2(page)} km2, as before the build ({grown} km2)")
     browser.close()
 
 assert not errors, errors
