@@ -60,7 +60,7 @@ and `docs/guides/dashboard-layout.md`). The page uses the template `dashboard` w
   The card behind the text of the panel starts at 70 % (`--rs-a-card`), and a button with a text has no tooltip box (roadstyle's `tip.js`).
 - **Disabled buttons.** An action button is `disabled` until its inputs are ready: Search (a name), GeoJSON (an area), Build (an area and a
   data file), Run (a query), Show on map and Edit levels (while a draw runs or the editor opens). A disabled button is grey (the panel's
-  tokens: the surface, the line and the muted text), has the cursor not-allowed and no hover, and the reason is the text under it ("Choose an
+  tokens: the surface, the line and the muted text), has the normal cursor (no forbidden sign) and no hover, and the reason is the text under it ("Choose an
   area in step 1."), not a tooltip. `buttons_e2e.py` checks each of them before and after its inputs, on a computer (light and dark) and on a phone.
 - **The help windows.** The panel's title has the "?" of roadstyle's help window (`rs.help.set`: the window and its button are roadstyle's, the page gives
   the words in Simplified Technical English). The window has the overview of the page, where the data stays (this browser only) and the links to the
@@ -408,19 +408,22 @@ areas, with **Open** and **Delete**.
 
 The card holds rules that correct known errors of OpenStreetMap. The rules are a duckOSM fixes file (`overrides`, `turn_restrictions`, `new_ways`). The page keeps them as data
 (`app/fixes.js`) and writes the YAML from that data. It never edits the YAML text, so the text is always valid for the build.
-The card needs the build. Press **Apply and build again** to run step 4 again with the rules.
+The card needs the build. It shows the number of rules and one button, **Edit fixes**, which opens the **fixes panel**.
 
-- **Roads.** Click a road on the map, or type its way ID, and press **Load**. The card shows the road (name, class, one-way, lanes, layer, length) and fills the
+- **The panel** is the page's one panel, as the level editor is: the steps, the title and the footer go while it is open, and **← Steps** brings them back.
+  A road click on the map fills the way ID, with no popup (the road's hover tooltip stays). **Apply and build again** closes the panel and runs step 4 with the rules.
+- **Roads.** Click a road on the map, or type its way ID, and press **Load**. The panel shows the road (name, class, one-way, lanes, layer, length) and fills the
   form with its rule, if it has one. The form sets `oneway` (yes or no), `lanes`, `lanes_forward`, `lanes_backward`, `layer`, `turn_lanes_forward`, `turn_lanes_backward`,
   `tags`, `exclude_modes`, `remove` and `note`. **Save rule** adds or replaces the rule of the way. **Delete rule** removes it. A `keep_nodes` key that is in the YAML stays when the form saves the rule.
-- **Turns.** Give a way ID (or click a road in this tab) and press **Find turns**. The card lists the junctions at the end of the road and, for the junction you pick, the roads that leave it.
+- **Turns.** Give a way ID (or click a road in this tab) and press **Find turns**. The panel lists the junctions at the end of the road and, for the junction you pick, the roads that leave it.
   Each road has a select for the turn rule (`no_left_turn`, `only_straight_on` and the others of duckOSM). The rules are for the driving mode. The list below shows all rules, each with a **Delete** button.
-- **YAML.** The text of the file. **Use this text** reads your edit again: an error shows in the card and the rules stay as they were. **Download** saves `osm_fixes.yaml`. **Clear all** removes every rule.
+- **YAML.** The text of the file. **Use this text** reads your edit again: an error shows and the rules stay as they were. **Download** saves `osm_fixes.yaml`. **Clear all** removes every rule.
   Comments in a file are not kept, because the page writes the YAML again.
 - The **Fixes** file of step 4 loads into the same rules. A build always reads the rules of card 7. A saved area keeps the text that it was built with.
 - The page reads the YAML with js-yaml (loaded from cdn.jsdelivr.net, as MapLibre is). The build reads it with the Rust parser (`crates/duckosm-build/src/config.rs`), which rejects keys it does not know.
 
-The check: `fixes_e2e.py` (Monaco). It loads a file, makes a road rule and a turn rule with the forms, breaks the YAML text, builds again, and checks that the lanes are in `driving.edges` and that the road is not in `walking.edges`.
+The check: `fixes_e2e.py` (Monaco). It loads a file, opens the panel and goes back, clicks a real road (the way ID fills, no popup), makes a road rule and a turn rule with the forms,
+breaks the YAML text, builds again, and checks that the lanes are in `driving.edges` and that the road is not in `walking.edges`.
 
 ### Step 8: edit the levels
 

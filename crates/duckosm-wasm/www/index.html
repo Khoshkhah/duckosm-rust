@@ -65,7 +65,7 @@
      in the title; the card's own buttons ("?", the zoom to the area) are beside the chevron */
   .step { position: relative; margin: 0; }
   .step > .rs-sec-hd { justify-content: flex-start; padding: 6px 0; font-size: 12px; letter-spacing: 0.06em; color: var(--fg); }
-  .step > .rs-sec-hd:disabled { cursor: not-allowed; color: var(--muted); }
+  .step > .rs-sec-hd:disabled { cursor: default; color: var(--muted); }
   .step > .rs-sec-hd .after { margin-left: auto; margin-right: 30px; font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); }
   .step > .rs-sec-hd .done { color: var(--accent); font-size: 13px; font-weight: 700; text-transform: none; }
   .step > .tools { position: absolute; top: 14px; right: 40px; height: 32px; display: flex; align-items: center; gap: 2px; }
@@ -108,10 +108,10 @@
   .btn:hover:not(:disabled) { background: var(--surface); }
   .btn.primary { background: var(--accent-fill); border-color: var(--accent-fill); color: #ffffff; }
   .btn.primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent-fill); }
-  /* an action button is disabled until its inputs are ready: grey (the panel's tokens), no hover, not-allowed; the reason is the text under it (.why) */
+  /* an action button is disabled until its inputs are ready: grey (the panel's tokens), no hover, the normal cursor (no forbidden sign); the reason is the text under it (.why) */
   .btn.busy svg { display: none; }
   .btn.busy::after { content: ""; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--muted); animation: spin 0.8s linear infinite; }
-  .btn:disabled, .btn.primary:disabled { background: var(--surface); border-color: var(--line); color: var(--muted); opacity: 1; filter: none; cursor: not-allowed; }
+  .btn:disabled, .btn.primary:disabled { background: var(--surface); border-color: var(--line); color: var(--muted); opacity: 1; filter: none; cursor: default; }
   .why { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); }
   .why:empty { display: none; }
   .sb-foot .why { grid-column: 1 / -1; margin: 0; }
@@ -197,13 +197,24 @@
   .sb-foot { flex: none; display: grid; grid-template-columns: 1fr 1.5fr; gap: 8px; padding: 12px 15px 14px; border-top: 1px solid var(--line); }
 
   /* steps 3 to 5: the data, the build, the result (docs/app.md) */
-  #step7-card [hidden], #step8-card [hidden] { display: none; }
-  #step7-card .fix-pane { margin-top: 10px; }
-  #step7-card .fix-pane .grid2 { grid-template-columns: 7.5em 1fr; }
-  #step7-card .trio { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-  #step7-card textarea { min-height: 9em; }
-  #step7-card .turn { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; margin-top: 6px; }
-  #step7-card .turn select { max-width: 11em; }
+  #step7-card [hidden], #step8-card [hidden], #fix-panel [hidden] { display: none; }
+  /* the fixes' own panel (like the level editor's): the steps, the title and the footer go while it is open, and the road popup is off */
+  #fix-panel { display: none; }
+  body.editing-fixes #sb .sb-top, body.editing-fixes #sb .sb-body, body.editing-fixes #sb .sb-foot { display: none; }
+  body.editing-fixes #fix-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  body.editing-fixes #sb #rs-fold-all { display: none; }
+  body.editing-fixes .maplibregl-popup:not(.rs-tip) { display: none !important; }
+  #fix-panel .fix-hd { flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 15px; border-bottom: 1px solid var(--line); }
+  #fix-panel .fix-hd h2 { margin: 0; font-size: 16px; text-transform: none; color: var(--fg); }
+  #fix-panel .fix-hd .btn svg { width: 14px; height: 14px; }
+  #fix-panel .fix-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 15px; overscroll-behavior: contain; }
+  #fix-panel .fix-foot { flex: none; padding: 12px 15px 14px; border-top: 1px solid var(--line); display: grid; }
+  #fix-panel .fix-pane { margin-top: 10px; }
+  #fix-panel .fix-pane .grid2 { grid-template-columns: 7.5em 1fr; }
+  #fix-panel .trio { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  #fix-panel textarea { min-height: 14em; }
+  #fix-panel .turn { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; margin-top: 6px; }
+  #fix-panel .turn select { max-width: 11em; }
   .grid2 [hidden] { display: none; }
   .pick { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 10px; cursor: pointer; margin-bottom: 10px; }
   .pick:hover { border-color: var(--accent); color: var(--accent); }
@@ -462,53 +473,8 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
 
 <section id="step7-card" class="step" aria-labelledby="step7">
   <h2 id="step7"><span class="n">7</span>Fix OSM data</h2>
-  <p id="fix-count" class="why">No fixes.</p>
-  <div class="segmented" role="tablist" aria-label="The kinds of fixes" style="margin-top:8px">
-    <button role="tab" id="fix-tab-roads" aria-controls="fix-roads" aria-selected="true" type="button">Roads</button>
-    <button role="tab" id="fix-tab-turns" aria-controls="fix-turns" aria-selected="false" type="button">Turns</button>
-    <button role="tab" id="fix-tab-yaml" aria-controls="fix-yaml-pane" aria-selected="false" type="button">YAML</button>
-  </div>
-  <div id="fix-roads" class="fix-pane" role="tabpanel" aria-labelledby="fix-tab-roads">
-    <div class="row" style="margin-top:0"><input id="fix-id" type="text" inputmode="numeric" placeholder="OSM way ID, or click a road" aria-label="OSM way ID" style="flex:1"><button id="fix-load" class="btn" type="button">Load</button></div>
-    <p id="fix-road" class="why">Click a road on the map, or type its way ID.</p>
-    <div class="grid2" style="margin-top:8px">
-      <label for="fix-oneway" class="small">One-way</label>
-      <select id="fix-oneway"><option value="">As in the data</option><option value="true">Yes</option><option value="false">No</option></select>
-      <span class="small">Lanes</span>
-      <div class="trio"><input id="fix-lanes" type="text" inputmode="numeric" placeholder="All" aria-label="Lanes, all"><input id="fix-lanes-fwd" type="text" inputmode="numeric" placeholder="Forward" aria-label="Lanes, forward"><input id="fix-lanes-bwd" type="text" inputmode="numeric" placeholder="Back" aria-label="Lanes, back"></div>
-      <label for="fix-layer" class="small">Layer</label>
-      <input id="fix-layer" type="text" inputmode="numeric" placeholder="For example 1 or -1">
-      <label for="fix-tl-fwd" class="small">Turn lanes</label>
-      <div class="trio" style="grid-template-columns:1fr 1fr"><input id="fix-tl-fwd" type="text" placeholder="Forward: left|through" aria-label="Turn lanes, forward"><input id="fix-tl-bwd" type="text" placeholder="Back" aria-label="Turn lanes, back"></div>
-      <label for="fix-tags" class="small">Tags</label>
-      <input id="fix-tags" type="text" placeholder="surface=asphalt, maxspeed=30">
-      <label for="fix-note" class="small">Note</label>
-      <input id="fix-note" type="text" placeholder="Why">
-    </div>
-    <div class="checks" role="group" aria-label="Exclude from" style="margin-top:8px">
-      <span class="small">Exclude from</span>
-      <label><input type="checkbox" name="fix-ex" value="driving">Driving</label>
-      <label><input type="checkbox" name="fix-ex" value="walking">Walking</label>
-      <label><input type="checkbox" name="fix-ex" value="cycling">Cycling</label>
-      <label><input type="checkbox" id="fix-remove">Remove the road</label>
-    </div>
-    <div class="row"><button id="fix-save" class="btn" type="button">Save rule</button><button id="fix-del" class="btn" type="button">Delete rule</button></div>
-  </div>
-  <div id="fix-turns" class="fix-pane" role="tabpanel" aria-labelledby="fix-tab-turns" hidden>
-    <p class="why" style="margin-top:0">Pick the road that the turn starts on (Roads tab, or the map). Then pick the junction and the rule for each road that leaves it. Driving only.</p>
-    <div class="row"><input id="fix-from" type="text" inputmode="numeric" placeholder="From way ID" aria-label="From way ID" style="flex:1"><button id="fix-turn-find" class="btn" type="button">Find turns</button></div>
-    <div class="grid2" style="margin-top:8px" id="fix-via-row" hidden><label for="fix-via" class="small">Junction</label><select id="fix-via"></select></div>
-    <div id="fix-out"></div>
-    <p class="small" style="margin-top:10px;margin-bottom:0"><b>All turn rules</b></p>
-    <div id="fix-turn-list" class="small"></div>
-  </div>
-  <div id="fix-yaml-pane" class="fix-pane" role="tabpanel" aria-labelledby="fix-tab-yaml" hidden>
-    <textarea id="fix-yaml" spellcheck="false" aria-label="The fixes file (YAML)" placeholder="overrides:&#10;  - osm_id: 12345678&#10;    lanes: 2"></textarea>
-    <p id="fix-yaml-err" class="why" role="alert"></p>
-    <div class="row"><button id="fix-yaml-save" class="btn" type="button">Use this text</button><button id="fix-download" class="btn" type="button">Download</button><button id="fix-clear" class="btn" type="button">Clear all</button></div>
-    <p class="why">The page writes this text from your rules, so comments are not kept. To load a file, use <b>Fixes</b> in step 4.</p>
-  </div>
-  <div class="row"><button id="fix-apply" class="btn" type="button">Apply and build again</button></div>
+  <p id="fix-sum" class="why" style="margin-top:0">No fixes.</p>
+  <div class="row"><button id="fix-open" class="btn" type="button">Edit fixes</button></div>
   <p id="fix-why" class="why"></p>
 </section>
 
@@ -526,6 +492,58 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
   <button id="run" class="btn primary" disabled>Build<svg><use href="#i-arrow"/></svg></button>
   <p id="buildhint" class="why" aria-live="polite"></p>
 </footer>
+<div id="fix-panel" aria-label="Fix OSM data">
+  <div class="fix-hd"><button id="fix-back" class="btn" type="button"><svg><use href="#i-chevron"/></svg>Steps</button><h2>Fix OSM data</h2></div>
+  <div class="fix-body">
+    <p id="fix-count" class="why" style="margin-top:0">No fixes.</p>
+    <div class="segmented" role="tablist" aria-label="The kinds of fixes" style="margin-top:8px">
+      <button role="tab" id="fix-tab-roads" aria-controls="fix-roads" aria-selected="true" type="button">Roads</button>
+      <button role="tab" id="fix-tab-turns" aria-controls="fix-turns" aria-selected="false" type="button">Turns</button>
+      <button role="tab" id="fix-tab-yaml" aria-controls="fix-yaml-pane" aria-selected="false" type="button">YAML</button>
+    </div>
+    <div id="fix-roads" class="fix-pane" role="tabpanel" aria-labelledby="fix-tab-roads">
+      <div class="row" style="margin-top:0"><input id="fix-id" type="text" inputmode="numeric" placeholder="OSM way ID, or click a road" aria-label="OSM way ID" style="flex:1"><button id="fix-load" class="btn" type="button">Load</button></div>
+      <p id="fix-road" class="why">Click a road on the map, or type its way ID.</p>
+      <div class="grid2" style="margin-top:8px">
+        <label for="fix-oneway" class="small">One-way</label>
+        <select id="fix-oneway"><option value="">As in the data</option><option value="true">Yes</option><option value="false">No</option></select>
+        <span class="small">Lanes</span>
+        <div class="trio"><input id="fix-lanes" type="text" inputmode="numeric" placeholder="All" aria-label="Lanes, all"><input id="fix-lanes-fwd" type="text" inputmode="numeric" placeholder="Forward" aria-label="Lanes, forward"><input id="fix-lanes-bwd" type="text" inputmode="numeric" placeholder="Back" aria-label="Lanes, back"></div>
+        <label for="fix-layer" class="small">Layer</label>
+        <input id="fix-layer" type="text" inputmode="numeric" placeholder="For example 1 or -1">
+        <label for="fix-tl-fwd" class="small">Turn lanes</label>
+        <div class="trio" style="grid-template-columns:1fr 1fr"><input id="fix-tl-fwd" type="text" placeholder="Forward: left|through" aria-label="Turn lanes, forward"><input id="fix-tl-bwd" type="text" placeholder="Back" aria-label="Turn lanes, back"></div>
+        <label for="fix-tags" class="small">Tags</label>
+        <input id="fix-tags" type="text" placeholder="surface=asphalt, maxspeed=30">
+        <label for="fix-note" class="small">Note</label>
+        <input id="fix-note" type="text" placeholder="Why">
+      </div>
+      <div class="checks" role="group" aria-label="Exclude from" style="margin-top:8px">
+        <span class="small">Exclude from</span>
+        <label><input type="checkbox" name="fix-ex" value="driving">Driving</label>
+        <label><input type="checkbox" name="fix-ex" value="walking">Walking</label>
+        <label><input type="checkbox" name="fix-ex" value="cycling">Cycling</label>
+        <label><input type="checkbox" id="fix-remove">Remove the road</label>
+      </div>
+      <div class="row"><button id="fix-save" class="btn" type="button">Save rule</button><button id="fix-del" class="btn" type="button">Delete rule</button></div>
+    </div>
+    <div id="fix-turns" class="fix-pane" role="tabpanel" aria-labelledby="fix-tab-turns" hidden>
+      <p class="why" style="margin-top:0">Pick the road that the turn starts on (Roads tab, or the map). Then pick the junction and the rule for each road that leaves it. Driving only.</p>
+      <div class="row"><input id="fix-from" type="text" inputmode="numeric" placeholder="From way ID" aria-label="From way ID" style="flex:1"><button id="fix-turn-find" class="btn" type="button">Find turns</button></div>
+      <div class="grid2" style="margin-top:8px" id="fix-via-row" hidden><label for="fix-via" class="small">Junction</label><select id="fix-via"></select></div>
+      <div id="fix-out"></div>
+      <p class="small" style="margin-top:10px;margin-bottom:0"><b>All turn rules</b></p>
+      <div id="fix-turn-list" class="small"></div>
+    </div>
+    <div id="fix-yaml-pane" class="fix-pane" role="tabpanel" aria-labelledby="fix-tab-yaml" hidden>
+      <textarea id="fix-yaml" spellcheck="false" aria-label="The fixes file (YAML)" placeholder="overrides:&#10;  - osm_id: 12345678&#10;    lanes: 2"></textarea>
+      <p id="fix-yaml-err" class="why" role="alert"></p>
+      <div class="row"><button id="fix-yaml-save" class="btn" type="button">Use this text</button><button id="fix-download" class="btn" type="button">Download</button><button id="fix-clear" class="btn" type="button">Clear all</button></div>
+      <p class="why">The page writes this text from your rules, so comments are not kept. To load a file, use <b>Fixes</b> in step 4.</p>
+    </div>
+  </div>
+  <div class="fix-foot"><button id="fix-apply" class="btn" type="button">Apply and build again</button></div>
+</div>
 </div>
 </div>
 <button id="sb-show" title="Show panel" aria-label="Show panel" aria-controls="sb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/><path d="m10.5 9.5-2.5 2.5 2.5 2.5"/></svg></button>
@@ -2005,7 +2023,9 @@ function fixSync() {
   $("fix-yaml").value = fixesLib.dump(jsyaml, fixDoc);
   fixErr("");
   const { overrides: o, turns: t } = fixesLib.counts(fixDoc), s = (n) => (n === 1 ? "" : "s");
-  $("fix-count").textContent = o + t ? `${o} road rule${s(o)}, ${t} turn rule${s(t)}. Apply them with a new build.` : "No fixes.";
+  const sum = o + t ? `${o} road rule${s(o)}, ${t} turn rule${s(t)}.` : "No fixes.";
+  $("fix-count").textContent = sum;
+  $("fix-sum").textContent = sum;
   fixTurnList();
 }
 function loadFixesText(text) {
@@ -2118,17 +2138,28 @@ function fixTurnList() {
 $("fix-turn-find").onclick = () => { const id = wayId("fix-from"); id ? fixJunctions(id).catch((e) => fixErr(e.message)) : fixErr("Type a way ID (a whole number)."); };
 $("fix-via").onchange = () => fixOutgoing();
 
-// a click on a road fills the way ID while the card is open (the dashboard's row -> the road's OSM ID)
+// the panel: it holds the page's one panel while it is open (the steps, the title and the footer go; ← Steps brings them back)
+function editingFixes(on) {
+  document.body.classList.toggle("editing-fixes", on);
+  if (on) document.querySelectorAll(".maplibregl-popup:not(.rs-tip)").forEach((p) => p.remove());
+  else padMap();
+  map.resize();
+}
+$("fix-open").onclick = () => netBuilt && editingFixes(true);
+$("fix-back").onclick = () => editingFixes(false);
+// a click on a road fills the way ID while the panel is open, with no popup (the dashboard's row -> the road's OSM ID)
 const osmIdOf = (row) => { const p = window.RS_SIDE?.props?.[row]; return Array.isArray(p) ? p[ROAD_KEYS.indexOf("osm_id")] : p?.osm_id; };
 document.addEventListener("rs:select", (e) => {
-  if (!netBuilt || $("step7-card").classList.contains("folded") || document.body.classList.contains("editing")) return;
+  if (!document.body.classList.contains("editing-fixes")) return;
+  setTimeout(() => document.querySelectorAll(".maplibregl-popup:not(.rs-tip)").forEach((p) => p.remove()));
   const id = Number(osmIdOf(e.detail?.id));
   if (!Number.isSafeInteger(id) || id <= 0) return;
   fixLoad(id);
   if (!$("fix-turns").hidden) fixJunctions(id).catch((err) => fixErr(err.message));
 });
 $("fix-apply").onclick = () => {
-  if ($("run").disabled) return ($("fix-why").textContent = "The build cannot start yet: check step 3 and step 4.");
+  if ($("run").disabled) return status("The build cannot start yet: check step 3 and step 4.");
+  editingFixes(false);
   $("fix-why").textContent = "Building the networks again with the fixes…";
   $("run").click();
 };

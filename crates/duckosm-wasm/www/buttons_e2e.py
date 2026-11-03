@@ -1,5 +1,5 @@
 """The action buttons of the steps in headless Chromium (Playwright): each is `disabled` until its inputs are ready, with a clearly different look (muted
-background and text from the panel's tokens, not-allowed cursor, no hover change) and a short reason as text under it (no tooltip). Search (a name), GeoJSON
+background and text from the panel's tokens, the normal cursor, no hover change) and a short reason as text under it (no tooltip). Search (a name), GeoJSON
 (an area), Build (an area and a data file), Run (a query), Show on map and Edit levels (while a draw runs or the editor opens). On a computer (light and dark)
 and on a phone (390 x 844, touch).
 
@@ -39,7 +39,7 @@ def run(browser, name, dark=False, **context):
     def off(button, reason_id, text):
         """the button is disabled, looks disabled, has no tooltip, and the reason is the text under it"""
         l = look(button)
-        assert l["disabled"] and l["cursor"] == "not-allowed" and l["opacity"] == "1" and not l["title"], (button, l)
+        assert l["disabled"] and l["cursor"] == "default" and l["opacity"] == "1" and not l["title"], (button, l)
         assert text in why(reason_id), (button, why(reason_id))
         b = page.evaluate("(i) => { const r = document.getElementById(i).getBoundingClientRect(); return [r.bottom]; }", button)
         w = page.evaluate("(i) => { const r = document.getElementById(i).getBoundingClientRect(); return [r.top, r.height]; }", reason_id)
@@ -48,7 +48,7 @@ def run(browser, name, dark=False, **context):
 
     def on(button, reason_id):
         l = look(button)
-        assert not l["disabled"] and l["cursor"] != "not-allowed", (button, l)
+        assert not l["disabled"] and l["cursor"] != "default", (button, l)
         assert why(reason_id) == "", (button, why(reason_id))
         return l
 
@@ -72,7 +72,7 @@ def run(browser, name, dark=False, **context):
     # building: Build is off with its reason
     tap("#run")
     l = look("run")
-    assert l["disabled"] and l["cursor"] == "not-allowed" and not l["title"], ("Build is off while it builds", l)
+    assert l["disabled"] and l["cursor"] == "default" and not l["title"], ("Build is off while it builds", l)
     assert page.evaluate("document.getElementById('run').classList.contains('busy')"), "Build shows a spinner while it builds"
     assert why("buildhint") == "", ("no text line under Build while it builds", why("buildhint"))
     # the progress of the build is in one place (the map's busy box): during the build only one visible element says "Building", and it is in #mapbusy
@@ -107,7 +107,7 @@ def run(browser, name, dark=False, **context):
     # a click on Show on map starts a draw: in the same turn of the page, both buttons are off with their reasons (the page is busy while it draws)
     now = page.evaluate("""() => { document.getElementById('show').click(); const g = (i) => document.getElementById(i);
         return [g('show').disabled, g('show-why').textContent, g('edit-open').disabled, g('edit-why').textContent, getComputedStyle(g('show')).cursor]; }""")
-    assert now[0] and "Drawing" in now[1] and now[2] and "map is drawn" in now[3] and now[4] == "not-allowed", now
+    assert now[0] and "Drawing" in now[1] and now[2] and "map is drawn" in now[3] and now[4] == "default", now
     page.wait_for_function("!window.mapDrawing", timeout=600_000)
     on("show", "show-why")
     on("edit-open", "edit-why")

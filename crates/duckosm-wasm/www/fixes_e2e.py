@@ -46,7 +46,34 @@ with sync_playwright() as p:
     built(page)
     if "folded" in (page.get_attribute("#step7-card", "class") or ""):
         page.click("#step7")
-    assert "No fixes" in page.inner_text("#fix-count")
+    assert "No fixes" in page.inner_text("#fix-sum")
+    # the panel: the page's one panel holds it (the steps and the footer go), and ← Steps brings the steps back
+    page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=600_000)
+    page.click("#fix-open")
+    assert page.is_visible("#fix-panel") and not page.is_visible("#sb .sb-body") and not page.is_visible("#sb .sb-foot")
+    page.click("#fix-back")
+    assert not page.is_visible("#fix-panel") and page.is_visible("#sb .sb-body") and page.is_visible("#sb .sb-foot")
+    page.click("#fix-open")
+    # a click on a road fills the way ID and shows no popup
+    point = page.evaluate("""() => { const m = window.duckMap, c = m.getCanvas().getBoundingClientRect();
+        for (const f of m.queryRenderedFeatures({layers: window.duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id)})) {
+          const g = f.geometry.type === 'LineString' ? f.geometry.coordinates : f.geometry.coordinates[0];
+          const p = m.project(g[Math.floor(g.length / 2)]);
+          const hit = m.queryRenderedFeatures(p, {layers: window.duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id)})[0];
+          if (hit && p.x > 440 && p.x < c.width - 80 && p.y > 40 && p.y < c.height - 60) {
+            // a two-way road is two halves (one feature for each direction, the same `r`): the hover lights the half that is nearest to the pointer
+            const halves = [...new Set(m.queryRenderedFeatures(p, {layers: window.duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id)}).filter((h) => h.properties.r === hit.properties.r).map((h) => h.id))];
+            return [p.x + c.left, p.y + c.top, halves]; } }
+        return null; }""")
+    assert point, "a road on the map"
+    page.mouse.move(point[0], point[1])
+    page.mouse.click(point[0], point[1])
+    page.wait_for_function("document.getElementById('fix-id').value !== ''", timeout=10_000)
+    page.wait_for_timeout(700)
+    assert page.evaluate("document.querySelectorAll('.maplibregl-popup:not(.rs-tip)').length") == 0, "no popup in the fixes panel"
+    print("a click on a road fills the way ID:", page.input_value("#fix-id"), "(no popup)")
+    page.evaluate("window.rsDeselect?.()")
+    page.fill("#fix-id", "")
 
     # a fixes file goes into the rules; the page writes the YAML again (the comment is gone), and the ids are numbers
     fixes_file = out / "start.yaml"
@@ -144,6 +171,7 @@ with sync_playwright() as p:
     walk = rows(page, f"SELECT count(*)::INTEGER AS n FROM walking.edges WHERE osm_id = {way}")[0]["n"]
     assert walk_before > 0 and walk == 0, ("the road is out of the walking network", walk_before, walk)
     assert not page.is_hidden("#step7-card .done"), "the done mark"
+    assert not page.is_visible("#fix-panel") and "1 road rule" in page.inner_text("#fix-sum"), "Apply closes the panel; the card shows the rules"
     print(f"fixes_e2e.py: way {way} has 7 lanes after the build, turn rule from way {frm}; no page errors" if not errors else errors)
 
     browser.close()
