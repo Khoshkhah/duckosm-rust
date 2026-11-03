@@ -8,6 +8,13 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 ### Added
 
 - **Saved areas in the browser page**: each build is saved in the browser (OPFS) with its drawing cache. A banner restores the last area with no build, and the **Saved** tab of card 1 lists, opens and deletes areas (docs/app.md, "Saved areas"). `saved_e2e.py` tests it.
+- **The elevation step, `--dem FILE`** (duckOSM `duckosm elevation --dem`): the build samples a DEM (a GeoTIFF in EPSG:4326, 32-bit
+  floats, uncompressed or deflate) at every node and at every vertex of every edge, as rasterio's `sample` does (the pixel that holds
+  the point, 2 decimals). It writes `elevation_nodes_<mode>.parquet`, `elevation_edges_<mode>.parquet` (`z_from`, `z_to` and
+  `z_vertices`, one height for each vertex) and `elevation_metadata_main.parquet`; the .duckdb gets duckOSM's columns `nodes.ele`,
+  `edges.z_from`, `z_to`, `z_vertices` and `main.elevation_metadata`. On Monaco (Copernicus GLO-30) every value equals Python
+  duckOSM's. New crate: `tiff` 0.11.3 (deflate only).
+
 ### Changed
 
 - The page uses roadstyle `6e025cd4119425a6e5d998c13192757ab817d475` (`0.26.3` and the level editor that opens in the page's map, branch `editor-fast-open`): the level editor's map follows the dashboard theme, and the area's layers (the **Map layers** switch and the legend list) stay inside the editor. The page gives the editor its look (`look`: `map/look.json`), so the editor's roads have the page's palette and colour options. `editor_path_e2e.py` checks the theme, the layers, the Base map box, the legend box and a theme change inside the open editor.
