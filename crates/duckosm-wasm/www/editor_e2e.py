@@ -101,16 +101,19 @@ with sync_playwright() as p:
           const g = f.geometry.type === 'LineString' ? f.geometry.coordinates : f.geometry.coordinates[0];
           const p = m.project(g[Math.floor(g.length / 2)]);
           const hit = m.queryRenderedFeatures(p, {layers: window.duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id)})[0];
-          if (hit && p.x > 420 && p.x < c.width - 80 && p.y > 40 && p.y < c.height - 60) return [p.x + c.left, p.y + c.top, hit.id]; }
+          if (hit && p.x > 420 && p.x < c.width - 80 && p.y > 40 && p.y < c.height - 60) {
+            // a two-way road is two halves (one feature for each direction, the same `r`): the hover lights the half that is nearest to the pointer
+            const halves = [...new Set(m.queryRenderedFeatures(p, {layers: window.duckMap.getStyle().layers.filter((l) => l.id.startsWith('rs-roads-simple')).map((l) => l.id)}).filter((h) => h.properties.r === hit.properties.r).map((h) => h.id))];
+            return [p.x + c.left, p.y + c.top, halves]; } }
         return null; }""")
     assert point, "a road on the map"
     page.evaluate("window.selected = null; document.addEventListener('rs:select', (e) => { window.selected = e.detail.id; })")
     page.mouse.move(point[0], point[1])
-    page.wait_for_function("""(id) => window.duckMap.getFeatureState({source: 'rs-roads', sourceLayer: 'simple', id}).hover === true""",
+    page.wait_for_function("""(ids) => ids.some((id) => window.duckMap.getFeatureState({source: 'rs-roads', sourceLayer: 'simple', id}).hover === true)""",
                            arg=point[2], timeout=10_000)
     page.mouse.click(point[0], point[1])
     page.wait_for_function("window.selected != null", timeout=10_000)
-    print(f"hover and click: road row {point[2]} glows, rs:select gives row {page.evaluate('window.selected')}")
+    print(f"hover and click: a half of the road (row {point[2]}) glows, rs:select gives row {page.evaluate('window.selected')}")
     page.evaluate("window.rsDeselect?.()")
     # a card opens with a click on its heading or on its chevron, and folds with a second click
     if page.evaluate("document.getElementById('step6-card').classList.contains('folded')"):
