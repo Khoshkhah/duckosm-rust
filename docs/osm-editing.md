@@ -119,12 +119,14 @@ Six tabs in two rows: **Road**, **Building**, **Node**, **Turn**, **New road** a
   A map click picks the kind of the active tab. A tab has these sections: **Pick** (a click, or an OSM ID and **Load**), **Selected** (the name, the ids, the data of the networks, all tags), then the fields in sections
   (`group` in `app/presets.json`), **Other tags**, and for a road **Modes** (not in a mode, remove the road) and for a building **Walls**.
   The Node tab says what a node is: one point of OSM, here a traffic signal or a crossing. Its changes show in `features.traffic`, not in the road edges.
+- **The map follows the tab.** A switch of tab zooms the map to the picked object of that tab (blue), or to the junction of the Turn tab. A tab with nothing picked shows nothing in blue.
 - **Add to changes.** The bar at the bottom of each tab has **Add to changes**. The button is disabled until a field differs from the data. It says **Update change** when the object has a change already.
   **Reset form** shows the saved change again. **Remove from changes** takes every change of the object away. The bar says how many fields wait.
   A wall type and the turn rules in the Turn tab follow the same rule: a choice is a change only after **Add to changes**, except a wall type, which goes to the changes when you pick it.
 - **Turn.** The road that the turn starts on, the junction, and a rule for each road that leaves it. **Add to changes** adds all chosen rules at once. The rules are for the driving mode.
 - **New road.** **Draw a new road**, then the points, then the sections for the kind, name and other tags. **Add to changes** finishes the road.
-- **Changes.** The list is in groups (Roads, Buildings, Walls, Nodes, Turn rules, New roads). Each item shows each field as `was → now` and has a **Delete** button. A click on an item picks the object in its tab.
+  A new road that is in the changes opens in this tab for edit: its tags change, and its points stay (to change them, remove the road and draw it again).
+- **Changes.** The list is in groups (Roads, Buildings, Walls, Nodes, Turn rules, New roads). Each item shows each field as `was → now` and has a **Delete** button. A click on an item opens it in its tab for edit (a road, a building, a node, a turn rule or a new road) and zooms the map to it.
   At the top: **Undo**, **Redo**, **Download**, **Clear all**. At the bottom: the one **Build again** button, with the number of changes.
 - **Edits that wait.** A tab with a field that is not added has an amber dot. The Changes tab then lists them ("Road tab: 2 fields not added") with a link to the tab, and **Build again** waits with its reason under it.
 - **Kept changes.** The page keeps the changes in this browser for each area name. A reload of the page does not lose them. A build keeps the picked objects of all tabs.
