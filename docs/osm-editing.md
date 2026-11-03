@@ -41,12 +41,10 @@ in a usable form: building faces, roof type, colors and floors. Only the section
 | Tag set on a way | `overrides[].tags` | network ways and raw ways (so buildings too) | built, no building form |
 | Turn rule | `turn_restrictions[]` | edge graph, driving | built |
 | New road | `new_ways[]` | network and raw | built, no form |
-| Tag delete | `delete_tags: [key]` in a rule | same as tag set | new (M1) |
-| Tag set or delete on a node | `node_tags[]` | `raw.nodes`, so `features.traffic` (signals, crossings) | new (M1) |
-| Tag set or delete on a relation | `relation_tags[]` | `raw.relations`, so multipolygon buildings | new (M1) |
+| Tag set and delete on a way, node or relation | `extra.tag_edits[]`: `type`, `id`, `set`, `delete` | ways as read (network) and `raw.*` (layers); nodes and relations: `raw.*` | built (M1, 2026-11-03) |
 | Face type of a building wall | `building_faces[]` | `features.building_faces` | new (M4) |
 
-The new keys go under one top-level key, `extra`. Then a file with only duckOSM keys stays a valid duckOSM file. Open point 2 asks Kaveh to confirm this.
+The new keys go under one top-level key, `extra`. Then a file with only duckOSM keys stays a valid duckOSM file. I checked duckOSM (Python): it reads only `overrides`, so it ignores `extra`.
 
 ### One tag editor, with presets
 
@@ -135,7 +133,7 @@ Each milestone is one pull request. Each one has tests on Monaco, a phone-viewpo
 | # | Work | Main files | Proof |
 |---|---|---|---|
 | M0 | Split `claude/fixes-panel`: the download speed and the cursor change go first, as a small pull request. The panel version 1 stays in the branch. | `app/regions.js`, `index.html` | Tests of the page; South Coast first bytes in 3 s. |
-| M1 | Rust core: `delete_tags`, `node_tags`, `relation_tags` under `extra`; the parser; `main.fixes_applied`. Then the wasm rebuild. | `config.rs`, `fixes.rs`, `raw.rs`, `duckosm-build` | Unit tests. Goldens unchanged. A Monaco file with a sidewalk tag changes the walking network. |
+| M1 | Rust core: `extra.tag_edits` (set and delete tags of a way, a node or a relation); the parser. Then the wasm rebuild. The table `main.fixes_applied` moved to M5. | `config.rs`, `fixes.rs`, `raw.rs`, `duckosm-build` | Unit tests. Goldens unchanged. A Monaco file with a sidewalk tag changes the walking network. |
 | M2 | Panel version 2: selection with a kind filter, full data, preset tag editor, **Changes** tab with map colors, undo and redo, no YAML text, the turn flow fixed. Presets for roads and crossings. | `index.html`, `app/fixes.js`, `app/presets.json` | `fixes_e2e.py` extended: select a road, the form has its data; `sidewalk` and `cycleway` change the tables; a change shows amber. |
 | M3 | Building info: preset fields for buildings and `features.building_info`. Check that the 3D buildings tool shows height and levels. | `features` SQL step, `presets.json` | A rule that sets `building:levels` changes `levels` in the table. |
 | M4 | Building faces: `building_faces.rs` (port, fix, tests), the table, the map layer, face edits in the panel. | `duckosm-core`, `duckosm-parquet`, `index.html` | A Monaco test of the faces (counts for each type, the fault of the old branch). The same rows on two builds. |
@@ -152,7 +150,7 @@ Order: M0, M1, M2, M3, M4. M2 can start while M1 is in review, because the page 
 
 ## Risks
 
-- duckOSM (Python) can reject a top-level key that it does not know. M1 starts with a check of this, with the real duckOSM.
+- The audit table `main.fixes_applied` (old and new values) is not in M1. M2 shows the new values from the rules. The old values need the table, so it moves to M5 unless M2 needs it.
 - A tag rule can make a bad file (a wrong value for `lanes`). The page checks the types before it saves a rule. The Rust parser is the last check, and its error shows in the panel.
 - Face classes depend on thresholds (distance, angle). M4 makes them named constants with a test for each, and shows them in the docs.
 - The 3D buildings tool of roadstyle can ignore `height`, `levels` and colors. M3 checks this first. If it ignores them, the plan needs a change in roadstyle.
