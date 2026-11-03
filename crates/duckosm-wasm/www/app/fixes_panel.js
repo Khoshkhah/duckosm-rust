@@ -19,6 +19,9 @@ const HINTS = {
   node: ["A node is one point of OSM. Here it is a traffic signal, a crossing, or a junction of the roads. To add a traffic signal, pick the junction (a gray dot) and press Add a traffic signal here. A change shows in the layer table features.traffic, not in the road edges.", "Click a dot on the map, or type the OSM node ID. The signals and crossings show at zoom 14 or more, and the junctions at zoom 16 or more."],
 };
 const TURN_OUT = "#16a34a";                  // the roads that leave the junction of the Turn tab
+const DELETED = "#dc2626";                     // an object that the changes delete: red on the map and in the list
+const NO_SIGNAL = new Set(["motorway", "motorway_link", "trunk", "trunk_link"]);
+const CROSSABLE = new Set(["residential", "living_street", "service", "unclassified", "tertiary", "secondary", "primary"]);
 const NODE_COLORS = { signal: "#e11d48", crossing: "#0d9488", other: "#6b7280", junction: "#9ca3af" };
 const FACE_COLORS = { front: "#16a34a", back: "#dc2626", side: "#6b7280", party: "#7c3aed" };
 const FACE_NAMES = { front: "Front", back: "Back", side: "Side", party: "Party wall" };
@@ -68,6 +71,12 @@ export async function initFixesPanel(ctx) {
   async function loadData(type, id, k) {
     const out = { type, id, kind: k, tags: {}, mode: {}, facts: [], found: false, lonlat: null };
     if (type === "node") {
+      // the roads of the driving network at the node: the number of different neighbour nodes (a plain road has 2, a T junction 3) and the classes
+      out.arms = 0; out.classes = [];
+      if (built("driving", "edges")) {
+        const nb = (await safe(`SELECT count(DISTINCT CASE WHEN source = ${id} THEN target ELSE source END)::INTEGER AS arms, string_agg(DISTINCT highway, ',') AS cls FROM driving.edges WHERE source = ${id} OR target = ${id}`))[0];
+        out.arms = nb?.arms ?? 0; out.classes = nb?.cls ? String(nb.cls).split(",") : [];
+      }
       const r = (await safe(`SELECT ST_X(geom) AS lon, ST_Y(geom) AS lat, ${TAGS} FROM features.traffic WHERE osm_id = ${id}`))[0];
       if (r) { out.found = true; out.tags = tagMap(r); out.lonlat = [r.lon, r.lat]; out.facts.push(`Node ${id}, at ${r.lon.toFixed(5)}, ${r.lat.toFixed(5)}`); return out; }
       for (const m of modes()) {                      // a node of the roads (a junction) with no traffic tag in the data
@@ -102,6 +111,21 @@ export async function initFixesPanel(ctx) {
   }
 
   // ---- the panel: what is selected
+  // why a traffic signal or a crossing cannot go on this node ("" when it can): the node must be on a road of the driving network, a signal needs a
+  // junction of at least 3 roads, a crossing needs a crossable road class, a motorway or a trunk road has neither, and a node has one kind
+  function nodeRule(kind, d) {
+    if (!d?.arms) return "This node is not on a road of the driving network.";
+    if (d.classes.some((c) => NO_SIGNAL.has(c))) return "A motorway or a trunk road meets here: no signal and no crossing.";
+    const cur = d.tags?.highway;
+    if (kind === "traffic_signals") {
+      if (cur === "crossing") return "This node is a crossing already.";
+      if (d.arms < 3) return "A traffic signal needs a junction of at least 3 roads.";
+    } else if (kind === "crossing") {
+      if (cur === "traffic_signals") return "This node is a traffic signal already.";
+      if (!d.classes.some((c) => CROSSABLE.has(c))) return "A crossing needs a road of the class residential, service, tertiary, secondary or primary here.";
+    }
+    return "";
+  }
   const presetsOf = () => presets[sel?.kind ?? kind] ?? [];
   const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
   const isRuleKey = (f) => !!f.rule;
@@ -149,6 +173,35 @@ export async function initFixesPanel(ctx) {
     paintDots();
   }
 
+  // the section Delete: a road or a building way is removed from the data (the rule `remove` of duckOSM: it is in no network and no layer after the next build), a building that is a
+  // relation loses its `building` tag, and a signal or a crossing loses its tags. The delete is part of the draft until Add to changes.
+  function deleteSection(rule) {
+    if (!sel || !data) return "";
+    const what = sel.kind === "road" ? "road" : sel.kind === "building" ? "building" : data.tags.highway === "traffic_signals" ? "traffic signal" : data.tags.highway === "crossing" ? "crossing" : null;
+    if (!what) return "";
+    const gone = deletedNow();
+    const effect = what === "road" || what === "building" ? "It is in no network and no layer after the next build." : "It has no traffic tag after the next build.";
+    return `<section class="fsec danger"><h3>Delete</h3>` + (gone && !touched.size
+      ? `<p class="small" style="margin:0"><b>This ${what} is deleted in the changes.</b> ${effect} To take it back, use Remove from changes.</p>`
+      : gone
+      ? `<p class="small"><b>This ${what} will be deleted from the data.</b> ${effect} Press Add to changes to keep this.</p><button type="button" class="btn" id="fix-delete" data-undo="1">Undo the delete</button>`
+      : `<p class="why" style="margin:0 0 8px">Delete this ${what} from the data. ${sel.kind === "node" ? "The node stays on its road, without its traffic tag." : "It is a change like the others: the data has it until you build again."}</p><button type="button" class="btn" id="fix-delete">Delete this ${what}</button>`) + `</section>`;
+  }
+  // whether the draft deletes the object: `remove` (a way), no `building` tag (a relation), no traffic tag (a node)
+  function deletedNow() {
+    if (!sel || !data) return false;
+    if (sel.kind === "node") return !!data.tags.highway && draft.highway === "";
+    if (sel.kind === "building" && sel.type === "relation") return !!data.tags.building && draft.building === "";
+    return !!draft.remove;
+  }
+  function toggleDelete() {
+    const undo = !!$("fix-delete")?.dataset.undo;
+    if (sel.kind === "node") {
+      for (const k of ["highway", "crossing"]) if (k in draft && (data.tags[k] || k === "highway")) { draft[k] = undo ? initialDraft()[k] : ""; touched.add(k); }
+    } else if (sel.kind === "building" && sel.type === "relation") { draft.building = undo ? initialDraft().building : ""; touched.add("building"); }
+    else { draft.remove = !undo; touched.add("remove"); }
+    renderForm();
+  }
   function renderForm() {
     const box = $("fix-form");
     if (!sel || !data) { box.innerHTML = ""; $("fix-actions").hidden = true; return paintDots(); }
@@ -157,7 +210,7 @@ export async function initFixesPanel(ctx) {
     const section = (title, inner) => `<section class="fsec"><h3>${title}</h3>${inner}</section>`;
     let html = [...new Set(fields.map((f) => f.group ?? "Fields"))].map((g) => section(esc(g), `<div class="grid2 fixgrid">${fields.filter((f) => (f.group ?? "Fields") === g).map(row).join("")}</div>`)).join("");
     if (sel.kind === "road") {
-      html += section("Modes", `<div class="checks" role="group" aria-label="Exclude from"><span class="small">Not in</span>${["driving", "walking", "cycling"].map((m) => `<label><input type="checkbox" name="fix-ex" value="${m}"${draft.exclude_modes.includes(m) ? " checked" : ""}>${m[0].toUpperCase() + m.slice(1)}</label>`).join("")}<label><input type="checkbox" id="fix-remove"${draft.remove ? " checked" : ""}>Remove the road</label></div>`);
+      html += section("Modes", `<div class="checks" role="group" aria-label="Exclude from"><span class="small">Not in</span>${["driving", "walking", "cycling"].map((m) => `<label><input type="checkbox" name="fix-ex" value="${m}"${draft.exclude_modes.includes(m) ? " checked" : ""}>${m[0].toUpperCase() + m.slice(1)}</label>`).join("")}</div>`);
     }
     if (sel.kind === "building" && walls.length) {
       html += section(`Walls <span class="muted">(${walls.length})</span>`, `<div class="wallbar"><button type="button" class="btn sm" data-wall-nav="-1">‹ Previous</button><button type="button" class="btn sm" data-wall-nav="1">Next ›</button><button type="button" class="btn sm" data-wall-nav="0" id="fix-wall-off">Unselect</button></div>
@@ -175,6 +228,7 @@ export async function initFixesPanel(ctx) {
     html += section("Other tags", `<div class="other">${other.map((k) => `<div class="otherrow${k in rule.set || rule.delete.includes(k) ? " edited" : ""}"><span class="k" title="${esc(k)}">${esc(k)}</span><input type="text" data-key="${esc(k)}" value="${esc(draft[k])}" aria-label="${esc(k)}"><button type="button" class="btn sm" data-clear="${esc(k)}" title="Delete this tag" aria-label="Delete ${esc(k)}">×</button></div>`).join("") || '<span class="small muted">None.</span>'}
       <div class="otherrow add"><input type="text" id="fix-addkey" placeholder="key" aria-label="New tag, key"><input type="text" id="fix-addval" placeholder="value" aria-label="New tag, value"><button type="button" class="btn sm" id="fix-add">Add</button></div></div>
       <div class="grid2 fixgrid" style="margin-top:8px"><label for="fix-note" class="small">Note</label><input type="text" id="fix-note" value="${esc(draft.note)}" placeholder="Why"></div>`);
+    html += deleteSection(rule);
     box.innerHTML = html;
     $("fix-actions").hidden = false;
     paintBar(); paintWalls();
@@ -198,7 +252,12 @@ export async function initFixesPanel(ctx) {
     const name = data.tags.name ? ` “${esc(data.tags.name)}”` : "";
     const head = `${KIND_NAME[sel.kind === "building" && sel.type === "relation" ? "relation" : sel.kind]} ${sel.type} ${sel.id}${name}`;
     const tagCount = Object.keys(data.tags).length;
-    const quick = sel.kind === "node" && data.found && !data.tags.highway ? `<div class="row" style="margin-top:8px"><button type="button" class="btn sm" data-quick="traffic_signals">Add a traffic signal here</button><button type="button" class="btn sm" data-quick="crossing">Add a crossing here</button></div>` : "";
+    let quick = "";
+    if (sel.kind === "node" && data.found && !data.tags.highway) {
+      const why = { traffic_signals: nodeRule("traffic_signals", data), crossing: nodeRule("crossing", data) };
+      quick = `<div class="row" style="margin-top:8px"><button type="button" class="btn sm" data-quick="traffic_signals"${why.traffic_signals ? " disabled" : ""}>Add a traffic signal here</button><button type="button" class="btn sm" data-quick="crossing"${why.crossing ? " disabled" : ""}>Add a crossing here</button></div>`
+        + [["Traffic signal", why.traffic_signals], ["Crossing", why.crossing]].filter(([, w]) => w).map(([n, w]) => `<p class="why quickwhy" style="margin:4px 0 0">${n}: ${esc(w)}</p>`).join("");
+    }
     box.innerHTML = `<div class="objhead">${head}</div>${data.found ? "" : '<p class="why">Not found in this area. A rule for this ID still works if the ID is right.</p>'}${data.facts.map((f) => `<div class="small muted">${esc(f)}</div>`).join("")}
       <details class="alltags"><summary>All tags in the data (${tagCount})</summary><table>${Object.entries(data.tags).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("") || '<tr><td colspan="2" class="muted">No tags (build with the layers on to see them all).</td></tr>'}</table></details>${quick}`;
   }
@@ -265,7 +324,6 @@ export async function initFixesPanel(ctx) {
       return;
     }
     if (el.name === "fix-ex") { draft.exclude_modes = [...document.querySelectorAll("input[name=fix-ex]:checked")].map((c) => c.value); touched.add("exclude_modes"); return paintBar(); }
-    if (el.id === "fix-remove") { draft.remove = el.checked; touched.add("remove"); return paintBar(); }
     if (el.id === "fix-note") { draft.note = el.value; touched.add("note"); return paintBar(); }
     if (el.dataset.for) { const t = $(el.dataset.for); t.value = el.value; draft[t.dataset.key] = el.value; touched.add(t.dataset.key); document.querySelector(`label[for="${t.id}"]`)?.classList.add("edited"); return paintBar(); }
     const k = el.dataset?.key;
@@ -278,6 +336,10 @@ export async function initFixesPanel(ctx) {
 
   function save() {
     if (!sel || !data) return status("Pick an object first.");
+    if (sel.kind === "node" && touched.has("highway") && ["traffic_signals", "crossing"].includes(draft.highway) && draft.highway !== data.tags.highway) {
+      const why = nodeRule(draft.highway, data);
+      if (why) return status(why, 7000);
+    }
     const rule = structuredClone(F.ruleOf(doc, sel.type, sel.id)), fields = presetsOf(), ruleFields = new Map(fields.filter(isRuleKey).map((f) => [f.key, f]));
     const dataMode = data.mode ?? {};
     for (const k of touched) {
@@ -389,14 +451,14 @@ export async function initFixesPanel(ctx) {
   async function renderChanges() {
     await classify();
     const objs = F.objects(doc), turns = doc.turn_restrictions ?? [], faces = F.faceEdits(doc), roads = F.newWays(doc);
-    const item = (attrs, label, inner) => `<div class="chg" ${attrs} tabindex="0" role="button"><div class="chgtop"><b>${label}</b><button type="button" class="btn sm" data-x aria-label="Delete this change">×</button></div>${inner}</div>`;
+    const item = (attrs, label, inner, cls = "") => `<div class="chg${cls}" ${attrs} tabindex="0" role="button"><div class="chgtop"><b>${label}</b><button type="button" class="btn sm" data-x aria-label="Delete this change">×</button></div>${inner}</div>`;
     const bits = (list) => list.length ? `<ul class="bits">${list.map(({ k, was, now }) => `<li><span class="k">${esc(k)}</span><span>${was === null ? "" : `<span class="was">${was === "" ? "none" : esc(was)}</span> → `}${now === null ? "(deleted)" : esc(now)}</span></li>`).join("")}</ul>` : '<div class="small">(no change in it)</div>';
     const note = (t) => `<div class="small">${esc(t)}</div>`;
     const group = (title, items) => (items.length ? `<div class="fix-group">${title} (${items.length})</div>${items.join("")}` : "");
     const by = { road: [], building: [], node: [], relation: [] };
     for (const o of objs) {
       const k = o.type === "way" ? kinds.get("way" + o.id) ?? "road" : o.type, nm = names.get(o.type + o.id);
-      by[k]?.push(item(`data-type="${o.type}" data-id="${o.id}" data-kind="${k === "relation" ? "building" : k}"`, `${KIND_NAME[k] ?? k} ${o.id}${nm ? ` · ${esc(nm)}` : ""}`, bits(F.describeBits(doc, o.type, o.id))));
+      by[k]?.push(item(`data-type="${o.type}" data-id="${o.id}" data-kind="${k === "relation" ? "building" : k}"`, `${KIND_NAME[k] ?? k} ${o.id}${nm ? ` · ${esc(nm)}` : ""}`, bits(F.describeBits(doc, o.type, o.id)), F.ruleOf(doc, o.type, o.id).mode.remove ? " del" : ""));
     }
     const newRoads = roads.map((w) => item(`data-newway="${w.id}"`, `New road · ${w.id}`, note(`${w.tags?.highway ?? "road"}${w.tags?.name ? ` “${w.tags.name}”` : ""}, ${w.nodes.length} points${w.nodes.some(Number.isInteger) ? ", joins a junction" : ""}`)));
     const walls = faces.map((f) => item(`data-face="${f.building}|${f.from_node}|${f.to_node}"`, `Wall · building ${f.building}`, note(`${FACE_NAMES[f.type] ?? f.type}, between nodes ${f.from_node} and ${f.to_node}`)));
@@ -512,7 +574,8 @@ export async function initFixesPanel(ctx) {
       map.addLayer({ id: "fix-turn-hl", type: "line", source: "fix-turn", filter: ["==", ["get", "id"], -1], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#111827", "line-width": 12, "line-opacity": 0.85 } });
       map.addLayer({ id: "fix-turn-line", type: "line", source: "fix-turn", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": TURN_OUT, "line-width": 6, "line-opacity": 0.95 } });
     }
-    for (const [src, color, w, fa] of [["fix-edits", AMBER, 5, 0.28], ["fix-sel", BLUE, 7, 0.2]]) {
+    for (const [src, color0, w, fa] of [["fix-edits", AMBER, 5, 0.28], ["fix-sel", BLUE, 7, 0.2]]) {
+      const color = src === "fix-edits" ? ["case", ["==", ["get", "d"], 1], DELETED, AMBER] : color0;          // a deleted object is red
       if (map.getSource(src)) continue;
       map.addSource(src, { type: "geojson", data: EMPTY });
       map.addLayer({ id: `${src}-fill`, type: "fill", source: src, filter: ["==", ["geometry-type"], "Polygon"], paint: { "fill-color": color, "fill-opacity": fa } });
@@ -621,7 +684,8 @@ export async function initFixesPanel(ctx) {
         if (map.getZoom() >= 16 && modes().length) {                  // the junctions of the roads (OSM nodes where two ways meet) that have no traffic tag: a place for a new signal
           const m = modes()[0];
           feats.push(...(await safe(`SELECT n.node_id AS id, ST_X(n.geom) AS x, ST_Y(n.geom) AS y FROM ${m}.nodes n WHERE ST_X(n.geom) BETWEEN ${b.getWest()} AND ${b.getEast()} AND ST_Y(n.geom) BETWEEN ${b.getSouth()} AND ${b.getNorth()}
-            AND n.node_id IN (SELECT node_id FROM ${m}.way_nodes GROUP BY node_id HAVING count(DISTINCT way_id) >= 2) AND n.node_id NOT IN (SELECT osm_id FROM features.traffic) LIMIT 5000`))
+            AND n.node_id IN (SELECT nid FROM (SELECT source AS nid, target AS o FROM ${m}.edges UNION ALL SELECT target, source FROM ${m}.edges) GROUP BY nid HAVING count(DISTINCT o) >= 3)
+            AND n.node_id IN (SELECT node_id FROM ${m}.way_nodes) AND n.node_id NOT IN (SELECT osm_id FROM features.traffic) LIMIT 5000`))
             .map((r) => ({ type: "Feature", properties: { id: Number(r.id), k: "junction", kind: "", name: "" }, geometry: { type: "Point", coordinates: [r.x, r.y] } })));
         }
         const n = (k) => feats.filter((f) => f.properties.k === k).length;
@@ -666,6 +730,8 @@ export async function initFixesPanel(ctx) {
     if (!map.isStyleLoaded?.() && !map.getSource("fix-edits")) await new Promise((ok) => map.once("idle", ok));
     ensureLayers();
     const list = F.objects(doc), feats = await shapes(list);
+    const gone = new Set(list.filter((o) => F.ruleOf(doc, o.type, o.id).mode.remove).map((o) => o.id));
+    for (const f of feats) f.properties.d = gone.has(f.properties.id) ? 1 : 0;
     for (const w of F.newWays(doc)) { const line = await newWayLine(w); if (line.length > 1) feats.push({ type: "Feature", properties: { id: w.id, road: 1 }, geometry: { type: "LineString", coordinates: line } }); }
     const via = [...new Set((doc.turn_restrictions ?? []).map((t) => t.via_node))].filter((n) => Number.isSafeInteger(n));
     if (via.length) for (const r of await safe(`SELECT node_id AS id, ST_AsGeoJSON(geom) AS g FROM driving.nodes WHERE node_id IN (${via.join(",")})`)) { try { feats.push({ type: "Feature", properties: { turn: 1 }, geometry: JSON.parse(r.g) }); } catch { /* no geometry */ } }
@@ -890,6 +956,7 @@ export async function initFixesPanel(ctx) {
   });
   $("fix-save").onclick = save;
   $("fix-unselect").onclick = unselect;
+  $("fix-form").addEventListener("click", (e) => { if (e.target.closest("#fix-delete")) toggleDelete(); });
   $("fix-obj").addEventListener("click", (e) => {                       // the quick buttons of a node that has no traffic tag: they fill the Kind field; Add to changes keeps it
     const q = e.target.closest("[data-quick]");
     if (!q || sel?.kind !== "node" || !data) return;

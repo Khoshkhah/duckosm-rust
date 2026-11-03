@@ -120,7 +120,7 @@ export function objects(doc) {
 export function describeBits(doc, type, id) {
   const { mode, set, delete: del, was } = ruleOf(doc, type, id), bits = [];
   const from = (k) => (k in was ? (was[k] === null || was[k] === "" ? "" : String(was[k])) : null);
-  for (const [k, v] of Object.entries(mode)) bits.push(k === "exclude_modes" ? { k: "not in", was: null, now: v.join(", ") } : k === "remove" ? { k: "road", was: null, now: "removed" } : { k, was: from(k), now: String(v) });
+  for (const [k, v] of Object.entries(mode)) bits.push(k === "exclude_modes" ? { k: "not in", was: null, now: v.join(", ") } : k === "remove" ? { k: "object", was: null, now: "deleted from the data" } : { k, was: from(k), now: String(v) });
   for (const [k, v] of Object.entries(set)) bits.push({ k, was: from(k), now: String(v) });
   for (const k of del) bits.push({ k, was: from(k), now: null });
   return bits;

@@ -428,7 +428,9 @@ with sync_playwright() as p:
     print("out and back: 6 changes in the list, the Road tab has its road")
 
     # add a traffic signal at a junction of the roads: a gray dot, a click on it, the quick button, Add to changes, build again, and the node is in features.traffic
-    j = rows(page, "SELECT n.node_id AS id, ST_X(n.geom) AS x, ST_Y(n.geom) AS y FROM driving.nodes n WHERE n.node_id IN (SELECT node_id FROM driving.way_nodes GROUP BY node_id HAVING count(DISTINCT way_id) >= 2) "
+    ARMS = "(SELECT nid FROM (SELECT source AS nid, target AS o FROM driving.edges UNION ALL SELECT target, source FROM driving.edges) GROUP BY nid HAVING count(DISTINCT o) >= 3)"
+    j = rows(page, "SELECT n.node_id AS id, ST_X(n.geom) AS x, ST_Y(n.geom) AS y FROM driving.nodes n WHERE n.node_id IN " + ARMS + " AND n.node_id IN (SELECT node_id FROM driving.way_nodes) "
+                   "AND NOT EXISTS (SELECT 1 FROM driving.edges e WHERE (e.source = n.node_id OR e.target = n.node_id) AND e.highway IN ('motorway', 'motorway_link', 'trunk', 'trunk_link')) "
                    "AND NOT EXISTS (SELECT 1 FROM features.traffic t WHERE abs(ST_X(t.geom) - ST_X(n.geom)) < 0.0004 AND abs(ST_Y(t.geom) - ST_Y(n.geom)) < 0.0004) LIMIT 1")[0]
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=60_000)
     page.wait_for_function("!window.duckMap.isMoving()")
@@ -450,11 +452,46 @@ with sync_playwright() as p:
     page.click("#fix-save")
     y = text(page)
     assert f"id: {j['id']}" in y and "highway: traffic_signals" in y, y
+    # the constraints: a plain road node (2 roads) takes no traffic signal, in the buttons and in the Kind field
+    plain = rows(page, "SELECT nid::BIGINT AS id FROM (SELECT source AS nid, target AS o FROM driving.edges UNION ALL SELECT target, source FROM driving.edges) GROUP BY nid HAVING count(DISTINCT o) = 2 "
+                       "AND nid IN (SELECT node_id FROM driving.way_nodes) AND nid NOT IN (SELECT osm_id FROM features.traffic) LIMIT 1")[0]["id"]
+    page.evaluate(f"window.fixesPanel.select('node', 'node', {plain})")
+    page.wait_for_function(f"document.querySelector('#fix-obj .objhead')?.textContent.includes('node {plain}') && document.querySelector('[data-quick=traffic_signals]')", timeout=20_000)
+    assert page.is_disabled("[data-quick=traffic_signals]") and "at least 3 roads" in page.inner_text("#fix-obj .quickwhy"), page.inner_text("#fix-obj")
+    page.select_option("#fixf-highway", "traffic_signals")
+    page.click("#fix-save")
+    assert f"id: {plain}" not in text(page), "a signal is refused on a node with 2 roads"
+    page.click("#fix-unselect")
+    print("the constraints: a node with 2 roads takes no traffic signal (the button is off with its reason, and Add to changes refuses it)")
+
+    # Delete: a building (a way) and a road are deleted from the data (the rule `remove`), and they are in no table after the build
+    ob = rows(page, f"SELECT osm_id FROM features.buildings WHERE osm_type = 'way' AND osm_id != {b['osm_id']} LIMIT 1")[0]["osm_id"]
+    page.evaluate(f"window.fixesPanel.select('building', 'way', {ob}, {{zoom: true}})")
+    page.wait_for_selector("#fix-delete", timeout=20_000)
+    page.click("#fix-delete")
+    assert "will be deleted" in page.inner_text(".fsec.danger") and page.is_visible("#fix-delete"), page.inner_text(".fsec.danger")
+    page.click("#fix-save")
+    y = text(page)
+    assert f"osm_id: {ob}" in y and "remove: true" in y, y
+    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['fix-edits-fill', 'fix-edits-line']}).some((f) => f.properties.d === 1)", timeout=20_000)      # a deleted object is red
+    orr = rows(page, f"SELECT osm_id FROM driving.edges WHERE osm_id NOT IN ({ROAD}, {frm}) AND osm_id < 9000000000000 AND source != {j['id']} AND target != {j['id']} ORDER BY length_m LIMIT 1")[0]["osm_id"]
+    page.click("#fix-tab-road")
+    page.evaluate(f"window.fixesPanel.select('road', 'way', {orr})")
+    page.wait_for_selector("#fix-delete", timeout=20_000)
+    page.click("#fix-delete"); page.click("#fix-save")
+    assert f"osm_id: {orr}" in text(page)
+    page.click("#fix-tab-changes")
+    lst2 = page.inner_text("#fix-list")
+    assert "deleted from the data" in lst2 and page.locator("#fix-list .chg.del").count() == 2, lst2
+    print(f"Delete: a building ({ob}) and a road ({orr}) are in the changes as deleted, red on the map")
+
     page.click("#fix-tab-changes")
     page.click("#fix-apply")
     page.wait_for_function("document.getElementById('run').hasAttribute('aria-busy')", timeout=30_000)
     built(page)
     page.wait_for_function("document.getElementById('fix-why').textContent.includes('Built with these fixes')", timeout=60_000)
+    assert rows(page, f"SELECT count(*)::INTEGER AS n FROM features.buildings WHERE osm_id = {ob} AND osm_type = 'way'")[0]["n"] == 0, "the deleted building is not in features.buildings"
+    assert rows(page, f"SELECT count(*)::INTEGER AS n FROM driving.edges WHERE osm_id = {orr}")[0]["n"] == 0, "the deleted road is not in driving.edges"
     kind = rows(page, f"SELECT map_extract(tags, 'highway')[1] AS h FROM features.traffic WHERE osm_id = {j['id']}")
     assert kind and kind[0]["h"] == "traffic_signals", ("the new signal is in features.traffic", kind)
     # card 5 has the fixes file of this build (.yaml)
