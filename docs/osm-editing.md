@@ -128,6 +128,7 @@ Six tabs in two rows: **Road**, **Building**, **Node**, **Turn**, **New road** a
   **Reset form** shows the saved change again. **Remove from changes** takes every change of the object away. The bar says how many fields wait.
   A wall type and the turn rules in the Turn tab follow the same rule: a choice is a change only after **Add to changes**, except a wall type, which goes to the changes when you pick it.
 - **Turn.** The road that the turn starts on, the junction, and a rule for each road that leaves it. **Add to changes** adds all chosen rules at once. The rules are for the driving mode.
+  The junction list says how many roads leave each junction and puts the junction with the most first. A road leaves a junction only when it is in the driving network and its direction goes away from the junction, so a through road with a one-way side road that arrives has no rule to give from the through road. When no other road leaves, the tab says why and lists the roads that arrive: click one to start from it.
   The map shows the road that the turn starts on (blue), the junction (a ring) and the roads that leave it (green). A hover on a row of the list outlines that road. **Clear** takes the road out of the tab.
 - **New road.** **Draw a new road**, then the points, then the sections for the kind, name and other tags. **Add to changes** finishes the road.
   A new road that is in the changes opens in this tab for edit: its tags change, and its points stay (to change them, remove the road and draw it again).

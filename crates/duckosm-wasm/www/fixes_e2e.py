@@ -249,7 +249,8 @@ with sync_playwright() as p:
     print(f"a node: {n['osm_id']}, a preset field, an added tag and a deleted tag")
 
     # a turn rule: the road that the road click gave has a junction; the rule goes into the list of changes (and into the file)
-    frm = rows(page, "SELECT a.osm_id FROM driving.edges a JOIN driving.edges b ON b.source = a.target AND b.osm_id != a.osm_id LIMIT 1")[0]["osm_id"]
+    frm = rows(page, "SELECT a.osm_id FROM driving.edges a JOIN driving.edges b ON b.source = a.target AND b.osm_id != a.osm_id "
+                     "JOIN driving.edges c ON c.target = a.target AND c.osm_id NOT IN (a.osm_id, b.osm_id) LIMIT 1")[0]["osm_id"]
     page.click("#fix-tab-turns")
     page.fill("#fix-from", str(frm))
     page.click("#fix-turn-find")
@@ -262,6 +263,19 @@ with sync_playwright() as p:
     assert page.get_attribute("#fix-out .turn", "data-to") in page.evaluate("JSON.stringify(duckMap.getFilter('fix-turn-hl'))"), "a hover on a row outlines its road"
     assert page.is_visible("#fix-turn-legend")
     print("the Turn tab draws the start road, the junction ring and the roads that leave it")
+    # the junction list says how many roads leave each junction, and the roads that arrive can be the start road
+    assert "leave" in page.evaluate("document.querySelector('#fix-via').selectedOptions[0].textContent"), "the junction list has the number of roads that leave"
+    arr = page.get_attribute("#fix-out [data-from]", "data-from")
+    page.click("#fix-out [data-from]")
+    page.wait_for_function(f"document.getElementById('fix-from').value === '{arr}'", timeout=10_000)
+    # a road that ends in a dead end: no road leaves, and the tab says why and lists the roads that arrive
+    dead = rows(page, "SELECT e.osm_id FROM driving.edges e GROUP BY e.osm_id HAVING bool_and(NOT EXISTS (SELECT 1 FROM driving.edges o WHERE o.source = e.target AND o.osm_id != e.osm_id)) LIMIT 1")
+    if dead:
+        page.fill("#fix-from", str(dead[0]["osm_id"])); page.click("#fix-turn-find")
+        page.wait_for_function("document.getElementById('fix-out').textContent.includes('No other road leaves this junction')", timeout=10_000)
+    page.fill("#fix-from", str(frm)); page.click("#fix-turn-find")
+    page.wait_for_selector("#fix-out .turn")
+    print("the Turn tab: the junctions say how many roads leave, a dead end says why, and an arriving road can be the start road")
     page.select_option("#fix-out .turn select", "no_left_turn")
     assert "not added yet" in page.inner_text("#fix-turn-note") and "restriction" not in text(page), "a choice is not a change until Add to changes"
     assert page.is_visible("#fix-tab-turns .dot")

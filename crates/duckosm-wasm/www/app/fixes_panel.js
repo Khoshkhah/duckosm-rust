@@ -428,10 +428,13 @@ export async function initFixesPanel(ctx) {
   const turnSelect = (cur) => `<select aria-label="Turn rule"><option value="">Allowed</option>${Object.entries(TURN_TYPES).map(([k, v]) => `<option value="${k}"${cur === k ? " selected" : ""}>${v}</option>`).join("")}</select>`;
   async function findTurns(from, via = null, { zoom = false } = {}) {
     $("fix-from").value = from;
-    const nodes = (await safe(`SELECT DISTINCT target AS n FROM driving.edges WHERE osm_id = ${from} ORDER BY n`)).map((r) => String(r.n));
+    // the junctions at the ends of the edges of the road, the one with the most roads that leave it first
+    const js = await safe(`SELECT t.n::VARCHAR AS n, count(DISTINCT o.osm_id)::INTEGER AS c FROM (SELECT DISTINCT target AS n FROM driving.edges WHERE osm_id = ${from}) t
+      LEFT JOIN driving.edges o ON o.source = t.n AND o.osm_id != ${from} GROUP BY t.n ORDER BY c DESC, t.n`);
+    const nodes = js.map((r) => String(r.n));
     $("fix-via-row").hidden = $("fix-turnsec").hidden = $("fix-turn-bar").hidden = !nodes.length;
     $("fix-turn-clear").hidden = false; $("fix-turn-legend").hidden = !nodes.length;
-    $("fix-via").innerHTML = nodes.map((n) => `<option value="${n}">Junction ${n}</option>`).join("");
+    $("fix-via").innerHTML = js.map((r) => `<option value="${r.n}">Junction ${r.n} · ${r.c ? `${plural(r.c, "road")} ${r.c === 1 ? "leaves" : "leave"} it` : "no road leaves it"}</option>`).join("");
     if (via != null && nodes.includes(String(via))) $("fix-via").value = String(via);
     $("fix-out").innerHTML = nodes.length ? "" : `<p class="why">Way ${from} is not in the driving network.</p>`;
     if (nodes.length) await outgoing();
@@ -443,7 +446,11 @@ export async function initFixesPanel(ctx) {
     if (!from || !Number.isSafeInteger(via)) return;
     const roads = await safe(`SELECT osm_id, any_value(name) AS name, any_value(highway) AS highway FROM driving.edges WHERE source = ${via} AND osm_id != ${from} GROUP BY osm_id ORDER BY osm_id LIMIT 30`);
     turnOut = roads.map((r) => Number(r.osm_id)); drawTurnRoads();
-    $("fix-out").innerHTML = roads.length ? roads.map((r) => `<div class="turn" data-to="${r.osm_id}"><span class="small">To <b>${esc(r.name || "no name")}</b> (${esc(r.highway)}, way ${r.osm_id})</span>${turnSelect(F.findTurn(doc, from, via, Number(r.osm_id))?.restriction)}</div>`).join("") : '<p class="why">No road leaves this junction.</p>';
+    const arrive = await safe(`SELECT osm_id, any_value(name) AS name, any_value(highway) AS highway, bool_or(oneway) AS oneway FROM driving.edges WHERE target = ${via} AND osm_id != ${from} GROUP BY osm_id ORDER BY osm_id LIMIT 12`);
+    const arrivals = arrive.length ? `<p class="small" style="margin:12px 0 4px"><b>Roads that arrive at this junction.</b> Start from one of them to give a rule for the turn onto a road that leaves.</p>${arrive.map((r) => `<div class="small"><button type="button" class="link" data-from="${r.osm_id}">${esc(r.name || "no name")}</button> (${esc(r.highway)}, way ${r.osm_id}${r.oneway ? ", one-way" : ""})</div>`).join("")}` : "";
+    const none = '<p class="why">No other road leaves this junction from this road. A road leaves it only when it is in the driving network and its direction goes away from the junction.</p>';
+    $("fix-out").innerHTML = (roads.length ? "" : none) + arrivals;
+    if (roads.length) $("fix-out").insertAdjacentHTML("afterbegin", roads.map((r) => `<div class="turn" data-to="${r.osm_id}"><span class="small">To <b>${esc(r.name || "no name")}</b> (${esc(r.highway)}, way ${r.osm_id})</span>${turnSelect(F.findTurn(doc, from, via, Number(r.osm_id))?.restriction)}</div>`).join(""));
     for (const row of $("fix-out").querySelectorAll(".turn")) row.querySelector("select").onchange = paintTurnBar;
     paintTurnBar();
   }
@@ -475,6 +482,7 @@ export async function initFixesPanel(ctx) {
     turnOut = []; drawTurnRoads(); paintTurnBar(); drawSelected(false);
   }
   $("fix-turn-clear").onclick = clearTurns;
+  $("fix-out").addEventListener("click", (e) => { const b = e.target.closest("[data-from]"); if (b) findTurns(Number(b.dataset.from), Number($("fix-via").value), { zoom: true }); });
   $("fix-turn-find").onclick = () => { const id = whole($("fix-from").value); id ? findTurns(id, null, { zoom: true }) : status("Type a way ID (a whole number)."); };
   $("fix-via").onchange = () => { outgoing(); drawSelected(false, { turn: { via: $("fix-via").value } }); };
 
