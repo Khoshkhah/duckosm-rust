@@ -236,6 +236,14 @@ Kaveh (2026-10-24): "the result card is not well designed and take many space an
 
 `panel_e2e.py` runs the flow from the start to the editor and checks each state; `dashboard_e2e.py` checks the grey look of the cards that are not ready.
 
+### The buffer
+
+Card 2 has **Buffer around the area (m)**, 0 by default (Kaveh, 2026-11-02). It is duckOSM's `boundary.buffer_m`: the area grows by this
+many metres on all sides, in the UTM zone of its centre. The page makes the grown shape in its own DuckDB (`ST_Transform` to the UTM zone,
+`ST_Buffer`, `ST_Transform` back, `bufferPolys` in `index.html`). The cut of the region file, the Overpass query, the list of extracts, the
+size in card 2 and the saved GeoJSON all use the grown area; the map shows it. The shape as chosen stays in `area.base`, so a new value (or 0)
+makes the area again from it. The saved GeoJSON has `buffer_m` in its properties when it is above 0. Card 2 stays open beside step 3 after an area is chosen (the other cards fold as before), so the buffer is in view; the card shows the size as "km² · +500 m". Test: `python crates/duckosm-wasm/www/buffer_e2e.py <out folder>`.
+
 ### Step 3: the data
 
 Three tabs, as the three sources of the old page:
