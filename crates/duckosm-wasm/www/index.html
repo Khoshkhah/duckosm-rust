@@ -2052,14 +2052,18 @@ async function leaveEditor() {
     editNote("writing the drawing order into the tables…");
     const text = async (n) => (await editorStore.load(n))?.body ?? "";
     const inputs = { "edits.csv": await text("edits.csv"), "heads.csv": await text("heads.csv"), "caps.csv": await text("caps.csv") };
+    const t = performance.now();
     await duck.saveLevels(await text("levels.csv"), inputs, "this browser: " + areaName);
+    lap("saveLevels (write the tables)", t);
     areaPrep = null;                              // the tables have the new levels
     files();                                      // the download links of the new files
     levelsApplied = true;
-    closeEditor(true);
+    // the map already shows the new levels (the map worker redrew each changed edge: replaceRoads), so it is not drawn again
+    editedMap = false;
+    closeEditor();
     refreshSteps();
     const n = (f) => Math.max(0, inputs[f].trim().split("\n").length - 1);
-    editNote(`Applied. Rules: ${num(n("edits.csv"))}, heads: ${num(n("heads.csv"))}, line ends: ${num(n("caps.csv"))}. The map draws it.`);
+    editNote(`Applied. Rules: ${num(n("edits.csv"))}, heads: ${num(n("heads.csv"))}, line ends: ${num(n("caps.csv"))}. The map has it.`);
   } catch (e) {
     editNote("Apply failed: " + e.message);       // the editor stays open
   }
