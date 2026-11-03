@@ -1403,6 +1403,7 @@ async function restoreSavedArea(slug) {
     netBuilt = true;
     fixesApplied = !!meta.fixesYaml;
     builtFixes = meta.fixesYaml ?? null;
+    savedCut = meta.hasCut ? (meta.slug || slug) : null;      // the cut file of the saved area: the .osm.pbf button reads it from the browser storage
     files();
     if (meta.summary) {
       buildDetails(meta.summary);
@@ -1584,6 +1585,7 @@ $("run").onclick = async () => {
     if (area) keep("duckosm.boundary", text());   // the area again after a reload
     const fixes = fixesText();
     builtFixes = fixes;                          // the fixes file of this build (the .yaml button of card 5)
+    savedCut = null;                             // a new build has its own cut file (or none)
     const threads = Number(new URLSearchParams(location.search).get("threads")) || undefined;  // ?threads=N: the size of the pool
     const levels = "solve";   // visualization.edge_levels: always roadstyle's solver (docs/levels.md); the page has no choice (Kaveh, 2026-11-04)
     let msg, download = null;
@@ -1651,7 +1653,7 @@ $("run").onclick = async () => {
         fixesYaml: fixes,
         fixesName: fixes ? $("fixes").files[0]?.name ?? "osm_fixes.yaml" : undefined,
         builtAt: Date.now()
-      }, duck.tables);
+      }, duck.tables, null, duck.cut);
     } catch (e) {
       console.warn("Could not save area to OPFS:", e);
       status("The area could not be saved in this browser (" + (e.name === "QuotaExceededError" ? "storage is full" : e.message) + "). It is still on the page.", 8000);
@@ -2339,8 +2341,9 @@ $("query").onclick = async () => {
 const size = (b) => (b < 2 ** 20 ? `${num(Math.max(1, b / 1024))} KB` : `${mb(b)} MB`);
 let urls = [];
 let builtFixes = null;                           // the text of the fixes that the last build (or the restored area) used
+let savedCut = null;                             // the slug of a restored area that has a cut file in the browser storage (duck.cut is null then)
 function files() {
-  $("cutpbf").hidden = !duck.cut;
+  $("cutpbf").hidden = !(duck.cut || savedCut);
   $("fixesyaml").hidden = !builtFixes;
   urls.forEach(URL.revokeObjectURL);
   urls = [];
@@ -2371,11 +2374,14 @@ $("fixesyaml").onclick = () => {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href));
 };
-$("cutpbf").onclick = () => {
+$("cutpbf").onclick = async () => {
+  const data = duck.cut ? new Blob([duck.cut], { type: "application/octet-stream" }) : savedCut ? await areaStore.loadCutFile(savedCut) : null;
+  if (!data) return status("The cut file is not in this browser any more.");
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([duck.cut], { type: "application/octet-stream" }));
+  a.href = URL.createObjectURL(data);
   a.download = duck.slug(areaName) + ".osm.pbf";
   a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href));
 };
 $("zip").onclick = async () => {
   try {

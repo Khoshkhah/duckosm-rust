@@ -34,7 +34,7 @@ def open_page(ctx):
     return page
 
 
-def build(page, modes):
+def build(page, modes, features=False):
     if not page.evaluate("window.areas >= 1"):
         page.set_input_files("#file", str(DATA / "monaco.geojson"))   # the File tab of step 1
         page.wait_for_function("window.areas >= 1", timeout=60_000)
@@ -42,7 +42,7 @@ def build(page, modes):
     page.set_input_files("#region", str(DATA / "monaco_sample.osm.pbf"))   # the page cuts it to the boundary
     for box in page.query_selector_all("input[name=mode]"):
         box.set_checked(box.get_attribute("value") in modes)
-    page.set_checked("#features", False)
+    page.set_checked("#features", features)          # the layers need a region file; with them the build makes the cut file
     page.click("#run")
     page.wait_for_function("!document.getElementById('step5-card').classList.contains('off') || document.getElementById('buildstatus').textContent.startsWith('Error')",
                            timeout=600_000)
@@ -64,8 +64,10 @@ with sync_playwright() as p:
     ctx = browser.new_context(accept_downloads=True)   # one profile: the storage stays between the pages
     page = open_page(ctx)
     assert page.evaluate("document.getElementById('areas-card').hidden") and page.is_hidden("#areas-card"), "no saved area, no card \"Your areas\""
-    before = build(page, ["driving", "walking"])
+    before = build(page, ["driving", "walking"], features=True)
     page.wait_for_function("!document.getElementById('areas-card').hidden", timeout=10_000)   # the card can be folded: the attribute, not the sight
+    cut_len = page.evaluate("import('./app/duck.js').then((d) => (d.cut ? d.cut.length : 0))")
+    assert cut_len > 1000, "the build made a cut file"
     s = saved(page)
     print("saved:", s[0]["slug"], s[0]["tables"][:40], s[0]["hasViz"])
     assert len(s) == 1 and s[0]["hasViz"] and any(t.startswith("walking.") for t in s[0]["tables"]), (len(s), s[0]["hasViz"], [t for t in s[0]["tables"] if "walk" in t][:3])
@@ -85,6 +87,12 @@ with sync_playwright() as p:
     assert after == before, (before, after)
     page.screenshot(path=str(out / "saved-restored.png"))
     print("restored result equals the build:", after)
+    # the cut file was saved with the area: the .osm.pbf button is there after a restore, and the file is the same
+    assert not page.evaluate("document.getElementById('cutpbf').hidden"), "the .osm.pbf button shows for a restored area"
+    with page.expect_download() as dl:
+        page.evaluate("document.getElementById('cutpbf').click()")
+    assert pathlib.Path(dl.value.path()).stat().st_size == cut_len, (pathlib.Path(dl.value.path()).stat().st_size, cut_len)
+    print(f"the cut file ({cut_len} bytes) is kept with the area and downloads after a restore")
 
     # a new build with fewer modes replaces the area: no walking table may come back
     page.close()

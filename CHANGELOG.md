@@ -28,6 +28,7 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 ### Changed
 
 - A disabled button or card title has the normal cursor, not the forbidden sign (Kaveh, 2026-11-03).
+- **A saved area keeps its cut file** (`cut.osm.pbf` in the browser storage, `hasCut` in `meta.json`). The **.osm.pbf** button of card 5 is there after a restore, and it reads the file only when you download it. An older save has no cut file, so it has no button. Monaco: 552 KB.
 - **Card 4 (Build) has a new layout**: the networks are three chips, the base map layers are one row with a reason, and Fixes, Build details and Time and memory are flat rows that open. In every card title the "?" is next to the title and the done mark is next to the chevron. **Card 5 has a .yaml button** (the fixes file that the build used, `osm_fixes.yaml`).
 - **The Build card has no "Drawing order" choice.** The page always uses the optimizer ("Optimized (slower)"), as the default was since 2026-10-24. The CLI keeps `--levels tags`.
 - **Card 1 opens the Saved tab when areas are saved**, in place of the banner "Open your last area?". The list has **Open** and **Delete** for each area, as before. The fourth tab (Saved) wrapped to a second row and did not look like a tab: the tab bar has one row for all its tabs now (`grid-auto-flow: column`).
