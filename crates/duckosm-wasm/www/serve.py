@@ -26,6 +26,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     quiet = False
 
     def end_headers(self):
+        # a test server changes its files all the time: no cache, so that a page never mixes an old module with a new one (a browser keeps a file from Last-Modified alone)
+        self.send_header("Cache-Control", "no-store")
         if self.isolated:
             self.send_header("Cross-Origin-Opener-Policy", "same-origin")
             self.send_header("Cross-Origin-Embedder-Policy", "require-corp")

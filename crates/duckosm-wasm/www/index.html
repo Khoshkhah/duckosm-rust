@@ -4,6 +4,22 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>duckOSM in the browser</title>
+<!-- on localhost only (a test page): a red bar with the first error of the page and the file and line, so a failure can be read without the console. A click on the bar closes it. -->
+<script>
+if (["localhost", "127.0.0.1"].includes(location.hostname)) {
+  const show = (text) => {
+    if (document.getElementById("errbar")) return;
+    const bar = document.createElement("div");
+    bar.id = "errbar";
+    bar.style.cssText = "position:fixed;left:0;right:0;bottom:0;z-index:99999;padding:8px 12px;background:#b91c1c;color:#fff;font:13px/1.4 system-ui,sans-serif;cursor:pointer";
+    bar.textContent = "Page error: " + text + " (click to close). Press Ctrl+Shift+R once: the browser may have an old file.";
+    bar.onclick = () => bar.remove();
+    (document.body || document.documentElement).append(bar);
+  };
+  addEventListener("error", (e) => { if (!/ResizeObserver/.test(e.message || "")) show(`${e.message || "a file did not load"}${e.filename ? " · " + e.filename.split("/").slice(-2).join("/") + ":" + e.lineno : ""}`); });
+  addEventListener("unhandledrejection", (e) => show(String(e.reason?.stack || e.reason).split("\n").slice(0, 2).join(" · ").slice(0, 300)));
+}
+</script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css" crossorigin>
 <!-- roadstyle's dashboard and popup look (src/roadstyle/static/, copied by build.sh from roadstyle at ROADSTYLE_COMMIT) -->
 <link rel="stylesheet" href="map/roadstyle/dashboard/dashboard.css">
@@ -921,7 +937,7 @@ for (const t of tabs) t.onclick = () => {
   if (t.id !== "tab-find") picking(false);
   document.body.classList.toggle("h3", t.id === "tab-h3");
   if (t.id === "tab-h3") h3Open();
-  h3Grid();
+  h3Grid().then(() => { if (t.id === "tab-h3" && h3GridOn === false) (area ? zoomToArea() : h3ZoomIn()); });      // the tab opens on a view with no grid: show the hexagons
   // the drawing tools work only in the Draw tab
   tool(t.id === "tab-draw" ? (draw.getSnapshot().length ? "select" : "rectangle") : null);
 };
@@ -1301,23 +1317,27 @@ function h3Forget() {
 // the grid: while the H3 tab shows, a transparent layer draws every hexagon in view at the chosen level (thin gray lines, no fill), the hexagon under the pointer is lit,
 // and the picked cells are filled. Too many hexagons for the view (a small level at a low zoom, or a big one at a high zoom): no grid, and the note says what to do.
 const H3_MAX_GRID = 4000;
-let h3Token = 0, h3Hover = null;
+let h3Token = 0, h3Hover = null, h3GridOn = null, h3Estimate = 0, h3Refused = false;      // h3GridOn: false when the view has too many hexagons (a click picks nothing), null when the tab is not shown
 async function h3Grid() {
   const my = ++h3Token, src = map.getSource("h3grid");
   if (!src) return;
   const on = document.body.classList.contains("h3");
-  if (!on) { src.setData(empty); map.getSource("h3hover")?.setData(empty); h3Hover = null; $("h3-grid-note").textContent = ""; return; }
+  if (!on) { src.setData(empty); map.getSource("h3hover")?.setData(empty); h3Hover = null; h3GridOn = null; $("h3-grid-note").textContent = ""; return; }
   let h3;
   try { h3 = await h3Lib(); } catch { return; }
   if (my !== h3Token) return;
   const b = map.getBounds(), pad = h3.getHexagonEdgeLengthAvg(h3Level, "km") / 111 * 1.5;       // a cell shows when its center is out of view but its corner is in
   const w = b.getWest() - pad, e = b.getEast() + pad, south = Math.max(-85, b.getSouth() - pad), north = Math.min(85, b.getNorth() + pad);
   const estimate = ((e - w) * 111 * Math.cos(((south + north) / 2) * Math.PI / 180)) * ((north - south) * 111) / h3.getHexagonAreaAvg(h3Level, "km2");
+  h3Estimate = estimate;
   if (estimate > H3_MAX_GRID) {
     src.setData(empty);
-    $("h3-grid-note").textContent = "Zoom in, or choose a bigger hexagon, to see the hexagons.";
+    h3GridOn = false;
+    $("h3-grid-note").innerHTML = 'The view has too many hexagons. Zoom in, or choose a bigger hexagon, to pick hexagons. <button type="button" class="link" id="h3-zoom">Zoom in</button>';
     return;
   }
+  h3GridOn = true;
+  if (h3Refused) { h3Refused = false; h3Text(cells.size && area ? areaKm2(area.polys) : 0); }       // the grid is back: the hint says what to do again
   const ids = h3.polygonToCells([[[w, south], [e, south], [e, north], [w, north], [w, south]]], h3Level, true);
   src.setData({ type: "FeatureCollection", features: ids.map((id) => ({ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [h3.cellToBoundary(id, true)] } })) });
   $("h3-grid-note").textContent = `${num(ids.length)} hexagon${ids.length === 1 ? "" : "s"} in view.`;
@@ -1332,6 +1352,9 @@ loaded.then(() => {
   map.addLayer({ id: "h3-line", type: "line", source: "h3cells", paint: { "line-color": blue, "line-width": 1.5, "line-opacity": 0.7 } });
   map.on("moveend", h3Grid);
 });
+// zoom in until about 150 hexagons are in view (a zoom step is 4 times the area); the button in the note does it, and the tab does it when it opens on a view that is too large
+const h3ZoomIn = () => map.easeTo({ zoom: Math.min(map.getZoom() + Math.max(1, Math.log(h3Estimate / 150) / Math.log(4)), 18), duration: 600 });
+$("h3-grid-note").addEventListener("click", (e) => { if (e.target.closest("#h3-zoom")) h3ZoomIn(); });
 map.on("mousemove", async (ev) => {                       // the hexagon under the pointer is lit
   if (!document.body.classList.contains("h3")) return;
   let h3;
@@ -1345,6 +1368,7 @@ map.on("click", async (ev) => {
   if (!document.body.classList.contains("h3")) return;
   let h3;
   try { h3 = await h3Lib(); } catch (e) { return status(`H3 did not load: ${e.message}`, 8000); }
+  if (h3GridOn === false) { h3Refused = true; return h3Text(0, "The view has too many hexagons to pick one. Zoom in, or choose a bigger hexagon."); }     // a cell that cannot be seen is not picked
   const { lat, lng } = ev.lngLat.wrap(), id = h3.latLngToCell(lat, lng, h3Level);
   let note;
   if (!cells.delete(id)) {

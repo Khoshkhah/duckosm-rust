@@ -97,6 +97,16 @@ def run(browser, phone):
     options = page.eval_on_selector_all("#h3-level option", "(o) => o.map((x) => x.textContent)")
     assert options[3].startswith("Level 8: edge 531 m, 0.737 km²"), options
     assert options[0].startswith("Level 5: edge 9.9 km, 252.9 km²") and options[5].startswith("Level 10: edge 76 m"), options
+    # the tab opens on a view with too many hexagons (the map starts on Europe): it zooms in by itself, and the grid shows
+    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['h3-grid']}).length > 10", timeout=30_000)
+    # a view with too many hexagons: no grid, a click picks nothing and says why, and the button zooms in
+    show(page, 10, 50, 3)
+    page.wait_for_function("document.getElementById('h3-grid-note').textContent.includes('too many hexagons')", timeout=20_000)
+    page.touchscreen.tap(195, 150) if phone else page.mouse.click(800, 450)
+    page.wait_for_timeout(700)
+    assert page.evaluate("window.h3Cells.size") == 0 and "too many hexagons" in text(), (page.evaluate("window.h3Cells.size"), text())
+    click("#h3-zoom")
+    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['h3-grid']}).length > 10", timeout=30_000)
     # the grid: a transparent layer with the hexagons in view, a lit hexagon under the pointer, and the picked cells filled
     show(page, 7.4246, 43.7384, 14)
     page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['h3-grid']}).length > 10", timeout=20_000)
