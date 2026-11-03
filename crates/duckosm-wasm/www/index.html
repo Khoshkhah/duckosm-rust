@@ -118,6 +118,7 @@
 
   .segmented { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--surface); border-radius: 10px; padding: 3px; gap: 3px; }
   .segmented [role=tab] { display: flex; align-items: center; justify-content: center; gap: 6px; height: 34px; border: 0; border-radius: 8px; background: none; color: var(--muted); font-weight: 500; }
+  .segmented [role=tab][hidden] { display: none; }
   .segmented [role=tab][aria-selected=true] { background: var(--bg); color: var(--fg); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
   [role=tabpanel] { padding-top: 12px; }
 
@@ -322,7 +323,7 @@
   <button role="tab" id="tab-find" aria-controls="find" aria-selected="true"><svg><use href="#i-search"/></svg>Search</button>
   <button role="tab" id="tab-draw" aria-controls="draw" aria-selected="false"><svg><use href="#i-pen"/></svg>Draw</button>
   <button role="tab" id="tab-file" aria-controls="file-panel" aria-selected="false"><svg><use href="#i-file"/></svg>File</button>
-  <button role="tab" id="tab-saved" aria-controls="saved-panel" aria-selected="false"><svg><use href="#i-download"/></svg>Saved</button>
+  <button role="tab" id="tab-saved" aria-controls="saved-panel" aria-selected="false" hidden><svg><use href="#i-download"/></svg>Saved</button>
 </div>
 
 <section id="find" role="tabpanel" aria-labelledby="tab-find">
@@ -1284,6 +1285,7 @@ async function renderSavedAreasList() {
           if ($("restore-banner")) $("restore-banner").style.display = "none";
         }
         renderSavedAreasList();
+        showSavedTab();
       };
     });
   } catch (e) {
@@ -1291,7 +1293,16 @@ async function renderSavedAreasList() {
   }
 }
 
+// the Saved tab shows only while an area is saved
+async function showSavedTab() {
+  let n = 0;
+  try { n = areaStore.isSupported ? (await areaStore.listSavedAreas()).length : 0; } catch (_) {}
+  $("tab-saved").hidden = !n;
+  if (!n && $("tab-saved").getAttribute("aria-selected") === "true") $("tab-find").click();
+}
+
 async function initSavedAreaBanner() {
+  showSavedTab();
   if (!areaStore.isSupported) return;
   areaStore.requestPersistence();
   const lastSlug = localStorage.getItem("duckosm.lastArea");
@@ -1472,6 +1483,7 @@ $("run").onclick = async () => {
       status("The area could not be saved in this browser (" + (e.name === "QuotaExceededError" ? "storage is full" : e.message) + "). It is still on the page.", 8000);
     }
     localStorage.setItem("duckosm.lastArea", areaSlug);
+    showSavedTab();
     // the networks of the build: one row for each, with its roads (edges) and junctions (nodes), in roadstyle's table
     const NET = { driving: ["car", "Driving"], walking: ["walk", "Walking"], cycling: ["bike", "Cycling"] };
     $("resultline").innerHTML = '<table class="rs-table"><thead><tr><th>Network</th><th>Roads</th><th>Junctions</th></tr></thead><tbody>' +
