@@ -112,6 +112,15 @@ export function objects(doc) {
 }
 
 // a short text of the rule, for the list of changes
+// the fields of a change as rows for the list of changes: {k, was, now}; was is null when the data had no value, now is null when the change deletes the field
+export function describeBits(doc, type, id) {
+  const { mode, set, delete: del, was } = ruleOf(doc, type, id), bits = [];
+  const from = (k) => (k in was ? (was[k] === null || was[k] === "" ? "" : String(was[k])) : null);
+  for (const [k, v] of Object.entries(mode)) bits.push(k === "exclude_modes" ? { k: "not in", was: null, now: v.join(", ") } : k === "remove" ? { k: "road", was: null, now: "removed" } : { k, was: from(k), now: String(v) });
+  for (const [k, v] of Object.entries(set)) bits.push({ k, was: from(k), now: String(v) });
+  for (const k of del) bits.push({ k, was: from(k), now: null });
+  return bits;
+}
 export function describe(doc, type, id) {
   const { mode, set, delete: del, was } = ruleOf(doc, type, id), bits = [];
   const from = (k) => (k in was ? ` (was ${was[k] === null || was[k] === "" ? "none" : was[k]})` : "");

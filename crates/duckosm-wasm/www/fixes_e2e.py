@@ -78,7 +78,8 @@ with sync_playwright() as p:
     page.click("#fix-back")
     assert not page.is_visible("#fix-panel") and page.is_visible("#sb .sb-body")
     page.click("#fix-open")
-    assert page.is_visible("#fix-tab-edit") and page.is_visible("#fix-kind") and "Roads" in page.inner_text("#fix-kind")
+    assert all(page.is_visible(f"#fix-tab-{t}") for t in ("road", "building", "node", "turns", "new", "changes")), "the six tabs"
+    assert page.get_attribute("#fix-tab-road", "aria-selected") == "true", "the panel opens on the Road tab"
 
     # a click on a road: the form has the data of the road, all its tags are listed, and no popup shows
     point = page.evaluate("""() => { const m = window.duckMap, c = m.getCanvas().getBoundingClientRect(), L = %s;
@@ -123,8 +124,16 @@ with sync_playwright() as p:
     page.click("#fix-revert")
     assert page.input_value("#fixf-lanes") == "7", "Reset form: the form shows the saved rule again"
 
-    # a building: the kind filter, a real click, the preset fields (floors, roof shape, roof color)
-    page.click("#fix-kind [data-kind=building]")
+    # the tabs are real: the Building tab has no road form, and the Road tab keeps its road, form and rule
+    page.click("#fix-tab-building")
+    assert page.locator("#fixf-lanes").count() == 0 and "Nothing is picked" in page.inner_text("#fix-obj"), page.inner_text("#fix-obj")
+    assert page.is_visible("#fixf-roof_shape") is False and page.input_value("#fix-id") == ""
+    page.click("#fix-tab-road")
+    assert page.input_value("#fix-id") == str(ROAD) and page.input_value("#fixf-lanes") == "7", "the Road tab keeps its road"
+    print("the tabs: Building has its own empty form, Road keeps its road and its rule")
+
+    # a building: its tab, a real click, the preset fields (floors, roof shape, roof color)
+    page.click("#fix-tab-building")
     b = rows(page, "SELECT osm_id, ST_X(ST_PointOnSurface(geom)) AS x, ST_Y(ST_PointOnSurface(geom)) AS y FROM features.buildings WHERE osm_type = 'way' "
                    "AND map_extract(tags, 'building:levels')[1] IS NULL ORDER BY ST_Area(geom) DESC LIMIT 1")[0]
     px = at(page, b["x"], b["y"])
@@ -154,8 +163,8 @@ with sync_playwright() as p:
     print(f"a wall: nodes {wall[0]} and {wall[1]} were {wall[2]}, now {new_type}")
     page.screenshot(path=str(out / "walls.png"))
 
-    # a node (a traffic signal): the Nodes filter, a real click
-    page.click("#fix-kind [data-kind=node]")
+    # a node (a traffic signal): its tab, a real click
+    page.click("#fix-tab-node")
     n = rows(page, "SELECT osm_id, ST_X(geom) AS lon, ST_Y(geom) AS lat FROM features.traffic WHERE map_extract(tags, 'highway')[1] = 'traffic_signals' LIMIT 1")[0]
     px = at(page, n["lon"], n["lat"])
     page.mouse.click(*px)
@@ -184,15 +193,30 @@ with sync_playwright() as p:
     page.click("#fix-turn-find")
     page.wait_for_selector("#fix-out .turn")
     page.select_option("#fix-out .turn select", "no_left_turn")
-    assert "Saved" in page.inner_text("#fix-turn-note"), page.inner_text("#fix-turn-note")
+    assert "not added yet" in page.inner_text("#fix-turn-note") and "restriction" not in text(page), "a choice is not a change until Add to changes"
+    assert page.is_visible("#fix-tab-turns .dot")
+    page.click("#fix-turn-add")
+    assert not page.is_visible("#fix-tab-turns .dot")
     y = text(page)
     assert "turn_restrictions" in y and "restriction: no_left_turn" in y and f"from_way: {frm}" in y, y
 
+    # the one Build button waits while a tab has edits that are not in the changes
+    page.click("#fix-tab-road")
+    page.fill("#fixf-lanes", "9")
+    assert page.is_visible("#fix-tab-road .dot")
+    page.click("#fix-tab-changes")
+    assert page.is_visible("#fix-pending") and page.is_disabled("#fix-apply") and "Road tab" in page.inner_text("#fix-pending"), page.inner_text("#fix-pending")
+    page.click("#fix-pending [data-go=road]")
+    assert page.get_attribute("#fix-tab-road", "aria-selected") == "true"
+    page.click("#fix-revert")
+    assert not page.is_visible("#fix-tab-road .dot")
+
     # the list of changes
     page.click("#fix-tab-changes")
+    assert not page.is_visible("#fix-pending") and page.is_enabled("#fix-apply")
     page.wait_for_function("document.querySelectorAll('#fix-list .chg').length === 5", timeout=10_000)
     lst = page.inner_text("#fix-list")
-    assert "Road" in lst and "Building" in lst and "Node" in lst and "Turn" in lst and "Wall" in lst and "sidewalk=both" in lst and "building:levels=7" in lst, lst
+    assert "Road" in lst and "Building" in lst and "Node" in lst and "Turn" in lst and "Wall" in lst and "sidewalk" in lst and "both" in lst and "building:levels" in lst and "roads (1)" in lst.lower(), lst
     assert page.inner_text("#fix-n") == "5"
     page.screenshot(path=str(out / "changes.png"))
     # a click on a change selects the object, with its data, and goes to the Edit tab
@@ -212,11 +236,11 @@ with sync_playwright() as p:
     page.wait_for_function("document.querySelectorAll('#fix-list .chg').length === 5")
     assert "traffic_signals:direction: backward" in text(page)
 
-    # the Changes list shows what the data had before ("was")
-    assert "(was" in lst, lst
+    # the Changes list shows what the data had before, as "was -> now"
+    assert "→" in lst and "none" in lst, lst
 
     # a new road: the first click is near a junction (it joins it), the second is a free point; Enter-free path: the Finish button
-    page.click("#fix-tab-edit")
+    page.click("#fix-tab-new")
     page.click("#fix-draw")
     assert page.is_visible("#fix-drawbox")
     j = rows(page, "SELECT node_id, ST_X(geom) AS x, ST_Y(geom) AS y FROM driving.nodes WHERE node_id IN (SELECT node_id FROM driving.way_nodes) LIMIT 1")[0]
@@ -243,7 +267,16 @@ with sync_playwright() as p:
     page.evaluate("(t) => window.fixesPanel.load(t)", saved)
     page.wait_for_function("document.getElementById('fix-n').textContent === '6'")
 
-    # build again with the rules: Apply closes the panel; the tables have the changes, and the amber layer is drawn again
+    # the changes stay in this browser for the area (a reload of the page keeps them)
+    key = "duckosm.fixes:" + page.input_value("#name").strip()
+    assert page.evaluate("(k) => localStorage.getItem(k)", key) == saved, "the browser has the changes"
+    page.evaluate("window.fixesPanel.load('{}')")
+    assert page.evaluate("(k) => localStorage.getItem(k)", key) is None and page.inner_text("#fix-n") == ""
+    page.evaluate("([k, t]) => localStorage.setItem(k, t)", [key, saved])
+    assert page.evaluate("window.fixesPanel.restore()") == 6 and page.inner_text("#fix-n") == "6", "restore brings the changes back"
+
+    # build again with the rules: the one Build button is in the Changes tab; it closes the panel; the tables have the changes, and the amber layer is drawn again
+    page.click("#fix-tab-changes")
     page.click("#fix-apply")
     page.wait_for_function("document.getElementById('run').hasAttribute('aria-busy')", timeout=30_000)
     built(page)
@@ -274,6 +307,16 @@ with sync_playwright() as p:
     assert (nt["d"], nt["s"], nt["n"]) == ("backward", None, "hello"), nt
     page.wait_for_function("window.fixesPanel.drawn().edits > 0", timeout=30_000)
     assert not popups(page)
+    # out and back: the changes and the picked road are still there after the build
+    if "folded" in (page.get_attribute("#step7-card", "class") or ""):
+        page.click("#step7")
+    page.click("#fix-open")
+    assert page.inner_text("#fix-n") == "6"
+    page.click("#fix-tab-road")
+    page.wait_for_function(f"document.querySelector('#fix-obj .objhead')?.textContent.includes('way {ROAD}') && document.querySelector('#fixf-lanes')", timeout=20_000)
+    page.click("#fix-tab-changes")
+    assert page.locator("#fix-list .chg").count() == 6, "the list of changes after the build"
+    print("out and back: 6 changes in the list, the Road tab has its road")
     print(f"after the build: lanes 7, walk type sidewalk, building floors {bt['l']} roof {bt['r']} {bt['c']}, node tags changed; amber features: {amber(page)}")
     browser.close()
     server.shutdown()

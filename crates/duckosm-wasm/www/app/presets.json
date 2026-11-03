@@ -1,10 +1,11 @@
 {
-  "_doc": "The preset fields of the fixes panel (app/fixes_panel.js, docs/osm-editing.md). One list for each kind of object (road, building, node, and new_road for a road that the person draws). key: an OSM tag, or, with rule: true, a key of an overrides rule that acts for each mode (oneway, lanes, layer, turn lanes). type: choice (options: [value, label]; a value that is not in the list is kept), text, int or color.",
+  "_doc": "The preset fields of the fixes panel (app/fixes_panel.js, docs/osm-editing.md). One list for each kind of object (road, building, node, and new_road for a road that the person draws). key: an OSM tag, or, with rule: true, a key of an overrides rule that acts for each mode (oneway, lanes, layer, turn lanes). type: choice (options: [value, label]; a value that is not in the list is kept), text, int or color. group: the section of a field in the form (the panel shows the fields in the order of this file, one section for each group).",
   "road": [
     {
       "key": "name",
       "label": "Name",
-      "type": "text"
+      "type": "text",
+      "group": "Basics"
     },
     {
       "key": "oneway",
@@ -20,37 +21,136 @@
           "false",
           "No"
         ]
-      ]
+      ],
+      "group": "Basics"
     },
     {
       "key": "lanes",
       "label": "Lanes, all",
       "type": "int",
-      "rule": true
+      "rule": true,
+      "group": "Lanes and speed"
     },
     {
       "key": "lanes_forward",
       "label": "Lanes, forward",
       "type": "int",
-      "rule": true
+      "rule": true,
+      "group": "Lanes and speed"
     },
     {
       "key": "lanes_backward",
       "label": "Lanes, back",
       "type": "int",
-      "rule": true
-    },
-    {
-      "key": "layer",
-      "label": "Layer",
-      "type": "int",
-      "rule": true
+      "rule": true,
+      "group": "Lanes and speed"
     },
     {
       "key": "maxspeed",
       "label": "Max speed",
       "type": "text",
-      "placeholder": "30, 50, walk"
+      "placeholder": "30, 50, walk",
+      "group": "Lanes and speed"
+    },
+    {
+      "key": "turn_lanes_forward",
+      "label": "Turn lanes, forward",
+      "type": "text",
+      "rule": true,
+      "placeholder": "left|through|right",
+      "group": "Lanes and speed"
+    },
+    {
+      "key": "turn_lanes_backward",
+      "label": "Turn lanes, back",
+      "type": "text",
+      "rule": true,
+      "placeholder": "left|through",
+      "group": "Lanes and speed"
+    },
+    {
+      "key": "sidewalk",
+      "label": "Sidewalk",
+      "type": "choice",
+      "options": [
+        [
+          "both",
+          "Both sides"
+        ],
+        [
+          "left",
+          "Left"
+        ],
+        [
+          "right",
+          "Right"
+        ],
+        [
+          "no",
+          "None"
+        ],
+        [
+          "separate",
+          "Separate (own way)"
+        ]
+      ],
+      "group": "Sidewalk, cycleway, crossing"
+    },
+    {
+      "key": "cycleway",
+      "label": "Cycleway",
+      "type": "choice",
+      "options": [
+        [
+          "lane",
+          "Lane"
+        ],
+        [
+          "track",
+          "Track"
+        ],
+        [
+          "shared_lane",
+          "Shared lane"
+        ],
+        [
+          "share_busway",
+          "Shared with bus"
+        ],
+        [
+          "opposite",
+          "Opposite"
+        ],
+        [
+          "no",
+          "None"
+        ]
+      ],
+      "group": "Sidewalk, cycleway, crossing"
+    },
+    {
+      "key": "crossing",
+      "label": "Crossing",
+      "type": "choice",
+      "options": [
+        [
+          "marked",
+          "Marked"
+        ],
+        [
+          "unmarked",
+          "Unmarked"
+        ],
+        [
+          "uncontrolled",
+          "Uncontrolled"
+        ],
+        [
+          "traffic_signals",
+          "Traffic signals"
+        ]
+      ],
+      "group": "Sidewalk, cycleway, crossing"
     },
     {
       "key": "surface",
@@ -93,7 +193,8 @@
           "dirt",
           "Dirt"
         ]
-      ]
+      ],
+      "group": "Surface and access"
     },
     {
       "key": "access",
@@ -124,88 +225,15 @@
           "no",
           "No"
         ]
-      ]
+      ],
+      "group": "Surface and access"
     },
     {
-      "key": "sidewalk",
-      "label": "Sidewalk",
-      "type": "choice",
-      "options": [
-        [
-          "both",
-          "Both sides"
-        ],
-        [
-          "left",
-          "Left"
-        ],
-        [
-          "right",
-          "Right"
-        ],
-        [
-          "no",
-          "None"
-        ],
-        [
-          "separate",
-          "Separate (own way)"
-        ]
-      ]
-    },
-    {
-      "key": "cycleway",
-      "label": "Cycleway",
-      "type": "choice",
-      "options": [
-        [
-          "lane",
-          "Lane"
-        ],
-        [
-          "track",
-          "Track"
-        ],
-        [
-          "shared_lane",
-          "Shared lane"
-        ],
-        [
-          "share_busway",
-          "Shared with bus"
-        ],
-        [
-          "opposite",
-          "Opposite"
-        ],
-        [
-          "no",
-          "None"
-        ]
-      ]
-    },
-    {
-      "key": "crossing",
-      "label": "Crossing",
-      "type": "choice",
-      "options": [
-        [
-          "marked",
-          "Marked"
-        ],
-        [
-          "unmarked",
-          "Unmarked"
-        ],
-        [
-          "uncontrolled",
-          "Uncontrolled"
-        ],
-        [
-          "traffic_signals",
-          "Traffic signals"
-        ]
-      ]
+      "key": "layer",
+      "label": "Layer",
+      "type": "int",
+      "rule": true,
+      "group": "Level"
     },
     {
       "key": "bridge",
@@ -220,7 +248,8 @@
           "viaduct",
           "Viaduct"
         ]
-      ]
+      ],
+      "group": "Level"
     },
     {
       "key": "tunnel",
@@ -235,28 +264,16 @@
           "building_passage",
           "Building passage"
         ]
-      ]
-    },
-    {
-      "key": "turn_lanes_forward",
-      "label": "Turn lanes, forward",
-      "type": "text",
-      "rule": true,
-      "placeholder": "left|through|right"
-    },
-    {
-      "key": "turn_lanes_backward",
-      "label": "Turn lanes, back",
-      "type": "text",
-      "rule": true,
-      "placeholder": "left|through"
+      ],
+      "group": "Level"
     }
   ],
   "building": [
     {
       "key": "name",
       "label": "Name",
-      "type": "text"
+      "type": "text",
+      "group": "Basics"
     },
     {
       "key": "building",
@@ -311,18 +328,21 @@
           "roof",
           "Roof only"
         ]
-      ]
+      ],
+      "group": "Basics"
     },
     {
       "key": "building:levels",
       "label": "Floors",
-      "type": "int"
+      "type": "int",
+      "group": "Size"
     },
     {
       "key": "height",
       "label": "Height (m)",
       "type": "text",
-      "placeholder": "15 or 15.5"
+      "placeholder": "15 or 15.5",
+      "group": "Size"
     },
     {
       "key": "roof:shape",
@@ -365,57 +385,20 @@
           "round",
           "Round"
         ]
-      ]
+      ],
+      "group": "Roof"
     },
     {
       "key": "roof:levels",
       "label": "Roof floors",
-      "type": "int"
+      "type": "int",
+      "group": "Roof"
     },
     {
       "key": "roof:colour",
       "label": "Roof color",
-      "type": "color"
-    },
-    {
-      "key": "building:colour",
-      "label": "Facade color",
-      "type": "color"
-    },
-    {
-      "key": "building:material",
-      "label": "Facade material",
-      "type": "choice",
-      "options": [
-        [
-          "brick",
-          "Brick"
-        ],
-        [
-          "concrete",
-          "Concrete"
-        ],
-        [
-          "stone",
-          "Stone"
-        ],
-        [
-          "wood",
-          "Wood"
-        ],
-        [
-          "glass",
-          "Glass"
-        ],
-        [
-          "metal",
-          "Metal"
-        ],
-        [
-          "plaster",
-          "Plaster"
-        ]
-      ]
+      "type": "color",
+      "group": "Roof"
     },
     {
       "key": "roof:material",
@@ -450,14 +433,58 @@
           "grass",
           "Grass"
         ]
-      ]
+      ],
+      "group": "Roof"
+    },
+    {
+      "key": "building:colour",
+      "label": "Facade color",
+      "type": "color",
+      "group": "Facade"
+    },
+    {
+      "key": "building:material",
+      "label": "Facade material",
+      "type": "choice",
+      "options": [
+        [
+          "brick",
+          "Brick"
+        ],
+        [
+          "concrete",
+          "Concrete"
+        ],
+        [
+          "stone",
+          "Stone"
+        ],
+        [
+          "wood",
+          "Wood"
+        ],
+        [
+          "glass",
+          "Glass"
+        ],
+        [
+          "metal",
+          "Metal"
+        ],
+        [
+          "plaster",
+          "Plaster"
+        ]
+      ],
+      "group": "Facade"
     }
   ],
   "node": [
     {
       "key": "name",
       "label": "Name",
-      "type": "text"
+      "type": "text",
+      "group": "Basics"
     },
     {
       "key": "highway",
@@ -484,7 +511,8 @@
           "bus_stop",
           "Bus stop"
         ]
-      ]
+      ],
+      "group": "Basics"
     },
     {
       "key": "crossing",
@@ -507,22 +535,8 @@
           "traffic_signals",
           "Traffic signals"
         ]
-      ]
-    },
-    {
-      "key": "traffic_signals:direction",
-      "label": "Signal direction",
-      "type": "choice",
-      "options": [
-        [
-          "forward",
-          "Forward"
-        ],
-        [
-          "backward",
-          "Backward"
-        ]
-      ]
+      ],
+      "group": "Crossing"
     },
     {
       "key": "kerb",
@@ -541,7 +555,8 @@
           "flush",
           "Flush"
         ]
-      ]
+      ],
+      "group": "Crossing"
     },
     {
       "key": "tactile_paving",
@@ -556,7 +571,24 @@
           "no",
           "No"
         ]
-      ]
+      ],
+      "group": "Crossing"
+    },
+    {
+      "key": "traffic_signals:direction",
+      "label": "Signal direction",
+      "type": "choice",
+      "options": [
+        [
+          "forward",
+          "Forward"
+        ],
+        [
+          "backward",
+          "Backward"
+        ]
+      ],
+      "group": "Traffic signals"
     }
   ],
   "new_road": [

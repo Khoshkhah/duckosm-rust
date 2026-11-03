@@ -112,15 +112,22 @@ A face is one wall of a building: one segment of the outer ring. `crates/duckosm
 
 ### The panel
 
-Three tabs. The panel is the page's one panel, as the level editor is.
+Six tabs in two rows: **Road**, **Building**, **Node**, **Turn**, **New road** and **Changes**. The panel is the page's one panel, as the level editor is.
+(Before 2026-11-04 it had three tabs, **Edit**, **Turns** and **Changes**, and three buttons chose what a click picks. They looked like tabs but kept the form of the last object. The tabs below do not.)
 
-1. **Edit.** The selected object. Top: the name, the kind, and the ids. Then **Data**: all tags, and the derived data (the edge for each mode, the length, the junction nodes, the faces of a building).
-   Then the preset fields. Then the raw tags. **Save** and **Delete rule** are at the bottom of the tab.
-2. **Turns.** The selected road, the junction at each end, and a rule for each road that leaves it. The list of all turn rules is below. The turn rules show on the map as an amber ring at the junction.
-3. **Changes.** All rules, in groups (Roads, Buildings, Nodes, Turns, Faces). Each item has a one-line summary ("Way 123, Main Street: lanes 2 → 3, sidewalk both") and a **Delete** button.
-   A click on an item selects the object, zooms to it, and opens its data in the **Edit** tab. At the bottom: **Undo**, **Redo**, **Download**, **Clear all**.
-
-**Apply and build again** is fixed at the bottom of the panel. It shows the number of changes that wait. The edits act when the build runs. The page keeps the area, so the build takes seconds on Monaco.
+- **Road, Building and Node.** One editor, and each tab has its own picked object, form and draft. A switch of tab shows the state of that tab, and the first visit shows an empty tab with one line of help.
+  A map click picks the kind of the active tab. A tab has these sections: **Pick** (a click, or an OSM ID and **Load**), **Selected** (the name, the ids, the data of the networks, all tags), then the fields in sections
+  (`group` in `app/presets.json`), **Other tags**, and for a road **Modes** (not in a mode, remove the road) and for a building **Walls**.
+  The Node tab says what a node is: one point of OSM, here a traffic signal or a crossing. Its changes show in `features.traffic`, not in the road edges.
+- **Add to changes.** The bar at the bottom of each tab has **Add to changes**. The button is disabled until a field differs from the data. It says **Update change** when the object has a change already.
+  **Reset form** shows the saved change again. **Remove from changes** takes every change of the object away. The bar says how many fields wait.
+  A wall type and the turn rules in the Turn tab follow the same rule: a choice is a change only after **Add to changes**, except a wall type, which goes to the changes when you pick it.
+- **Turn.** The road that the turn starts on, the junction, and a rule for each road that leaves it. **Add to changes** adds all chosen rules at once. The rules are for the driving mode.
+- **New road.** **Draw a new road**, then the points, then the sections for the kind, name and other tags. **Add to changes** finishes the road.
+- **Changes.** The list is in groups (Roads, Buildings, Walls, Nodes, Turn rules, New roads). Each item shows each field as `was → now` and has a **Delete** button. A click on an item picks the object in its tab.
+  At the top: **Undo**, **Redo**, **Download**, **Clear all**. At the bottom: the one **Build again** button, with the number of changes.
+- **Edits that wait.** A tab with a field that is not added has an amber dot. The Changes tab then lists them ("Road tab: 2 fields not added") with a link to the tab, and **Build again** waits with its reason under it.
+- **Kept changes.** The page keeps the changes in this browser for each area name. A reload of the page does not lose them. A build keeps the picked objects of all tabs.
 
 ### Limits
 
