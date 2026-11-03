@@ -465,6 +465,7 @@
   <select id="h3-level" aria-label="The size of a hexagon (H3 level)"></select>
   <button id="h3-clear" class="btn" type="button" disabled>Clear the cells</button>
   <p id="h3-hint" aria-live="polite">Click a hexagon on the map to add it to the area.</p>
+  <p id="h3-grid-note" class="small muted" style="margin:6px 0 0"></p>
 </section>
 
 <div id="areas-src" hidden>
@@ -920,6 +921,7 @@ for (const t of tabs) t.onclick = () => {
   if (t.id !== "tab-find") picking(false);
   document.body.classList.toggle("h3", t.id === "tab-h3");
   if (t.id === "tab-h3") h3Open();
+  h3Grid();
   // the drawing tools work only in the Draw tab
   tool(t.id === "tab-draw" ? (draw.getSnapshot().length ? "select" : "rectangle") : null);
 };
@@ -1296,9 +1298,48 @@ function h3Forget() {
   h3Text(0);
 }
 
+// the grid: while the H3 tab shows, a transparent layer draws every hexagon in view at the chosen level (thin gray lines, no fill), the hexagon under the pointer is lit,
+// and the picked cells are filled. Too many hexagons for the view (a small level at a low zoom, or a big one at a high zoom): no grid, and the note says what to do.
+const H3_MAX_GRID = 4000;
+let h3Token = 0, h3Hover = null;
+async function h3Grid() {
+  const my = ++h3Token, src = map.getSource("h3grid");
+  if (!src) return;
+  const on = document.body.classList.contains("h3");
+  if (!on) { src.setData(empty); map.getSource("h3hover")?.setData(empty); h3Hover = null; $("h3-grid-note").textContent = ""; return; }
+  let h3;
+  try { h3 = await h3Lib(); } catch { return; }
+  if (my !== h3Token) return;
+  const b = map.getBounds(), pad = h3.getHexagonEdgeLengthAvg(h3Level, "km") / 111 * 1.5;       // a cell shows when its center is out of view but its corner is in
+  const w = b.getWest() - pad, e = b.getEast() + pad, south = Math.max(-85, b.getSouth() - pad), north = Math.min(85, b.getNorth() + pad);
+  const estimate = ((e - w) * 111 * Math.cos(((south + north) / 2) * Math.PI / 180)) * ((north - south) * 111) / h3.getHexagonAreaAvg(h3Level, "km2");
+  if (estimate > H3_MAX_GRID) {
+    src.setData(empty);
+    $("h3-grid-note").textContent = "Zoom in, or choose a bigger hexagon, to see the hexagons.";
+    return;
+  }
+  const ids = h3.polygonToCells([[[w, south], [e, south], [e, north], [w, north], [w, south]]], h3Level, true);
+  src.setData({ type: "FeatureCollection", features: ids.map((id) => ({ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [h3.cellToBoundary(id, true)] } })) });
+  $("h3-grid-note").textContent = `${num(ids.length)} hexagon${ids.length === 1 ? "" : "s"} in view.`;
+}
 loaded.then(() => {
+  map.addSource("h3grid", { type: "geojson", data: empty });
+  map.addSource("h3hover", { type: "geojson", data: empty });
   map.addSource("h3cells", { type: "geojson", data: empty });
+  map.addLayer({ id: "h3-grid", type: "line", source: "h3grid", paint: { "line-color": "#475569", "line-width": 1, "line-opacity": 0.5 } });
+  map.addLayer({ id: "h3-fill", type: "fill", source: "h3cells", paint: { "fill-color": blue, "fill-opacity": 0.22 } });
+  map.addLayer({ id: "h3-hover", type: "fill", source: "h3hover", paint: { "fill-color": blue, "fill-opacity": 0.12 } });
   map.addLayer({ id: "h3-line", type: "line", source: "h3cells", paint: { "line-color": blue, "line-width": 1.5, "line-opacity": 0.7 } });
+  map.on("moveend", h3Grid);
+});
+map.on("mousemove", async (ev) => {                       // the hexagon under the pointer is lit
+  if (!document.body.classList.contains("h3")) return;
+  let h3;
+  try { h3 = await h3Lib(); } catch { return; }
+  const { lat, lng } = ev.lngLat.wrap(), id = h3.latLngToCell(lat, lng, h3Level);
+  if (id === h3Hover) return;
+  h3Hover = id;
+  map.getSource("h3hover")?.setData({ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [h3.cellToBoundary(id, true)] } });
 });
 map.on("click", async (ev) => {
   if (!document.body.classList.contains("h3")) return;
@@ -1318,6 +1359,7 @@ $("h3-level").onchange = async () => {
   h3Level = Number($("h3-level").value);
   cells.clear();
   h3Update(h3, had ? "You changed the level. The cells are removed." : undefined);
+  h3Hover = null; h3Grid();
 };
 $("h3-clear").onclick = async () => { cells.clear(); h3Update(await h3Lib()); };
 

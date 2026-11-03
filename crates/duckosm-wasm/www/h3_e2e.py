@@ -97,7 +97,15 @@ def run(browser, phone):
     options = page.eval_on_selector_all("#h3-level option", "(o) => o.map((x) => x.textContent)")
     assert options[3].startswith("Level 8: edge 531 m, 0.737 km²"), options
     assert options[0].startswith("Level 5: edge 9.9 km, 252.9 km²") and options[5].startswith("Level 10: edge 76 m"), options
-    # the four tabs fit in the panel and the page does not scroll sideways
+    # the grid: a transparent layer with the hexagons in view, a lit hexagon under the pointer, and the picked cells filled
+    show(page, 7.4246, 43.7384, 14)
+    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['h3-grid']}).length > 10", timeout=20_000)
+    assert "hexagon" in page.inner_text("#h3-grid-note"), page.inner_text("#h3-grid-note")
+    assert page.evaluate("duckMap.getPaintProperty('h3-grid', 'line-opacity')") < 0.6 and page.evaluate("duckMap.getLayer('h3-grid').type") == "line", "the grid has no fill"
+    if not phone:
+        page.mouse.move(700, 450)
+        page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['h3-hover']}).length > 0", timeout=10_000)
+        # the four tabs fit in the panel and the page does not scroll sideways
     tabs = page.evaluate("[...document.querySelectorAll('#step1-card [role=tab]:not([hidden])')].map((t) => { const r = t.getBoundingClientRect(); return [r.left, r.right, r.width]; })")
     sb = page.evaluate("(() => { const r = document.getElementById('sb').getBoundingClientRect(); return [r.left, r.right]; })()")
     assert len(tabs) == 4 and all(t[0] >= sb[0] and t[1] <= sb[1] + 1 and t[2] > 50 for t in tabs), (tabs, sb)
