@@ -1883,10 +1883,17 @@ function showRoads() {
 // or a touch screen (Safari has no deviceMemory). ?maxroads=N in the address changes the limit (0: none).
 const SMALL_DEVICE = (navigator.deviceMemory ?? 8) <= 4 || matchMedia("(pointer: coarse)").matches;
 const maxParam = new URLSearchParams(location.search).get("maxroads");
-window.mapMaxRoads = maxParam !== null ? (Number(maxParam) || Infinity) : SMALL_DEVICE ? 40000 : Infinity;
-const tooLarge = (n) => `This map has ${num(n)} roads; on this device the map can show up to ${num(window.mapMaxRoads)}. ` +
-  (duck.MODES.some((m) => (roadCount[m] ?? Infinity) <= window.mapMaxRoads) ? "Choose a network that is smaller, use" : "Use") +
-  " a desktop browser, or a smaller area. SQL and the downloads work.";
+// roadstyle's engine draws at most 200,000 roads in a browser page (its memory): a desktop page has this limit too, and it says so before the engine fails
+const ENGINE_MAX_ROADS = 200000;
+window.mapMaxRoads = maxParam !== null ? (Number(maxParam) || Infinity) : SMALL_DEVICE ? 40000 : ENGINE_MAX_ROADS;
+const roadLimit = () => Math.min(window.mapMaxRoads, ENGINE_MAX_ROADS);
+// what to do when the map is too large: the networks that fit (with their number of roads), or a smaller area
+const smaller = () => {
+  const fit = duck.MODES.filter((m) => roadCount[m] != null && roadCount[m] <= roadLimit());
+  return (fit.length ? `Choose one network: ${fit.map((m) => `${m[0].toUpperCase() + m.slice(1)} ${num(roadCount[m])} roads`).join(", ")}. Or use` : "Use")
+    + (SMALL_DEVICE ? " a desktop browser or" : "") + " a smaller area. SQL and the downloads work.";
+};
+const tooLarge = (n) => `This map has ${num(n)} roads. ${SMALL_DEVICE ? "This device" : "A browser page"} draws at most ${num(roadLimit())} roads (its memory). ` + smaller();
 async function addRoadStyle(style) {
   const own = style.metadata?.["roadstyle:images"] || {};
   await addImages(Object.fromEntries(Object.entries(own).map(([n, v]) => ["rs-" + n, v])));
@@ -1976,7 +1983,7 @@ async function drawRoads() {
   } catch (e) {
     // no memory (a WebAssembly memory that cannot grow, an allocation): the same advice as the limit above
     const memory = /memory|allocat|RangeError/i.test(`${e.name} ${e.message}`);
-    if (run === roadsRun) $("mapnote").textContent = memory ? `The map needs more memory than this device gives it (${e.message}). ` + tooLarge(n)
+    if (run === roadsRun) $("mapnote").textContent = memory ? (n > roadLimit() ? tooLarge(n) : `The map needs more memory than this ${SMALL_DEVICE ? "device" : "browser"} gives it. ` + smaller())
       : "The map failed: " + e.message;
   }
 }
@@ -2376,8 +2383,8 @@ const editorPkgUrl = () => new URL("./map/pkg/roadstyle_wasm.js", location.href)
 const editorLook = () => (lookText ??= fetch("map/look.json").then((r) => r.text()));
 $("edit-open").onclick = async () => {
   // the editor draws every road of the area (all networks): the same limit as the map on a small device
-  if (roadCount.all > window.mapMaxRoads) return editNote(`The level editor shows all ${num(roadCount.all)} roads of the area; on this ` +
-    `device it can show up to ${num(window.mapMaxRoads)}. Use a desktop browser, or a smaller area.`);
+  if (roadCount.all > window.mapMaxRoads) return editNote(`The level editor shows all ${num(roadCount.all)} roads of the area. ${SMALL_DEVICE ? "This device" : "A browser page"} draws at most ${num(roadLimit())}. ` +
+    `Use ${SMALL_DEVICE ? "a desktop browser or " : ""}a smaller area.`);
   opening = true;
   drawControls();
   openBusy();

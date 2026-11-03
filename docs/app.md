@@ -199,11 +199,13 @@ The changes:
 **The limit on a small device.** About 1,000 MiB plus 14 KB for each road on the map fits the measurements (Monaco
 13,298 roads: 1,077 MiB; Tartu 64,828: 2,050 MiB; Burnaby 151,770: 3,174 MiB). With 1.5 GB, a phone can thus show about
 40,000 roads. On a small device (`navigator.deviceMemory` 4 GB or less, or a touch screen; Safari has no
-`deviceMemory`), the page draws at most 40,000 roads. A larger map gives the note "This map has N roads; on this device
-the map can show up to 40,000. Choose a network that is smaller, use a desktop browser, or a smaller area. SQL and the
-downloads work." The level editor (all the roads of the area) has the same limit. A draw that fails with a memory error
-gives the same advice. `?maxroads=N` in the address changes the limit (`?maxroads=0`: no limit), so a phone with more
-memory can try. Burnaby on a phone: the build, SQL and the downloads work; its map (151,770 roads, or 62,453 for
+`deviceMemory`), the page draws at most 40,000 roads. On a desktop page the limit is 200,000 roads, the limit of roadstyle's
+engine (its memory; since 2026-11-04 the page checks it before it draws, and before that the engine failed with its own message
+and the page added "up to ∞"). A larger map gives the note "This map has N roads. A browser page draws at most 200,000 roads (its
+memory). Choose one network: Driving 57,951 roads, Walking 132,122 roads. Or use a smaller area. SQL and the downloads work."
+The note lists the networks that fit, with their roads. The level editor (all the roads of the area) has the same limit. A draw
+that fails with a memory error gives the same advice. `?maxroads=N` in the address changes the limit (`?maxroads=0`: no limit,
+and the engine can still fail), so a phone with more memory can try. `roads_limit_e2e.py` checks the note and the limits. Burnaby on a phone: the build, SQL and the downloads work; its map (151,770 roads, or 62,453 for
 "Driving") is over the limit.
 
 **The tiles in a fast zoom.** The roads source `rs-roads` has the roads and all the layers of the area map (land, water, buildings), so a tile that is not loaded leaves a square of the whole map empty. MapLibre draws such a tile from loaded parents and from loaded children up to 3 zooms deeper (`maxOverzooming`), so a fast zoom out, past zooms that have no loaded tile, showed the background colour for 0.5 to 1.7 s (Burnaby, pitch 60, headless Chromium, software GL). Two changes (`app/duck.js` `tile()`, `index.html` `addOverview()`): the page keeps the waiting tile requests, sends the newest first, two at a time, and skips a request that MapLibre aborted; and a second source `rs-low` (the same tiles, zoom 6 to 9) gives copies of the opaque fill layers under the real layers, so the area always has land and water. The test `tile-lag/zoom/black.py` (not in the repository) measured black time 0 ms in 7 of 8 zoom-out runs (path from zoom 9, zoom 7 and zoom 6.3; one run from zoom 8: 0.4 s), against 0.26 to 1.7 s without. The zoom in was never black in these paths. A tile of zoom 10 to 13 has 0.5 to 0.9 MB, and MapLibre needs 0.4 to 0.7 s to parse it: smaller low-zoom tiles are roadstyle's to make.
