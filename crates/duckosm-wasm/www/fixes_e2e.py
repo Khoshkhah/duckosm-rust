@@ -142,6 +142,18 @@ with sync_playwright() as p:
     assert 22.4 in page.evaluate("window.fixesPanel.drawn().heights"), ("7 floors are 22.4 m in the 3D preview", page.evaluate("window.fixesPanel.drawn().heights"))
     print(f"a building: way {b['osm_id']}, floors 7 (3D preview 22.4 m), roof gabled, roof color #cc3300")
 
+    # the walls of the building: a list with a type for each wall (from main.building_faces), colored on the map; a change of type is a rule at once
+    page.wait_for_function("document.querySelectorAll('#fix-form .wallrow').length >= 3", timeout=20_000)
+    assert page.evaluate("window.fixesPanel.drawn().faces") >= 3, "the walls of the building are drawn"
+    wall = page.evaluate("(() => { const r = document.querySelector('#fix-form .wallrow'); return [r.dataset.a, r.dataset.b, r.dataset.computed]; })()")
+    new_type = "party" if wall[2] != "party" else "side"
+    page.select_option("#fix-form .wallrow select", new_type)
+    y = text(page)
+    assert "building_faces" in y and f"type: {new_type}" in y and f"building: {b['osm_id']}" in y, y
+    assert "edited" in (page.get_attribute("#fix-form .wallrow", "class") or "")
+    print(f"a wall: nodes {wall[0]} and {wall[1]} were {wall[2]}, now {new_type}")
+    page.screenshot(path=str(out / "walls.png"))
+
     # a node (a traffic signal): the Nodes filter, a real click
     page.click("#fix-kind [data-kind=node]")
     n = rows(page, "SELECT osm_id, ST_X(geom) AS lon, ST_Y(geom) AS lat FROM features.traffic WHERE map_extract(tags, 'highway')[1] = 'traffic_signals' LIMIT 1")[0]
@@ -178,10 +190,10 @@ with sync_playwright() as p:
 
     # the list of changes
     page.click("#fix-tab-changes")
-    page.wait_for_function("document.querySelectorAll('#fix-list .chg').length === 4", timeout=10_000)
+    page.wait_for_function("document.querySelectorAll('#fix-list .chg').length === 5", timeout=10_000)
     lst = page.inner_text("#fix-list")
-    assert "Road" in lst and "Building" in lst and "Node" in lst and "Turn" in lst and "sidewalk=both" in lst and "building:levels=7" in lst, lst
-    assert page.inner_text("#fix-n") == "4"
+    assert "Road" in lst and "Building" in lst and "Node" in lst and "Turn" in lst and "Wall" in lst and "sidewalk=both" in lst and "building:levels=7" in lst, lst
+    assert page.inner_text("#fix-n") == "5"
     page.screenshot(path=str(out / "changes.png"))
     # a click on a change selects the object, with its data, and goes to the Edit tab
     page.click(f"#fix-list .chg[data-id='{ROAD}']")
@@ -191,30 +203,30 @@ with sync_playwright() as p:
     # delete a change, then undo and redo
     page.click("#fix-tab-changes")
     page.click("#fix-list .chg[data-type=node] [data-x]")
-    page.wait_for_function("document.querySelectorAll('#fix-list .chg').length === 3")
-    page.click("#fix-undo")
     page.wait_for_function("document.querySelectorAll('#fix-list .chg').length === 4")
+    page.click("#fix-undo")
+    page.wait_for_function("document.querySelectorAll('#fix-list .chg').length === 5")
     page.click("#fix-redo")
-    page.wait_for_function("document.querySelectorAll('#fix-list .chg').length === 3")
-    page.click("#fix-undo")
     page.wait_for_function("document.querySelectorAll('#fix-list .chg').length === 4")
+    page.click("#fix-undo")
+    page.wait_for_function("document.querySelectorAll('#fix-list .chg').length === 5")
     assert "traffic_signals:direction: backward" in text(page)
 
     # a file that is not valid does not change the rules; a duckOSM file (overrides with tags) loads
     saved = text(page)
     page.evaluate("window.fixesPanel.load('overrides: [')")
-    assert page.inner_text("#fix-n") == "4"
+    assert page.inner_text("#fix-n") == "5"
     page.evaluate("window.fixesPanel.load('overrides:\\n  - osm_id: 1\\n    lanes: 3\\n    tags: {surface: asphalt}\\n')")
     assert page.inner_text("#fix-n") == "1"
     page.evaluate("(t) => window.fixesPanel.load(t)", saved)
-    page.wait_for_function("document.getElementById('fix-n').textContent === '4'")
+    page.wait_for_function("document.getElementById('fix-n').textContent === '5'")
 
     # build again with the rules: Apply closes the panel; the tables have the changes, and the amber layer is drawn again
     page.click("#fix-apply")
     page.wait_for_function("document.getElementById('run').hasAttribute('aria-busy')", timeout=30_000)
     built(page)
     page.wait_for_function("document.getElementById('fix-why').textContent.includes('Built with these fixes')", timeout=60_000)
-    assert not page.is_visible("#fix-panel") and "4 changes" in page.inner_text("#fix-sum"), page.inner_text("#fix-sum")
+    assert not page.is_visible("#fix-panel") and "5 changes" in page.inner_text("#fix-sum"), page.inner_text("#fix-sum")
     lanes = rows(page, f"SELECT DISTINCT lanes::INTEGER AS lanes FROM driving.edges WHERE osm_id = {ROAD}")
     assert [r["lanes"] for r in lanes] == [7], lanes
     wt = {r["walk_type"] for r in rows(page, f"SELECT DISTINCT walk_type FROM walking.edges WHERE osm_id = {ROAD}")}
@@ -222,6 +234,10 @@ with sync_playwright() as p:
     bt = rows(page, f"SELECT map_extract(tags, 'building:levels')[1] AS l, map_extract(tags, 'roof:shape')[1] AS r, map_extract(tags, 'roof:colour')[1] AS c "
                     f"FROM features.buildings WHERE osm_id = {b['osm_id']} AND osm_type = 'way'")[0]
     assert (bt["l"], bt["r"], bt["c"]) == ("7", "gabled", "#cc3300"), bt
+    faces = rows(page, f"SELECT face_type, computed_type, edited FROM main.building_faces WHERE building_id = {b['osm_id']} AND "
+                       f"least(from_node, to_node) = least({wall[0]}, {wall[1]}) AND greatest(from_node, to_node) = greatest({wall[0]}, {wall[1]})")[0]
+    assert (faces["face_type"], faces["computed_type"], faces["edited"]) == (new_type, wall[2], True), ("the rule is in main.building_faces", faces)
+    assert rows(page, "SELECT count(*)::INTEGER AS n FROM main.building_faces")[0]["n"] > 1000
     info = rows(page, f"SELECT levels, roof_shape, roof_color, height_m FROM main.building_info WHERE osm_id = {b['osm_id']} AND osm_type = 'way'")[0]
     assert (info["levels"], info["roof_shape"], info["roof_color"]) == (7, "gabled", "#cc3300"), info
     cc = rows(page, "SELECT css_color('red') AS a, css_color('#f0a') AS b, css_color('nope') AS c")[0]

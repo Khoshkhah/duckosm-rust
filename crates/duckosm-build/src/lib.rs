@@ -10,7 +10,7 @@ use duckosm_core::model::{Network, Way};
 use duckosm_core::network::{build_network_with, Coords, Options};
 use duckosm_core::osmjson::OsmJson;
 use duckosm_core::raw::Raw;
-use duckosm_core::{cutfile, pbf, sidewalks};
+use duckosm_core::{building_faces, cutfile, pbf, sidewalks};
 use levels::LevelEdges;
 use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
@@ -69,6 +69,9 @@ pub struct Params {
     /// and writes `elevation_nodes_<mode>.parquet`, `elevation_edges_<mode>.parquet` (with `z_vertices`, the
     /// height at each vertex) and `elevation_metadata_main.parquet`; the .duckdb gets duckOSM's columns.
     pub dem: Option<PathBuf>,
+    /// Also make `main.building_faces` (`building_faces_main.parquet`, docs/osm-editing.md): the walls of the buildings of the raw cut, each with a
+    /// type (front, back, side, party), from the street edges of the driving and walking modes. Needs a boundary and a region file, as `raw` does.
+    pub building_faces: bool,
 }
 
 impl Default for Params {
@@ -91,6 +94,7 @@ impl Default for Params {
             built_at: None,
             timezone_entry: None,
             dem: None,
+            building_faces: false,
         }
     }
 }
@@ -123,6 +127,8 @@ pub struct Summary {
     pub bus_routes: Option<usize>,
     /// The rows of `raw.nodes`, `raw.ways` and `raw.relations`, when they were written.
     pub raw: Option<(usize, usize, usize)>,
+    /// The walls and the buildings of `main.building_faces`, when it was made.
+    pub building_faces: Option<(usize, usize)>,
     /// A summary of the drawing levels, when they were made.
     pub levels: Option<String>,
     /// A summary of the lane profile, when the driving mode was built.
@@ -155,6 +161,9 @@ impl Summary {
         }
         if let Some((n, w, r)) = self.raw {
             out.push(format!("raw: {n} nodes, {w} ways, {r} relations"));
+        }
+        if let Some((f, b)) = self.building_faces {
+            out.push(format!("building faces: {f} walls of {b} buildings"));
         }
         out.extend(self.levels.iter().chain(&self.lanes).cloned());
         out
@@ -202,6 +211,23 @@ pub fn write_tables<W: Write + Send>(
         pq::write_turn_path_restrictions_to(out("turn_path_restrictions")?, rows)?;
     }
     Ok(())
+}
+
+/// The roads that a building can face: the segments of the edges of a mode, but not the paths that run along or across a street (footways, steps,
+/// cycleways), which would be the nearest "street" of a wall that faces the real one.
+fn street_segments(edges: &[duckosm_core::model::Edge], out: &mut Vec<building_faces::Street>) {
+    const NOT_STREETS: [&str; 7] = ["footway", "path", "steps", "corridor", "bridleway", "cycleway", "track"];
+    for e in edges.iter().filter(|e| !NOT_STREETS.contains(&e.attrs.highway.as_str())) {
+        for w in e.geometry.windows(2) {
+            out.push(building_faces::Street {
+                a: w[0],
+                b: w[1],
+                edge_id: e.edge_id,
+                osm_id: e.osm_id,
+                name: e.attrs.name.clone(),
+            });
+        }
+    }
 }
 
 /// Write `bus.routes` and `bus.route_edges` (docs/bus.md) of the driving network `net`, from the route relations and
@@ -383,9 +409,9 @@ pub fn run<W: Write + Send>(
     // the bus routes need the route relations and the member ways of the raw cut (docs/bus.md)
     let bus = p.bus_routes && driving;
     let cut_file = p.cut_pbf || p.cut_osm;
-    if (p.raw || cut_file) && !matches!(input, Input::Area(..)) {
+    if (p.raw || cut_file || p.building_faces) && !matches!(input, Input::Area(..)) {
         return Err(
-            "raw.* (the base-map layers) and the cut file need a boundary and a region file".into(),
+            "raw.* (the base-map layers), the building faces and the cut file need a boundary and a region file".into(),
         );
     }
     let mut raw = None;
@@ -408,7 +434,7 @@ pub fn run<W: Write + Send>(
         )?,
         // duckOSM with a boundary: cut the PBF (osmium complete_ways, or smart for raw.*), then the fixes on the raw ways
         Input::Area(open, boundary) => {
-            let (mut ways, coords, relations) = if p.raw || bus || cut_file {
+            let (mut ways, coords, relations) = if p.raw || bus || cut_file || p.building_faces {
                 let (w, c, r, mut rw) = pbf::read_area_raw(open, boundary)?;
                 log.step("cut to the boundary");
                 // the cut as osmium gives it: before the fixes change the ways
@@ -459,6 +485,7 @@ pub fn run<W: Write + Send>(
     let mut mode_nodes = Vec::new();
     let mut level_edges = LevelEdges::default();
     let mut lane_edges = LaneEdges::default();
+    let mut streets: Vec<building_faces::Street> = Vec::new();
     for mode in &p.modes {
         let n = mode.name();
         let net = build_network_with(&ways, &coords, *mode, opts, fixes, &relations)?;
@@ -492,6 +519,9 @@ pub fn run<W: Write + Send>(
             edge_graph: net.graph.edge_graph.as_ref().map_or(0, Vec::len),
             turn_restrictions: net.graph.turn_restrictions.as_ref().map_or(0, Vec::len),
         });
+        if p.building_faces && matches!(*mode, Mode::Driving | Mode::Walking) {
+            street_segments(&net.edges, &mut streets);
+        }
         // duckOSM: the arrows of the fixes go into the raw tags after this mode, so the next modes see them
         fixes.set_arrows(&mut ways, &net.ways, *mode);
         lane_edges.add(*mode, &net);
@@ -535,6 +565,14 @@ pub fn run<W: Write + Send>(
             dem_nodata,
         )?;
         log.step("elevation metadata");
+    }
+    if let Some(r) = raw.as_ref().filter(|_| p.building_faces) {
+        let faces = building_faces::building_faces(&r.ways, &r.nodes, &streets, &fixes.face_edits);
+        duckosm_parquet::write_building_faces_to(file("building_faces_main.parquet")?, &faces)?;
+        let mut buildings: Vec<i64> = faces.iter().map(|f| f.building_id).collect();
+        buildings.dedup();
+        sum.building_faces = Some((faces.len(), buildings.len()));
+        log.step("building faces");
     }
     if let Some(r) = raw.as_mut().filter(|_| p.raw) {
         // the tags that the steps set on the network's ways (the sidewalk rule, the arrows of the fixes)

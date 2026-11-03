@@ -47,6 +47,7 @@ export const TABLES = {
   level_edits: "Your edits of the drawing order in the level editor (card 7): one rule for each row.",
   level_heads: "The head lengths that you set in the level editor, for each road.",
   level_caps: "The line ends that you set in the level editor, for each road.",
+  building_faces: "One row for each wall of a building: its type (front, back, side, party wall), length, direction and the street that it faces. Your rules for walls are in face_type; computed_type is what the method gave.",
   building_info: "One row for each building: floors, height, roof shape, roof and facade colors (as #rrggbb) and materials, read from its OSM tags.",
 };
 export const REFERENCE = "https://khoshkhah.github.io/duckOSM/reference/database/";
