@@ -373,6 +373,23 @@ A change of format does not build the roads again. The map worker keeps its tile
 
 **These results can depend on the browser and on the device.** The measurements used one browser (Chromium), software rendering and 2 runs. A phone or another browser can give other times. MLT is the default by Kaveh's order of 2026-10-29. A comparison of MVT and MLT in several browsers is still open; MVT stays as the second choice.
 
+### Saved areas
+
+Each build is saved in the browser (OPFS, the origin private file system): the tables as Parquet files, `meta.json` (the
+name, the boundary, the fixes text, the summary and the table list) and a cache of the drawn roads (`viz_roads.parquet`,
+`viz_features.parquet`). The code is `www/app/area_store.js`. A new visit shows a banner above the cards: **Open**
+loads the last area into DuckDB and draws the map again with no build (Monaco: 1.6 s). The **Saved** tab of card 1 lists all
+areas, with **Open** and **Delete**.
+
+- A save replaces the area: it removes all old files first, and writes `meta.json` last. A restore reads only the files that
+  `meta.json` lists, so the tables of an older build (other modes) never come back.
+- The slug is the name in lower case and a short hash of the exact name, so "Tartu" and "tartu" are two areas.
+- The drawing cache is valid only for the page that wrote it: it holds the page's `?v=<sha>` (a deployed page; empty on a
+  local server). Another page version loads the tables and draws the roads again.
+- A failed save (for example, full storage) shows a message, and the page keeps working.
+- The edits of the level editor are not here: roadstyle's own browser store keeps them.
+- Test: `python crates/duckosm-wasm/www/saved_e2e.py <out folder>` (build, new visit, restore, a smaller rebuild).
+
 ### Step 7: edit the levels
 
 Kaveh's words (2026-10-24): "Add editing dashboard to duckosm rust github io dashboard". The card **Edit levels** puts
@@ -390,11 +407,15 @@ The card shows after a build that has `visualization.edge_levels` (each build of
    this browser (`roads.parquet`, `pairs.csv`, `edges.json`, and `edits.csv` only when the store has none, so the edits
    of an earlier session show again). The store is `browserStore("duckosm:<area name>")`, in the private file system of
    the site. The card gives the number of roads and the warnings of `makeArea`.
-2. The editor (`levelEditor({map, panel, backLabel, pkgUrl, store, dashboard: rs, prefix: "rs-", levels})`) draws its own roads (`rs-lv-roads`, the tiles `lv://`) on the page's map,
-   with the page's dashboard, as roadstyle's own editor page does (not the `host` mode, which keeps the page's roads and their hover and select colours). So the hover and the
-   picks are the editor's: a lighter red for the road that the next click picks first, a lighter blue for the second, red and blue picks, and no tooltip or popup of the page's own
-   dashboard while the editor is open. The page's roads source stays and its road layers are off while the editor is open (`destroy` puts them back). The editor opens in 1 to 2 s on Monaco
-   (the `host` mode: 0.3 s). The tables change at **Apply** (the page reads the editor's `levels.csv` from the store at "← Steps"). `levels` is the build's `visualization.edge_levels` as CSV text,
+2. The editor (`levelEditor({map, panel, backLabel, pkgUrl, store, dashboard: rs, prefix: "rs-", levels, host: {replaceRoads}, look})`) keeps the page's roads
+   (roadstyle's `host` mode). **At open** it loads the area into its worker and draws its panel: the map does not change, and the editor builds no roads and no tiles of its own
+   (Burnaby, 151,770 roads, quiet machine: 2.0 s the first time, with the area made, and 1.5 s the next time; on a machine that other work loads, 3.7 s and 1.9 s, against 34.8 s and 16.4 s when the editor built its own roads and tiles: 15.5 s and 11.1 s on a quiet machine). A test
+   keeps it so: the editor's worker gets no `build`, `draw` or `tile` call (`editor_e2e.py`). **At a change** the editor gives `replaceRoads` the rows of the edges that changed, and the page's map
+   worker redraws only those edges and the edges at their end nodes (`relevel`: stage 1 of the area again, 1.0 s on Burnaby; then the visible tiles load again from the map
+   worker, which keeps its tiles and cuts again only the pieces of the changed edges). A head or a cap on Burnaby: 2.0 to 2.5 s until the map is drawn (before: 8.6 to 11.7 s with the same load).
+   MapLibre 5 has no `source.reload()`: `replaceRoads` uses `setTiles` with the same URLs. The picks are the editor's: `look` (the page's
+   `map/look.json`) tells the editor the page's select and hover colours, and it swaps them in the page's road layers (a lighter red for the road that the next click picks first, a lighter blue for the
+   second, red and blue picks); the page's popup and tooltip are off while the editor is open (`quiet` of roadstyle's `select.js`); `destroy` puts the page's paint back. The tables change at **Apply** (the page reads the editor's `levels.csv` from the store at "← Steps"). The page and the editor share one road model: the page makes the area once for an edge hash (not at each open) and, in the idle time after it draws the map, makes the editor's engine (`prepareEditor`: the worker and the `LevelArea`); "← Steps" keeps the engine, and the next open (also after Apply: the edges are the same) uses it. Burnaby: Edit levels 0.8 s the first time, 0.4 s the next. At "← Steps" the page writes the tables and does not draw the map again, because the map worker already has the changes (Burnaby: 1.2 s, against 9.6 s with a new draw). `levels` is the build's `visualization.edge_levels` as CSV text,
    with the `edge_hash` of `edge_levels_meta` (`duck.storedLevels()`). The editor starts from its stored `levels.csv`
    when it was solved for the same inputs (roadstyle `6be68c2`: the SHA-256 of `roads.parquet`, `pairs.csv` and
    `edits.csv`), else from the build's levels (since `083224c`); it solves the whole area only when neither fits. Its panel (roadstyle's `level_editor.html`) is on the right of the
