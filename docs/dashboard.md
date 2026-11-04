@@ -302,11 +302,21 @@ Card 9 gives the network that you built to other software. It is off until a bui
 | **MATSim network** | `<area>_<network>_matsim_network.xml` | A `network_v2.dtd` file: a node for each node, and a link for each edge with length (m), free speed (m/s), capacity (vehicles per hour), lanes and mode (`car`, `walk` or `bike`). Coordinates are meters in the UTM zone of the area. |
 | **SUMO plain XML** | `<area>_<network>_sumo.zip` | `.nod.xml`, `.edg.xml` and `.con.xml` and a `README.txt` with the `netconvert` command. An edge has its shape, lanes, speed and priority. The connections are the legal turns of the edge graph (turn restrictions applied). |
 
-The tiles are the tiles of the map on the screen, made again by the map worker as MVT. Two fields set them:
+The tiles are the tiles of the map on the screen, made again by the map worker as MVT. The card has a check box and two fields for them:
 
-- **Zoom from ... to ...** The lowest and the highest zoom (0 to 18). The card shows the number of tiles for the extent of the network. The limit is 40,000 tiles: if the count is higher, the buttons are off, and you use fewer zooms.
+- **Everything** (on by default). The export has the whole map: zoom 0 up to the highest zoom that stays under the limit (for Monaco, 0 to 16), all the networks in one tile set, every attribute of every road, and all the layers of the build. If the map shows one network, the page switches it to **All** (card 6) and draws it again first. Monaco gives a 5.6 MB file.
+- **Zoom from ... to ...** The lowest and the highest zoom (0 to 18). These fields are off while **Everything** is on. With **Everything** off, the file has only the tiles of the map as they are (the layers of roadstyle's look, without the extra attributes), for the zooms that you set. The card shows the number of tiles for the extent of the network. The limit is 40,000 tiles: if the count is higher, the buttons are off, and you use fewer zooms.
 - The buttons for tiles are off until **Show on map** (step 6) has drawn the map. A tile that has nothing in it is left out.
-- A tile has all the layers of the map. In roadstyle's tiles, the layer `simple` has the roads and the layers `ov0`, `ov1` and so on have the base-map layers (water, land use, buildings). A tile joins the layers of all the sources of the map.
+
+What a tile has:
+
+| Layer | What it is |
+|---|---|
+| `edges` | Only with **Everything**. One LineString for each piece of a road in the tile, clipped to the tile with a small buffer. Each piece has all the columns of its edge: `edge_id`, `osm_id`, `edge_ref`, `source`, `target`, `name`, `highway`, `oneway`, `lanes`, `surface`, `maxspeed_kmh`, `bridge`, `tunnel`, `junction`, `layer`, `service`, `access`, `length_m` and `cost_s`, and a flag for each network that has the edge (`driving`, `walking`, `cycling`). The ids are text. A lower road class starts at a higher zoom: motorway, trunk and primary from zoom 0, secondary from 8, tertiary from 10, unclassified from 11, residential and living street from 12, all other classes from 13. At the highest zoom, every edge is in the tiles. |
+| `simple`, `slots` | roadstyle's layers for drawing the roads (shapes, classes, one-way marks, labels). The map style reads them. They do not carry the attributes of an edge. |
+| `ov0`, `ov1`, ... | The base-map layers of the build: water, land use, buildings (with `height`), railways and more. They need a build with **Layers** on. |
+
+The OpenFreeMap background of the page is not in the tiles: it is not ours.
 
 Facts about the files:
 

@@ -27,6 +27,17 @@ def rows(page, sql):
     return page.evaluate(f"window.duckApi.query({sql!r}).then((r) => r.toArray().map((x) => x.toJSON()))")
 
 
+def serve_range(route, body):
+    """answer a request of the pmtiles library for a range of the file"""
+    rng = route.request.headers.get("range")
+    if rng:
+        a_, b_ = rng.replace("bytes=", "").split("-")
+        part = body[int(a_): int(b_) + 1]
+        route.fulfill(status=206, body=part, headers={"Content-Range": f"bytes {a_}-{int(a_) + len(part) - 1}/{len(body)}", "Accept-Ranges": "bytes", "Content-Type": "application/octet-stream"})
+    else:
+        route.fulfill(status=200, body=body)
+
+
 def download(page, fmt):
     try:
         with page.expect_download(timeout=60_000) as d:
@@ -118,6 +129,38 @@ with sync_playwright() as p:
     print(f"SUMO: {len(es)} edges, {len(cs)} connections")
     # tiles: the zooms of the card, a count; PMTiles that the pmtiles library reads (the header, the metadata, a tile that is MVT), and MBTiles (SQLite) with the same tiles
     assert page.locator("#export-list [data-tiles]").count() == 2 and page.evaluate("[...document.querySelectorAll('#export-list [data-tiles]')].every((b) => !b.disabled)"), "the tile buttons are on after the map is drawn"
+    # Everything (on by default): zoom 0 to the highest that fits, all networks, every road attribute in the tiles
+    assert page.is_checked("#export-full") and page.is_disabled("#export-zmin") and page.input_value("#export-zmin") == "0"
+    zmax = int(page.input_value("#export-zmax"))
+    assert zmax >= 14, zmax
+    page.wait_for_function("/\\d+ tiles\\./.test(document.getElementById('export-tiles').textContent)")
+    full_path = download(page, "pmtiles")
+    served = {"body": full_path.read_bytes()}
+    page.route("**/__dl/full.pmtiles", lambda route: serve_range(route, served["body"]))
+    page.add_script_tag(url="https://cdn.jsdelivr.net/npm/pmtiles@3.2.1/dist/pmtiles.js")
+    ev = page.evaluate("""async (zmax) => {
+        const mvt = await import('./app/mvt.js'), p = new pmtiles.PMTiles('/__dl/full.pmtiles'), h = await p.getHeader();
+        const n = 2 ** zmax, x0 = Math.floor((7.40 + 180) / 360 * n), x1 = Math.floor((7.45 + 180) / 360 * n);
+        const lat = (d) => { const r = d * Math.PI / 180; return Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n); };
+        const ids = new Set(); let sample = null, pieces = 0;
+        for (let x = x0; x <= x1; x++) for (let y = lat(43.76); y <= lat(43.72); y++) {
+            const t = await p.getZxy(zmax, x, y);
+            if (!t) continue;
+            const L = mvt.decodeTile(new Uint8Array(t.data)).find((l) => l.name === 'edges');
+            if (!L) continue;
+            for (const f of L.features) { const q = mvt.propsOf(L, f); ids.add(q.edge_id); sample ??= q; pieces++; }
+        }
+        const low = await p.getZxy(5, Math.floor((7.4246 + 180) / 360 * 32), Math.floor((1 - Math.log(Math.tan(43.7384 * Math.PI / 180) + 1 / Math.cos(43.7384 * Math.PI / 180)) / Math.PI) / 2 * 32));
+        const Ll = low ? mvt.decodeTile(new Uint8Array(low.data)).find((l) => l.name === 'edges') : null;
+        return {min: h.minZoom, max: h.maxZoom, ids: [...ids], pieces, sample, lowClasses: Ll ? [...new Set(Ll.features.map((f) => mvt.propsOf(Ll, f).highway))] : null};
+    }""", zmax)
+    assert ev["min"] == 0 and ev["max"] == zmax, ev
+    union = rows(page, "SELECT count(*)::INTEGER AS n FROM (SELECT edge_id FROM driving.edges UNION SELECT edge_id FROM walking.edges UNION SELECT edge_id FROM cycling.edges)")[0]["n"]
+    assert len(ev["ids"]) == union, ("every edge of every network is in the tiles of the highest zoom", len(ev["ids"]), union)
+    assert all(k in ev["sample"] for k in ("osm_id", "edge_id", "edge_ref", "highway", "driving", "walking", "cycling", "length_m", "source", "target")), ev["sample"]
+    assert ev["lowClasses"] is None or set(ev["lowClasses"]) <= {"motorway", "trunk", "primary", "primary_link", "motorway_link", "trunk_link"}, ev["lowClasses"]
+    print(f"Everything: zoom 0 to {zmax}, {len(ev['ids'])} edges of {union} in the tiles of zoom {zmax} ({ev['pieces']} pieces), low zoom classes {ev['lowClasses']}")
+    page.uncheck("#export-full")
     page.fill("#export-zmin", "12")
     page.fill("#export-zmax", "14")
     page.wait_for_function("/\\d+ tiles\\./.test(document.getElementById('export-tiles').textContent)")
@@ -125,19 +168,7 @@ with sync_playwright() as p:
     path = download(page, "pmtiles")
     data = path.read_bytes()
     assert data[:7] == b"PMTiles" and data[7] == 3
-    served = {"body": data}
-
-    def serve(route):
-        rng = route.request.headers.get("range")
-        body = served["body"]
-        if rng:
-            a_, b_ = rng.replace("bytes=", "").split("-")
-            part = body[int(a_): int(b_) + 1]
-            route.fulfill(status=206, body=part, headers={"Content-Range": f"bytes {a_}-{int(a_) + len(part) - 1}/{len(body)}", "Accept-Ranges": "bytes", "Content-Type": "application/octet-stream"})
-        else:
-            route.fulfill(status=200, body=body)
-    page.route("**/__dl/t.pmtiles", serve)
-    page.add_script_tag(url="https://cdn.jsdelivr.net/npm/pmtiles@3.2.1/dist/pmtiles.js")
+    page.route("**/__dl/t.pmtiles", lambda route: serve_range(route, data))
     got = page.evaluate("""async () => {
         const p = new pmtiles.PMTiles('/__dl/t.pmtiles'), h = await p.getHeader(), m = await p.getMetadata();
         const z = 14, n = 2 ** z, x = Math.floor((7.4246 + 180) / 360 * n), r = 43.7384 * Math.PI / 180, y = Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n);

@@ -2418,7 +2418,7 @@ function paintExport() {
   sel.value = modes.includes(was) ? was : modes[0] ?? "";       // (roadstyle's list shows the new value after this)
   $("export-mode-row").hidden = modes.length < 2;
   let last = "";
-  const zoomRow = '<div class="exp zoomrow"><span class="small">Zoom from <input id="export-zmin" type="number" min="0" max="18" value="10" aria-label="The lowest zoom"> to <input id="export-zmax" type="number" min="0" max="18" value="14" aria-label="The highest zoom"></span><span id="export-tiles" class="small"></span></div>';
+  const zoomRow = '<div class="exp zoomrow"><label class="optrow"><input type="checkbox" id="export-full" checked><span class="t"><b>Everything</b><small>Zoom 0 up to the highest zoom that fits the limit, all networks, every road attribute, and all layers of the build. Water, land use and buildings need a build with Layers on.</small></span></label><span class="small">Zoom from <input id="export-zmin" type="number" min="0" max="18" value="10" aria-label="The lowest zoom"> to <input id="export-zmax" type="number" min="0" max="18" value="14" aria-label="The highest zoom"></span><span id="export-tiles" class="small"></span></div>';
   $("export-list").innerHTML = exporter.FORMATS.map((f) => `${f.group !== last ? `<p class="grp">${(last = f.group)}</p>${f.tiles ? zoomRow : ""}` : ""}<div class="exp"><b>${esc(f.title)}</b><button type="button" class="btn sm" data-fmt="${f.id}"${f.tiles ? " data-tiles" : ""}>Download</button><small>${esc(f.note)}</small></div>`).join("");
   paintTileCount();
 }
@@ -2431,18 +2431,24 @@ async function exportExtent() {
   return (exportBox = [e.w, e.s, e.e, e.n]);
 }
 const exportSource = () => ({
-  urls: Object.entries(map.getStyle().sources).filter(([id, src]) => id.startsWith("rs-") && src.type === "vector" && src.tiles?.length).map(([, src]) => src.tiles[0].replace(/([?&])f=[a-z]+/, "$1f=mvt").replace(/^(rs:[^?]*)$/, "$1?f=mvt")),
+  urls: [...new Set(Object.entries(map.getStyle().sources).filter(([id, src]) => id.startsWith("rs-") && src.type === "vector" && src.tiles?.length).map(([, src]) => src.tiles[0].replace(/([?&])f=[a-z]+/, "$1f=mvt").replace(/^(rs:[^?]*)$/, "$1?f=mvt")))],      // the roads and low-zoom sources have one address
   tile: (u) => duck.tile(u),
 });
+const exportModes = () => [...new Set(duck.tables.filter((t) => t.table === "edges").map((t) => t.mode))];
+const fullMaxZoom = (box) => { let z = 0; for (let k = 0; k <= 16; k++) { if (exporter.tileCount(box, 0, k) > exporter.MAX_TILES) break; z = k; } return z; };
 async function paintTileCount() {
   const out = $("export-tiles");
   if (!out) return;
+  const box = await exportExtent(), full = $("export-full").checked;
+  if (full) { $("export-zmin").value = 0; $("export-zmax").value = fullMaxZoom(box); }
+  $("export-zmin").disabled = $("export-zmax").disabled = full;
   const lo = Math.max(0, Math.min(18, +$("export-zmin").value || 0)), hi = Math.max(lo, Math.min(18, +$("export-zmax").value || lo));
-  const n = exporter.tileCount(await exportExtent(), lo, hi);
+  const n = exporter.tileCount(box, lo, hi);
   out.textContent = n > exporter.MAX_TILES ? `${num(n)} tiles: too many (at most ${num(exporter.MAX_TILES)}). Use fewer zooms.` : `${num(n)} tiles.`;
   for (const b of document.querySelectorAll("#export-list [data-tiles]")) b.disabled = n > exporter.MAX_TILES || !roadsShown;
 }
-$("export-list").addEventListener("input", (e) => { if (e.target.id === "export-zmin" || e.target.id === "export-zmax") paintTileCount(); });
+$("export-list").addEventListener("input", (e) => { if (["export-zmin", "export-zmax", "export-full"].includes(e.target.id)) paintTileCount(); });
+$("export-list").addEventListener("change", (e) => { if (e.target.id === "export-full") paintTileCount(); });
 document.addEventListener("duckosm:built", () => { exportBox = null; });
 document.addEventListener("duckosm:drawn", () => { paintTileCount(); });
 $("export-list").addEventListener("click", async (e) => {
@@ -2452,8 +2458,19 @@ $("export-list").addEventListener("click", async (e) => {
   b.disabled = true; $("export-status").textContent = `Making ${f.title}…`;
   try {
     const t0 = performance.now();
-    const ctx = f.tiles ? { src: exportSource(), bbox: await exportExtent(), min: Math.max(0, +$("export-zmin").value || 0), max: Math.min(18, +$("export-zmax").value || 14),
-      progress: (d, n) => { $("export-status").textContent = `Making ${f.title}: ${num(d)} of ${num(n)} tiles…`; } } : undefined;
+    let ctx;
+    if (f.tiles) {
+      const full = $("export-full").checked;
+      if (full && $("mapmode").value !== "all" && [...$("mapmode").options].some((o) => o.value === "all")) {       // all networks in one tile set: the map shows All
+        $("export-status").textContent = "Drawing all networks…";
+        $("mapmode").value = "all";
+        await $("mapmode").onchange();
+        await window.mapDrawing;
+      }
+      ctx = { src: exportSource(), bbox: await exportExtent(), min: Math.max(0, +$("export-zmin").value || 0), max: Math.min(18, +$("export-zmax").value || 14),
+        extra: full ? exporter.edgeTiles(await exporter.roadFeatures(exportQuery, exportModes()), Math.max(0, +$("export-zmin").value || 0), Math.min(18, +$("export-zmax").value || 14)) : null,
+        progress: (d, n) => { $("export-status").textContent = `Making ${f.title}: ${num(d)} of ${num(n)} tiles…`; } };
+    }
     const r = await f.run(exportQuery, mode, $("name").value.trim() || areaName, ctx);
     const a = Object.assign(document.createElement("a"), { download: r.name, href: URL.createObjectURL(r.blob) });
     a.click(); setTimeout(() => URL.revokeObjectURL(a.href));

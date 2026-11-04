@@ -78,6 +78,8 @@ export async function sumo(query, mode, area) {
   return { name: `${slug}_sumo.zip`, blob: await zipOf({ [`${slug}.nod.xml`]: nod, [`${slug}.edg.xml`]: edg, [`${slug}.con.xml`]: con, "README.txt": readme }), rows: edges.length, connections: links.length };
 }
 
+import { decodeTile, encodeTile, addProps, indexOf } from "./mvt.js";
+
 // ---- tiles: the vector tiles of the map that is on screen (the roads and the base-map layers), made again by the map worker as MVT for a range of zooms,
 // and packed in one PMTiles v3 file or one MBTiles file. A tile is the layers of all the map's sources: MVT layers are repeated fields, so the bytes of two
 // tiles of one address can be joined.
@@ -124,7 +126,7 @@ function layerNames(b) {
  * Make the tiles. `src`: {urls: the address of a source with {z}, {x} and {y}, tile(url) -> ArrayBuffer}. Gives {tiles: [{z, x, y, data (gzip)}], layers}.
  * The tiles that have nothing are left out.
  */
-export async function collectTiles(src, bbox, min, max, progress = () => {}) {
+export async function collectTiles(src, bbox, min, max, progress = () => {}, extra = null) {
   const todo = [];
   for (let z = min; z <= max; z++) { const t = spanOf(bbox, z); for (let x = t.x0; x <= t.x1; x++) for (let y = t.y0; y <= t.y1; y++) todo.push([z, x, y]); }
   const tiles = [], layers = new Set();
@@ -132,6 +134,8 @@ export async function collectTiles(src, bbox, min, max, progress = () => {}) {
   const one = async ([z, x, y]) => {
     const parts = [];
     for (const u of src.urls) { const d = new Uint8Array(await src.tile(u.replace("{z}", z).replace("{x}", x).replace("{y}", y))); if (d.length) parts.push(d); }
+    const more = extra?.get(`${z}/${x}/${y}`);
+    if (more) parts.push(more);                          // the layer `edges` of the full export
     if (parts.length) {
       const all = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
       parts.reduce((o, p) => (all.set(p, o), o + p.length), 0);
@@ -239,7 +243,7 @@ export async function mbtiles(tiles, info) {
  * The tile exports. `ctx`: {src, bbox, min, max, progress}. They need the map (step 6): the tiles are the ones of the map.
  */
 async function tileFile(kind, ctx, area) {
-  const { tiles, layers } = await collectTiles(ctx.src, ctx.bbox, ctx.min, ctx.max, ctx.progress);
+  const { tiles, layers } = await collectTiles(ctx.src, ctx.bbox, ctx.min, ctx.max, ctx.progress, ctx.extra);
   if (!tiles.length) throw new Error("no tile has anything in it: show the map first (step 6), or use other zooms");
   const info = { name: SLUG(area), bbox: ctx.bbox, minzoom: ctx.min, maxzoom: ctx.max, layers };
   const blob = await (kind === "pmtiles" ? pmtiles : mbtiles)(tiles, info);
@@ -247,6 +251,102 @@ async function tileFile(kind, ctx, area) {
 }
 export const pmtilesFile = (query, mode, area, ctx) => tileFile("pmtiles", ctx, area);
 export const mbtilesFile = (query, mode, area, ctx) => tileFile("mbtiles", ctx, area);
+
+/** The zoom where a road class starts to show in the layer `edges` (a lower class is left out at a lower zoom, as in any tile set that has to stay small). */
+const CLASS_FROM_ZOOM = { motorway: 0, trunk: 0, primary: 0, secondary: 8, tertiary: 10, unclassified: 11, residential: 12, living_street: 12 };
+const fromZoom = (h) => CLASS_FROM_ZOOM[cls(h)] ?? 13;
+
+/** The roads of all the networks for the layer `edges`: one feature for each edge_id, with every column of the edge, and a flag for each network that has it. */
+export async function roadFeatures(query, modes) {
+  const byId = new Map();
+  for (const m of modes) {
+    for (const e of await query(`SELECT edge_id::VARCHAR AS edge_id, osm_id::VARCHAR AS osm_id, edge_ref, name, highway, oneway, lanes, surface, maxspeed_kmh, bridge, tunnel, junction, layer, service, access,
+        length_m, cost_s, source::VARCHAR AS source, target::VARCHAR AS target, ST_AsGeoJSON(geometry) AS g FROM ${m}.edges`)) {
+      let f = byId.get(e.edge_id);
+      if (!f) {
+        const { g, ...props } = e;
+        for (const n of modes) props[n] = false;
+        byId.set(e.edge_id, (f = { props, line: JSON.parse(g).coordinates }));
+      }
+      f.props[m] = true;
+    }
+  }
+  return [...byId.values()];
+}
+
+/**
+ * The layer `edges` of every tile of the zooms from `min` to `max`: a LineString for each road piece in the tile (clipped to the tile with a buffer of 64 units, 4096 units
+ * wide), with all the attributes. Gives a map from "z/x/y" to the bytes of an MVT tile with that one layer.
+ */
+export function edgeTiles(features, min, max) {
+  const EXT = 4096, BUF = 64, out = new Map();
+  for (let z = min; z <= max; z++) {
+    const scale = 2 ** z * EXT, tiles = new Map();
+    for (const f of features) {
+      if (z < fromZoom(f.props.highway)) continue;
+      const pts = f.line.map(([lon, lat]) => { const r = (lat * Math.PI) / 180; return [((lon + 180) / 360) * scale, ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * scale]; });
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+      const tx0 = Math.max(0, Math.floor((x0 - BUF) / EXT)), tx1 = Math.min(2 ** z - 1, Math.floor((x1 + BUF) / EXT)), ty0 = Math.max(0, Math.floor((y0 - BUF) / EXT)), ty1 = Math.min(2 ** z - 1, Math.floor((y1 + BUF) / EXT));
+      for (let tx = tx0; tx <= tx1; tx++) {
+        for (let ty = ty0; ty <= ty1; ty++) {
+          const runs = clipLine(pts.map(([x, y]) => [x - tx * EXT, y - ty * EXT]), -BUF, EXT + BUF);
+          if (!runs.length) continue;
+          const key = `${z}/${tx}/${ty}`;
+          if (!tiles.has(key)) tiles.set(key, []);
+          tiles.get(key).push({ props: f.props, runs });
+        }
+      }
+    }
+    for (const [key, list] of tiles) out.set(key, edgeTile(list));
+  }
+  return out;
+}
+
+/** The pieces of a polyline inside a square (lo to hi in both axes), as arrays of integer points; a piece of one point is dropped (Liang-Barsky on each segment). */
+function clipLine(pts, lo, hi) {
+  const runs = [];
+  let run = null;
+  const push = (x, y) => { x = Math.round(x); y = Math.round(y); if (!run) run = []; const l = run[run.length - 1]; if (!l || l[0] !== x || l[1] !== y) run.push([x, y]); };
+  const end = () => { if (run && run.length > 1) runs.push(run); run = null; };
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const [ax, ay] = pts[i], [bx, by] = pts[i + 1], dx = bx - ax, dy = by - ay;
+    let t0 = 0, t1 = 1;
+    for (const [p, q] of [[-dx, ax - lo], [dx, hi - ax], [-dy, ay - lo], [dy, hi - ay]]) {
+      if (p === 0) { if (q < 0) { t0 = 2; break; } continue; }
+      const r = q / p;
+      if (p < 0) { if (r > t1) { t0 = 2; break; } if (r > t0) t0 = r; } else { if (r < t0) { t0 = 2; break; } if (r < t1) t1 = r; }
+    }
+    if (t0 > t1) { end(); continue; }
+    if (t0 > 0) end();                                   // the line comes in from outside: a new piece
+    push(ax + dx * t0, ay + dy * t0);
+    push(ax + dx * t1, ay + dy * t1);
+    if (t1 < 1) end();                                   // and leaves
+  }
+  end();
+  return runs;
+}
+
+/** An MVT tile with the layer `edges`: each piece is a feature (MoveTo and LineTo commands, zigzag deltas). */
+function edgeTile(list) {
+  const layer = { name: "edges", extent: 4096, version: 2, keys: [], values: [], features: [] }, idx = indexOf(layer);
+  const zig = (v) => (v << 1) ^ (v >> 31);
+  for (const { props, runs } of list) {
+    const g = [];
+    let cx = 0, cy = 0;
+    const put = (v) => { v = zig(v) >>> 0; while (v >= 128) { g.push((v & 127) | 128); v >>>= 7; } g.push(v); };
+    for (const run of runs) {
+      put0(g, (1 & 7) | (1 << 3)); put(run[0][0] - cx); put(run[0][1] - cy); [cx, cy] = run[0];
+      put0(g, (2 & 7) | ((run.length - 1) << 3));
+      for (let i = 1; i < run.length; i++) { put(run[i][0] - cx); put(run[i][1] - cy); [cx, cy] = run[i]; }
+    }
+    const feat = { id: undefined, tags: [], type: 2, geometry: Uint8Array.from(g) };
+    addProps(layer, feat, props, idx);
+    layer.features.push(feat);
+  }
+  return encodeTile([layer]);
+}
+const put0 = (g, v) => { while (v >= 128) { g.push((v & 127) | 128); v >>>= 7; } g.push(v); };
 
 /** A GeoPackage (OGC GeoPackage 1.2, SQLite): the tables `roads` (LineString) and `nodes` (Point) in EPSG:4326, with no spatial index. */
 export async function geopackage(query, mode, area) {
