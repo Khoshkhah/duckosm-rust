@@ -92,13 +92,24 @@ with sync_playwright() as p:
     roads = json.loads(gj.read_text())
     gn = download(page, "geojson_nodes")
     nodes = json.loads(gn.read_text())
-    assert roads["type"] == "FeatureCollection" and len(roads["features"]) == n_roads and len(nodes["features"]) == n_nodes, (len(roads["features"]), n_roads)
-    both = [f["properties"]["edge_id"] for f in roads["features"]] + [f["properties"]["edge_id_reverse"] for f in roads["features"] if f["properties"]["edge_id_reverse"]]
-    assert set(both) == ids and len(both) == n_edges, "a two-way road is one feature: its forward edge id and the id of its reverse edge together are all the edge ids of the table, as text"
+    # by default every direction is a feature of its own, as on the page's map: a two-way road is two features with their own id and their own geometry (the line in the direction of travel)
+    assert roads["type"] == "FeatureCollection" and len(roads["features"]) == n_edges and len(nodes["features"]) == n_nodes, (len(roads["features"]), n_edges)
+    assert {f["properties"]["edge_id"] for f in roads["features"]} == ids, "the edge ids are the ids of the table, as text"
     two = [f for f in roads["features"] if f["properties"]["twoway"]]
-    assert len(two) == n_pairs and all(f["properties"]["edge_id_reverse"] for f in two) and not any(f["properties"]["edge_id_reverse"] for f in roads["features"] if not f["properties"]["twoway"])
-    rev = rows(page, "SELECT ST_AsGeoJSON(geometry) AS g FROM driving.edges WHERE edge_id::VARCHAR = '" + two[0]["properties"]["edge_id_reverse"] + "'")[0]["g"]
-    assert json.loads(rev)["coordinates"][::-1] == two[0]["geometry"]["coordinates"], "the reverse edge is the same line the other way"
+    assert len(two) == 2 * n_pairs and {f["properties"]["direction"] for f in two} == {"forward", "reverse"}
+    byid = {f["properties"]["edge_id"]: f for f in roads["features"]}
+    for f in two[:200]:
+        other = byid[f["properties"]["edge_id_pair"]]
+        assert other["properties"]["edge_id_pair"] == f["properties"]["edge_id"] and other["properties"]["direction"] != f["properties"]["direction"]
+        assert other["geometry"]["coordinates"][::-1] == f["geometry"]["coordinates"], "the other direction is the same line the other way"
+    assert all(not f["properties"]["twoway"] and f["properties"]["edge_id_pair"] is None for f in roads["features"] if f["properties"]["oneway"])
+    # the option "One feature for a two-way road": the forward edge with the id of the reverse edge
+    page.check("#export-list .exp:has([data-fmt=geojson]) .export-merge")
+    gm = json.loads(download(page, "geojson").read_text())
+    page.uncheck("#export-list .exp:has([data-fmt=geojson]) .export-merge")
+    assert len(gm["features"]) == n_roads
+    both = [f["properties"]["edge_id"] for f in gm["features"]] + [f["properties"]["edge_id_reverse"] for f in gm["features"] if f["properties"]["edge_id_reverse"]]
+    assert set(both) == ids and len(both) == n_edges and sum(1 for f in gm["features"] if f["properties"]["twoway"]) == n_pairs
     assert all(f["geometry"]["type"] == "LineString" for f in roads["features"][:50]) and all(f["geometry"]["type"] == "Point" for f in nodes["features"][:50])
     assert "NaN" not in gj.read_text() and "Infinity" not in gj.read_text()
     props = roads["features"][0]["properties"]
@@ -115,15 +126,15 @@ with sync_playwright() as p:
     nm = json.loads(lz.read("names.geojson"))
     assert nm["features"] and nm["features"][0]["properties"]["name"]
     print(f"GeoJSON layers: {', '.join(lnames)}")
-    print(f"GeoJSON: {n_roads} roads ({n_pairs} of them two-way, once) and {n_nodes} nodes, plain files")
+    print(f"GeoJSON: {n_edges} edges (each direction of a two-way road is a feature; merged: {n_roads}) and {n_nodes} nodes, plain files")
 
     # GeoPackage: a SQLite file with the GeoPackage tables, one row for each edge and node, and a geometry blob with the "GP" header and a WKB line
     import sqlite3
     import struct
     gp = sqlite3.connect(download(page, "gpkg"))
     assert gp.execute("PRAGMA application_id").fetchone()[0] == 0x47504B47
-    assert gp.execute("SELECT count(*) FROM roads").fetchone()[0] == n_roads and gp.execute("SELECT count(*) FROM nodes").fetchone()[0] == n_nodes
-    assert gp.execute("SELECT count(*) FROM roads WHERE twoway = 1").fetchone()[0] == n_pairs
+    assert gp.execute("SELECT count(*) FROM roads").fetchone()[0] == n_edges and gp.execute("SELECT count(*) FROM nodes").fetchone()[0] == n_nodes
+    assert gp.execute("SELECT count(*) FROM roads WHERE twoway = 1").fetchone()[0] == 2 * n_pairs and gp.execute("SELECT count(DISTINCT direction) FROM roads WHERE twoway = 1").fetchone()[0] == 2
     assert gp.execute("SELECT count(*) FROM gpkg_spatial_ref_sys WHERE srs_id = 4326").fetchone()[0] == 1
     blob, eid = gp.execute("SELECT geom, edge_id FROM roads ORDER BY fid LIMIT 1").fetchone()
     assert blob[:2] == b"GP" and blob[3] == 1 and struct.unpack("<i", blob[4:8])[0] == 4326 and blob[8] == 1 and struct.unpack("<I", blob[9:13])[0] == 2, "GP header, then a little-endian WKB LineString"
@@ -143,7 +154,7 @@ with sync_playwright() as p:
     cats = [c.get("value") for c in rq.iter("category")]
     assert "motorway" in cats and "residential" in cats and rq.find("renderer-v2").get("attr") == "highway" and rq.find("renderer-v2").get("symbollevels") == "1"
     assert all(len(sym.findall("layer")) == 2 for sym in rq.iter("symbol")), "a casing and a fill in each symbol"
-    print(f"GeoPackage: {n_roads} roads and {n_nodes} nodes, layers {sorted(tables)}, QGIS styles for {sorted(styles)}")
+    print(f"GeoPackage: {n_edges} roads and {n_nodes} nodes, layers {sorted(tables)}, QGIS styles for {sorted(styles)}")
     # the QGIS style as a file
     qf = download(page, "qml")
     XML.fromstring(qf.read_text().split("\n", 1)[1])
@@ -200,8 +211,8 @@ with sync_playwright() as p:
     page.click("#export-seg [data-m=walking]")
     assert page.get_attribute("#export-seg [data-m=walking]", "aria-checked") == "true" and page.input_value("#export-mode") == "walking"
     walk = sqlite3.connect(download(page, "gpkg"))
-    n_walk = rows(page, "SELECT count(*)::INTEGER AS n FROM walking.edges WHERE NOT is_reverse")[0]["n"]
-    assert walk.execute("SELECT count(*) FROM roads").fetchone()[0] == n_walk and n_walk != n_roads, (n_walk, n_roads)
+    n_walk = rows(page, "SELECT count(*)::INTEGER AS n FROM walking.edges")[0]["n"]
+    assert walk.execute("SELECT count(*) FROM roads").fetchone()[0] == n_walk and n_walk != n_edges, (n_walk, n_edges)
     page.click("#export-seg [data-m=driving]")
     print(f"Network control: Walking gives {n_walk} roads")
 

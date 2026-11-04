@@ -34,15 +34,22 @@ const zipOf = async (files) => {         // files: name to text or bytes
  * Gives the rows with `g` (GeoJSON text of the geometry), and the SQL fragment of the count.
  */
 const PAIR = (m) => `(SELECT 1 FROM ${m}.edges f WHERE NOT f.is_reverse AND f.osm_id = e.osm_id AND f.source = e.target AND f.target = e.source AND left(f.edge_ref, length(f.edge_ref) - 1) = left(e.edge_ref, length(e.edge_ref) - 1))`;
-export const roadCountSql = (m) => `SELECT count(*) AS n FROM ${m}.edges e WHERE NOT e.is_reverse OR NOT EXISTS ${PAIR(m)}`;
+export const roadCountSql = (m, merge) => (merge ? `SELECT count(*) AS n FROM ${m}.edges e WHERE NOT e.is_reverse OR NOT EXISTS ${PAIR(m)}` : `SELECT count(*) AS n FROM ${m}.edges`);
 const hasTable = async (query, schema, name) => (await query(`SELECT 1 FROM duckdb_tables() WHERE schema_name = '${schema}' AND table_name = '${name}'`)).length > 0;
-async function roadRows(query, m, geometry, extra = "") {
+/**
+ * The roads of the files. Default: one feature for each directed edge, as the page's map has them: a two-way road is two features, each with its own `edge_id` and its own geometry
+ * (the line in its direction of travel), and the properties `twoway` (true), `direction` (`forward` or `reverse`) and `edge_id_pair` (the id of the other direction). A one-way road is one
+ * feature with `twoway: false`. `merge`: one feature for a two-way road (its forward edge, with `edge_id_reverse`).
+ */
+async function roadRows(query, m, geometry, extra = "", merge = false) {
   const lv = await hasTable(query, "visualization", "edge_levels");       // the level of each road (the over and under order, bridges and tunnels) from the level step of the build
-  return query(`SELECT e.edge_id::VARCHAR AS edge_id, p.edge_id::VARCHAR AS edge_id_reverse, (p.edge_id IS NOT NULL) AS twoway, e.osm_id::VARCHAR AS osm_id, e.source::VARCHAR AS source, e.target::VARCHAR AS target,
+  const join = `LEFT JOIN ${m}.edges p ON p.is_reverse <> e.is_reverse AND p.osm_id = e.osm_id AND p.source = e.target AND p.target = e.source AND left(p.edge_ref, length(p.edge_ref) - 1) = left(e.edge_ref, length(e.edge_ref) - 1)`;
+  const cols = merge ? "p.edge_id::VARCHAR AS edge_id_reverse, (p.edge_id IS NOT NULL) AS twoway" : "(p.edge_id IS NOT NULL) AS twoway, CASE WHEN e.is_reverse THEN 'reverse' ELSE 'forward' END AS direction, p.edge_id::VARCHAR AS edge_id_pair";
+  return query(`SELECT e.edge_id::VARCHAR AS edge_id, ${cols}, e.osm_id::VARCHAR AS osm_id, e.source::VARCHAR AS source, e.target::VARCHAR AS target,
       e.name, e.highway, e.oneway, e.lanes, e.maxspeed_kmh, e.length_m, e.surface, e.access, e.bridge, e.tunnel, e.layer, e.junction, e.service${lv ? ", l.fill_level::INTEGER AS level" : ""}, ${geometry} AS g${extra}
-    FROM ${m}.edges e LEFT JOIN ${m}.edges p ON NOT e.is_reverse AND p.is_reverse AND p.osm_id = e.osm_id AND p.source = e.target AND p.target = e.source AND left(p.edge_ref, length(p.edge_ref) - 1) = left(e.edge_ref, length(e.edge_ref) - 1)
+    FROM ${m}.edges e ${join}
     ${lv ? "LEFT JOIN visualization.edge_levels l ON l.edge_id = e.edge_id" : ""}
-    WHERE NOT e.is_reverse OR NOT EXISTS ${PAIR(m)} ORDER BY e.edge_id`);
+    ${merge ? `WHERE NOT e.is_reverse OR p.edge_id IS NULL` : ""} ORDER BY e.edge_id`);
 }
 
 /**
@@ -65,9 +72,9 @@ async function otherLayers(query, mode, geometry) {
 }
 
 /** The roads as one GeoJSON file (a plain .geojson that kepler.gl, QGIS and web maps open; a LineString for each road, a two-way road once; the ids as text). */
-export async function geojson(query, mode, area) {
-  const roads = await roadRows(query, mode, "ST_AsGeoJSON(e.geometry)");
-  return { name: `${SLUG(area)}_${mode}_roads.geojson`, blob: featureCollection(roads), rows: roads.length };
+export async function geojson(query, mode, area, ctx) {
+  const roads = await roadRows(query, mode, "ST_AsGeoJSON(e.geometry)", "", !!ctx?.mergeTwoWay);
+  return { name: `${SLUG(area)}_${mode}_roads.geojson`, blob: featureCollection(roads), rows: roads.length, merged: !!ctx?.mergeTwoWay };
 }
 
 /** The other layers as GeoJSON files in one .zip (buildings, water, land use, railways, names, arrows ...): load the files that you want, one by one (kepler.gl opens one file at a time). */
@@ -490,7 +497,7 @@ const put0 = (g, v) => { while (v >= 128) { g.push((v & 127) | 128); v >>>= 7; }
  */
 export async function geopackage(query, mode, area, ctx) {
   const SQL = await sqlite(), db = new SQL.Database();
-  const roads = await roadRows(query, mode, "ST_AsWKB(e.geometry)", ", ST_XMin(e.geometry) AS x0, ST_YMin(e.geometry) AS y0, ST_XMax(e.geometry) AS x1, ST_YMax(e.geometry) AS y1");
+  const roads = await roadRows(query, mode, "ST_AsWKB(e.geometry)", ", ST_XMin(e.geometry) AS x0, ST_YMin(e.geometry) AS y0, ST_XMax(e.geometry) AS x1, ST_YMax(e.geometry) AS y1", !!ctx?.mergeTwoWay);
   const nodes = await query(`SELECT node_id::VARCHAR AS node_id, ST_AsWKB(geom) AS g FROM ${mode}.nodes ORDER BY node_id`);
   // the geometry type of a layer: the one type of its WKB, else GEOMETRY (a layer of several types)
   const WKB = { 1: "POINT", 2: "LINESTRING", 3: "POLYGON", 4: "MULTIPOINT", 5: "MULTILINESTRING", 6: "MULTIPOLYGON" };
@@ -528,7 +535,7 @@ export async function geopackage(query, mode, area, ctx) {
   }
   const bytes = db.export();
   db.close();
-  return { name: `${SLUG(area)}_${mode}.gpkg`, blob: new Blob([bytes], { type: "application/geopackage+sqlite3" }), rows: roads.length, nodes: nodes.length, layers: layers.map((l) => l.name), styled };
+  return { name: `${SLUG(area)}_${mode}.gpkg`, blob: new Blob([bytes], { type: "application/geopackage+sqlite3" }), rows: roads.length, nodes: nodes.length, layers: layers.map((l) => l.name), styled, merged: !!ctx?.mergeTwoWay };
 }
 
 // ---- the check of a file: the page reads the file that it made, and compares it with the tables. `verify` gives {ok, text}.
@@ -573,7 +580,8 @@ async function readPmtiles(bytes) {
 export async function verify(id, r, { query, mode, modes = [mode] }) {
   const NO_TABLE = ["pmtiles", "mbtiles", "webmap", "qml", "geojson_layers", "style", "png"];      // the formats that have no count of the tables
   const roadsCount = ["geojson", "gpkg", "svg", "kepler"].includes(id);
-  const nEdges = NO_TABLE.includes(id) || id === "geojson_nodes" ? 0 : await count(query, roadsCount ? roadCountSql(mode) : `SELECT count(*) AS n FROM ${mode}.edges`);
+  const merged = id === "svg" || id === "kepler" || !!r.merged;
+  const nEdges = NO_TABLE.includes(id) || id === "geojson_nodes" ? 0 : await count(query, roadsCount ? roadCountSql(mode, merged) : `SELECT count(*) AS n FROM ${mode}.edges`);
   const nNodes = NO_TABLE.includes(id) || ["geojson", "svg", "kepler"].includes(id) ? 0 : await count(query, `SELECT count(*) AS n FROM ${mode}.nodes`);
   const same = (what, got, want) => { if (got !== want) throw new Error(`${what}: the file has ${fmt(got)}, the tables have ${fmt(want)}`); };
   try {
@@ -581,8 +589,9 @@ export async function verify(id, r, { query, mode, modes = [mode] }) {
       const g = JSON.parse(await r.blob.text()), want = id === "geojson" ? nEdges : nNodes;
       if (g.type !== "FeatureCollection") throw new Error("the file is not a FeatureCollection");
       same(id === "geojson" ? "roads" : "nodes", g.features.length, want);
-      if (id === "geojson") {                          // every edge of the table is a feature (forward) or the reverse of one
+      if (id === "geojson") {                          // every edge of the table is a feature, or (merged) the reverse of one
         const ids = new Set(g.features.flatMap((f) => [f.properties.edge_id, f.properties.edge_id_reverse]).filter(Boolean));
+        if (!r.merged && g.features.some((f) => f.properties.twoway && (!f.properties.edge_id_pair || !["forward", "reverse"].includes(f.properties.direction)))) throw new Error("a two-way feature has no direction or no id of the other direction");
         same("edge ids", ids.size, await count(query, `SELECT count(*) AS n FROM ${mode}.edges`));
       }
       const type = id === "geojson" ? "LineString" : "Point";
@@ -728,7 +737,7 @@ export async function qml(query, mode, area, ctx) {
 
 /** The map as an SVG picture, drawn from the tables with the colors and widths of the page (the area, its roads, and the buildings, water and land use of the build). */
 export async function svg(query, mode, area, ctx) {
-  const roads = (await roadRows(query, mode, "ST_AsGeoJSON(e.geometry)")).map((r) => ({ highway: r.highway, geometry: JSON.parse(r.g) }));
+  const roads = (await roadRows(query, mode, "ST_AsGeoJSON(e.geometry)", "", true)).map((r) => ({ highway: r.highway, geometry: JSON.parse(r.g) }));       // a picture draws a two-way road once
   let w = 180, s = 90, e = -180, n = -90;
   for (const r of roads) for (const [x, y] of r.geometry.coordinates) { w = Math.min(w, x); e = Math.max(e, x); s = Math.min(s, y); n = Math.max(n, y); }
   const polys = async (t) => ((await hasTable(query, "features", t)) ? (await query(`SELECT ST_AsGeoJSON(geom) AS g FROM features.${t}`)).map((r) => JSON.parse(r.g)) : []);
@@ -767,7 +776,7 @@ async function extentOf(query, mode) {
 
 /** A kepler.gl map file (.json): the roads as data, with a casing layer and a fill layer colored like the page's map. Drop it on kepler.gl. */
 export async function kepler(query, mode, area, ctx) {
-  const roads = (await roadRows(query, mode, "ST_AsGeoJSON(e.geometry)")).map(({ g, ...p }) => ({ type: "Feature", properties: Object.fromEntries(Object.entries(p).map(([k, v]) => [k, typeof v === "bigint" ? String(v) : v])), geometry: JSON.parse(g) }));
+  const roads = (await roadRows(query, mode, "ST_AsGeoJSON(e.geometry)", "", true)).map(({ g, ...p }) => ({ type: "Feature", properties: Object.fromEntries(Object.entries(p).map(([k, v]) => [k, typeof v === "bigint" ? String(v) : v])), geometry: JSON.parse(g) }));
   const map = keplerMap({ features: roads, palette: paletteOf(ctx.look), name: "roads" });
   return { name: `${SLUG(area)}_${mode}_kepler.json`, blob: new Blob([JSON.stringify(map)], { type: "application/json" }), rows: roads.length, kepler: map };
 }
@@ -785,12 +794,12 @@ export const FORMATS = [
   { id: "webmap", group: "Tiles", title: "Web map (tiles, style and viewer)", note: "A .zip with the tiles, the style of this page's map and a viewer page. Run \"python serve.py\" in the folder and open it in a browser: the map looks like this page. Needs the map (step 6).", run: webMap, tiles: true },
   { id: "pmtiles", group: "Tiles", title: "PMTiles", note: "The vector tiles of the map (MVT) in one file, for MapLibre, roadstyle and any static server. Needs the map (step 6).", run: pmtilesFile, tiles: true },
   { id: "mbtiles", group: "Tiles", title: "MBTiles", note: "The same tiles in a SQLite file, for QGIS and tile servers. Needs the map (step 6).", run: mbtilesFile, tiles: true },
-  { id: "gpkg", group: "Visualization", title: "GeoPackage", note: "Roads (lines) and nodes (points) in one .gpkg file, for QGIS and ArcGIS. kepler.gl cannot open it: use GeoJSON there.", run: geopackage, modes: ["driving", "walking", "cycling"] },
+  { id: "gpkg", group: "Visualization", title: "GeoPackage", note: "Roads (lines) and nodes (points) in one .gpkg file, for QGIS and ArcGIS. kepler.gl cannot open it: use GeoJSON there.", run: geopackage, merge: true, modes: ["driving", "walking", "cycling"] },
   { id: "png", group: "Visualization", title: "Map image (PNG)", note: "One picture of the whole area, drawn with the style of this page's map. Needs the map (step 6).", run: png, needsMap: true, width: true, modes: ["driving", "walking", "cycling"] },
   { id: "svg", group: "Visualization", title: "Map image (SVG)", note: "One vector picture of the area (land, water, buildings, roads with casings), made from the tables. For reports and printing.", run: svg, width: true, modes: ["driving", "walking", "cycling"] },
   { id: "kepler", group: "Visualization", title: "kepler.gl map", note: "One .json file with the roads and their style (casing and fill by road class). Drop it on kepler.gl.", run: kepler, modes: ["driving", "walking", "cycling"] },
   { id: "qml", group: "Visualization", title: "QGIS style (.qml)", note: "The colors, casings and widths of this page's roads for QGIS. Load it on the GeoJSON roads (Layer Styling, Style, Load Style). The GeoPackage has it inside.", run: qml, modes: ["driving", "walking", "cycling"] },
-  { id: "geojson", group: "Visualization", title: "GeoJSON roads", note: "One .geojson file of lines, one for each edge. For kepler.gl, QGIS and web maps.", run: geojson, modes: ["driving", "walking", "cycling"] },
+  { id: "geojson", group: "Visualization", title: "GeoJSON roads", note: "One .geojson file of lines, one for each edge: a two-way road is two features, one for each direction, as on the page's map. For kepler.gl, QGIS and web maps.", run: geojson, merge: true, modes: ["driving", "walking", "cycling"] },
   { id: "geojson_layers", group: "Visualization", title: "GeoJSON layers", note: "A .zip of one .geojson file for each other layer: buildings, water, land use, railways, street names, one-way arrows. Load the files that you want.", run: geojsonLayers, modes: ["driving", "walking", "cycling"] },
   { id: "geojson_nodes", group: "Visualization", title: "GeoJSON nodes", note: "One .geojson file of points: the junctions and the ends of the roads.", run: geojsonNodes, modes: ["driving", "walking", "cycling"] },
   { id: "matsim", group: "Simulation", title: "MATSim network", note: "network.xml: nodes, and a link for each edge with length, free speed, capacity and lanes. Meters in the UTM zone of the area.", run: matsim, modes: ["driving", "walking", "cycling"] },
