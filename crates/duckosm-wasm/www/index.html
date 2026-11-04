@@ -767,6 +767,7 @@ const rasters = basemaps.find((b) => b.tiles.length);
 const map = new maplibregl.Map({ container: "map", center: [10, 50], zoom: 3, style: { version: 8, glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
   sources: { bm: { type: "raster", tiles: rasters.tiles, tileSize: 256 } },
   layers: [{ id: "bg", type: "background", paint: { "background-color": basemaps[0].bg } }, { id: "basemap", type: "raster", source: "bm", layout: { visibility: "none" } }] } });
+const loaded = new Promise((ok) => map.on("load", ok));      // right after the map is made, before any await: a `load` that comes during a later await would not reach a listener that is added after it
 // the zoom buttons and the compass become tools of roadstyle's bar, the scale bar goes into its corner box with the zoom number: both before rsDashboard
 map.addControl(new maplibregl.NavigationControl(), "top-right");
 map.addControl(new maplibregl.ScaleControl(), "bottom-left");
@@ -798,7 +799,6 @@ document.addEventListener("rs:select", () => {
 });
 // the tiles of the roads map: roadstyle's module makes each one when the map asks for it (app/duck.js tile())
 maplibregl.addProtocol("rs", async (params, abort) => ({ data: await duck.tile(params.url, abort.signal) }));
-const loaded = new Promise((ok) => map.on("load", ok));
 const setData = (src, data) => loaded.then(() => map.getSource(src).setData(data ?? empty));
 
 const blue = "#2563eb";

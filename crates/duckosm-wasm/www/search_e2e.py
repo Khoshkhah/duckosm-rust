@@ -5,6 +5,8 @@ moves to the box of the place, the text stays under the list, a second click ask
 
 It needs the network: photon.komoot.io, and nominatim.openstreetmap.org for the first part.
 """
+import time
+
 from playwright.sync_api import sync_playwright
 
 from serve import WWW, start
@@ -55,6 +57,21 @@ with sync_playwright() as p:
     page.wait_for_function("window.areas >= 1", timeout=30_000)
     assert page.locator("#found-err").count() == 0 and float(page.inner_text("#summary .stat b").replace(",", "")) > 1
     print("Nominatim fails: the map zoomed to the box, the text and the box button show, and the box is the area")
+
+    # a slow file at the start (a test page behind an ssh tunnel): the map's `load` comes during the wait, and the page must not lose it (the area, the zoom and the layers came from it)
+    page = browser.new_page(viewport={"width": 1400, "height": 900})
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.route("**/local_keys.json", lambda r: (time.sleep(4), r.fulfill(status=404, body=""))[1])
+    page.goto(base)
+    page.wait_for_function("window.mapReady", timeout=120_000)
+    z0 = page.evaluate("duckMap.getZoom()")
+    search(page, "Tartu")
+    page.click("#found label >> nth=0")
+    page.wait_for_function("window.areas >= 1", timeout=60_000)
+    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['area-line']}).length > 0 && !duckMap.isMoving()", timeout=30_000)
+    assert page.evaluate("duckMap.getZoom()") > z0 + 4
+    print("a slow start: the area shows and the map zooms as with a fast start")
+    page.close()
     browser.close()
 assert not errors, errors
 print("search_e2e.py: passed")
