@@ -728,7 +728,7 @@ pub fn parse_osm_fixes(text: &str, label: &str) -> Result<OsmFixes, String> {
                             .and_then(|v| v.as_str())
                             .and_then(FaceType::parse)
                             .ok_or_else(|| {
-                                err(format!("{what}.type must be front, back, side or party"))
+                                err(format!("{what}.type must be front, back, side, party or court"))
                             })?;
                         let door = match get("door") {
                             None | Some(Yaml::Null) => None,
@@ -954,7 +954,7 @@ mod tests {
         let d = parse_osm_fixes("extra:\n  building_faces:\n    - {building: 5, from_node: 1, to_node: 2, type: side, door: main}\n", "t").unwrap();
         assert_eq!(d.face_edits[0].door.as_deref(), Some("main"));
         for (text, msg) in [
-            ("extra:\n  building_faces:\n    - {building: 5, from_node: 1, to_node: 2, type: roof}\n", "type must be front, back, side or party"),
+            ("extra:\n  building_faces:\n    - {building: 5, from_node: 1, to_node: 2, type: roof}\n", "type must be front, back, side, party or court"),
             ("extra:\n  building_faces:\n    - {building: 5, from_node: 1, type: front}\n", "has no to_node"),
             ("extra:\n  building_faces:\n    - {building: 5, from_node: 1, to_node: 2, type: front, x: 1}\n", "unknown key 'x'"),
             ("extra:\n  building_faces: 3\n", "extra.building_faces must be a list"),

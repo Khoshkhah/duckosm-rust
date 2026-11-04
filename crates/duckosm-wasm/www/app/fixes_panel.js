@@ -25,8 +25,20 @@ const DELETED = "#dc2626";                     // an object that the changes del
 const NO_SIGNAL = new Set(["motorway", "motorway_link", "trunk", "trunk_link"]);
 const CROSSABLE = new Set(["residential", "living_street", "service", "unclassified", "tertiary", "secondary", "primary"]);
 const NODE_COLORS = { signal: "#e11d48", crossing: "#0d9488", other: "#6b7280", junction: "#9ca3af" };
-const FACE_COLORS = { front: "#16a34a", back: "#dc2626", side: "#6b7280", party: "#7c3aed" };
-const FACE_NAMES = { front: "Front", back: "Back", side: "Side", party: "Party wall" };
+const FACE_COLORS = { front: "#16a34a", back: "#dc2626", side: "#6b7280", party: "#7c3aed", court: "#0891b2" };
+// why a wall has its computed type (the column type_reason of main.building_faces): a short note in the row for the walls that the method guessed or took from the data, and a tip for all
+const REASONS = {
+  entrance: ["entrance", "An entrance of OSM is on this wall."],
+  address: ["address", "The wall faces the street of the addr:street tag of the building."],
+  street: [null, "The wall faces a street that it can see."],
+  inferred: ["guess", "No street can be seen from the building (other buildings are in the way). The wall faces the nearest street within 150 m. Check it."],
+  opposite: [null, "The wall points away from the front wall."],
+  shared: [null, "Two buildings share this wall."],
+  other: [null, "A wall of a building that has a front, and no street in front of it."],
+  inner: [null, "A wall of a courtyard (an inner ring of a building that is a multipolygon relation)."],
+  none: ["no street seen", "No street is near this building. Check the type."],
+};
+const FACE_NAMES = { front: "Front", back: "Back", side: "Side", party: "Party wall", court: "Courtyard wall" };
 
 // the height and the color of a building from its tags, for the 3D preview of the edited buildings (the same reading as main.building_info in app/duck.js)
 const NAMED = { white: "#ffffff", black: "#000000", red: "#ff0000", green: "#008000", blue: "#0000ff", yellow: "#ffff00", orange: "#ffa500", brown: "#a52a2a", grey: "#808080", gray: "#808080",
@@ -221,11 +233,11 @@ export async function initFixesPanel(ctx) {
         <p class="small" id="fix-wallpos" style="margin:6px 0"></p>
         <p class="small" style="margin:0 0 6px">${Object.entries(FACE_COLORS).map(([t, c]) => `<span class="legend" style="margin-left:0;margin-right:8px"><i style="background:${c}"></i>${FACE_NAMES[t]}</span>`).join("")}</p>
         <div class="walls">${walls.map((w) => { const t = wallType(w), ruled = !!F.findFace(doc, sel.id, w.from_node, w.to_node) || touched.has(`@wall:${wallKey(w)}`) || touched.has(`@wdoor:${wallKey(w)}`);
-          return `<div class="wallrow${ruled ? " edited" : ""}${wallKey(w) === wallSel ? " sel" : ""}" tabindex="0" data-key="${wallKey(w)}" data-a="${w.from_node}" data-b="${w.to_node}" data-computed="${w.computed_type}"><span class="k">#${w.face_index + 1}</span><span class="small">${Number(w.length_m).toFixed(1)} m${w.street_name ? ` · ${esc(w.street_name)}` : ""}</span>
+          return `<div class="wallrow${ruled ? " edited" : ""}${wallKey(w) === wallSel ? " sel" : ""}" tabindex="0" data-key="${wallKey(w)}" data-a="${w.from_node}" data-b="${w.to_node}" data-computed="${w.computed_type}"><span class="k"><i class="sw" style="background:${FACE_COLORS[t] ?? FACE_COLORS.side}"></i>#${w.face_index + 1}</span><span class="small"${REASONS[w.type_reason] ? ` title="${esc(REASONS[w.type_reason][1])}"` : ""}>${Number(w.length_m).toFixed(1)} m${w.street_name ? ` · ${esc(w.street_name)}` : ""}${REASONS[w.type_reason]?.[0] ? ` · <i>${REASONS[w.type_reason][0]}</i>` : ""}</span>
           <select data-wall aria-label="Type of wall ${w.face_index + 1}">${Object.entries(FACE_NAMES).map(([k, v]) => `<option value="${k}"${k === t ? " selected" : ""}>${v}${k === w.computed_type ? " (computed)" : ""}</option>`).join("")}</select>
           <span class="small dlabel">Door</span><select data-walldoor aria-label="Door of wall ${w.face_index + 1}">${[["", "No door"], ...DOOR_KINDS.filter(([v]) => v)].map(([v, n]) => `<option value="${esc(v)}"${v === wallDoor(w) ? " selected" : ""}>${esc(n)}</option>`).join("")}</select></div>`; }).join("")}</div>
         <p class="why" style="margin:6px 0 0">Click a wall in the list or on the map to select it. A wall type and a door wait for Add to changes, like a field. A door belongs to the wall: it has no place on it.</p>`);
-    } else if (sel.kind === "building" && !hasFaces() && sel.type === "way") {
+    } else if (sel.kind === "building" && !hasFaces()) {
       html += section("Walls", '<p class="why" style="margin:0">Build with the layers on to see the walls of a building and to give them a type.</p>');
     }
     if (sel.kind === "building" && sel.type === "way" && hasDoors()) {
@@ -286,7 +298,7 @@ export async function initFixesPanel(ctx) {
     const d = await loadData(sel.type, id, k);
     if (my !== token) return;
     sel.type = d.type; data = d; draft = initialDraft();
-    walls = k === "building" && d.type === "way" ? await loadWalls(id) : [];
+    walls = k === "building" ? await loadWalls(id, d.type) : [];
     doors = k === "building" && d.type === "way" ? await loadDoors(id) : [];
     if (my !== token) return;
     renderObject(); renderForm(); drawFaces();
@@ -313,9 +325,12 @@ export async function initFixesPanel(ctx) {
     if (v === orig) delete rule.was.entrance; else if (v === "") rule.delete.push("entrance"); else rule.set.entrance = v;
     F.writeRule(doc, "node", id, rule);
   }
-  async function loadWalls(id) {
+  async function loadWalls(id, type = "way") {
     if (!hasFaces()) return [];
-    return (await safe(`SELECT * EXCLUDE (geometry), ST_AsGeoJSON(geometry) AS g FROM main.building_faces WHERE building_id = ${id} ORDER BY face_index`))
+    // the id of a way and the id of a relation are two number spaces: a table of an older build has no `building_type` (all its rows are ways)
+    const typed = (await safe("SELECT 1 FROM duckdb_columns() WHERE table_name = 'building_faces' AND column_name = 'building_type'")).length
+      ? ` AND building_type = '${type === "relation" ? "relation" : "way"}'` : (type === "relation" ? " AND false" : "");
+    return (await safe(`SELECT * EXCLUDE (geometry), ST_AsGeoJSON(geometry) AS g FROM main.building_faces WHERE building_id = ${id}${typed} ORDER BY face_index`))
       .map((r) => ({ ...r, from_node: Number(r.from_node), to_node: Number(r.to_node), face_index: Number(r.face_index) }));
   }
   const wallKey = (w) => `${w.from_node}|${w.to_node}`;
@@ -377,6 +392,7 @@ export async function initFixesPanel(ctx) {
     if (el.dataset?.wall !== undefined) {                                        // the type of a wall: a rule at once (a Save button is for tags)
       const row = el.closest(".wallrow"), k = `@wall:${row.dataset.key}`, w = walls.find((x) => wallKey(x) === row.dataset.key);
       if (el.value === wallTypeNow(w)) { touched.delete(k); delete draft[k]; } else { touched.add(k); draft[k] = el.value; }
+      const sw = row.querySelector(".sw"); if (sw) sw.style.background = FACE_COLORS[el.value] ?? FACE_COLORS.side;
       row.classList.toggle("edited", touched.has(k) || touched.has(`@wdoor:${row.dataset.key}`) || !!F.findFace(doc, sel.id, w.from_node, w.to_node));
       return paintBar();
     }
@@ -564,7 +580,21 @@ export async function initFixesPanel(ctx) {
   };
 
   // ---- the turns: the junctions at the end of a road, and a rule for each road that leaves one
-  const turnSelect = (cur) => `<select aria-label="Turn rule"><option value="">Allowed</option>${Object.entries(TURN_TYPES).map(([k, v]) => `<option value="${k}"${cur === k ? " selected" : ""}>${v}</option>`).join("")}</select>`;
+  // the way that a turn goes, from the direction of the road at the end of the start road and the direction of the road that leaves: straight on within 30 degrees
+  // of the line, a U-turn when it turns back (more than 150 degrees), else left or right. Only the rules for that way are offered (`no_left_turn` and `only_left_turn`
+  // for a left turn); a rule that is in the changes already is offered too, whatever its way.
+  const WAY_NAMES = { straight_on: "straight on", u_turn: "U-turn", right_turn: "right turn", left_turn: "left turn" };
+  const turnWay = (a, b) => {
+    if (!a || !b || [...Object.values(a), ...Object.values(b)].some((v) => v == null)) return null;
+    const bearing = (p) => Math.atan2((p.x2 - p.x1) * Math.cos((p.y1 * Math.PI) / 180), p.y2 - p.y1) * 180 / Math.PI;
+    const t = ((bearing(b) - bearing(a) + 540) % 360) - 180;                 // from -180 to 180: a positive angle is a turn to the right
+    return Math.abs(t) <= 30 ? "straight_on" : Math.abs(t) > 150 ? "u_turn" : t > 0 ? "right_turn" : "left_turn";
+  };
+  const turnSelect = (cur, way) => {
+    const keys = way ? [`no_${way}`, `only_${way}`] : Object.keys(TURN_TYPES).filter((k) => !/entry|exit/.test(k));
+    if (cur && !keys.includes(cur)) keys.push(cur);
+    return `<select aria-label="Turn rule"><option value="">Allowed</option>${keys.map((k) => `<option value="${k}"${cur === k ? " selected" : ""}>${TURN_TYPES[k]}</option>`).join("")}</select>`;
+  };
   async function findTurns(from, via = null, { zoom = false } = {}) {
     $("fix-from").value = from;
     // the junctions at the ends of the edges of the road, the one with the most roads that leave it first
@@ -573,8 +603,7 @@ export async function initFixesPanel(ctx) {
     const nodes = js.map((r) => String(r.n));
     $("fix-via-row").hidden = $("fix-turnsec").hidden = $("fix-turn-bar").hidden = !nodes.length;
     $("fix-turn-clear").hidden = false; $("fix-turn-legend").hidden = !nodes.length;
-    $("fix-via").innerHTML = js.map((r) => `<option value="${r.n}">Junction ${r.n} · ${r.c ? `${plural(r.c, "road")} ${r.c === 1 ? "leaves" : "leave"} it` : "no road leaves it"}</option>`).join("");
-    if (via != null && nodes.includes(String(via))) $("fix-via").value = String(via);
+    $("fix-via").value = nodes.includes(String(via)) ? String(via) : nodes[0] ?? "";       // the junction that the tab picks first: the one at the end of the road with the most roads that leave it
     $("fix-via-list").innerHTML = js.map((r, i) => `<div class="junrow" role="option" tabindex="0" data-n="${r.n}"><span class="k">${i + 1}</span><span><b>Junction ${r.n}</b><br><span class="small muted">${r.c ? `${plural(r.c, "road")} ${r.c === 1 ? "leaves" : "leave"} it` : "no road leaves it"}</span></span></div>`).join("");
     paintJunctions();
     $("fix-out").innerHTML = nodes.length ? "" : `<p class="why">Way ${from} is not in the driving network.</p>`;
@@ -592,13 +621,16 @@ export async function initFixesPanel(ctx) {
   async function outgoing() {
     const from = whole($("fix-from").value), via = Number($("fix-via").value);
     if (!from || !Number.isSafeInteger(via)) return;
-    const roads = await safe(`SELECT osm_id, any_value(name) AS name, any_value(highway) AS highway FROM driving.edges WHERE source = ${via} AND osm_id != ${from} GROUP BY osm_id ORDER BY osm_id LIMIT 30`);
+    const roads = await safe(`SELECT osm_id, any_value(name) AS name, any_value(highway) AS highway, any_value(ST_X(ST_PointN(geometry, 1))) AS x1, any_value(ST_Y(ST_PointN(geometry, 1))) AS y1,
+      any_value(ST_X(ST_PointN(geometry, 2))) AS x2, any_value(ST_Y(ST_PointN(geometry, 2))) AS y2 FROM driving.edges WHERE source = ${via} AND osm_id != ${from} GROUP BY osm_id ORDER BY osm_id LIMIT 30`);
+    const inEdge = (await safe(`SELECT ST_X(ST_PointN(geometry, (ST_NPoints(geometry) - 1)::INTEGER)) AS x1, ST_Y(ST_PointN(geometry, (ST_NPoints(geometry) - 1)::INTEGER)) AS y1, ST_X(ST_PointN(geometry, ST_NPoints(geometry)::INTEGER)) AS x2,
+      ST_Y(ST_PointN(geometry, ST_NPoints(geometry)::INTEGER)) AS y2 FROM driving.edges WHERE osm_id = ${from} AND target = ${via} LIMIT 1`))[0];
     turnOut = roads.map((r) => Number(r.osm_id)); drawTurnRoads();
     const arrive = await safe(`SELECT osm_id, any_value(name) AS name, any_value(highway) AS highway, bool_or(oneway) AS oneway FROM driving.edges WHERE target = ${via} AND osm_id != ${from} GROUP BY osm_id ORDER BY osm_id LIMIT 12`);
     const arrivals = arrive.length ? `<p class="small" style="margin:12px 0 4px"><b>Roads that arrive at this junction.</b> Start from one of them to give a rule for the turn onto a road that leaves.</p>${arrive.map((r) => `<div class="small"><button type="button" class="link" data-from="${r.osm_id}">${esc(r.name || "no name")}</button> (${esc(r.highway)}, way ${r.osm_id}${r.oneway ? ", one-way" : ""})</div>`).join("")}` : "";
     const none = '<p class="why">No other road leaves this junction from this road. A road leaves it only when it is in the driving network and its direction goes away from the junction.</p>';
     $("fix-out").innerHTML = (roads.length ? "" : none) + arrivals;
-    if (roads.length) $("fix-out").insertAdjacentHTML("afterbegin", roads.map((r) => `<div class="turn" data-to="${r.osm_id}"><span class="small">To <b>${esc(r.name || "no name")}</b> (${esc(r.highway)}, way ${r.osm_id})</span>${turnSelect(F.findTurn(doc, from, via, Number(r.osm_id))?.restriction)}</div>`).join(""));
+    if (roads.length) $("fix-out").insertAdjacentHTML("afterbegin", roads.map((r) => `<div class="turn" data-to="${r.osm_id}"><span class="small"><i class="sw" style="background:#16a34a"></i>To <b>${esc(r.name || "no name")}</b> (${esc(r.highway)}, way ${r.osm_id})${turnWay(inEdge, r) ? ` · <i>${WAY_NAMES[turnWay(inEdge, r)]}</i>` : ""}</span>${turnSelect(F.findTurn(doc, from, via, Number(r.osm_id))?.restriction, turnWay(inEdge, r))}</div>`).join(""));
     for (const row of $("fix-out").querySelectorAll(".turn")) { row.tabIndex = 0; row.querySelector("select").onchange = paintTurnBar; }
     if (!roads.some((r) => Number(r.osm_id) === turnSel)) turnSel = null;
     paintTurnSel();
@@ -627,7 +659,7 @@ export async function initFixesPanel(ctx) {
     status(`Added to the changes: ${plural(d.length, "turn rule")}.`);
   };
   function clearTurns() {
-    $("fix-from").value = ""; $("fix-via").innerHTML = ""; $("fix-via-list").innerHTML = ""; turnSel = null; $("fix-out").innerHTML = "";
+    $("fix-from").value = ""; $("fix-via").value = ""; $("fix-via-list").innerHTML = ""; turnSel = null; $("fix-out").innerHTML = "";
     $("fix-via-row").hidden = $("fix-turnsec").hidden = $("fix-turn-bar").hidden = $("fix-turn-clear").hidden = $("fix-turn-legend").hidden = true;
     turnOut = []; drawTurnRoads(); paintTurnBar(); drawSelected(false);
   }

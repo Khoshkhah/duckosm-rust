@@ -1066,12 +1066,14 @@ pub fn write_route_edges_to<W: Write + Send>(out: W, rows: &[RouteEdge]) -> Resu
 pub fn building_faces_schema() -> Schema {
     Schema::new(vec![
         Field::new("building_id", DataType::Int64, false),
+        Field::new("building_type", DataType::Utf8, false),
         Field::new("face_index", DataType::Int32, false),
         Field::new("from_node", DataType::Int64, false),
         Field::new("to_node", DataType::Int64, false),
         Field::new("face_type", DataType::Utf8, false),
         Field::new("computed_type", DataType::Utf8, false),
         Field::new("edited", DataType::Boolean, false),
+        Field::new("type_reason", DataType::Utf8, false),
         Field::new("door", DataType::Utf8, true),
         Field::new("length_m", DataType::Float32, false),
         Field::new("azimuth_deg", DataType::Float32, false),
@@ -1093,7 +1095,7 @@ pub fn write_building_faces_to<W: Write + Send>(out: W, rows: &[BuildingFace]) -
         let mut face_index = Int32Builder::with_capacity(n);
         let (mut face_type, mut computed_type, mut street_name) = (StringBuilder::new(), StringBuilder::new(), StringBuilder::new());
         let mut edited = BooleanBuilder::with_capacity(n);
-        let mut door = StringBuilder::new();
+        let (mut door, mut type_reason, mut building_type) = (StringBuilder::new(), StringBuilder::new(), StringBuilder::new());
         let (mut length_m, mut azimuth_deg, mut distance_m) = (Float32Builder::with_capacity(n), Float32Builder::with_capacity(n), Float32Builder::with_capacity(n));
         let (mut street_osm_id, mut street_edge_id) = (Int64Builder::with_capacity(n), Int64Builder::with_capacity(n));
         let mut geometry = BinaryBuilder::new();
@@ -1105,6 +1107,8 @@ pub fn write_building_faces_to<W: Write + Send>(out: W, rows: &[BuildingFace]) -
             face_type.append_value(r.face_type.name());
             computed_type.append_value(r.computed_type.name());
             edited.append_value(r.edited);
+            type_reason.append_value(r.type_reason);
+            building_type.append_value(r.building_type);
             door.append_option(r.door.as_deref());
             length_m.append_value(r.length_m);
             azimuth_deg.append_value(r.azimuth_deg);
@@ -1116,12 +1120,14 @@ pub fn write_building_faces_to<W: Write + Send>(out: W, rows: &[BuildingFace]) -
         }
         let cols: Vec<ArrayRef> = vec![
             Arc::new(building_id.finish()),
+            Arc::new(building_type.finish()),
             Arc::new(face_index.finish()),
             Arc::new(from_node.finish()),
             Arc::new(to_node.finish()),
             Arc::new(face_type.finish()),
             Arc::new(computed_type.finish()),
             Arc::new(edited.finish()),
+            Arc::new(type_reason.finish()),
             Arc::new(door.finish()),
             Arc::new(length_m.finish()),
             Arc::new(azimuth_deg.finish()),

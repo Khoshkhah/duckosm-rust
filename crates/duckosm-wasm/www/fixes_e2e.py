@@ -209,6 +209,7 @@ with sync_playwright() as p:
     # the walls of the building: a list with a type for each wall (from main.building_faces), colored on the map; a change of type is a rule at once
     page.wait_for_function("document.querySelectorAll('#fix-form .wallrow').length >= 3", timeout=20_000)
     assert page.evaluate("window.fixesPanel.drawn().faces") >= 3, "the walls of the building are drawn"
+    assert page.evaluate("document.querySelectorAll('#fix-form .wallrow .sw').length === document.querySelectorAll('#fix-form .wallrow').length"), "each wall row has the color of its type"
     page.wait_for_function("duckMap.querySourceFeatures('fix-faces').filter((f) => f.properties.n).length >= 3", timeout=20_000)     # the numbers of the walls on the map, as in the list (#1, #2, ...)
     assert page.evaluate("duckMap.getLayer('fix-faces-label').layout.get ? true : !!duckMap.getLayer('fix-faces-label')")
     wall = page.evaluate("(() => { const r = document.querySelector('#fix-form .wallrow'); return [r.dataset.a, r.dataset.b, r.dataset.computed]; })()")
@@ -229,6 +230,16 @@ with sync_playwright() as p:
     page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['fix-faces-door']}).length === 1", timeout=20_000)
     assert page.input_value("#fix-form .wallrow >> nth=0 >> select[data-walldoor]") == "main"
     print(f"a door on the wall: nodes {wall[0]} and {wall[1]} have a main door, the type {new_type} stays, and a dot shows on the map")
+
+    # a building that is a multipolygon relation: its outer ring has walls like a way, and its courtyard has `court` walls
+    rel = rows(page, "SELECT building_id FROM main.building_faces WHERE building_type = 'relation' AND face_type = 'court' LIMIT 1")
+    assert rel, "Monaco has a building with a courtyard"
+    page.evaluate(f"window.fixesPanel.select('building', 'relation', {rel[0]['building_id']})")
+    page.wait_for_function("document.querySelectorAll('#fix-form .wallrow').length >= 5", timeout=20_000)
+    assert page.evaluate("[...document.querySelectorAll('#fix-form .wallrow select[data-wall]')].some((s) => s.value === 'court')"), "the courtyard walls have the type court"
+    page.evaluate(f"window.fixesPanel.select('building', 'way', {b['osm_id']})")
+    page.wait_for_function("document.querySelectorAll('#fix-form .wallrow').length >= 3", timeout=20_000)
+    print(f"a building that is a relation ({rel[0]['building_id']}): walls with court walls for the courtyard")
 
     # select each wall: a row of the list, the bar (Next, Previous, Unselect), and a click on the wall on the map
     assert "No wall is selected" in page.inner_text("#fix-wallpos")
@@ -307,8 +318,12 @@ with sync_playwright() as p:
     assert page.get_attribute("#fix-out .turn", "data-to") in page.evaluate("JSON.stringify(duckMap.getFilter('fix-turn-hl'))"), "a hover on a row outlines its road"
     assert page.is_visible("#fix-turn-legend")
     print("the Turn tab draws the start road, the junction ring and the roads that leave it")
+    # only the rules that fit the turn are offered: Allowed, No <way> and Only <way> (the way is left, right, straight on or a U-turn), not all ten; the row has the green of the map
+    opts = page.eval_on_selector_all("#fix-out .turn select", "(l) => l.map((x) => [...x.options].map((o) => o.value))")
+    assert opts and all(len(o) == 3 and o[0] == "" and o[1].startswith("no_") and o[2].startswith("only_") and o[1][3:] == o[2][5:] for o in opts), opts
+    assert page.evaluate("[...document.querySelectorAll('#fix-out .turn .sw')].length") == len(opts)
     # the junctions are a list like the walls: the junction that the tab picked first has the mark, no row is wider than the panel, a row under the pointer has a tint
-    assert page.locator("#fix-via-list .junrow.sel").count() == 1 and page.eval_on_selector("#fix-via", "(s) => s.hidden")
+    assert page.locator("#fix-via-list .junrow.sel").count() == 1 and page.eval_on_selector("#fix-via", "(s) => s.type") == "hidden" and page.locator("#fix-via-row .rs-sel").count() == 0, "no dropdown in the junction row"
     assert page.evaluate("[...document.querySelectorAll('#fix-via-list .junrow, #fix-out .turn')].every((r) => r.getBoundingClientRect().right <= document.getElementById('fix-panel').getBoundingClientRect().right + 1)"), "a row is wider than the panel"
     page.mouse.move(5, 5)
     still = page.eval_on_selector("#fix-out .turn", "(r) => getComputedStyle(r).backgroundColor")
@@ -342,13 +357,14 @@ with sync_playwright() as p:
     page.fill("#fix-from", str(frm)); page.click("#fix-turn-find")
     page.wait_for_selector("#fix-out .turn")
     print("the Turn tab: the junctions say how many roads leave, a dead end says why, and an arriving road can be the start road")
-    page.select_option("#fix-out .turn select", "no_left_turn")
+    rule = page.eval_on_selector("#fix-out .turn select", "(x) => x.options[1].value")      # the first rule that fits the turn: No <way>
+    page.select_option("#fix-out .turn select", rule)
     assert "not added yet" in page.inner_text("#fix-turn-note") and "restriction" not in text(page), "a choice is not a change until Add to changes"
     assert page.is_visible("#fix-tab-turns .dot")
     page.click("#fix-turn-add")
     assert not page.is_visible("#fix-tab-turns .dot")
     y = text(page)
-    assert "turn_restrictions" in y and "restriction: no_left_turn" in y and f"from_way: {frm}" in y, y
+    assert "turn_restrictions" in y and f"restriction: {rule}" in y and f"from_way: {frm}" in y, y
     page.click("#fix-turn-clear")                  # Clear takes the road out of the Turn tab (the rule stays in the changes)
     assert not page.is_visible("#fix-turnsec") and page.input_value("#fix-from") == "" and "turn_restrictions" in text(page)
 

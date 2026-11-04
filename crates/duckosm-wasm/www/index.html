@@ -309,6 +309,8 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   #fix-panel :is(.wallrow, .doorrow, .junrow, .turn):focus-visible { outline: 2px solid var(--accent); }
   #fix-panel .wallrow select { width: 100%; max-width: none; }
   #fix-panel .wallrow .dlabel { grid-column: 2; color: var(--mut); }
+  #fix-panel .sw { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }   /* the color of the item on the map */
+  #fix-panel .wallrow { grid-template-columns: 3.6em 1fr 1fr; }
   #fix-panel .legend { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; font-size: 11.5px; color: var(--muted); }
   #fix-panel .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
   #fix-panel .chgtop { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -647,7 +649,7 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
         <p class="why">Click the road that the turn starts on, or type its way ID.</p>
         <div class="row"><input id="fix-from" type="text" inputmode="numeric" placeholder="From way ID" aria-label="From way ID" style="flex:1"><button id="fix-turn-find" class="btn" type="button">Find turns</button><button id="fix-turn-clear" class="btn" type="button" hidden>Unselect</button></div>
         <p id="fix-turn-legend" class="small" hidden><span class="legend" style="margin-left:0"><i style="background:#2563eb"></i>The road the turn starts on</span><span class="legend"><i style="background:#16a34a"></i>Roads that leave the junction</span><span class="legend"><i style="border:3px solid #2563eb;border-radius:50%;background:rgba(37,99,235,.25)"></i>The junction</span><br><span class="muted">Point at a road in the list to outline it on the map.</span></p>
-        <div id="fix-via-row" hidden><p class="small" style="margin:10px 0 4px"><b>Junctions at the end of the road.</b> Click one to see the roads that leave it.</p><select id="fix-via" hidden aria-hidden="true" tabindex="-1"></select><div id="fix-via-list" class="walls" role="listbox" aria-label="Junction"></div></div>
+        <div id="fix-via-row" hidden><p class="small" style="margin:10px 0 4px"><b>Junctions at the end of the road.</b> Click one to see the roads that leave it.</p><input id="fix-via" type="hidden"><div id="fix-via-list" class="walls" role="listbox" aria-label="Junction"></div></div>
       </section>
       <section class="fsec" id="fix-turnsec" hidden><h3>Rule for each road that leaves the junction</h3><div id="fix-out"></div></section>
       <div class="fix-bar" id="fix-turn-bar" hidden>
