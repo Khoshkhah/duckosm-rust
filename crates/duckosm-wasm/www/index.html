@@ -937,7 +937,8 @@ const setData = (src, data) => loaded.then(() => map.getSource(src).setData(data
 const blue = "#2563eb";
 // the boundary of the area on the map: the layers area-fill, area-casing and area-line take the values of the design (card 9, designLib.defaultBoundary: the blue line of
 // the page before the card). The fill of the page hides while the roads show, because it would change their colors; the design can turn it on over the roads.
-let boundaryNow = designLib.defaultBoundary(), groundNow = designLib.defaultGround(), visibleNow = null;
+let boundaryNow = designLib.defaultBoundary(), groundNow = designLib.defaultGround(), visibleNow = null, roadsNow = null;
+const roadOrig = new Map();                  // the original paint of the road layers (see paintRoads)
 function paintBoundary(onRoads = roadsShown) {
   if (!map.getLayer("area-line")) return;
   const b = boundaryNow, vis = (on) => (on ? "visible" : "none");
@@ -2101,6 +2102,7 @@ let roadsShown = false;
 function removeRoads() {
   if (!map.getStyle()) return;
   roadsShown = false;
+  roadOrig.clear();
   for (const l of map.getStyle().layers) if (l.id.startsWith("rs-")) map.removeLayer(l.id);
   for (const id of Object.keys(map.getStyle().sources)) if (id.startsWith("rs-")) map.removeSource(id);
   paintBoundary(false);
@@ -2727,7 +2729,26 @@ function applyVisible() {
     if (map.getLayer("rs-roads-labels")) map.setLayoutProperty("rs-roads-labels", "visibility", v.names ? "visible" : "none");
   } finally { applyingLayers = false; }
 }
-const applyDesignLayers = () => { paintGround(); applyVisible(); };
+// the opacity of the roads (card 9): roadstyle's road layers have one `line-opacity` and one `line-width` for the casing and the fill; the page writes the design's opacity into them
+// (designLib.roadOpacity), and, with "Casing as an outline", a casing that has a gap of the fill width (designLib.roadOutline), so a transparent fill shows the map under it.
+// The originals are kept when a layer is first seen, and come back for the default values.
+function paintRoads() {
+  const d = roadsNow;
+  if (!d || !roadsShown) return;
+  const o = d.roads.opacity;
+  for (const l of map.getStyle().layers) {
+    if (l.type !== "line" || !/^rs-roads-simple/.test(l.id)) continue;
+    let orig = roadOrig.get(l.id);
+    if (!orig) roadOrig.set(l.id, (orig = { op: l.paint?.["line-opacity"], w: l.paint?.["line-width"] }));
+    map.setPaintProperty(l.id, "line-opacity", o.fill === 1 && o.casing === 1 ? orig.op : designLib.roadOpacity(orig.op, o.fill, o.casing));
+    const hole = o.outline ? designLib.roadOutline(orig.w) : null;
+    map.setPaintProperty(l.id, "line-width", hole ? hole.width : orig.w);
+    map.setPaintProperty(l.id, "line-gap-width", hole ? hole.gap : 0);
+  }
+  if (map.getLayer("rs-roads-labels") && d.labels.halo_opacity !== 1) map.setPaintProperty("rs-roads-labels", "text-halo-color", designLib.withAlpha(d.labels.halo_color, d.labels.halo_opacity));
+  if (map.getLayer("rs-roads-arrows") && d.arrows.opacity !== 0.7) map.setPaintProperty("rs-roads-arrows", "icon-opacity", d.arrows.opacity);
+}
+const applyDesignLayers = () => { paintGround(); applyVisible(); paintRoads(); };
 for (const [ev, key] of [["rs:arrowschange", "arrows"], ["rs:buildings3dchange", "buildings3d"]]) document.addEventListener(ev, (e) => { if (!applyingLayers) designPanel?.setVisible(key, e.detail.on); });
 document.addEventListener("rs:overlaychange", (e) => { if (!applyingLayers) designPanel?.setVisible(e.detail.overlay, e.detail.visible); });
 document.addEventListener("rs:filterchange", (e) => {
@@ -2772,7 +2793,7 @@ function designSaved(text) {
 try {
   const look = await fetch("map/look.json").then((r) => r.json());
   designPanel = await initDesignPanel({ $, esc, look, redraw: redrawDesign, onProfile: designChanged, onBoundary: (b) => { boundaryNow = b; paintBoundary(); },
-    onGround: (g) => { groundNow = g; paintGround(); }, onVisible: (v) => { visibleNow = v; applyVisible(); }, has: hasLayer, preview: { get: previewValue, set: setPreview }, onSave: designSaved });
+    onGround: (g) => { groundNow = g; paintGround(); }, onVisible: (v) => { visibleNow = v; applyVisible(); }, onRoads: (d) => { roadsNow = d; paintRoads(); }, has: hasLayer, preview: { get: previewValue, set: setPreview }, onSave: designSaved });
   let stored = null;
   try { stored = localStorage.getItem("duckosm.design"); } catch (_) { /* no storage: the default design */ }
   if (!(stored && await designPanel.load(stored, { draw: false }))) designPanel.patchProfile({ format: duck.tileFormat, preset: "analysis" });     // no design yet: the tile format that the person chose before

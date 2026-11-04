@@ -85,7 +85,7 @@ with sync_playwright() as p:
     page.click("#design-open")
     before = style_text(page)
         # the themes
-    assert page.locator("#design-pane .theme[data-look]").count() == 21 and page.get_attribute("#design-pane [data-look=light]", "aria-checked") == "true"
+    assert page.locator("#design-pane .theme[data-look]").count() == 23 and page.get_attribute("#design-pane [data-look=light]", "aria-checked") == "true"
     page.click("#design-pane [data-look=dark]")
     settled(page)
     assert page.get_attribute("#design-pane [data-look=dark]", "aria-checked") == "true" and page.evaluate("window.designPanel.get().theme") == "dark"
@@ -141,7 +141,7 @@ with sync_playwright() as p:
     # all the ready themes: each one loads, draws with no error and has its own road colors; the swatches show the ground, a road, its casing and the water
     page.click("#design-tab-theme")
     ids = page.eval_on_selector_all("#design-pane [data-look]", "(l) => l.map((x) => x.dataset.look)")
-    assert len(ids) == 21 and page.locator("#design-pane .sw5").first.locator("i").count() == 4
+    assert len(ids) == 23 and page.locator("#design-pane .sw5").first.locator("i").count() == 4
     assert page.locator("#design-pane [data-look=overlay] .sw5 i.none").count() == 2, "the overlay shows a checkerboard for the ground and the water"
     sigs = {}
     for t in ids:
@@ -195,6 +195,64 @@ with sync_playwright() as p:
     page.uncheck("#design-pane [data-p='ground.transparent']")
     assert alpha() == 1
     print("ground: ok")
+
+    # the opacity of the roads on the Satellite base map: a road with a fill at 40 percent shows the satellite; the ground stays transparent
+    page.click("#design-tab-theme")
+    page.evaluate("window.rsSetBasemap('satellite'); window.duckMap.jumpTo({center: [7.4246, 43.7384], zoom: 16})")
+    page.click("#design-pane [data-look=overlay]")
+    settled(page)
+    page.wait_for_timeout(4000)                                                           # the satellite tiles
+    assert page.evaluate("window.designPanel.get().roads.opacity") == {"fill": 0.6, "casing": 0.85, "outline": True} and alpha() == 0
+    spot = page.evaluate("""() => { const m = window.duckMap, c = m.getCanvas().getBoundingClientRect();
+        const fillAt = (x, y) => m.queryRenderedFeatures([x, y], { layers: ['rs-roads-simple'] }).some((f) => f.properties.__rs_k === 1);
+        for (let y = 120; y < 800; y += 6) for (let x = 460; x < 1300; x += 6) {
+          let ok = true;
+          for (let dy = -7; dy <= 7 && ok; dy += 7) for (let dx = -7; dx <= 7 && ok; dx += 7) ok = fillAt(x + dx, y + dy);
+          if (ok) return [x, y];
+        }
+        return null; }""")
+    assert spot, "a wide road is in view"
+    def patch(fill, casing):
+        page.click("#design-tab-roads")
+        set_input(page, "[data-p='roads.opacity.fill']", fill)
+        set_input(page, "[data-p='roads.opacity.casing']", casing)
+        page.wait_for_timeout(1500)
+        img = np.asarray(Image.open(io.BytesIO(page.screenshot(clip={"x": spot[0] - 2, "y": spot[1] - 2, "width": 5, "height": 5}))).convert("RGB")).astype(float)
+        return img.reshape(-1, 3).mean(axis=0)
+    p100, p40, p0 = patch(1, 1), patch(0.4, 0.85), patch(0, 0)
+    print("  road pixel at 100 %, 40 % and 0 %:", p100.round(), p40.round(), p0.round())
+    assert np.abs(p100 - p0).sum() > 60, "an opaque road hides the satellite"
+    assert np.abs(p40 - p0).sum() < np.abs(p100 - p0).sum() - 30, "the road at 40 percent is nearer to the satellite than the opaque road"
+    assert np.abs(p40 - (0.4 * p100 + 0.6 * p0)).max() < 30, "the pixel of the road at 40 percent has the satellite color in it (40 percent fill, 60 percent satellite)"
+    assert alpha() == 0, "the ground stays transparent"
+    lw = page.evaluate("JSON.stringify(window.duckMap.getPaintProperty('rs-roads-simple', 'line-gap-width')).length")
+    assert lw > 100, "the casing is an outline: a gap of the fill width"
+    # the casing under the fill makes the road darker; the outline does not
+    page.click("#design-tab-roads")
+    page.uncheck("#design-pane [data-p='roads.opacity.outline']")
+    page.wait_for_timeout(1000)
+    assert page.evaluate("window.duckMap.getPaintProperty('rs-roads-simple', 'line-gap-width')") == 0
+    page.check("#design-pane [data-p='roads.opacity.outline']")
+    # the halo and the arrows have an opacity
+    page.click("#design-tab-text")
+    set_input(page, "[data-p='labels.halo_opacity']", 0.5)
+    set_input(page, "[data-p='arrows.opacity']", 0.3)
+    assert page.evaluate("window.duckMap.getPaintProperty('rs-roads-arrows', 'icon-opacity')") == 0.3 and "rgba(255,255,255,0.5)" in page.evaluate("window.duckMap.getPaintProperty('rs-roads-labels', 'text-halo-color')")
+    assert page.text_content("#design-pane [data-p='labels.halo_opacity'] + output") == "50%"
+    # the opacity is in the design file, and the themes Roads hollow and Roads ghost set it
+    page.click("#design-tab-theme")
+    page.click("#design-pane [data-look=hollow]")
+    settled(page)
+    assert page.evaluate("window.designPanel.get().roads.opacity") == {"fill": 0, "casing": 1, "outline": True} and alpha() == 0
+    page.click("#design-pane [data-look=ghost]")
+    settled(page)
+    assert page.evaluate("window.designPanel.get().roads.opacity") == {"fill": 0.35, "casing": 0.7, "outline": True}
+    page.click("#design-pane [data-look=dark]")
+    settled(page)
+    assert page.evaluate("window.designPanel.get().roads.opacity") == {"fill": 1, "casing": 1, "outline": False} and page.evaluate("window.duckMap.getPaintProperty('rs-roads-simple', 'line-gap-width')") == 0
+    page.evaluate("window.rsSetBasemap('blank')")
+    page.evaluate("window.duckMap.jumpTo({center: [7.4246, 43.7384], zoom: 16})")
+    print("road opacity: ok")
 
     # the preview under a transparent ground: the Blank base map shows a checkerboard by itself; "Preview on" is the base map of roadstyle (one state)
     page.click("#design-tab-theme")

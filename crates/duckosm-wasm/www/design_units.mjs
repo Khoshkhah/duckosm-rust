@@ -149,3 +149,27 @@ assert.throws(() => UT.fromFile(JSON.stringify({ format: UT.FILE_FORMAT, version
 const merged = UT.merge(UT.put([], "Night 2", base), mine);
 assert.deepEqual([merged.added, merged.replaced, merged.list.length], [1, 1, 2]);
 console.log("design_units: your themes passed");
+
+// the opacity of the roads: the defaults, the repair, the themes, and the expressions for roadstyle's road layers
+assert.deepEqual(base.roads.opacity, { fill: 1, casing: 1, outline: false }); assert.equal(base.labels.halo_opacity, 1); assert.equal(base.arrows.opacity, 0.7);
+const ov2 = D.normalize({ roads: { opacity: { fill: 9, casing: -1, outline: 1 } }, labels: { halo_opacity: "x" }, arrows: { opacity: 0.2 } }, base);
+assert.deepEqual(ov2.roads.opacity, { fill: 1, casing: 0, outline: true }); assert.equal(ov2.labels.halo_opacity, 1); assert.equal(ov2.arrows.opacity, 0.2);
+const T = (id) => D.makeTheme(base, D.THEME_DATA.find((t) => t.id === id));
+assert.deepEqual(T("overlay").roads.opacity, { fill: 0.6, casing: 0.85, outline: true }); assert.deepEqual(T("overlaydark").roads.opacity, { fill: 0.6, casing: 0.85, outline: true });
+assert.deepEqual(T("hollow").roads.opacity, { fill: 0, casing: 1, outline: true }); assert.deepEqual(T("ghost").roads.opacity, { fill: 0.35, casing: 0.7, outline: true });
+assert.deepEqual(T("print").roads.opacity, { fill: 1, casing: 1, outline: false }, "a theme with no opacity has the default");
+const nightHollow = D.makeTheme(base, D.THEME_DATA.find((t) => t.id === "amber"), T("hollow"));
+assert.deepEqual(nightHollow.roads.opacity, T("hollow").roads.opacity, "a road palette keeps the opacity of the design");
+const rowExpr = ["+", ["*", ["at", ["+", ["*", ["get", "__rs_k"], 8], 0], ["literal", [0, 1, 2]]], 13], 5];
+const widthExpr = ["let", "row", rowExpr, ["interpolate", ["linear"], ["zoom"], 12, ["*", ["at", ["var", "row"], ["literal", [6, 4]]], 1], 14, ["*", ["at", ["var", "row"], ["literal", [12, 8]]], 1]]];
+const opExpr = ["interpolate", ["linear"], ["zoom"], 14, ["case", ["==", ["get", "__rs_k"], 2], 0, 1], 17, 1];
+const o1 = D.roadOpacity(opExpr, 0.4, 0.8);
+assert.equal(o1[0], "interpolate"); assert.deepEqual(o1.slice(0, 4), ["interpolate", ["linear"], ["zoom"], 14]); assert.equal(o1[4][0], "*"); assert.equal(o1[6][0], "*");
+assert.deepEqual(o1[4][2], ["case", ["==", ["get", "__rs_k"], 0], 0.8, ["==", ["get", "__rs_k"], 1], 0.4, 1], "casing at 0.8, fill at 0.4, other pieces as they are");
+assert.deepEqual(D.roadOpacity(0.7, 0.5, 1)[0], "*"); assert.deepEqual(D.roadOpacity(undefined, 0.5, 1)[1], 1);
+const out = D.roadOutline(widthExpr);
+assert.equal(out.width[0], "let"); assert.equal(out.width.length, 6); assert.equal(out.width[3], "row1");
+assert.ok(JSON.stringify(out.width[2]).includes("__rs_k") && !JSON.stringify(out.width[4]).includes("__rs_k"), "row has the kind of the piece; row1 has the kind 1 (the fill)");
+assert.deepEqual(out.gap[5].slice(0, 4), ["interpolate", ["linear"], ["zoom"], 12], "the zoom stays at the top");
+assert.equal(D.roadOutline(["literal", 3]), null); assert.equal(D.roadOutline(undefined), null);
+assert.equal(D.withAlpha("#ff8000", 0.5), "rgba(255,128,0,0.5)");

@@ -2,7 +2,7 @@
 // (index.html, #design-panel): a header, five tabs and a bar. This file owns the design (app/design.js) and draws the tabs; the page gives it
 // the look (map/look.json), the way to draw the map again with a new look, and the places to keep the design.
 //
-//   initDesignPanel({ $, esc, look, redraw, onProfile, onBoundary, onGround, onVisible, has, preview, onSave }) -> { open, close, isOpen, tab, get, text, set, patchProfile, profile, boundary, setVisible, refresh, load, setCount, flush, state }
+//   initDesignPanel({ $, esc, look, redraw, onProfile, onBoundary, onGround, onVisible, onRoads, has, preview, onSave }) -> { open, close, isOpen, tab, get, text, set, patchProfile, profile, boundary, setVisible, refresh, load, setCount, flush, state }
 //
 // A change of the style draws the map again after 0.5 s of quiet (`redraw(lookObject, isDefault, draw)`: it gives the look to the map and, with `draw`, draws). A change of the profile calls `onProfile(profile)`, a change of the boundary calls `onBoundary(boundary)`, of the ground `onGround(ground)`, and of the layers `onVisible(visible)` (the page paints them at once: no new draw of the roads). `has(key)` tells whether the build has a layer (false: "not in this build"); `preview` = {get(), set(v)} is the base map under the map (checkerboard, blank, openfreemap, satellite, other);
 // the Export card reads the profile through `profile()`.
@@ -23,17 +23,22 @@ const setPath = (o, path, v) => {
   o[last] = v;
 };
 
-export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => {}, onBoundary = () => {}, onGround = () => {}, onVisible = () => {}, has = () => true, preview = { get: () => "other", set: () => {} }, onSave = () => {} }) {
+export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => {}, onBoundary = () => {}, onGround = () => {}, onVisible = () => {}, onRoads = () => {}, has = () => true, preview = { get: () => "other", set: () => {} }, onSave = () => {} }) {
   const base = D.defaultsOf(look);
   let mine = UT.readAll(), origin = null, ask = null, armed = null, renaming = null, nameDraft = "", keepDraft = false, mineMsg = "";       // the themes that the person saved (app/user_themes.js)
   let design = structuredClone(base), tab = "theme", lastKey = null, timer = null, busy = false, again = false, note = "", counts = { text: "", bad: false };
-  const styleKey = (d) => JSON.stringify({ ...d, name: 0, theme: 0, profile: 0, boundary: 0, ground: 0, visible: 0 });       // the profile and the boundary are not in the look: they draw no new map
-  const announce = () => { onProfile(design.profile); onBoundary(design.boundary); onGround(design.ground); onVisible(design.visible); };
+  const styleKey = (d) => {                                          // the profile, the boundary, the ground, the layers and the opacity are not in the look: they draw no new map
+    const k = structuredClone({ ...d, name: 0, theme: 0, profile: 0, boundary: 0, ground: 0, visible: 0 });
+    delete k.roads.opacity; delete k.labels.halo_opacity; delete k.arrows.opacity;
+    return JSON.stringify(k);
+  };
+  const announce = () => { onProfile(design.profile); onBoundary(design.boundary); onGround(design.ground); onVisible(design.visible); onRoads(design); };
   const profile = () => design.profile;
 
   // ---- the controls ----
   const color = (label, p, v) => `<label class="drow2"><span>${label}</span><input type="color" data-p="${p}" value="${v}"></label>`;
-  const range = (label, p, v, min, max, step, unit = "") => `<label class="drow2 rng"><span>${label}</span><input type="range" data-unit="${unit}" data-p="${p}" min="${min}" max="${max}" step="${step}" value="${v}"><output>${+(+v).toFixed(2)}${unit}</output></label>`;
+  const shown = (v, unit) => (unit === "%" ? `${Math.round(v * 100)}%` : `${+(+v).toFixed(2)}${unit}`);          // the unit "%" shows a fraction (0 to 1) as a percent
+  const range = (label, p, v, min, max, step, unit = "") => `<label class="drow2 rng"><span>${label}</span><input type="range" data-unit="${unit}" data-p="${p}" min="${min}" max="${max}" step="${step}" value="${v}"><output>${shown(v, unit)}</output></label>`;
   const number = (label, p, v, min, max, step = 1, extra = "") => `<label class="drow2"><span>${label}</span><input type="number" data-p="${p}" min="${min}" max="${max}" step="${step}" value="${v}" ${extra}></label>`;
   const check = (label, p, v, note2 = "", extra = "") => `<label class="optrow"><input type="checkbox" data-p="${p}" ${v ? "checked" : ""} ${extra}><span class="t"><b>${label}</b>${note2 ? `<small>${note2}</small>` : ""}</span></label>`;
   const sec = (title, body, why = "") => `<section class="fsec"><h3>${title}</h3>${why ? `<p class="why">${why}</p>` : ""}${body}</section>`;
@@ -75,14 +80,17 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
       <p class="why" id="design-where">The page keeps the design in this browser, with the saved area. Download saves it as one .json file.</p>`);
   const paneRoads = () => sec("Colors", `<div class="rhead"><span></span><span>Fill</span><span>Casing</span></div>${D.CLASSES.map((c) => `<div class="drow2 cls"><span>${LABEL[c]}</span><input type="color" data-p="roads.fill.${c}" value="${design.roads.fill[c]}" aria-label="${LABEL[c]} fill"><input type="color" data-p="roads.casing.${c}" value="${design.roads.casing[c]}" aria-label="${LABEL[c]} casing"></div>`).join("")}`,
       "The casing is the outline of a road. A link road has the colors of its class.")
+    + sec("Opacity", range("Fill opacity", "roads.opacity.fill", design.roads.opacity.fill, 0, 1, 0.05, "%") + range("Casing opacity", "roads.opacity.casing", design.roads.opacity.casing, 0, 1, 0.05, "%")
+      + check("Casing as an outline", "roads.opacity.outline", design.roads.opacity.outline, "The casing is drawn only outside the fill, not under it. Use it when the fill is not opaque: the map under the road then shows through the fill."),
+      "100 percent is the opacity of the style. A lower value lets the map under the roads show through.")
     + sec("Width", D.GROUPS.map(([g, n]) => range(n, `roads.width.${g}`, design.roads.width[g], 0.5, 2.5, 0.05, " ×")).join(""), "A factor for the whole width curve of a group. 1 is the width of the theme.")
     + sec("Dark mode", `<p class="why">The map in the dark theme changes each light color to a dark one. These ranges set how light the dark colors are (0 is black, 1 is white).</p>`
       + [["roads", "Road fill"], ["casing", "Casing"], ["areas", "Areas"], ["labels", "Text"]].map(([k, n]) => `<div class="drow2 two"><span>${n}</span><input type="number" data-p="dark.${k}.0" min="0" max="1" step="0.02" value="${design.dark[k][0]}" aria-label="${n}, darkest"><input type="number" data-p="dark.${k}.1" min="0" max="1" step="0.02" value="${design.dark[k][1]}" aria-label="${n}, lightest"></div>`).join("")
       + color("Dark ground", "dark.background", design.dark.background));
   const paneText = () => sec("Street names", color("Color", "labels.color", design.labels.color) + color("Halo color", "labels.halo_color", design.labels.halo_color)
-      + range("Halo width", "labels.halo_width", design.labels.halo_width, 0, 4, 0.25, " px") + range("Size", "labels.size", design.labels.size, 0.6, 1.8, 0.05, " ×")
+      + range("Halo width", "labels.halo_width", design.labels.halo_width, 0, 4, 0.25, " px") + range("Halo opacity", "labels.halo_opacity", design.labels.halo_opacity, 0, 1, 0.05, "%") + range("Size", "labels.size", design.labels.size, 0.6, 1.8, 0.05, " ×")
       + number("From zoom", "labels.minzoom", design.labels.minzoom, 8, 20), "Smaller roads show their names two zooms later.")
-    + sec("One-way arrows", color("Color", "arrows.color", design.arrows.color) + range("Size", "arrows.size", design.arrows.size, 0.5, 3, 0.1, " ×") + number("From zoom", "arrows.minzoom", design.arrows.minzoom, 8, 20),
+    + sec("One-way arrows", color("Color", "arrows.color", design.arrows.color) + range("Size", "arrows.size", design.arrows.size, 0.5, 3, 0.1, " ×") + range("Opacity", "arrows.opacity", design.arrows.opacity, 0, 1, 0.05, "%") + number("From zoom", "arrows.minzoom", design.arrows.minzoom, 8, 20),
       "The switch for the arrows is in the Layers box of the map bar.");
   const paneVisible = () => {
     const v = design.visible, row = (k, n) => {
@@ -197,7 +205,7 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
     const v = el.type === "checkbox" ? el.checked : el.type === "range" || el.type === "number" ? (el.value === "" ? NaN : +el.value) : el.value;
     if (Number.isNaN(v)) return;
     setPath(design, p, el.tagName === "SELECT" && p === "profile.extent" ? +v : v);
-    if (el.type === "range") el.parentElement.querySelector("output").textContent = `${+(+v).toFixed(2)}${el.dataset.unit}`;
+    if (el.type === "range") el.parentElement.querySelector("output").textContent = shown(v, el.dataset.unit);
     if (p.startsWith("profile.")) { design.profile.preset = "custom"; if (el.type === "checkbox" || el.tagName === "SELECT") return (changed(), paint()); }
     else if (p === "boundary.show" || p === "ground.transparent") { design.theme = "custom"; return (changed(), paint()); }
     else if (p !== "name") design.theme = "custom";

@@ -302,7 +302,7 @@ The panel has five tabs.
 
 | Tab | What it sets |
 |---|---|
-| **Theme** | Twenty-one ready themes, the name of the design, and **Download**, **Load a file** and **Reset**. |
+| **Theme** | Twenty-three ready themes, the name of the design, and **Download**, **Load a file** and **Reset**. |
 | **Roads** | The fill and the casing of 14 road classes, the width of 9 groups of classes, and the colors of the dark theme. |
 | **Text** | The street names (color, halo, size, first zoom) and the one-way arrows (color, size, first zoom). |
 | **Layers** | A switch for each layer, the boundary of the area (line, fill), the ground (transparent or not), the colors of the ground, water, green areas, built-up land, sand, buildings, railways and waterways, and the height of 3D buildings. |
@@ -338,6 +338,8 @@ Each button shows four cells: the ground, a road fill, its casing and the water.
 | **Vintage** | A sepia ground and brown roads. For posters. |
 | **Roads overlay** | Only the roads, on a transparent ground. Strong colors and a dark casing. See below. |
 | **Roads overlay, dark** | The same overlay with light roads. For a dark map or a satellite map under it. |
+| **Roads hollow** | Only the outline of each road, in the color of its class, with no fill. |
+| **Roads ghost** | Pale roads: the fill at 35 percent and a thin casing at 70 percent. |
 
 There is no theme for the Satellite base map. A theme can hide a layer, but it cannot make the base-map fills partly transparent. Use **Roads overlay** over a satellite map.
 
@@ -365,7 +367,7 @@ Your themes stay in this browser, in the storage `localStorage` (key `duckosm.th
 
 ![The Roads overlay theme on the satellite base map](img/dashboard/33-design-overlay.png)
 
-**Roads overlay** and **Roads overlay, dark** show only the roads, the street names and the casings. The ground has alpha 0 (the layer `bg` of the map is transparent, also in the dark theme). The base-map layers (land use, water, buildings, railways and the points) are off. The casing is a little wider and the colors are a little stronger than in Light, because no ground is behind them. Put the overlay on a light map, a dark map, the Satellite base map or a map with 3D buildings. The base-map switch of roadstyle changes the map under the roads, and the ground stays transparent.
+**Roads overlay** and **Roads overlay, dark** show only the roads, the street names and the casings. The fill is at 60 percent and the casing at 85 percent, with the casing as an outline, so the map under the roads shows through them. The ground has alpha 0 (the layer `bg` of the map is transparent, also in the dark theme). The base-map layers (land use, water, buildings, railways and the points) are off. The casing is a little wider and the colors are a little stronger than in Light, because no ground is behind them. Put the overlay on a light map, a dark map, the Satellite base map or a map with 3D buildings. The base-map switch of roadstyle changes the map under the roads, and the ground stays transparent.
 
 **Download** saves the design as one `.design.json` file. **Load a file** reads such a file and draws it. A file that is not a duckOSM design file does not load, and the design stays as it is. **Reset** goes back to the Light style and keeps the tile profile.
 
@@ -379,13 +381,15 @@ Each class has a color input for the fill and one for the casing. The casing is 
 
 A width factor scales the whole width curve of a group. For example, 2 doubles the width of the roads of the group at all zooms. The groups come from roadstyle: motorway and trunk, primary, secondary, tertiary, residential and unclassified, living street, service, pedestrian, and footway, path, cycleway and track.
 
+**Opacity** has two sliders, **Fill opacity** and **Casing opacity** (0 to 100 percent). 100 percent is the opacity of the style. A lower value lets the map under the roads show through: a satellite map or 3D buildings. The switch **Casing as an outline** draws the casing only outside the fill. This matters when the fill is not opaque. Without it, the casing is under the fill, and the road looks dark and muddy over a satellite map, because the casing shows through the fill. With it, the casing has a gap of the width of the fill, so the map shows through the whole fill. The page does this in the paint of roadstyle's road layers (`line-opacity`, and `line-gap-width` for the casing). A change shows at once and draws no new map. The opacity is `design.roads.opacity` (`{fill, casing, outline}`). The opacity is not per class or per group: roadstyle's road layer has one opacity for all classes.
+
 The dark theme of the map does not use the colors of the light theme directly. roadstyle changes each light color to a dark one. The **Dark mode** section sets the range of lightness of that change for the road fill, the casing, the areas and the text (0 is black, 1 is white). It also sets the dark ground.
 
 ### Text
 
 ![The Text tab](img/dashboard/29-design-text.png)
 
-The street names have a color, a halo (a color and a width), a size factor and a first zoom. The names of small roads show two zooms after the first zoom. The one-way arrows have a color, a size factor and a first zoom. The switch that turns the arrows on or off is in the base-map box of the bar.
+The street names have a color, a halo (a color, a width and an opacity), a size factor and a first zoom. The names of small roads show two zooms after the first zoom. The one-way arrows have a color, an opacity, a size factor and a first zoom. The halo opacity is `design.labels.halo_opacity`, and the arrow opacity is `design.arrows.opacity` (0.7 at the first visit, as in the style). The switch that turns the arrows on or off is in the base-map box of the bar.
 
 ### Layers
 
