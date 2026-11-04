@@ -407,7 +407,7 @@ pub fn read(path: &Path, pbf_is_cut: bool, strict: bool) -> Result<FromConfig, S
 const FIX_TOP: [&str; 4] = ["overrides", "new_ways", "turn_restrictions", "extra"];
 /// The keys of `extra` (an extension of duckosm-rust: duckOSM reads only `overrides`, so it ignores the key `extra`).
 const FIX_EXTRA: [&str; 2] = ["tag_edits", "building_faces"];
-const FIX_FACE_EDIT: [&str; 5] = ["building", "from_node", "to_node", "type", "note"];
+const FIX_FACE_EDIT: [&str; 6] = ["building", "from_node", "to_node", "type", "door", "note"];
 /// `was`: what the data had before the change, kept by the page to show "was to now" (the build does not read it).
 const FIX_TAG_EDIT: [&str; 6] = ["type", "id", "set", "delete", "note", "was"];
 const FIX_RULE: [&str; 13] = [
@@ -730,11 +730,26 @@ pub fn parse_osm_fixes(text: &str, label: &str) -> Result<OsmFixes, String> {
                             .ok_or_else(|| {
                                 err(format!("{what}.type must be front, back, side or party"))
                             })?;
+                        let door = match get("door") {
+                            None | Some(Yaml::Null) => None,
+                            Some(Yaml::String(d))
+                                if !d.is_empty()
+                                    && d.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') =>
+                            {
+                                Some(d.clone())
+                            }
+                            Some(_) => {
+                                return Err(err(format!(
+                                    "{what}.door must be a word (letters, digits, _), for example main"
+                                )))
+                            }
+                        };
                         fixes.face_edits.push(FaceEdit {
                             building: id("building")?,
                             from_node: id("from_node")?,
                             to_node: id("to_node")?,
                             face_type,
+                            door,
                         });
                     }
                 }
@@ -935,11 +950,15 @@ mod tests {
         assert_eq!(e.len(), 2);
         assert_eq!((e[0].building, e[0].from_node, e[0].to_node, e[0].face_type), (5, 1, 2, FaceType::Front));
         assert_eq!(e[1].face_type, FaceType::Party);
+        assert_eq!((e[0].door.as_deref(), e[1].door.as_deref()), (None, None));
+        let d = parse_osm_fixes("extra:\n  building_faces:\n    - {building: 5, from_node: 1, to_node: 2, type: side, door: main}\n", "t").unwrap();
+        assert_eq!(d.face_edits[0].door.as_deref(), Some("main"));
         for (text, msg) in [
             ("extra:\n  building_faces:\n    - {building: 5, from_node: 1, to_node: 2, type: roof}\n", "type must be front, back, side or party"),
             ("extra:\n  building_faces:\n    - {building: 5, from_node: 1, type: front}\n", "has no to_node"),
             ("extra:\n  building_faces:\n    - {building: 5, from_node: 1, to_node: 2, type: front, x: 1}\n", "unknown key 'x'"),
             ("extra:\n  building_faces: 3\n", "extra.building_faces must be a list"),
+            ("extra:\n  building_faces:\n    - {building: 5, from_node: 1, to_node: 2, type: front, door: 'a b'}\n", "door must be a word"),
         ] {
             let e = parse_osm_fixes(text, "t").unwrap_err();
             assert!(e.contains(msg), "{text:?}: {e}");

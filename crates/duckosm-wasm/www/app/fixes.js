@@ -53,10 +53,10 @@ export function upsertTagEdit(doc, edit) {
 const sameWall = (e, building, a, b) => e.building === building && ((e.from_node === a && e.to_node === b) || (e.from_node === b && e.to_node === a));
 export const findFace = (doc, building, a, b) => faceEdits(doc).find((e) => sameWall(e, building, a, b)) ?? null;
 
-// a rule that gives the computed type is not a change: it is removed
-export function setFace(doc, building, a, b, type, computed) {
+// a rule that gives the computed type and no door is not a change: it is removed. `door`: the kind of door of the wall ("" or null: no door)
+export function setFace(doc, building, a, b, type, computed, door = "") {
   const list = faceEdits(doc).filter((e) => !sameWall(e, building, a, b));
-  if (type !== computed) list.push({ building, from_node: a, to_node: b, type });
+  if (type !== computed || door) list.push({ building, from_node: a, to_node: b, type, ...(door ? { door } : {}) });
   if (list.length) (doc.extra ??= {}).building_faces = list;
   else if (doc.extra) { delete doc.extra.building_faces; if (!Object.keys(doc.extra).length) delete doc.extra; }
 }

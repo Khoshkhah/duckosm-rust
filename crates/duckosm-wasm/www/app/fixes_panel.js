@@ -220,10 +220,11 @@ export async function initFixesPanel(ctx) {
       html += section(`Walls <span class="muted">(${walls.length})</span>`, `<div class="wallbar"><button type="button" class="btn sm" data-wall-nav="-1">‹ Previous</button><button type="button" class="btn sm" data-wall-nav="1">Next ›</button><button type="button" class="btn sm" data-wall-nav="0" id="fix-wall-off">Unselect</button></div>
         <p class="small" id="fix-wallpos" style="margin:6px 0"></p>
         <p class="small" style="margin:0 0 6px">${Object.entries(FACE_COLORS).map(([t, c]) => `<span class="legend" style="margin-left:0;margin-right:8px"><i style="background:${c}"></i>${FACE_NAMES[t]}</span>`).join("")}</p>
-        <div class="walls">${walls.map((w) => { const t = wallType(w), ruled = !!F.findFace(doc, sel.id, w.from_node, w.to_node) || touched.has(`@wall:${wallKey(w)}`);
+        <div class="walls">${walls.map((w) => { const t = wallType(w), ruled = !!F.findFace(doc, sel.id, w.from_node, w.to_node) || touched.has(`@wall:${wallKey(w)}`) || touched.has(`@wdoor:${wallKey(w)}`);
           return `<div class="wallrow${ruled ? " edited" : ""}${wallKey(w) === wallSel ? " sel" : ""}" tabindex="0" data-key="${wallKey(w)}" data-a="${w.from_node}" data-b="${w.to_node}" data-computed="${w.computed_type}"><span class="k">#${w.face_index + 1}</span><span class="small">${Number(w.length_m).toFixed(1)} m${w.street_name ? ` · ${esc(w.street_name)}` : ""}</span>
-          <select data-wall aria-label="Type of wall ${w.face_index + 1}">${Object.entries(FACE_NAMES).map(([k, v]) => `<option value="${k}"${k === t ? " selected" : ""}>${v}${k === w.computed_type ? " (computed)" : ""}</option>`).join("")}</select></div>`; }).join("")}</div>
-        <p class="why" style="margin:6px 0 0">Click a wall in the list or on the map to select it. A wall type waits for Add to changes, like a field.</p>`);
+          <select data-wall aria-label="Type of wall ${w.face_index + 1}">${Object.entries(FACE_NAMES).map(([k, v]) => `<option value="${k}"${k === t ? " selected" : ""}>${v}${k === w.computed_type ? " (computed)" : ""}</option>`).join("")}</select>
+          <span class="small dlabel">Door</span><select data-walldoor aria-label="Door of wall ${w.face_index + 1}">${[["", "No door"], ...DOOR_KINDS.filter(([v]) => v)].map(([v, n]) => `<option value="${esc(v)}"${v === wallDoor(w) ? " selected" : ""}>${esc(n)}</option>`).join("")}</select></div>`; }).join("")}</div>
+        <p class="why" style="margin:6px 0 0">Click a wall in the list or on the map to select it. A wall type and a door wait for Add to changes, like a field. A door belongs to the wall: it has no place on it.</p>`);
     } else if (sel.kind === "building" && !hasFaces() && sel.type === "way") {
       html += section("Walls", '<p class="why" style="margin:0">Build with the layers on to see the walls of a building and to give them a type.</p>');
     }
@@ -314,7 +315,7 @@ export async function initFixesPanel(ctx) {
   }
   async function loadWalls(id) {
     if (!hasFaces()) return [];
-    return (await safe(`SELECT from_node, to_node, face_index, face_type, computed_type, edited, length_m, street_name, ST_AsGeoJSON(geometry) AS g FROM main.building_faces WHERE building_id = ${id} ORDER BY face_index`))
+    return (await safe(`SELECT from_node, to_node, face_index, face_type, computed_type, edited, door, length_m, street_name, ST_AsGeoJSON(geometry) AS g FROM main.building_faces WHERE building_id = ${id} ORDER BY face_index`))
       .map((r) => ({ ...r, from_node: Number(r.from_node), to_node: Number(r.to_node), face_index: Number(r.face_index) }));
   }
   const wallKey = (w) => `${w.from_node}|${w.to_node}`;
@@ -352,6 +353,9 @@ export async function initFixesPanel(ctx) {
     selectWall(wallKey(walls[i < 0 ? (dir > 0 ? 0 : walls.length - 1) : (i + dir + walls.length) % walls.length]), { zoom: true });
   }
   const wallTypeNow = (w) => F.findFace(doc, sel.id, w.from_node, w.to_node)?.type ?? w.face_type;
+  // the door of a wall: the rule in the changes if there is one (no `door` in it: no door), else the table; the draft first
+  const wallDoorNow = (w) => { const r = F.findFace(doc, sel.id, w.from_node, w.to_node); return r ? r.door ?? "" : w.door ?? ""; };
+  const wallDoor = (w) => draft[`@wdoor:${wallKey(w)}`] ?? wallDoorNow(w);
   const wallType = (w) => draft[`@wall:${wallKey(w)}`] ?? wallTypeNow(w);
 
 
@@ -364,10 +368,16 @@ export async function initFixesPanel(ctx) {
       row.classList.toggle("edited", el.value !== row.dataset.was);
       return paintBar();
     }
+    if (el.dataset?.walldoor !== undefined) {                                    // the door of a wall: a draft until Add to changes
+      const row = el.closest(".wallrow"), k = `@wdoor:${row.dataset.key}`, w = walls.find((x) => wallKey(x) === row.dataset.key);
+      if (el.value === wallDoorNow(w)) { touched.delete(k); delete draft[k]; } else { touched.add(k); draft[k] = el.value; }
+      row.classList.toggle("edited", touched.has(k) || touched.has(`@wall:${row.dataset.key}`) || !!F.findFace(doc, sel.id, w.from_node, w.to_node));
+      return paintBar();
+    }
     if (el.dataset?.wall !== undefined) {                                        // the type of a wall: a rule at once (a Save button is for tags)
       const row = el.closest(".wallrow"), k = `@wall:${row.dataset.key}`, w = walls.find((x) => wallKey(x) === row.dataset.key);
       if (el.value === wallTypeNow(w)) { touched.delete(k); delete draft[k]; } else { touched.add(k); draft[k] = el.value; }
-      row.classList.toggle("edited", touched.has(k) || !!F.findFace(doc, sel.id, w.from_node, w.to_node));
+      row.classList.toggle("edited", touched.has(k) || touched.has(`@wdoor:${row.dataset.key}`) || !!F.findFace(doc, sel.id, w.from_node, w.to_node));
       return paintBar();
     }
     if (el.name === "fix-ex") { draft.exclude_modes = [...document.querySelectorAll("input[name=fix-ex]:checked")].map((c) => c.value); touched.add("exclude_modes"); return paintBar(); }
@@ -420,9 +430,12 @@ export async function initFixesPanel(ctx) {
     }
     commit(() => {
       F.writeRule(doc, sel.type, sel.id, rule);
+      for (const key of new Set(specials.filter((k) => k[1] === "w").map((k) => k.slice(k.indexOf(":") + 1)))) {       // a wall: its type and its door in one rule
+        const [a, b] = key.split("|").map(Number), w = walls.find((x) => wallKey(x) === key);
+        F.setFace(doc, sel.id, a, b, draft[`@wall:${key}`] ?? wallTypeNow(w), w.computed_type, draft[`@wdoor:${key}`] ?? wallDoorNow(w));
+      }
       for (const k of specials) {
-        if (k.startsWith("@wall:")) { const [a, b] = k.slice(6).split("|").map(Number), w = walls.find((x) => wallKey(x) === k.slice(6)); F.setFace(doc, sel.id, a, b, draft[k], w.computed_type); }
-        else { const id = Number(k.slice(6)), d = doors.find((x) => x.osm_id === id); applyDoorKind(id, draft[k], d.kind === "door" ? "" : d.kind); }
+        if (k.startsWith("@door:")) { const id = Number(k.slice(6)), d = doors.find((x) => x.osm_id === id); applyDoorKind(id, draft[k], d.kind === "door" ? "" : d.kind); }
       }
     });
     status(F.isEmptyRule(rule) && !specials.length ? "No change to add." : `Added to the changes: ${sel.type} ${sel.id}.`);
@@ -516,7 +529,7 @@ export async function initFixesPanel(ctx) {
       by[k]?.push(item(`data-type="${o.type}" data-id="${o.id}" data-kind="${k === "relation" ? "building" : k}"`, `${KIND_NAME[k] ?? k} ${o.id}${nm ? ` · ${esc(nm)}` : ""}`, bits(F.describeBits(doc, o.type, o.id)), F.ruleOf(doc, o.type, o.id).mode.remove ? " del" : ""));
     }
     const newRoads = roads.map((w) => item(`data-newway="${w.id}"`, `New road · ${w.id}`, note(`${w.tags?.highway ?? "road"}${w.tags?.name ? ` “${w.tags.name}”` : ""}, ${w.nodes.length} points${w.nodes.some(Number.isInteger) ? ", joins a junction" : ""}`)));
-    const walls = faces.map((f) => item(`data-face="${f.building}|${f.from_node}|${f.to_node}"`, `Wall · building ${f.building}`, note(`${FACE_NAMES[f.type] ?? f.type}, between nodes ${f.from_node} and ${f.to_node}`)));
+    const walls = faces.map((f) => item(`data-face="${f.building}|${f.from_node}|${f.to_node}"`, `Wall · building ${f.building}`, note(`${FACE_NAMES[f.type] ?? f.type}${f.door ? `, door: ${f.door}` : ""}, between nodes ${f.from_node} and ${f.to_node}`)));
     const turnItems = turns.map((t) => item(`data-turn="${t.from_way}|${t.via_node}|${t.to_way}"`, `Turn · ${esc(TURN_TYPES[t.restriction] ?? t.restriction)}`, note(`way ${t.from_way}, at junction ${t.via_node}, to way ${t.to_way}`)));
     const html = [group("Roads", by.road), group("Buildings", by.building), group("Walls", walls), group("Nodes", by.node), group("Other objects", by.relation), group("Turn rules", turnItems), group("New roads", newRoads)].join("");
     $("fix-list").innerHTML = html || '<p class="why" style="margin:0">No changes yet. Pick an object on the map, change a field and press <b>Add to changes</b>.</p>';
@@ -667,6 +680,7 @@ export async function initFixesPanel(ctx) {
       map.addLayer({ id: "fix-faces-sel", type: "line", source: "fix-faces", filter: ["==", ["get", "s"], 1], layout: { "line-cap": "round" }, paint: { "line-color": "#111827", "line-width": 14, "line-opacity": 0.9 } });
       map.addLayer({ id: "fix-faces-line", type: "line", source: "fix-faces", layout: { "line-cap": "round" },
         paint: { "line-color": ["match", ["get", "t"], "front", FACE_COLORS.front, "back", FACE_COLORS.back, "party", FACE_COLORS.party, FACE_COLORS.side], "line-width": 4.5 } });
+      map.addLayer({ id: "fix-faces-door", type: "circle", source: "fix-faces", filter: ["==", ["get", "door"], 1], paint: { "circle-radius": 6.5, "circle-color": "#0ea5e9", "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });   // a wall with a door: a dot in the middle of it
     }
     if (!map.getSource("fix-3d")) {                  // the edited buildings, as extrusions with their height and facade color (tilt the map to see them)
       map.addSource("fix-3d", { type: "geojson", data: EMPTY });
@@ -814,13 +828,17 @@ export async function initFixesPanel(ctx) {
     ensureLayers();
     let feats = [];
     const asFeature = (g, t, e, s = 0) => { try { return { type: "Feature", properties: { t, e: e ? 1 : 0, s: s ? 1 : 0 }, geometry: JSON.parse(g) }; } catch { return null; } };
+    const doorDot = (g) => { try { const c = JSON.parse(g).coordinates; return { type: "Feature", properties: { door: 1 }, geometry: { type: "Point", coordinates: [(c[0][0] + c[1][0]) / 2, (c[0][1] + c[1][1]) / 2] } }; } catch { return null; } };
     if (hasFaces()) {
       if (current === "building" && $("fix-walls-all").checked && map.getZoom() >= 16) {
         const b = map.getBounds();
-        feats = (await safe(`SELECT face_type AS t, edited AS e, building_id AS b, from_node AS f, to_node AS n, ST_AsGeoJSON(geometry) AS g FROM main.building_faces WHERE ST_Intersects(geometry, ST_MakeEnvelope(${b.getWest()}, ${b.getSouth()}, ${b.getEast()}, ${b.getNorth()})) LIMIT 30000`))
-          .map((r) => asFeature(r.g, r.t, r.e, sel?.kind === "building" && Number(r.b) === sel.id && `${Number(r.f)}|${Number(r.n)}` === wallSel));
+        const all = (await safe(`SELECT face_type AS t, edited AS e, building_id AS b, from_node AS f, to_node AS n, door AS d, ST_AsGeoJSON(geometry) AS g FROM main.building_faces WHERE ST_Intersects(geometry, ST_MakeEnvelope(${b.getWest()}, ${b.getSouth()}, ${b.getEast()}, ${b.getNorth()})) LIMIT 30000`))
+        ;
+        feats = all.map((r) => asFeature(r.g, r.t, r.e, sel?.kind === "building" && Number(r.b) === sel.id && `${Number(r.f)}|${Number(r.n)}` === wallSel));
+        feats.push(...all.filter((r) => r.d).map((r) => doorDot(r.g)));
       } else if (current === "building" && sel?.kind === "building" && walls.length) {
         feats = walls.map((w) => asFeature(w.g, wallType(w), !!F.findFace(doc, sel.id, w.from_node, w.to_node) || w.edited, wallKey(w) === wallSel));
+        feats.push(...walls.filter((w) => wallDoorNow(w)).map((w) => doorDot(w.g)));
       }
     }
     if (my !== faceToken) return;

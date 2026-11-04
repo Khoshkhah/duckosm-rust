@@ -306,6 +306,7 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   #fix-panel :is(.wallrow, .doorrow, .junrow, .turn).sel { background: color-mix(in srgb, var(--accent) 26%, var(--bg)); outline: 2px solid var(--accent); outline-offset: -1px; }
   #fix-panel :is(.wallrow, .doorrow, .junrow, .turn):focus-visible { outline: 2px solid var(--accent); }
   #fix-panel .wallrow select { max-width: 11.5em; }
+  #fix-panel .wallrow .dlabel { grid-column: 2; justify-self: end; color: var(--mut); }
   #fix-panel .legend { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; font-size: 11.5px; color: var(--muted); }
   #fix-panel .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
   #fix-panel .chgtop { display: flex; justify-content: space-between; align-items: center; gap: 8px; }

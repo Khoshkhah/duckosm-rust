@@ -215,6 +215,15 @@ with sync_playwright() as p:
     assert "building_faces" in y and f"type: {new_type}" in y and f"building: {b['osm_id']}" in y, y
     assert "edited" in (page.get_attribute("#fix-form .wallrow", "class") or "")
     print(f"a wall: nodes {wall[0]} and {wall[1]} were {wall[2]}, now {new_type}")
+    # a door on a wall: a select in the row, a draft until Add to changes, then a rule with `door` (the type stays), a dot on the map, and the text in the Changes tab
+    page.select_option("#fix-form .wallrow >> nth=0 >> select[data-walldoor]", "main")
+    assert "door: main" not in text(page) and not page.is_disabled("#fix-save"), "a door waits for Add to changes"
+    page.click("#fix-save")
+    y = text(page)
+    assert "door: main" in y and f"type: {new_type}" in y, y
+    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['fix-faces-door']}).length === 1", timeout=20_000)
+    assert page.input_value("#fix-form .wallrow >> nth=0 >> select[data-walldoor]") == "main"
+    print(f"a door on the wall: nodes {wall[0]} and {wall[1]} have a main door, the type {new_type} stays, and a dot shows on the map")
 
     # select each wall: a row of the list, the bar (Next, Previous, Unselect), and a click on the wall on the map
     assert "No wall is selected" in page.inner_text("#fix-wallpos")
@@ -457,6 +466,7 @@ with sync_playwright() as p:
     faces = rows(page, f"SELECT face_type, computed_type, edited FROM main.building_faces WHERE building_id = {b['osm_id']} AND "
                        f"least(from_node, to_node) = least({wall[0]}, {wall[1]}) AND greatest(from_node, to_node) = greatest({wall[0]}, {wall[1]})")[0]
     assert (faces["face_type"], faces["computed_type"], faces["edited"]) == (new_type, wall[2], True), ("the rule is in main.building_faces", faces)
+    assert rows(page, f"SELECT door FROM main.building_faces WHERE building_id = {b['osm_id']} AND door IS NOT NULL")[0]["door"] == "main" and rows(page, "SELECT count(*)::INTEGER AS n FROM main.building_faces WHERE door IS NOT NULL")[0]["n"] == 1, "the door is in main.building_faces"
     assert rows(page, "SELECT count(*)::INTEGER AS n FROM main.building_faces")[0]["n"] > 1000
     info = rows(page, f"SELECT levels, roof_shape, roof_color, height_m FROM main.building_info WHERE osm_id = {b['osm_id']} AND osm_type = 'way'")[0]
     assert (info["levels"], info["roof_shape"], info["roof_color"]) == (7, "gabled", "#cc3300"), info

@@ -1072,6 +1072,7 @@ pub fn building_faces_schema() -> Schema {
         Field::new("face_type", DataType::Utf8, false),
         Field::new("computed_type", DataType::Utf8, false),
         Field::new("edited", DataType::Boolean, false),
+        Field::new("door", DataType::Utf8, true),
         Field::new("length_m", DataType::Float32, false),
         Field::new("azimuth_deg", DataType::Float32, false),
         Field::new("street_osm_id", DataType::Int64, true),
@@ -1092,6 +1093,7 @@ pub fn write_building_faces_to<W: Write + Send>(out: W, rows: &[BuildingFace]) -
         let mut face_index = Int32Builder::with_capacity(n);
         let (mut face_type, mut computed_type, mut street_name) = (StringBuilder::new(), StringBuilder::new(), StringBuilder::new());
         let mut edited = BooleanBuilder::with_capacity(n);
+        let mut door = StringBuilder::new();
         let (mut length_m, mut azimuth_deg, mut distance_m) = (Float32Builder::with_capacity(n), Float32Builder::with_capacity(n), Float32Builder::with_capacity(n));
         let (mut street_osm_id, mut street_edge_id) = (Int64Builder::with_capacity(n), Int64Builder::with_capacity(n));
         let mut geometry = BinaryBuilder::new();
@@ -1103,6 +1105,7 @@ pub fn write_building_faces_to<W: Write + Send>(out: W, rows: &[BuildingFace]) -
             face_type.append_value(r.face_type.name());
             computed_type.append_value(r.computed_type.name());
             edited.append_value(r.edited);
+            door.append_option(r.door.as_deref());
             length_m.append_value(r.length_m);
             azimuth_deg.append_value(r.azimuth_deg);
             street_osm_id.append_option(r.street_osm_id);
@@ -1119,6 +1122,7 @@ pub fn write_building_faces_to<W: Write + Send>(out: W, rows: &[BuildingFace]) -
             Arc::new(face_type.finish()),
             Arc::new(computed_type.finish()),
             Arc::new(edited.finish()),
+            Arc::new(door.finish()),
             Arc::new(length_m.finish()),
             Arc::new(azimuth_deg.finish()),
             Arc::new(street_osm_id.finish()),

@@ -70,13 +70,15 @@ pub struct Street {
     pub name: Option<String>,
 }
 
-/// A rule of `extra.building_faces`: the type of one wall, in place of the computed type. The two nodes can be in either order.
+/// A rule of `extra.building_faces`: the type of one wall, in place of the computed type, and the kind of door that the wall has (None: no door).
+/// The two nodes can be in either order.
 #[derive(Clone, Debug)]
 pub struct FaceEdit {
     pub building: i64,
     pub from_node: i64,
     pub to_node: i64,
     pub face_type: FaceType,
+    pub door: Option<String>,
 }
 
 /// One face (wall) of a building, in the order of the ring (counter-clockwise).
@@ -91,6 +93,8 @@ pub struct BuildingFace {
     pub face_type: FaceType,
     pub computed_type: FaceType,
     pub edited: bool,
+    /// The kind of door of the wall (`main`, `service`, ...) from a rule; None when the wall has no door.
+    pub door: Option<String>,
     pub length_m: f32,
     /// The compass direction of the outward normal (0 north, 90 east).
     pub azimuth_deg: f32,
@@ -277,7 +281,7 @@ pub fn building_faces(
                 .or_default() += 1;
         }
     }
-    let rules: FxHashMap<(i64, i64, i64), FaceType> = edits
+    let rules: FxHashMap<(i64, i64, i64), (FaceType, Option<&str>)> = edits
         .iter()
         .map(|e| {
             (
@@ -286,7 +290,7 @@ pub fn building_faces(
                     e.from_node.min(e.to_node),
                     e.from_node.max(e.to_node),
                 ),
-                e.face_type,
+                (e.face_type, e.door.as_deref()),
             )
         })
         .collect();
@@ -417,9 +421,10 @@ pub fn building_faces(
             } else {
                 FaceType::Side
             };
-            let ruled = rules
-                .get(&(id, w.from.min(w.to), w.from.max(w.to)))
-                .copied();
+            let (ruled, door) = match rules.get(&(id, w.from.min(w.to), w.from.max(w.to))) {
+                Some(&(t, d)) => (Some(t), d),
+                None => (None, None),
+            };
             // a street is named for a wall that faces it; the other walls have none
             let street = w
                 .street
@@ -433,6 +438,7 @@ pub fn building_faces(
                 face_type: ruled.unwrap_or(computed),
                 computed_type: computed,
                 edited: ruled.is_some_and(|r| r != computed),
+                door: door.map(str::to_string),
                 length_m: w.length as f32,
                 azimuth_deg: w.azimuth as f32,
                 street_osm_id: street.map(|s| s.osm_id),
@@ -636,6 +642,7 @@ mod tests {
             from_node: a,
             to_node: b,
             face_type: t,
+            door: None,
         };
         // the nodes of a rule can be in either order; a rule that gives the computed type is not an edit; a rule for another building does nothing
         let rules = [
@@ -646,6 +653,7 @@ mod tests {
                 from_node: 3,
                 to_node: 4,
                 face_type: FaceType::Back,
+                door: None,
             },
         ];
         let f = building_faces(&ways, &block(), &streets, &rules);
@@ -653,6 +661,16 @@ mod tests {
         assert_eq!((f[1].computed_type, f[1].edited), (FaceType::Side, true));
         assert_eq!((f[0].computed_type, f[0].edited), (FaceType::Front, false));
         assert_eq!(f.iter().filter(|x| x.edited).count(), 1);
+    }
+
+    #[test]
+    fn a_rule_gives_a_wall_a_door_with_no_change_of_type() {
+        let ways = [building(100, &[1, 2, 3, 4, 1])];
+        let streets = [street(7, (-30.0, -8.0), (50.0, -8.0))];
+        let rules = [FaceEdit { building: 100, from_node: 2, to_node: 1, face_type: FaceType::Front, door: Some("main".into()) }];
+        let f = building_faces(&ways, &block(), &streets, &rules);
+        assert_eq!((f[0].face_type, f[0].edited, f[0].door.as_deref()), (FaceType::Front, false, Some("main")));
+        assert_eq!(f.iter().filter(|x| x.door.is_some()).count(), 1);
     }
 
     #[test]
