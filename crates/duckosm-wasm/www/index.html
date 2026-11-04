@@ -1713,10 +1713,8 @@ async function restoreSavedArea(slug) {
     const ready = performance.now();
     progress(`Restored ${meta.name} from browser storage in ${num((ready - start) / 1000, 2)} s`, { final: true });
     localStorage.setItem("duckosm.lastArea", slug);
-    await visualization(false);
-    if (saved.viz?.roads || (roadCount.all && roadCount.all < AUTO_DRAW)) {
-      await freshMap();
-    }
+    await visualization(false);                   // it draws by itself a map of fewer than AUTO_DRAW roads: a second draw here made the map load twice
+    if (saved.viz?.roads && !(roadCount.all < AUTO_DRAW && roadCount.all <= window.mapMaxRoads)) await freshMap();      // a larger map with its drawing saved: draw it now
   } catch (e) {
     progress("Failed to restore area: " + e.message, { final: true });
     status("Failed to restore area: " + e.message, 6000);

@@ -102,6 +102,11 @@ with sync_playwright() as p:
     status = page.inner_text("#buildstatus")
     print(status)
     assert status.startswith("Restored"), status
+    # the map is drawn once (the style of the first draw is generation 1; a second draw made generation 2 and the map loaded twice)
+    page.wait_for_function("/drawn/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=120_000)
+    page.wait_for_timeout(1500)
+    gen = page.evaluate("duckMap.getStyle().sources['rs-roads'].tiles[0].match(/rs:\\/\\/(\\d+)\\//)[1]")
+    assert gen == "1", ("the map was drawn more than once after Open", gen)
     after = " ".join(page.inner_text("#resultline").split())
     assert after == before, (before, after)
     page.screenshot(path=str(out / "saved-restored.png"))
