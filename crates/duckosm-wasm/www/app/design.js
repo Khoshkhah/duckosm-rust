@@ -3,6 +3,9 @@
 // so a design file does not depend on the look that it was made from.
 //
 //   style    roads (fill, casing, width factor), labels, arrows, base map (water, land, buildings, railways), 3D buildings, dark mode
+//   boundary the line and the fill of the boundary of the area on the map: `design.boundary` = {show, color, width, dash, fill, fillOpacity, fillOnRoads}.
+//            It is not in the look (the page paints its layers `area-line`, `area-casing` and `area-fill`), so a change draws no new map.
+//            Other modules (the PNG and SVG exports) read this one object. `dash` is a key of BOUNDARY_DASH.
 //   profile  zoom range, layers, columns of the layer `edges`, the zoom where each road class starts, extent, buffer, tile limit, format
 //
 // The style is written into roadstyle's look (map/look.json, the sections of its version 2) with `applyToLook`. The map worker then makes the
@@ -31,6 +34,10 @@ export const EDGE_COLUMNS = ["edge_id", "osm_id", "edge_ref", "name", "highway",
 /** The zoom where each road class starts in the layer `edges` (a lower class is left out at a lower zoom). Other classes start at `OTHER_FROM`. */
 export const CLASS_FROM = { motorway: 0, trunk: 0, primary: 0, secondary: 8, tertiary: 10, unclassified: 11, residential: 12, living_street: 12 };
 export const OTHER_FROM = 13;
+/** The dash styles of the boundary line: the pattern in multiples of the line width (MapLibre's `line-dasharray`), or null for a solid line. */
+export const BOUNDARY_DASH = { solid: null, dashed: [3, 2], dotted: [1, 1.5], "dash-dot": [4, 1.5, 1, 1.5] };
+/** The boundary of the page before the design card: a solid blue line of 2.5 px on a white casing, a blue fill of 0.18 that shows only before the roads are drawn. */
+export const defaultBoundary = () => ({ show: true, color: "#2563eb", width: 2.5, dash: "solid", fill: "#2563eb", fillOpacity: 0.18, fillOnRoads: false });
 export const LIMITS = { zoom: [0, 18], extent: [1024, 8192], buffer: [0, 256], tiles: [1000, 200000] };
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
@@ -103,6 +110,7 @@ export function defaultsOf(look) {
       railways: toHex(look.base_map.style.lines?.railways?.color) ?? "#bbbbbb", waterways: toHex(look.base_map.style.lines?.waterways?.color) ?? "#a0c8f0",
       m_per_level: num(b3?.m_per_level, 3.66), max_height: num(b3?.max_height, 200), height_opacity: num(b3?.opacity, 0.9),
     },
+    boundary: defaultBoundary(),
     dark: { roads: [...look.dark.line.lightness], casing: [...look.dark.casing.lightness], areas: [...look.dark.area.lightness], labels: [...look.dark.label.lightness], background: toHex(look.background.dark) ?? "#0e1113" },
     profile: defaultProfile(),
   };
@@ -130,6 +138,13 @@ export function normalize(d, base) {
     if (Array.isArray(r) && r.length === 2 && r.every((x) => Number.isFinite(+x))) out.dark[k] = [clamp(+r[0], [0, 1]), clamp(+r[1], [0, 1])];
   }
   out.dark.background = hex(d.dark?.background, out.dark.background);
+  const bd = d.boundary ?? {};
+  out.boundary = {
+    show: bd.show ?? out.boundary.show, color: hex(bd.color, out.boundary.color), width: clamp(num(bd.width, out.boundary.width), [0.5, 8]),
+    dash: Object.hasOwn(BOUNDARY_DASH, bd.dash) ? bd.dash : out.boundary.dash, fill: hex(bd.fill, out.boundary.fill),
+    fillOpacity: clamp(num(bd.fillOpacity, out.boundary.fillOpacity), [0, 1]), fillOnRoads: bd.fillOnRoads ?? out.boundary.fillOnRoads,
+  };
+  out.boundary.show = !!out.boundary.show; out.boundary.fillOnRoads = !!out.boundary.fillOnRoads;
   out.profile = normalizeProfile(d.profile ?? out.profile);
   return out;
 }
@@ -206,18 +221,21 @@ export const THEMES = [
     roads: { fill: BY({ motorway: "#e0a458", trunk: "#d6b36a", primary: "#c9b98a", secondary: "#9aa7b4", tertiary: "#8793a0", cycleway: "#4f9a6a" }, "#6b7683"),
       casing: ALL("#14181c"), width: Object.fromEntries(GROUPS.map(([g]) => [g, 1])) },
     labels: { color: "#d8dde3", halo_color: "#12161a", halo_width: 1.5 }, arrows: { color: "#c6ccd3" },
+    boundary: { color: "#7cc4ff", fill: "#7cc4ff", fillOpacity: 0.12 },
     base: { background: "#1b1f24", water: "#1d3a56", green: "#233427", land: "#20252b", sand: "#3a3a2e", buildings: "#2d333a", buildingLine: "#3a424a", railways: "#6b7280", waterways: "#2b5278" } }) },
   { id: "traffic", name: "Traffic", note: "Quiet grey roads and a pale ground. The colours of flow or speed stand out.", make: (b) => paint(b, {
     name: "Traffic", theme: "traffic",
     roads: { fill: BY({ motorway: "#8d939a", trunk: "#9a9fa6", primary: "#a6abb1", secondary: "#b3b7bc" }, "#c5c8cc"), casing: ALL("#9ea2a8"),
       width: Object.fromEntries(GROUPS.map(([g]) => [g, ["major", "primary", "secondary"].includes(g) ? 1.15 : 1])) },
     labels: { color: "#6b7078", halo_color: "#ffffff", halo_width: 1.2 }, arrows: { color: "#6b7078" },
+    boundary: { color: "#1d4ed8", width: 2, dash: "dashed" },
     base: { background: "#eeeeec", water: "#cfdce8", green: "#e5e9df", land: "#f3f3f1", sand: "#ecebe3", buildings: "#e3e3e1", buildingLine: "#d3d3d0", railways: "#c2c4c7", waterways: "#bfd0e0" } }) },
   { id: "print", name: "Print", note: "White ground, dark outlines, black text. Roads are wider. Good on paper.", make: (b) => paint(b, {
     name: "Print", theme: "print",
     roads: { fill: BY({ motorway: "#f4b183", trunk: "#f8cbad", primary: "#fff2cc", secondary: "#ffffff", cycleway: "#c9dcf0" }, "#ffffff"), casing: ALL("#3a3a3a"),
       width: Object.fromEntries(GROUPS.map(([g]) => [g, 1.25])) },
     labels: { color: "#000000", halo_color: "#ffffff", halo_width: 2 }, arrows: { color: "#000000" },
+    boundary: { color: "#000000", width: 1.5, dash: "dashed", fillOpacity: 0 },
     base: { background: "#ffffff", water: "#d4e6f6", green: "#e8f1de", land: "#fafafa", sand: "#f6f0d6", buildings: "#dcdcdc", buildingLine: "#8a8a8a", railways: "#000000", waterways: "#9cc3e6" } }) },
 ];
 

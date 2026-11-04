@@ -133,6 +133,49 @@ with sync_playwright() as p:
     assert "#abcdef" in base, "the building color is in the style"
     print("layers: ok")
 
+    # Boundary (Layers tab): the layers area-line, area-casing and area-fill take the values at once, with no new draw of the roads
+    def bpaint():
+        return page.evaluate("""() => { const m = window.duckMap, g = (id, k) => m.getLayoutProperty(id, k);
+            return { color: m.getPaintProperty('area-line', 'line-color'), width: m.getPaintProperty('area-line', 'line-width'), dash: m.getPaintProperty('area-line', 'line-dasharray') ?? null,
+                     casing: m.getPaintProperty('area-casing', 'line-width'), line: g('area-line', 'visibility'), cas: g('area-casing', 'visibility'), fill: g('area-fill', 'visibility'),
+                     fillColor: m.getPaintProperty('area-fill', 'fill-color'), opacity: m.getPaintProperty('area-fill', 'fill-opacity') }; }""")
+    tiles_url = lambda: page.evaluate("window.duckMap.getStyle().sources['rs-roads'].tiles[0]")
+    page.click("#design-tab-layers")
+    assert page.locator("#design-pane h3").first.text_content() == "Area boundary"
+    gen = tiles_url()
+    b0 = page.evaluate("window.designPanel.boundary()")
+    assert bpaint()["color"] == b0["color"] == "#7cc4ff" and bpaint()["line"] == "visible" and bpaint()["fill"] == "none", ("the Dark theme has its boundary; the fill hides while the roads show", bpaint())
+    set_input(page, "[data-p='boundary.color']", "#ff00ff")
+    set_input(page, "[data-p='boundary.width']", 4)
+    page.select_option("[data-p='boundary.dash']", "dashed")
+    b = bpaint()
+    assert b["color"] == "#ff00ff" and b["width"] == 4 and b["dash"] == [3, 2] and b["casing"] == 7.5, b
+    assert page.evaluate("window.designPanel.boundary().dash") == "dashed" and page.evaluate("window.designPanel.get().theme") == "custom"
+    page.uncheck("#design-pane [data-p='boundary.show']")
+    b = bpaint()
+    assert b["line"] == "none" and b["cas"] == "none" and b["fill"] == "none" and page.is_disabled("#design-pane [data-p='boundary.color']") and page.is_disabled("#design-pane [data-p='boundary.fillOnRoads']")
+    page.check("#design-pane [data-p='boundary.show']")
+    set_input(page, "[data-p='boundary.fill']", "#00ff00")
+    set_input(page, "[data-p='boundary.fillOpacity']", 0.3)
+    assert bpaint()["fill"] == "none", "the fill stays off the roads unless the design says so"
+    page.check("#design-pane [data-p='boundary.fillOnRoads']")
+    b = bpaint()
+    assert b["fill"] == "visible" and b["fillColor"] == "#00ff00" and b["opacity"] == 0.3, b
+    page.uncheck("#design-pane [data-p='boundary.fillOnRoads']")
+    assert bpaint()["fill"] == "none"
+    assert tiles_url() == gen and not page.evaluate("window.mapDrawing"), "a boundary change draws no new map"
+    page.click("#design-tab-theme")
+    page.click("#design-pane [data-look=print]")
+    b = bpaint()
+    assert b["color"] == "#000000" and b["dash"] == [3, 2] and b["width"] == 1.5 and page.evaluate("window.designPanel.boundary().fillOpacity") == 0
+    page.click("#design-pane [data-look=light]")
+    assert bpaint()["color"] == "#2563eb" and bpaint()["dash"] is None and bpaint()["width"] == 2.5 and page.evaluate("window.designPanel.boundary()") == {"show": True, "color": "#2563eb", "width": 2.5, "dash": "solid", "fill": "#2563eb", "fillOpacity": 0.18, "fillOnRoads": False}
+    settled(page)
+    page.click("#design-tab-layers")
+    set_input(page, "[data-p='boundary.color']", "#ff00ff")
+    page.select_option("[data-p='boundary.dash']", "dotted")
+    print("boundary: ok")
+
     # Tiles: a ready profile fills the fields, the Export card shows them, and the files follow them
     page.click("#design-tab-tiles")
     page.click("#design-pane [data-profile=web]")
@@ -193,8 +236,9 @@ with sync_playwright() as p:
     d.value.save_as(file)
     saved = json.loads(file.read_text())
     assert file.name == "my_roads.design.json" and saved["format"] == "duckosm-design" and saved["version"] == 1 and saved["name"] == "My roads"
-    assert saved["roads"]["fill"]["primary"] == "#ff0000" and saved["base"]["buildings"] == "#abcdef" and saved["profile"]["extent"] == 2048
-    saved["name"] = "Loaded one"; saved["roads"]["fill"]["primary"] = "#00aa00"
+    assert saved["profile"]["extent"] == 2048 and saved["theme"] == "custom" and saved["roads"]["fill"]["primary"] == "#ffeeaa", "the file has the design as it is now (the Light theme, then the boundary)"
+    assert saved["boundary"]["color"] == "#ff00ff" and saved["boundary"]["dash"] == "dotted" and saved["boundary"]["show"] is True, saved["boundary"]
+    saved["name"] = "Loaded one"; saved["roads"]["fill"]["primary"] = "#00aa00"; saved["boundary"]["color"] = "#00ffaa"
     other = out / "other.design.json"
     other.write_text(json.dumps(saved))
     page.set_input_files("#design-file", str(other))
@@ -202,6 +246,7 @@ with sync_playwright() as p:
     assert page.evaluate("window.designPanel.get().roads.fill.primary") == "#00aa00" and "Loaded" in page.text_content("#design-where")
     settled(page)
     assert "#00aa00" in style_text(page), "a loaded file draws"
+    assert bpaint()["color"] == "#00ffaa", "a loaded file sets the boundary"
     (out / "bad.json").write_text("{}")
     page.set_input_files("#design-file", str(out / "bad.json"))
     page.wait_for_function("/not loaded/.test(document.getElementById('design-where').textContent)")
@@ -231,6 +276,7 @@ with sync_playwright() as p:
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=600_000)
     assert page.evaluate("window.designPanel.get().name") == "Loaded one"
     assert "#00aa00" in style_text(page), "the first draw of the saved area has its design"
+    assert bpaint()["color"] == "#00ffaa" and page.evaluate("window.designPanel.boundary().dash") == "dotted", "the saved area has its boundary"
     print("restore: ok")
 
     assert not errors, errors

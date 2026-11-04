@@ -20,6 +20,16 @@ for (const t of D.THEMES) {
   assert.equal(L.labels.color, d.labels.color);
   if (t.id !== "light") assert.ok(D.changes(d, base).length > 10, `${t.id}: the theme changes the design`);
 }
+// the boundary: the page's blue line is the default; each theme, the file and a repair keep it in range
+assert.deepEqual(base.boundary, D.defaultBoundary());
+assert.deepEqual(base.boundary, { show: true, color: "#2563eb", width: 2.5, dash: "solid", fill: "#2563eb", fillOpacity: 0.18, fillOnRoads: false });
+for (const t of D.THEMES) { const d = t.make(base); assert.deepEqual(D.normalize(d, base).boundary, d.boundary, `${t.id}: the boundary is in range`); }
+assert.equal(D.THEMES.find((t) => t.id === "print").make(base).boundary.color, "#000000");
+const bb = D.normalize({ boundary: { show: 0, color: "blue", width: 99, dash: "wavy", fill: "#ABCDEF", fillOpacity: -1, fillOnRoads: 1 } }, base).boundary;
+assert.deepEqual(bb, { show: false, color: "#2563eb", width: 8, dash: "solid", fill: "#abcdef", fillOpacity: 0, fillOnRoads: true });
+assert.ok(JSON.stringify(D.applyToLook(look, { ...base, boundary: { ...base.boundary, color: "#000000", show: false } })) === JSON.stringify(look), "the boundary is not in the look");
+assert.deepEqual(Object.keys(D.BOUNDARY_DASH), ["solid", "dashed", "dotted", "dash-dot"]);
+
 // a width factor scales the curve of its group only
 const w = structuredClone(base); w.roads.width.major = 2;
 const W = D.applyToLook(look, w);

@@ -364,7 +364,7 @@ The panel has five tabs.
 | **Theme** | Four ready themes (Light, Dark, Traffic, Print), the name of the design, and **Download**, **Load a file** and **Reset**. |
 | **Roads** | The fill and the casing of 14 road classes, the width of 9 groups of classes, and the colors of the dark theme. |
 | **Text** | The street names (color, halo, size, first zoom) and the one-way arrows (color, size, first zoom). |
-| **Layers** | The colors of the ground, water, green areas, built-up land, sand, buildings, railways and waterways, and the height of 3D buildings. |
+| **Layers** | The boundary of the area (show or hide, line, fill), the colors of the ground, water, green areas, built-up land, sand, buildings, railways and waterways, and the height of 3D buildings. |
 | **Tiles** | The tile profile: zooms, layers, columns, class zooms, extent, buffer, tile limit and tile format. |
 
 ### Theme
@@ -402,7 +402,21 @@ The street names have a color, a halo (a color and a width), a size factor and a
 
 ![The Layers tab](img/dashboard/30-design-layers.png)
 
-The colors are for the base-map layers of step 4. A map that was built without the base-map layers has no ground, water or buildings to color. One color covers a group of land-use classes: **Green areas** covers forest, wood, grass, park and others, and **Built-up land** covers residential, commercial, industrial and others. The 3D buildings have a height for each floor, a highest building and an opacity.
+The tab starts with the **Area boundary** section. The other sections are the colors of the base-map layers of step 4. A map that was built without the base-map layers has no ground, water or buildings to color. One color covers a group of land-use classes: **Green areas** covers forest, wood, grass, park and others, and **Built-up land** covers residential, commercial, industrial and others. The 3D buildings have a height for each floor, a highest building and an opacity.
+
+**Area boundary** is the line around the area that you chose in step 1. It has these fields:
+
+| Field | What it does |
+|---|---|
+| **Show the boundary** | On by default. Off hides the line, its white casing and the fill. The other fields are then off. |
+| **Line color** and **Line width** | A blue line of 2.5 px at the first visit. The width is 0.5 to 6 px. |
+| **Line style** | `solid`, `dashed`, `dotted` or `dash-dot`. |
+| **Fill color** and **Fill opacity** | The fill of the area. An opacity of 0 gives no fill. |
+| **Fill over the roads** | Off by default. Before the roads are drawn, the fill shows. After that, the page hides it, because it changes the colors of the roads. Turn this switch on to keep the fill over the roads. |
+
+The boundary is not part of roadstyle's look. A change shows at once, and the page does not draw the roads again. The four themes have their own boundary: Print has a thin black dashed line and no fill, Dark has a light blue line. **Reset** goes back to the blue line.
+
+The values are in one object, `design.boundary` (`{show, color, width, dash, fill, fillOpacity, fillOnRoads}`), in the design file and in the saved area. `designPanel.boundary()` gives it, and `BOUNDARY_DASH` in `app/design.js` gives the pattern of each `dash` value. Other modules read these values, for example a picture export.
 
 ### Tiles
 

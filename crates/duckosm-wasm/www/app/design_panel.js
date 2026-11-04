@@ -2,9 +2,9 @@
 // (index.html, #design-panel): a header, five tabs and a bar. This file owns the design (app/design.js) and draws the tabs; the page gives it
 // the look (map/look.json), the way to draw the map again with a new look, and the places to keep the design.
 //
-//   initDesignPanel({ $, esc, look, redraw, onProfile, onSave }) -> { open, close, isOpen, tab, get, text, set, patchProfile, profile, load, setCount, flush, state }
+//   initDesignPanel({ $, esc, look, redraw, onProfile, onBoundary, onSave }) -> { open, close, isOpen, tab, get, text, set, patchProfile, profile, boundary, load, setCount, flush, state }
 //
-// A change of the style draws the map again after 0.5 s of quiet (`redraw(lookObject, isDefault, draw)`: it gives the look to the map and, with `draw`, draws). A change of the profile calls `onProfile(profile)`;
+// A change of the style draws the map again after 0.5 s of quiet (`redraw(lookObject, isDefault, draw)`: it gives the look to the map and, with `draw`, draws). A change of the profile calls `onProfile(profile)`, and a change of the boundary calls `onBoundary(boundary)` (the page paints it at once: no new draw of the roads);
 // the Export card reads the profile through `profile()`.
 import * as D from "./design.js";
 
@@ -22,10 +22,11 @@ const setPath = (o, path, v) => {
   o[last] = v;
 };
 
-export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => {}, onSave = () => {} }) {
+export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => {}, onBoundary = () => {}, onSave = () => {} }) {
   const base = D.defaultsOf(look);
   let design = structuredClone(base), tab = "theme", lastKey = null, timer = null, busy = false, again = false, note = "", counts = { text: "", bad: false };
-  const styleKey = (d) => JSON.stringify({ ...d, name: 0, theme: 0, profile: 0 });
+  const styleKey = (d) => JSON.stringify({ ...d, name: 0, theme: 0, profile: 0, boundary: 0 });       // the profile and the boundary are not in the look: they draw no new map
+  const announce = () => { onProfile(design.profile); onBoundary(design.boundary); };
   const profile = () => design.profile;
 
   // ---- the controls ----
@@ -56,7 +57,16 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
       + number("From zoom", "labels.minzoom", design.labels.minzoom, 8, 20), "Smaller roads show their names two zooms later.")
     + sec("One-way arrows", color("Color", "arrows.color", design.arrows.color) + range("Size", "arrows.size", design.arrows.size, 0.5, 3, 0.1, " ×") + number("From zoom", "arrows.minzoom", design.arrows.minzoom, 8, 20),
       "The switch for the arrows is in the Layers box of the map bar.");
-  const paneLayers = () => sec("Ground", color("Background", "base.background", design.base.background) + color("Water", "base.water", design.base.water) + color("Green areas", "base.green", design.base.green)
+  const paneBoundary = () => {
+    const b = design.boundary, off = b.show ? "" : "disabled";
+    return sec("Area boundary", check("Show the boundary", "boundary.show", b.show, "The line around the area that you chose.")
+      + color("Line color", "boundary.color", b.color).replace("<input", `<input ${off}`) + range("Line width", "boundary.width", b.width, 0.5, 6, 0.5, " px").replace("<input", `<input ${off}`)
+      + `<label class="drow2"><span>Line style</span><select data-p="boundary.dash" ${off}>${Object.keys(D.BOUNDARY_DASH).map((k) => `<option value="${k}" ${b.dash === k ? "selected" : ""}>${k}</option>`).join("")}</select></label>`
+      + color("Fill color", "boundary.fill", b.fill).replace("<input", `<input ${off}`) + range("Fill opacity", "boundary.fillOpacity", b.fillOpacity, 0, 1, 0.02).replace("<input", `<input ${off}`)
+      + check("Fill over the roads", "boundary.fillOnRoads", b.fillOnRoads, "The fill covers the roads and changes their colors. It is off by default: the page hides the fill when the roads show.", off),
+      "A fill opacity of 0 gives no fill.");
+  };
+  const paneLayers = () => paneBoundary() + sec("Ground", color("Background", "base.background", design.base.background) + color("Water", "base.water", design.base.water) + color("Green areas", "base.green", design.base.green)
       + color("Built-up land", "base.land", design.base.land) + color("Sand and beach", "base.sand", design.base.sand), "Colors of the base-map layers. They show when step 4 built the base-map layers.")
     + sec("Buildings and lines", color("Buildings", "base.buildings", design.base.buildings) + color("Building outline", "base.buildingLine", design.base.buildingLine)
       + color("Railways", "base.railways", design.base.railways) + color("Waterways", "base.waterways", design.base.waterways))
@@ -129,7 +139,7 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
   function schedule(ms = 500) { clearTimeout(timer); timer = setTimeout(run, ms); }
   const changed = () => {
     design = D.normalize(design, base);
-    save(); schedule(); onProfile(design.profile); paintBar();
+    save(); schedule(); announce(); paintBar();
   };
 
   // ---- events ----
@@ -148,6 +158,7 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
     setPath(design, p, el.tagName === "SELECT" && p === "profile.extent" ? +v : v);
     if (el.type === "range") el.parentElement.querySelector("output").textContent = `${+(+v).toFixed(2)}${el.dataset.unit}`;
     if (p.startsWith("profile.")) { design.profile.preset = "custom"; if (el.type === "checkbox" || el.tagName === "SELECT") return (changed(), paint()); }
+    else if (p === "boundary.show") { design.theme = "custom"; return (changed(), paint()); }
     else if (p !== "name") design.theme = "custom";
     changed();
   });
@@ -178,7 +189,7 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
   $("design-pane").addEventListener("change", (e) => { if (e.target.dataset.p === "name") { design.name = e.target.value; changed(); paintBar(); } });
   for (const t of TABS) $(`design-tab-${t}`).onclick = () => tabTo(t);
 
-  function set(d) { design = D.normalize(d, base); save(); schedule(0); onProfile(design.profile); paint(); }
+  function set(d) { design = D.normalize(d, base); save(); schedule(0); announce(); paint(); }
   /** A change of the profile from outside the panel (the Export card, the tile format select). */
   function patchProfile(part) {
     design.profile = D.normalizeProfile({ ...design.profile, preset: "custom", ...part });
@@ -187,7 +198,7 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
   /** A stored design (the text of a file). A bad text keeps the design that is now. `draw: false` only gives the look to the page (the next draw has it). */
   async function load(text, { draw = true } = {}) {
     try { design = D.fromFile(text, base); } catch (_) { return false; }
-    onProfile(design.profile);
+    announce();
     if (draw) schedule(0);
     else { lastKey = styleKey(design); await redraw(D.applyToLook(look, design), lastKey === styleKey(base), false); }
     paint(); paintBar();
@@ -197,7 +208,7 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
   function open() { document.body.classList.add("editing-design"); paint(); }
   function close() { document.body.classList.remove("editing-design"); }
   return {
-    open, close, isOpen, tab: tabTo, get: () => design, text: () => D.toFile(design), set, load, patchProfile, profile, base: () => base,
+    open, close, isOpen, tab: tabTo, get: () => design, text: () => D.toFile(design), set, load, patchProfile, profile, boundary: () => design.boundary, base: () => base,
     flush: async () => { clearTimeout(timer); await run(); while (busy) await new Promise((r) => setTimeout(r, 50)); },
     setCount: (text, bad) => { counts = { text, bad }; const el = $("design-count"); if (el) { el.textContent = text; el.classList.toggle("bad", !!bad); } },
     state: () => note,

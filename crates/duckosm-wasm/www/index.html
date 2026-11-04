@@ -918,6 +918,21 @@ maplibregl.addProtocol("rs", async (params, abort) => ({ data: await duck.tile(p
 const setData = (src, data) => loaded.then(() => map.getSource(src).setData(data ?? empty));
 
 const blue = "#2563eb";
+// the boundary of the area on the map: the layers area-fill, area-casing and area-line take the values of the design (card 10, designLib.defaultBoundary: the blue line of
+// the page before the card). The fill of the page hides while the roads show, because it would change their colors; the design can turn it on over the roads.
+let boundaryNow = designLib.defaultBoundary();
+function paintBoundary(onRoads = roadsShown) {
+  if (!map.getLayer("area-line")) return;
+  const b = boundaryNow, vis = (on) => (on ? "visible" : "none");
+  for (const id of ["area-line", "area-casing"]) map.setLayoutProperty(id, "visibility", vis(b.show));
+  map.setPaintProperty("area-line", "line-color", b.color);
+  map.setPaintProperty("area-line", "line-width", b.width);
+  map.setPaintProperty("area-line", "line-dasharray", designLib.BOUNDARY_DASH[b.dash] ?? undefined);
+  map.setPaintProperty("area-casing", "line-width", b.width + 3.5);          // the white casing is 3.5 px wider than the line (6 px for 2.5)
+  map.setPaintProperty("area-fill", "fill-color", b.fill);
+  map.setPaintProperty("area-fill", "fill-opacity", b.fillOpacity);
+  map.setLayoutProperty("area-fill", "visibility", vis(b.show && b.fillOpacity > 0 && (!onRoads || b.fillOnRoads)));
+}
 const shape = { fillColor: blue, fillOpacity: 0.15, outlineColor: blue, outlineWidth: 2 };
 const validation = (f) => ValidateNotSelfIntersecting(f);
 // select: drag a shape to move it; drag a corner of a rectangle or a point of a circle to resize it; drag a
@@ -973,6 +988,7 @@ loaded.then(() => {
   map.addLayer({ id: "pin-halo", type: "circle", source: "pin", paint: { "circle-radius": 16, "circle-color": blue, "circle-opacity": 0.25 } });
   map.addLayer({ id: "pin", type: "circle", source: "pin", paint: { "circle-radius": 7, "circle-color": blue, "circle-stroke-color": "#fff", "circle-stroke-width": 3 } });
   map.on("zoomend", pin);
+  paintBoundary();
   draw.start();
   window.mapReady = true;
 });
@@ -2070,7 +2086,7 @@ function removeRoads() {
   roadsShown = false;
   for (const l of map.getStyle().layers) if (l.id.startsWith("rs-")) map.removeLayer(l.id);
   for (const id of Object.keys(map.getStyle().sources)) if (id.startsWith("rs-")) map.removeSource(id);
-  if (map.getLayer("area-fill")) map.setLayoutProperty("area-fill", "visibility", "visible");
+  paintBoundary(false);
 }
 const addImages = (images) => Promise.all(Object.entries(images).map(([n, v]) => new Promise((done) => {
   const o = typeof v === "string" ? { url: v } : v, img = new Image();
@@ -2142,7 +2158,7 @@ async function addRoadStyle(style) {
     const layer = JSON.parse(json);
     map.addLayer({ ...layer, id: "rs-" + l.id, source: "rs-" + l.source }, "area-fill");
   }
-  map.setLayoutProperty("area-fill", "visibility", "none");   // the fill would change the colors of the roads
+  paintBoundary(true);   // the fill would change the colors of the roads: it hides, unless the design says that it covers the roads
   addOverview(style);
 }
 // MapLibre draws a tile that is not loaded yet from loaded tiles of the same source, but only from its parents and from children up to 3
@@ -2659,7 +2675,7 @@ function designChanged(p) {
 }
 function designSaved(text) {
   const d = JSON.parse(text);
-  designEdited = designLib.changes({ ...d, profile: 0 }, { ...designPanel.base(), profile: 0 }).length > 0;
+  designEdited = designLib.changes({ ...d, profile: 0 }, { ...designPanel.base(), profile: 0 }).length > 0;       // the boundary counts as style
   $("design-sum").textContent = `${d.name}${designEdited ? " (changed)" : ""}. Tile profile: ${designLib.PROFILES[d.profile.preset]?.name ?? "your own"}.`;
   refreshSteps();
   clearTimeout(designSave);
@@ -2667,7 +2683,7 @@ function designSaved(text) {
 }
 try {
   const look = await fetch("map/look.json").then((r) => r.json());
-  designPanel = await initDesignPanel({ $, esc, look, redraw: redrawDesign, onProfile: designChanged, onSave: designSaved });
+  designPanel = await initDesignPanel({ $, esc, look, redraw: redrawDesign, onProfile: designChanged, onBoundary: (b) => { boundaryNow = b; paintBoundary(); }, onSave: designSaved });
   let stored = null;
   try { stored = localStorage.getItem("duckosm.design"); } catch (_) { /* no storage: the default design */ }
   if (!(stored && await designPanel.load(stored, { draw: false }))) designPanel.patchProfile({ format: duck.tileFormat, preset: "analysis" });     // no design yet: the tile format that the person chose before
