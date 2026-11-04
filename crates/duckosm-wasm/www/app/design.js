@@ -6,6 +6,11 @@
 //   boundary the line and the fill of the boundary of the area on the map: `design.boundary` = {show, color, width, dash, fill, fillOpacity, fillOnRoads}.
 //            It is not in the look (the page paints its layers `area-line`, `area-casing` and `area-fill`), so a change draws no new map.
 //            Other modules (the PNG and SVG exports) read this one object. `dash` is a key of BOUNDARY_DASH.
+//   ground   `design.ground` = {transparent, opacity}: the ground of the map (roadstyle's layer `bg`). The alpha of the ground is `groundAlpha(design)`:
+//            1 when `transparent` is off, else `opacity` (0 to 1; 0 is fully transparent). A picture export gives no background rectangle at alpha 0.
+//   visible  `design.visible` = one boolean for each layer that the map can show (VISIBLE_GROUPS): the road groups, bridges, tunnels, arrows, names, the
+//            3D buildings, and the base-map layers. It is the state of roadstyle's switches too (the page calls rsSetOverlay, rsSetClasses and the others, and
+//            reads roadstyle's events), so there is one state in two places. The boundary has its own `boundary.show`.
 //   profile  zoom range, layers, columns of the layer `edges`, the zoom where each road class starts, extent, buffer, tile limit, format
 //
 // The style is written into roadstyle's look (map/look.json, the sections of its version 2) with `applyToLook`. The map worker then makes the
@@ -38,6 +43,31 @@ export const OTHER_FROM = 13;
 export const BOUNDARY_DASH = { solid: null, dashed: [3, 2], dotted: [1, 1.5], "dash-dot": [4, 1.5, 1, 1.5] };
 /** The boundary of the page before the design card: a solid blue line of 2.5 px on a white casing, a blue fill of 0.18 that shows only before the roads are drawn. */
 export const defaultBoundary = () => ({ show: true, color: "#2563eb", width: 2.5, dash: "solid", fill: "#2563eb", fillOpacity: 0.18, fillOnRoads: false });
+/** The road classes of each switch of `visible` (a class with `_link` is in the group of its main class). A class that is in no group (ferry, raceway) always shows. */
+export const ROAD_GROUPS = {
+  motorway: ["motorway", "trunk"], primary: ["primary"], secondary: ["secondary"], tertiary: ["tertiary"],
+  residential: ["unclassified", "residential", "living_street", "road", "busway"], service: ["service"],
+  paths: ["pedestrian", "footway", "path", "steps", "track", "bridleway", "corridor", "platform", "construction"], cycleway: ["cycleway"],
+};
+export const classGroup = (c) => { const m = String(c).replace(/_link$/, ""); return Object.keys(ROAD_GROUPS).find((g) => ROAD_GROUPS[g].includes(m)) ?? null; };
+/** The base-map layers (the labels of roadstyle's overlays, `rsSetOverlay(label, on)`). */
+export const OVERLAY_KEYS = ["landcover", "water", "waterways", "paved", "buildings", "raceway", "other_ways", "railways", "parking", "parking_p", "platform", "traffic_signals", "crossings", "bus_stations", "train_stations", "bicycle"];
+/** The switches of `design.visible`, by section, with their names on the page. */
+export const VISIBLE_GROUPS = [
+  ["Roads", [["motorway", "Motorway and trunk"], ["primary", "Primary"], ["secondary", "Secondary"], ["tertiary", "Tertiary"], ["residential", "Residential and below"], ["service", "Service"], ["paths", "Paths and footways"], ["cycleway", "Cycleways"]]],
+  ["On the roads", [["bridges", "Bridges"], ["tunnels", "Tunnels"], ["arrows", "One-way arrows"], ["names", "Street names"]]],
+  ["Base map", [["buildings", "Buildings"], ["buildings3d", "3D buildings"], ["landcover", "Land use (green and built-up)"], ["water", "Water"], ["waterways", "Waterways"], ["paved", "Paved areas"], ["railways", "Railways"], ["raceway", "Race tracks"], ["other_ways", "Other ways"], ["platform", "Platforms"], ["parking", "Parking areas"]]],
+  ["Points", [["parking_p", "Parking"], ["bus_stations", "Bus stops"], ["train_stations", "Train stations"], ["bicycle", "Bicycle points"], ["traffic_signals", "Traffic signals"], ["crossings", "Crossings"]]],
+];
+export const VISIBLE_KEYS = VISIBLE_GROUPS.flatMap(([, rows]) => rows.map(([k]) => k));
+/** The layers at the first visit: the roads, bridges, tunnels and names show; the arrows and the 3D buildings are off (the page's first visit); a base-map layer is on unless the look unticks it (railways, points). */
+export function defaultVisible(look) {
+  const ticked = Object.fromEntries((look?.base_map?.layers_yaml?.layers ?? []).map((l) => [l.name, l.ticked !== false]));
+  return Object.fromEntries(VISIBLE_KEYS.map((k) => [k, k === "arrows" || k === "buildings3d" ? false : OVERLAY_KEYS.includes(k) ? ticked[k] ?? true : true]));
+}
+export const defaultGround = () => ({ transparent: false, opacity: 0 });
+/** The alpha of the ground of the map (roadstyle's layer `bg`): 1, or the opacity when the ground is transparent. */
+export const groundAlpha = (d) => (d.ground.transparent ? d.ground.opacity : 1);
 export const LIMITS = { zoom: [0, 18], extent: [1024, 8192], buffer: [0, 256], tiles: [1000, 200000] };
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
@@ -69,6 +99,8 @@ export const PROFILES = {
     make: () => ({ ...defaultProfile(), preset: "web", maxzoom: 14, auto: false, layers: { roads: true, base: true, edges: false } }) },
   analysis: { name: "Analysis", note: "Adds the layer edges: every road of every network with all its attributes. The highest zoom is the highest that fits the limit.",
     make: () => defaultProfile() },
+  roads: { name: "Roads only", note: "The road layers and the layer edges, and no base-map layer. The file is smaller, and nothing in it hides a base map under it.",
+    make: () => ({ ...defaultProfile(), preset: "roads", layers: { roads: true, base: false, edges: true } }) },
   simulation: { name: "Simulation preview", note: "Zoom 10 and higher. Only the roads and the layer edges, with the columns that a simulation needs.",
     make: () => ({ ...defaultProfile(), preset: "simulation", minzoom: 10, maxzoom: 16, auto: true, layers: { roads: true, base: false, edges: true },
       columns: EDGE_COLUMNS.filter((c) => ["edge_id", "osm_id", "name", "highway", "oneway", "lanes", "maxspeed_kmh", "bridge", "tunnel", "length_m", "cost_s", "source", "target"].includes(c)),
@@ -110,7 +142,7 @@ export function defaultsOf(look) {
       railways: toHex(look.base_map.style.lines?.railways?.color) ?? "#bbbbbb", waterways: toHex(look.base_map.style.lines?.waterways?.color) ?? "#a0c8f0",
       m_per_level: num(b3?.m_per_level, 3.66), max_height: num(b3?.max_height, 200), height_opacity: num(b3?.opacity, 0.9),
     },
-    boundary: defaultBoundary(),
+    boundary: defaultBoundary(), ground: defaultGround(), visible: defaultVisible(look),
     dark: { roads: [...look.dark.line.lightness], casing: [...look.dark.casing.lightness], areas: [...look.dark.area.lightness], labels: [...look.dark.label.lightness], background: toHex(look.background.dark) ?? "#0e1113" },
     profile: defaultProfile(),
   };
@@ -145,6 +177,8 @@ export function normalize(d, base) {
     fillOpacity: clamp(num(bd.fillOpacity, out.boundary.fillOpacity), [0, 1]), fillOnRoads: bd.fillOnRoads ?? out.boundary.fillOnRoads,
   };
   out.boundary.show = !!out.boundary.show; out.boundary.fillOnRoads = !!out.boundary.fillOnRoads;
+  out.ground = { transparent: !!(d.ground?.transparent ?? out.ground.transparent), opacity: clamp(num(d.ground?.opacity, out.ground.opacity), [0, 1]) };
+  out.visible = Object.fromEntries(VISIBLE_KEYS.map((k) => [k, typeof d.visible?.[k] === "boolean" ? d.visible[k] : out.visible[k]]));
   out.profile = normalizeProfile(d.profile ?? out.profile);
   return out;
 }
@@ -200,44 +234,96 @@ export function applyToLook(look, d) {
 }
 
 // ---- the ready themes ----
+// A theme is one plain object (data, no code). It sets every style value: the fill and the casing of the road classes, the width of the groups, the text, the arrows,
+// the boundary and the colors of the base map. In a map of classes (`fill`, `casing`, `width`) the key "*" is the value of every class that is not named.
+// The Light theme has `look: true`: it is the design of the look itself. A theme keeps the tile profile and the dark ranges of the page.
 
-const paint = (base, over) => {
-  const d = clone(base);
-  for (const [k, v] of Object.entries(over)) {
-    if (k === "roads") for (const [kk, vv] of Object.entries(v)) Object.assign(d.roads[kk], vv);
-    else if (typeof v === "object" && !Array.isArray(v)) Object.assign(d[k], v);
-    else d[k] = v;
-  }
-  return d;
-};
-const ALL = (v) => Object.fromEntries(CLASSES.map((c) => [c, v]));
-const BY = (map, rest) => Object.fromEntries(CLASSES.map((c) => [c, map[c] ?? rest]));
-
-/** The ready themes. `make(base)` gives a design from the design of the look (the Light theme is that design). */
-export const THEMES = [
-  { id: "light", name: "Light", note: "The look of the page: light roads with a casing on a light ground.", make: (b) => ({ ...clone(b), name: "Light", theme: "light" }) },
-  { id: "dark", name: "Dark", note: "Dim roads and ground, light text. For a dark screen or a projector.", make: (b) => paint(b, {
-    name: "Dark", theme: "dark",
-    roads: { fill: BY({ motorway: "#e0a458", trunk: "#d6b36a", primary: "#c9b98a", secondary: "#9aa7b4", tertiary: "#8793a0", cycleway: "#4f9a6a" }, "#6b7683"),
-      casing: ALL("#14181c"), width: Object.fromEntries(GROUPS.map(([g]) => [g, 1])) },
+const PASSIVE = { "*": 1 };
+export const THEME_DATA = [
+  { id: "light", name: "Light", look: true, note: "The look of the page: light roads with a casing on a light ground." },
+  { id: "dark", name: "Dark", note: "Dim roads and ground, light text. For a dark screen or a projector.",
+    roads: { fill: { motorway: "#e0a458", trunk: "#d6b36a", primary: "#c9b98a", secondary: "#9aa7b4", tertiary: "#8793a0", cycleway: "#4f9a6a", "*": "#6b7683" }, casing: { "*": "#14181c" }, width: PASSIVE },
     labels: { color: "#d8dde3", halo_color: "#12161a", halo_width: 1.5 }, arrows: { color: "#c6ccd3" },
-    boundary: { color: "#7cc4ff", fill: "#7cc4ff", fillOpacity: 0.12 },
-    base: { background: "#1b1f24", water: "#1d3a56", green: "#233427", land: "#20252b", sand: "#3a3a2e", buildings: "#2d333a", buildingLine: "#3a424a", railways: "#6b7280", waterways: "#2b5278" } }) },
-  { id: "traffic", name: "Traffic", note: "Quiet grey roads and a pale ground. The colours of flow or speed stand out.", make: (b) => paint(b, {
-    name: "Traffic", theme: "traffic",
-    roads: { fill: BY({ motorway: "#8d939a", trunk: "#9a9fa6", primary: "#a6abb1", secondary: "#b3b7bc" }, "#c5c8cc"), casing: ALL("#9ea2a8"),
-      width: Object.fromEntries(GROUPS.map(([g]) => [g, ["major", "primary", "secondary"].includes(g) ? 1.15 : 1])) },
+    boundary: { color: "#7cc4ff", width: 2.5, dash: "solid", fill: "#7cc4ff", fillOpacity: 0.12 },
+    base: { background: "#1b1f24", water: "#1d3a56", green: "#233427", land: "#20252b", sand: "#3a3a2e", buildings: "#2d333a", buildingLine: "#3a424a", railways: "#6b7280", waterways: "#2b5278" } },
+  { id: "traffic", name: "Traffic", note: "Quiet grey roads and a pale ground. The colors of flow or speed stand out.",
+    roads: { fill: { motorway: "#8d939a", trunk: "#9a9fa6", primary: "#a6abb1", secondary: "#b3b7bc", "*": "#c5c8cc" }, casing: { "*": "#9ea2a8" }, width: { major: 1.15, primary: 1.15, secondary: 1.15, "*": 1 } },
     labels: { color: "#6b7078", halo_color: "#ffffff", halo_width: 1.2 }, arrows: { color: "#6b7078" },
-    boundary: { color: "#1d4ed8", width: 2, dash: "dashed" },
-    base: { background: "#eeeeec", water: "#cfdce8", green: "#e5e9df", land: "#f3f3f1", sand: "#ecebe3", buildings: "#e3e3e1", buildingLine: "#d3d3d0", railways: "#c2c4c7", waterways: "#bfd0e0" } }) },
-  { id: "print", name: "Print", note: "White ground, dark outlines, black text. Roads are wider. Good on paper.", make: (b) => paint(b, {
-    name: "Print", theme: "print",
-    roads: { fill: BY({ motorway: "#f4b183", trunk: "#f8cbad", primary: "#fff2cc", secondary: "#ffffff", cycleway: "#c9dcf0" }, "#ffffff"), casing: ALL("#3a3a3a"),
-      width: Object.fromEntries(GROUPS.map(([g]) => [g, 1.25])) },
+    boundary: { color: "#1d4ed8", width: 2, dash: "dashed", fill: "#1d4ed8", fillOpacity: 0.1 },
+    base: { background: "#eeeeec", water: "#cfdce8", green: "#e5e9df", land: "#f3f3f1", sand: "#ecebe3", buildings: "#e3e3e1", buildingLine: "#d3d3d0", railways: "#c2c4c7", waterways: "#bfd0e0" } },
+  { id: "print", name: "Print", note: "White ground, dark outlines, black text. Roads are wider. Good on paper.",
+    roads: { fill: { motorway: "#f4b183", trunk: "#f8cbad", primary: "#fff2cc", cycleway: "#c9dcf0", "*": "#ffffff" }, casing: { "*": "#3a3a3a" }, width: { "*": 1.25 } },
     labels: { color: "#000000", halo_color: "#ffffff", halo_width: 2 }, arrows: { color: "#000000" },
-    boundary: { color: "#000000", width: 1.5, dash: "dashed", fillOpacity: 0 },
-    base: { background: "#ffffff", water: "#d4e6f6", green: "#e8f1de", land: "#fafafa", sand: "#f6f0d6", buildings: "#dcdcdc", buildingLine: "#8a8a8a", railways: "#000000", waterways: "#9cc3e6" } }) },
+    boundary: { color: "#000000", width: 1.5, dash: "dashed", fill: "#000000", fillOpacity: 0 },
+    base: { background: "#ffffff", water: "#d4e6f6", green: "#e8f1de", land: "#fafafa", sand: "#f6f0d6", buildings: "#dcdcdc", buildingLine: "#8a8a8a", railways: "#000000", waterways: "#9cc3e6" } },
+  { id: "pastel", name: "Pastel", note: "Soft colors and thin casings. For slides and posters on a screen.",
+    roads: { fill: { motorway: "#f7b6c2", trunk: "#f9c9a8", primary: "#fbe3a1", secondary: "#fff3c4", tertiary: "#d6ecc0", cycleway: "#b6d4f2", footway: "#f2cfd3", path: "#f2cfd3", track: "#e6dcc9", "*": "#ffffff" }, casing: { "*": "#ddd6d0" }, width: { "*": 0.85 } },
+    labels: { color: "#7a6f78", halo_color: "#ffffff", halo_width: 1.5 }, arrows: { color: "#9a8f99" },
+    boundary: { color: "#c78fd6", width: 2, dash: "solid", fill: "#c78fd6", fillOpacity: 0.12 },
+    base: { background: "#f6f1ec", water: "#cfe6f5", green: "#e1f1d6", land: "#faf6f2", sand: "#f8efd2", buildings: "#efe3df", buildingLine: "#e0d0cb", railways: "#cfc6c0", waterways: "#bcdcf0" } },
+  { id: "blueprint", name: "Blueprint", note: "A dark blue ground with white and light blue lines.",
+    roads: { fill: { motorway: "#ffffff", trunk: "#e6f2ff", primary: "#cfe6fb", secondary: "#b3d6f5", tertiary: "#96c3ee", cycleway: "#8fd3ff", footway: "#4f8fc6", path: "#4f8fc6", track: "#4f8fc6", "*": "#6fa8dc" }, casing: { "*": "#1d5d94" }, width: { "*": 0.9 } },
+    labels: { color: "#e8f3ff", halo_color: "#0b2a4a", halo_width: 1.5 }, arrows: { color: "#cfe6fb" },
+    boundary: { color: "#ffffff", width: 2, dash: "dashed", fill: "#ffffff", fillOpacity: 0.06 },
+    base: { background: "#0b2a4a", water: "#0e3a63", green: "#10375c", land: "#0d2f52", sand: "#123d66", buildings: "#14406b", buildingLine: "#5aa0d8", railways: "#7fb7e6", waterways: "#2a6aa3" } },
+  { id: "night", name: "Night", note: "A very dark ground, dim small roads and bright main roads. For a screen in a dark room.",
+    roads: { fill: { motorway: "#ffb347", trunk: "#ffc76a", primary: "#ffe08a", secondary: "#9fb3c8", tertiary: "#7e8fa1", cycleway: "#46a36b", footway: "#5a6169", path: "#5a6169", track: "#5a6169", "*": "#4a525b" }, casing: { "*": "#0b0c0e" }, width: PASSIVE },
+    labels: { color: "#aab2bb", halo_color: "#0b0c0e", halo_width: 1.5 }, arrows: { color: "#8b95a1" },
+    boundary: { color: "#4da3ff", width: 2.5, dash: "solid", fill: "#4da3ff", fillOpacity: 0.1 },
+    base: { background: "#121417", water: "#16222e", green: "#17211b", land: "#16181b", sand: "#25241d", buildings: "#1e2125", buildingLine: "#2a2e33", railways: "#4a4f57", waterways: "#1f3a52" } },
+  { id: "minimal", name: "Minimal gray", note: "Gray roads of one color. Only the width shows the class. For data on top: flow, speed.",
+    roads: { fill: { "*": "#b5b5b5" }, casing: { "*": "#9a9a9a" }, width: { major: 1.4, primary: 1.2, secondary: 1.1, tertiary: 1, residential: 0.9, living_street: 0.8, service: 0.7, pedestrian: 0.7, path: 0.6 } },
+    labels: { color: "#7a7a7a", halo_color: "#f2f2f2", halo_width: 1.2 }, arrows: { color: "#7a7a7a" },
+    boundary: { color: "#555555", width: 1.5, dash: "dashed", fill: "#555555", fillOpacity: 0.04 },
+    base: { background: "#f2f2f2", water: "#e6e6e6", green: "#eeeeee", land: "#f5f5f5", sand: "#efefef", buildings: "#e9e9e9", buildingLine: "#dcdcdc", railways: "#cccccc", waterways: "#dddddd" } },
+  { id: "contrast", name: "High contrast", note: "A white ground, black casings, bright fills, wide roads and large text. For easy reading.",
+    roads: { fill: { motorway: "#ff1744", trunk: "#ff9100", primary: "#ffea00", secondary: "#00e5ff", tertiary: "#76ff03", cycleway: "#2979ff", footway: "#ff4081", path: "#ff4081", track: "#b26a00", "*": "#ffffff" }, casing: { "*": "#000000" }, width: { "*": 1.4 } },
+    labels: { color: "#000000", halo_color: "#ffffff", halo_width: 2.5, size: 1.3 }, arrows: { color: "#000000", size: 1.4 },
+    boundary: { color: "#000000", width: 4, dash: "solid", fill: "#000000", fillOpacity: 0 },
+    base: { background: "#ffffff", water: "#a9d4ff", green: "#c6f0b2", land: "#ffffff", sand: "#fff2a8", buildings: "#d9d9d9", buildingLine: "#000000", railways: "#000000", waterways: "#4aa3ff" } },
+  { id: "colorblind", name: "Colorblind safe", note: "The Okabe-Ito colors. They stay clear for red-green color blindness.",
+    roads: { fill: { motorway: "#d55e00", trunk: "#e69f00", primary: "#f0e442", secondary: "#56b4e9", tertiary: "#0072b2", cycleway: "#009e73", footway: "#cc79a7", path: "#cc79a7", track: "#999999", "*": "#ffffff" }, casing: { "*": "#4d4d4d" }, width: PASSIVE },
+    labels: { color: "#222222", halo_color: "#ffffff", halo_width: 1.5 }, arrows: { color: "#222222" },
+    boundary: { color: "#0072b2", width: 2.5, dash: "solid", fill: "#0072b2", fillOpacity: 0.12 },
+    base: { background: "#f5f5f5", water: "#cfe3f3", green: "#dcebd5", land: "#fafafa", sand: "#f5efd0", buildings: "#e5e5e5", buildingLine: "#cfcfcf", railways: "#888888", waterways: "#9cc7e6" } },
+  { id: "vintage", name: "Vintage", note: "A sepia ground and brown roads. For posters.",
+    roads: { fill: { motorway: "#b5572b", trunk: "#c27a3a", primary: "#d19a5b", secondary: "#dcb77f", tertiary: "#e6cc9c", cycleway: "#8a7a3a", footway: "#a9865a", path: "#a9865a", track: "#a9865a", "*": "#f3e8d0" }, casing: { "*": "#6b4f3a" }, width: { "*": 1.05 } },
+    labels: { color: "#5a3f2a", halo_color: "#f3e8d0", halo_width: 1.8 }, arrows: { color: "#6b4f3a" },
+    boundary: { color: "#7a3b1d", width: 2.5, dash: "dash-dot", fill: "#7a3b1d", fillOpacity: 0.08 },
+    base: { background: "#e9dcc0", water: "#b9c9c4", green: "#cdc79a", land: "#eee0c3", sand: "#e8d6a8", buildings: "#d9c4a0", buildingLine: "#b39b78", railways: "#6b4f3a", waterways: "#9fb5ae" } },
+  { id: "overlay", name: "Roads overlay", note: "Only the roads, with a transparent ground. Strong colors and a dark casing, for a light map, a dark map, a satellite map or 3D buildings under it.",
+    roads: { fill: { motorway: "#ff7a00", trunk: "#ff9f1a", primary: "#ffc400", secondary: "#ffe14d", tertiary: "#ffffff", cycleway: "#00b36b", footway: "#ff6fa5", path: "#ff6fa5", track: "#c08a4a", "*": "#ffffff" }, casing: { "*": "#1a1a1a" }, width: { "*": 1.15 } },
+    labels: { color: "#111111", halo_color: "#ffffff", halo_width: 2.5 }, arrows: { color: "#111111" },
+    boundary: { show: false, color: "#ffffff", width: 2, dash: "solid", fill: "#ffffff", fillOpacity: 0 },
+    base: { background: "#808080", water: "#808080", green: "#808080", land: "#808080", sand: "#808080", buildings: "#808080", buildingLine: "#808080", railways: "#808080", waterways: "#808080" },
+    ground: { transparent: true, opacity: 0 }, visible: { buildings: false, buildings3d: false, landcover: false, water: false, waterways: false, paved: false, railways: false, raceway: false, other_ways: false, platform: false, parking: false, parking_p: false, bus_stations: false, train_stations: false, bicycle: false, traffic_signals: false, crossings: false } },
+  { id: "overlaydark", name: "Roads overlay, dark", note: "The same overlay with light roads and a dark casing. For a dark map or a satellite map under it.",
+    roads: { fill: { motorway: "#ffd166", trunk: "#ffe08a", primary: "#fff1b8", secondary: "#e6f0ff", tertiary: "#cfe3ff", cycleway: "#7bf2b2", footway: "#ffb3d1", path: "#ffb3d1", track: "#e0c9a6", "*": "#f5f5f5" }, casing: { "*": "#101418" }, width: { "*": 1.15 } },
+    labels: { color: "#f5f5f5", halo_color: "#101418", halo_width: 2.5 }, arrows: { color: "#f5f5f5" },
+    boundary: { show: false, color: "#ffffff", width: 2, dash: "solid", fill: "#ffffff", fillOpacity: 0 },
+    base: { background: "#808080", water: "#808080", green: "#808080", land: "#808080", sand: "#808080", buildings: "#808080", buildingLine: "#808080", railways: "#808080", waterways: "#808080" },
+    ground: { transparent: true, opacity: 0 }, visible: { buildings: false, buildings3d: false, landcover: false, water: false, waterways: false, paved: false, railways: false, raceway: false, other_ways: false, platform: false, parking: false, parking_p: false, bus_stations: false, train_stations: false, bicycle: false, traffic_signals: false, crossings: false } },
+  { id: "osm", name: "OSM like", note: "The colors of the standard OpenStreetMap map.",
+    roads: { fill: { motorway: "#e892a2", trunk: "#f9b29c", primary: "#fcd6a4", secondary: "#f7fabf", living_street: "#ededed", pedestrian: "#dddde8", cycleway: "#5c7cb6", footway: "#fa8072", path: "#fa8072", track: "#9e7b54", "*": "#ffffff" },
+      casing: { motorway: "#dc2a48", trunk: "#c84e2f", primary: "#a06b00", secondary: "#707d00", living_street: "#cccccc", pedestrian: "#8f8f8f", cycleway: "#5c7cb6", footway: "#fa8072", path: "#fa8072", track: "#9e7b54", "*": "#bbbbbb" }, width: PASSIVE },
+    labels: { color: "#333333", halo_color: "#ffffff", halo_width: 1.5 }, arrows: { color: "#555555" },
+    boundary: { color: "#6a0dad", width: 2, dash: "dotted", fill: "#6a0dad", fillOpacity: 0 },
+    base: { background: "#f2efe9", water: "#aad3df", green: "#cdebb0", land: "#f2efe9", sand: "#f5e9c6", buildings: "#d9d0c9", buildingLine: "#bbaaa4", railways: "#999999", waterways: "#aad3df" } },
 ];
+
+const expand = (map, keys) => Object.fromEntries(keys.map((k) => [k, map[k] ?? map["*"]]));
+/** The design of a theme (an object of THEME_DATA) on top of `b`, the design of the look: it has every style value, and keeps the profile and the dark ranges of `b`. */
+export function makeTheme(b, t) {
+  const d = clone(b);
+  d.name = t.name; d.theme = t.id;
+  if (t.look) return d;
+  d.roads = { fill: expand(t.roads.fill, CLASSES), casing: expand(t.roads.casing, CLASSES), width: expand(t.roads.width, GROUPS.map(([g]) => g)) };
+  Object.assign(d.labels, t.labels); Object.assign(d.arrows, t.arrows); Object.assign(d.boundary, t.boundary); Object.assign(d.base, t.base);
+  Object.assign(d.ground, t.ground); Object.assign(d.visible, t.visible);          // a theme names the layers that it hides (visible: false) and the ground that it makes transparent
+  return d;
+}
+/** The ready themes, for the panel: `make(base)` gives the design of a theme. */
+export const THEMES = THEME_DATA.map((t) => ({ id: t.id, name: t.name, note: t.note, make: (b) => makeTheme(b, t) }));
 
 // ---- the design file ----
 

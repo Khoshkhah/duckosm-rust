@@ -85,7 +85,7 @@ with sync_playwright() as p:
     page.click("#design-open")
     before = style_text(page)
         # the themes
-    assert page.locator("#design-pane .theme[data-look]").count() == 4 and page.get_attribute("#design-pane [data-look=light]", "aria-checked") == "true"
+    assert page.locator("#design-pane .theme[data-look]").count() == 14 and page.get_attribute("#design-pane [data-look=light]", "aria-checked") == "true"
     page.click("#design-pane [data-look=dark]")
     settled(page)
     assert page.get_attribute("#design-pane [data-look=dark]", "aria-checked") == "true" and page.evaluate("window.designPanel.get().theme") == "dark"
@@ -133,6 +133,110 @@ with sync_playwright() as p:
     assert "#abcdef" in base, "the building color is in the style"
     print("layers: ok")
 
+    # all the ready themes: each one loads, draws with no error and has its own road colors; the swatches show the ground, a road, its casing and the water
+    page.click("#design-tab-theme")
+    ids = page.eval_on_selector_all("#design-pane [data-look]", "(l) => l.map((x) => x.dataset.look)")
+    assert len(ids) == 14 and page.locator("#design-pane .sw5").first.locator("i").count() == 4
+    assert page.locator("#design-pane [data-look=overlay] .sw5 i.none").count() == 2, "the overlay shows a checkerboard for the ground and the water"
+    sigs = {}
+    for t in ids:
+        page.click(f"#design-pane [data-look={t}]")
+        settled(page)
+        assert page.evaluate("window.designPanel.get().theme") == t and "could not draw" not in page.evaluate("window.designPanel.state()")
+        sigs[t] = page.evaluate("JSON.stringify(window.duckMap.getStyle().layers.find((l) => l.id === 'rs-roads-simple').paint['line-color']).slice(0, 700)")
+    assert len(set(sigs.values())) == len(ids), ("every theme gives its own road colors", [t for t in ids if list(sigs.values()).count(sigs[t]) > 1])
+    print("themes loop: ok,", len(ids), "themes")
+
+    # the theme Roads overlay: the ground is transparent (the layer bg has alpha 0), the base-map layers are off, the roads and the names stay; also on other base maps
+    vis = lambda lid: page.evaluate(f"window.duckMap.getLayoutProperty('{lid}', 'visibility')")
+    alpha = lambda: page.evaluate("window.duckMap.getPaintProperty('bg', 'background-opacity')")
+    assert alpha() == 1, "an opaque theme has an opaque ground"
+    page.click("#design-pane [data-look=overlay]")
+    settled(page)
+    assert alpha() == 0 and vis("rs-ov4-fill") == "none" and vis("rs-ov1-fill") == "none" and vis("rs-ov0-fill") == "none" and vis("rs-roads-simple") != "none" and vis("rs-roads-labels") != "none"
+    page.click("#design-tab-layers")
+    assert page.is_checked("#design-pane [data-p='ground.transparent']") and not page.is_checked("#design-pane [data-p='visible.water']")
+    page.click("#design-tab-theme")
+    for bm in ("satellite", "blank", "ofm_liberty"):
+        page.evaluate(f"window.rsSetBasemap('{bm}')")
+        page.wait_for_timeout(2500)
+        assert alpha() == 0 and vis("rs-ov4-fill") == "none" and vis("rs-roads-simple") != "none", (bm, alpha())
+    page.click("#design-pane [data-look=overlaydark]")
+    settled(page)
+    assert alpha() == 0 and page.evaluate("window.designPanel.get().theme") == "overlaydark"
+    page.screenshot(path=str(out / "overlay-on-3d.png"))
+    page.evaluate("window.rsSetBasemap('blank')")
+    page.click("#design-pane [data-look=dark]")
+    settled(page)
+    assert alpha() == 1 and vis("rs-ov4-fill") == "visible"
+    print("overlay: ok")
+
+    # the switch Transparent ground, with its opacity
+    page.click("#design-tab-layers")
+    assert page.is_disabled("#design-pane [data-p='ground.opacity']")
+    page.check("#design-pane [data-p='ground.transparent']")
+    set_input(page, "[data-p='ground.opacity']", 0.4)
+    assert abs(alpha() - 0.4) < 1e-6 and page.evaluate("window.designPanel.get().ground") == {"transparent": True, "opacity": 0.4}
+    page.uncheck("#design-pane [data-p='ground.transparent']")
+    assert alpha() == 1
+    print("ground: ok")
+
+    # Show these layers: one state with roadstyle's switches; no new draw
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    def shot():
+        return np.asarray(Image.open(io.BytesIO(page.screenshot(clip={"x": 400, "y": 0, "width": 900, "height": 900}))).convert("RGB")).astype(int)       # the map, not the panel or the bar
+    page.evaluate("window.duckMap.jumpTo({center: [7.4246, 43.7384], zoom: 16})")           # the buildings show from zoom 14
+    page.wait_for_function("!window.duckMap.isMoving()")
+    page.wait_for_timeout(2500)
+    gen = page.evaluate("window.duckMap.getStyle().sources['rs-roads'].tiles[0]")
+    page.click("#design-tab-layers")
+    on = shot()
+    page.uncheck("#design-pane [data-p='visible.buildings']")
+    assert vis("rs-ov4-fill") == "none" and vis("rs-ov4-outline") == "none" and page.evaluate("window.RS_OVERLAYS.find((o) => o.label === 'buildings').visible") is False, "roadstyle has the same state"
+    page.wait_for_timeout(800)
+    off = shot()
+    changed = np.abs(on - off).sum(axis=2) > 12
+    assert changed.sum() > 500, "the buildings were on the map"
+    packed = on[changed] @ np.array([65536, 256, 1])
+    vals, counts = np.unique(packed, return_counts=True)
+    top = int(vals[counts.argmax()])
+    color = np.array([top >> 16, (top >> 8) & 255, top & 255])       # the most common color of the pixels that changed: the fill of a building
+    near = lambda img, mask=slice(None): int((np.abs(img - color).sum(axis=2)[mask] < 4).sum())
+    print("  pixels of the building color: on", near(on), "off", near(off), "| in the changed part: on", near(on, changed), "off", near(off, changed))
+    assert near(off, changed) < 0.2 * near(on, changed) and near(off) < 0.75 * near(on), "the building color falls on the map"
+    page.check("#design-pane [data-p='visible.buildings']")
+    page.wait_for_timeout(800)
+    assert vis("rs-ov4-fill") == "visible" and near(shot()) > 0.85 * near(on)
+    # roadstyle's own switch changes the design, and the box of the panel follows
+    page.evaluate("window.rsSetOverlay('water', false)")
+    assert page.evaluate("window.designPanel.get().visible.water") is False and not page.is_checked("#design-pane [data-p='visible.water']")
+    page.evaluate("window.rsSetOverlay('water', true)")
+    assert page.evaluate("window.designPanel.get().visible.water") is True
+    page.evaluate("import('/map/roadstyle/dashboard/arrows.js').then((m) => m.rsSetArrows(true))")
+    page.wait_for_function("window.designPanel.get().visible.arrows === true")
+    assert vis("rs-roads-arrows") == "visible" and page.is_checked("#design-pane [data-p='visible.arrows']")
+    page.uncheck("#design-pane [data-p='visible.arrows']")
+    assert vis("rs-roads-arrows") == "none"
+    page.uncheck("#design-pane [data-p='visible.names']")
+    assert vis("rs-roads-labels") == "none"
+    page.check("#design-pane [data-p='visible.names']")
+    page.uncheck("#design-pane [data-p='visible.primary']")
+    assert page.evaluate("window.RS_CLASSES.filter((c) => c.startsWith('primary')).every((c) => !window.designPanel.get().visible.primary)")
+    page.check("#design-pane [data-p='visible.primary']")
+    # a layer that the build does not have
+    assert page.is_disabled("#design-pane [data-p='visible.cycleway']") and "not in this build" in page.locator("#design-pane [data-p='visible.cycleway']").locator("xpath=..").text_content()
+    assert page.evaluate("window.duckMap.getStyle().sources['rs-roads'].tiles[0]") == gen and not page.evaluate("window.mapDrawing"), "a layer switch draws no new map"
+    page.click("#design-pane [data-p='visible.tunnels']"); page.click("#design-pane [data-p='visible.tunnels']")
+    page.screenshot(path=str(out / "layers.png"))
+    page.click("#design-tab-theme")
+    page.click("#design-pane [data-look=dark]")
+    settled(page)
+    print("visible: ok")
+
     # Boundary (Layers tab): the layers area-line, area-casing and area-fill take the values at once, with no new draw of the roads
     def bpaint():
         return page.evaluate("""() => { const m = window.duckMap, g = (id, k) => m.getLayoutProperty(id, k);
@@ -141,7 +245,7 @@ with sync_playwright() as p:
                      fillColor: m.getPaintProperty('area-fill', 'fill-color'), opacity: m.getPaintProperty('area-fill', 'fill-opacity') }; }""")
     tiles_url = lambda: page.evaluate("window.duckMap.getStyle().sources['rs-roads'].tiles[0]")
     page.click("#design-tab-layers")
-    assert page.locator("#design-pane h3").first.text_content() == "Area boundary"
+    assert page.locator("#design-pane h3").first.text_content() == "Show these layers"
     gen = tiles_url()
     b0 = page.evaluate("window.designPanel.boundary()")
     assert bpaint()["color"] == b0["color"] == "#7cc4ff" and bpaint()["line"] == "visible" and bpaint()["fill"] == "none", ("the Dark theme has its boundary; the fill hides while the roads show", bpaint())

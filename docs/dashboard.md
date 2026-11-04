@@ -361,22 +361,44 @@ The panel has five tabs.
 
 | Tab | What it sets |
 |---|---|
-| **Theme** | Four ready themes (Light, Dark, Traffic, Print), the name of the design, and **Download**, **Load a file** and **Reset**. |
+| **Theme** | Fourteen ready themes, the name of the design, and **Download**, **Load a file** and **Reset**. |
 | **Roads** | The fill and the casing of 14 road classes, the width of 9 groups of classes, and the colors of the dark theme. |
 | **Text** | The street names (color, halo, size, first zoom) and the one-way arrows (color, size, first zoom). |
-| **Layers** | The boundary of the area (show or hide, line, fill), the colors of the ground, water, green areas, built-up land, sand, buildings, railways and waterways, and the height of 3D buildings. |
+| **Layers** | A switch for each layer, the boundary of the area (line, fill), the ground (transparent or not), the colors of the ground, water, green areas, built-up land, sand, buildings, railways and waterways, and the height of 3D buildings. |
 | **Tiles** | The tile profile: zooms, layers, columns, class zooms, extent, buffer, tile limit and tile format. |
 
 ### Theme
 
 ![The Theme tab](img/dashboard/27-design-theme.png)
 
-A theme is a full set of values. One click on a theme replaces the style. After that, change any value in the other tabs. The theme then shows as "custom". A theme keeps your tile profile.
+A theme is a full set of values: the road colors and widths, the text, the boundary, the base-map colors, the ground and the layers. A theme is one plain object (data) in `app/design.js`. One click on a theme replaces the style. After that, change any value in the other tabs. The theme then shows as "custom". A theme keeps your tile profile.
 
-- **Light** is the look that the page had before the design card.
-- **Dark** has dim roads, a dark ground and light text.
-- **Traffic** has quiet gray roads and a pale ground. The colors of flow or speed stand out on it.
-- **Print** has a white ground, dark outlines, wider roads and black text.
+Each button shows four cells: the ground, a road fill, its casing and the water. A checkerboard cell means that the ground is transparent, or that the layer is off.
+
+| Theme | What it is for |
+|---|---|
+| **Light** | The look that the page had before the design card. |
+| **Dark** | Dim roads and ground, light text. For a dark screen or a projector. |
+| **Traffic** | Quiet gray roads and a pale ground. The colors of flow or speed stand out on it. |
+| **Print** | A white ground, dark outlines, wider roads and black text. |
+| **Pastel** | Soft colors and thin casings. For slides. |
+| **Blueprint** | A dark blue ground with white and light blue lines. |
+| **Night** | A very dark ground, dim small roads and bright main roads. For a dark room. |
+| **Minimal gray** | Gray roads of one color. Only the width shows the class. For data on top. |
+| **High contrast** | A white ground, black casings, bright fills, wide roads and large text. |
+| **Colorblind safe** | The Okabe-Ito colors. They stay clear for red-green color blindness. |
+| **Vintage** | A sepia ground and brown roads. For posters. |
+| **OSM like** | The colors of the standard OpenStreetMap map. |
+| **Roads overlay** | Only the roads, on a transparent ground. Strong colors and a dark casing. See below. |
+| **Roads overlay, dark** | The same overlay with light roads. For a dark map or a satellite map under it. |
+
+There is no theme for the Satellite base map. A theme can hide a layer, but it cannot make the base-map fills partly transparent. Use **Roads overlay** over a satellite map.
+
+### The roads overlay
+
+![The Roads overlay theme on the satellite base map](img/dashboard/33-design-overlay.png)
+
+**Roads overlay** and **Roads overlay, dark** show only the roads, the street names and the casings. The ground has alpha 0 (the layer `bg` of the map is transparent, also in the dark theme). The base-map layers (land use, water, buildings, railways and the points) are off. The casing is a little wider and the colors are a little stronger than in Light, because no ground is behind them. Put the overlay on a light map, a dark map, the Satellite base map or a map with 3D buildings. The base-map switch of roadstyle changes the map under the roads, and the ground stays transparent.
 
 **Download** saves the design as one `.design.json` file. **Load a file** reads such a file and draws it. A file that is not a duckOSM design file does not load, and the design stays as it is. **Reset** goes back to the Light style and keeps the tile profile.
 
@@ -402,7 +424,21 @@ The street names have a color, a halo (a color and a width), a size factor and a
 
 ![The Layers tab](img/dashboard/30-design-layers.png)
 
-The tab starts with the **Area boundary** section. The other sections are the colors of the base-map layers of step 4. A map that was built without the base-map layers has no ground, water or buildings to color. One color covers a group of land-use classes: **Green areas** covers forest, wood, grass, park and others, and **Built-up land** covers residential, commercial, industrial and others. The 3D buildings have a height for each floor, a highest building and an opacity.
+The tab starts with **Show these layers**. Then come **Area boundary**, **Ground**, the colors of the base-map layers (they need step 4 with the base-map layers) and the 3D buildings. One color covers a group of land-use classes: **Green areas** covers forest, wood, grass, park and others, and **Built-up land** covers residential, commercial, industrial and others. The 3D buildings have a height for each floor, a highest building and an opacity.
+
+**Show these layers** has one switch for each layer of the map. A change shows at once, and the page does not draw the map again.
+
+| Section | Switches |
+|---|---|
+| **Roads** | Motorway and trunk, primary, secondary, tertiary, residential and below, service, paths and footways, cycleways. A link road is in the group of its main road. |
+| **On the roads** | Bridges, tunnels, one-way arrows, street names. |
+| **Base map** | Buildings, 3D buildings, land use, water, waterways, paved areas, railways, race tracks, other ways, platforms, parking areas. |
+| **Points** | Parking, bus stops, train stations, bicycle points, traffic signals, crossings. |
+| **Area** | The area boundary. |
+
+A switch is the same as the matching switch of roadstyle (the Layers box and the arrows switch of the map bar). If you change one of them, the other one follows: the design reads roadstyle's events, and the design calls roadstyle's functions (`rsSetOverlay`, `rsSetClasses`, `rsSetBridges`, `rsSetTunnels`, `rsSetArrows`, `rsSetBuildings3D`). A layer that the build does not have shows "(not in this build)" and cannot be switched. At the first visit the arrows, the 3D buildings, the railways and the points are off, as before the card.
+
+**Ground** has the switch **Transparent ground** and an opacity from 0 to 1. With the switch on, the ground of the map has the alpha of the opacity (0 is fully transparent). With the switch off, the ground is opaque.
 
 **Area boundary** is the line around the area that you chose in step 1. It has these fields:
 
@@ -416,18 +452,19 @@ The tab starts with the **Area boundary** section. The other sections are the co
 
 The boundary is not part of roadstyle's look. A change shows at once, and the page does not draw the roads again. The four themes have their own boundary: Print has a thin black dashed line and no fill, Dark has a light blue line. **Reset** goes back to the blue line.
 
-The values are in one object, `design.boundary` (`{show, color, width, dash, fill, fillOpacity, fillOnRoads}`), in the design file and in the saved area. `designPanel.boundary()` gives it, and `BOUNDARY_DASH` in `app/design.js` gives the pattern of each `dash` value. Other modules read these values, for example a picture export.
+The values are in one object, `design.boundary` (`{show, color, width, dash, fill, fillOpacity, fillOnRoads}`), in the design file and in the saved area. The ground is `design.ground` (`{transparent, opacity}`; `groundAlpha(design)` in `app/design.js` gives its alpha). The layers are `design.visible` (one boolean for each key of `VISIBLE_KEYS`). `designPanel.boundary()` gives it, and `BOUNDARY_DASH` in `app/design.js` gives the pattern of each `dash` value. Other modules read these values, for example a picture export.
 
 ### Tiles
 
 ![The Tiles tab](img/dashboard/31-design-tiles.png)
 
-The tile profile is for the tile files of step 9. The map uses its format. Three ready profiles fill the fields:
+The tile profile is for the tile files of step 9. The map uses its format. Four ready profiles fill the fields:
 
 | Profile | Zoom | Layers | Use |
 |---|---|---|---|
 | **Web map small** | 0 to 14 | Roads and base map | A small file for a web map. |
 | **Analysis** | 0 to the highest zoom under the limit | Roads, base map and the layer `edges` with all columns | Every road of every network, with its attributes. This is the profile at the first visit. |
+| **Roads only** | 0 to the highest zoom under the limit | Roads and the layer `edges`, no base-map layer | A smaller file that has nothing that hides a base map under it. |
 | **Simulation preview** | 10 to the highest zoom under the limit | Roads and the layer `edges` with 13 columns | The columns that a simulation needs. |
 
 The fields:

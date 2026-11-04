@@ -2,9 +2,9 @@
 // (index.html, #design-panel): a header, five tabs and a bar. This file owns the design (app/design.js) and draws the tabs; the page gives it
 // the look (map/look.json), the way to draw the map again with a new look, and the places to keep the design.
 //
-//   initDesignPanel({ $, esc, look, redraw, onProfile, onBoundary, onSave }) -> { open, close, isOpen, tab, get, text, set, patchProfile, profile, boundary, load, setCount, flush, state }
+//   initDesignPanel({ $, esc, look, redraw, onProfile, onBoundary, onGround, onVisible, has, onSave }) -> { open, close, isOpen, tab, get, text, set, patchProfile, profile, boundary, setVisible, load, setCount, flush, state }
 //
-// A change of the style draws the map again after 0.5 s of quiet (`redraw(lookObject, isDefault, draw)`: it gives the look to the map and, with `draw`, draws). A change of the profile calls `onProfile(profile)`, and a change of the boundary calls `onBoundary(boundary)` (the page paints it at once: no new draw of the roads);
+// A change of the style draws the map again after 0.5 s of quiet (`redraw(lookObject, isDefault, draw)`: it gives the look to the map and, with `draw`, draws). A change of the profile calls `onProfile(profile)`, a change of the boundary calls `onBoundary(boundary)`, of the ground `onGround(ground)`, and of the layers `onVisible(visible)` (the page paints them at once: no new draw of the roads). `has(key)` tells whether the build has a layer (false: "not in this build");
 // the Export card reads the profile through `profile()`.
 import * as D from "./design.js";
 
@@ -22,11 +22,11 @@ const setPath = (o, path, v) => {
   o[last] = v;
 };
 
-export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => {}, onBoundary = () => {}, onSave = () => {} }) {
+export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => {}, onBoundary = () => {}, onGround = () => {}, onVisible = () => {}, has = () => true, onSave = () => {} }) {
   const base = D.defaultsOf(look);
   let design = structuredClone(base), tab = "theme", lastKey = null, timer = null, busy = false, again = false, note = "", counts = { text: "", bad: false };
-  const styleKey = (d) => JSON.stringify({ ...d, name: 0, theme: 0, profile: 0, boundary: 0 });       // the profile and the boundary are not in the look: they draw no new map
-  const announce = () => { onProfile(design.profile); onBoundary(design.boundary); };
+  const styleKey = (d) => JSON.stringify({ ...d, name: 0, theme: 0, profile: 0, boundary: 0, ground: 0, visible: 0 });       // the profile and the boundary are not in the look: they draw no new map
+  const announce = () => { onProfile(design.profile); onBoundary(design.boundary); onGround(design.ground); onVisible(design.visible); };
   const profile = () => design.profile;
 
   // ---- the controls ----
@@ -37,7 +37,9 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
   const sec = (title, body, why = "") => `<section class="fsec"><h3>${title}</h3>${why ? `<p class="why">${why}</p>` : ""}${body}</section>`;
 
   // ---- the tabs ----
-  const swatches = (d) => ["motorway", "primary", "residential"].map((c) => d.roads.fill[c]).concat([d.base.water, d.base.green, d.base.buildings]).map((c) => `<i style="background:${c}"></i>`).join("");
+  // four cells: the ground, a road fill, its casing, the water; a transparent ground or a layer that is off shows as a checkerboard
+  const swatches = (d) => [[d.base.background, d.ground.transparent && d.ground.opacity < 0.5], [d.roads.fill.primary], [d.roads.casing.primary], [d.base.water, d.visible.water === false]]
+    .map(([c, none]) => `<i${none ? ' class="none"' : ` style="background:${c}"`}></i>`).join("");
   const paneTheme = () => sec("Ready themes", `<div class="themes" role="radiogroup" aria-label="Ready themes">${D.THEMES.map((t) => {
       const d = t.make(base);
       return `<button type="button" class="theme" role="radio" data-look="${t.id}" aria-checked="${design.theme === t.id}"><span class="sw5">${swatches(d)}</span><b>${t.name}</b><small>${esc(t.note)}</small></button>`;
@@ -57,16 +59,28 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
       + number("From zoom", "labels.minzoom", design.labels.minzoom, 8, 20), "Smaller roads show their names two zooms later.")
     + sec("One-way arrows", color("Color", "arrows.color", design.arrows.color) + range("Size", "arrows.size", design.arrows.size, 0.5, 3, 0.1, " ×") + number("From zoom", "arrows.minzoom", design.arrows.minzoom, 8, 20),
       "The switch for the arrows is in the Layers box of the map bar.");
+  const paneVisible = () => {
+    const v = design.visible, row = (k, n) => {
+      const off = has(k) === false;
+      return `<label class="col"><input type="checkbox" data-p="visible.${k}" ${v[k] ? "checked" : ""} ${off ? "disabled" : ""}>${n}${off ? ' <small class="muted">(not in this build)</small>' : ""}</label>`;
+    };
+    return sec("Show these layers", D.VISIBLE_GROUPS.map(([g, rows]) => `<p class="fix-group">${g}</p><div class="cols">${rows.map(([k, n]) => row(k, n)).join("")}</div>`).join("")
+      + `<p class="fix-group">Area</p><div class="cols"><label class="col"><input type="checkbox" data-p="boundary.show" ${design.boundary.show ? "checked" : ""}>Area boundary</label></div>`,
+      "A switch is the same as the switch in the Layers box of the map bar: both show one state. A layer that the build does not have cannot show.");
+  };
+  const paneGround = () => sec("Ground", check("Transparent ground", "ground.transparent", design.ground.transparent, "The ground of the map has no color, so a base map shows under the roads. Use it with the theme Roads overlay.")
+      + range("Opacity of the ground", "ground.opacity", design.ground.opacity, 0, 1, 0.05).replace("<input", `<input ${design.ground.transparent ? "" : "disabled"}`),
+      "0 is fully transparent. The opacity counts only while the ground is transparent.");
   const paneBoundary = () => {
     const b = design.boundary, off = b.show ? "" : "disabled";
-    return sec("Area boundary", check("Show the boundary", "boundary.show", b.show, "The line around the area that you chose.")
+    return sec("Area boundary", (b.show ? "" : '<p class="small muted">The boundary is hidden. Turn it on in Show these layers.</p>')
       + color("Line color", "boundary.color", b.color).replace("<input", `<input ${off}`) + range("Line width", "boundary.width", b.width, 0.5, 6, 0.5, " px").replace("<input", `<input ${off}`)
       + `<label class="drow2"><span>Line style</span><select data-p="boundary.dash" ${off}>${Object.keys(D.BOUNDARY_DASH).map((k) => `<option value="${k}" ${b.dash === k ? "selected" : ""}>${k}</option>`).join("")}</select></label>`
       + color("Fill color", "boundary.fill", b.fill).replace("<input", `<input ${off}`) + range("Fill opacity", "boundary.fillOpacity", b.fillOpacity, 0, 1, 0.02).replace("<input", `<input ${off}`)
       + check("Fill over the roads", "boundary.fillOnRoads", b.fillOnRoads, "The fill covers the roads and changes their colors. It is off by default: the page hides the fill when the roads show.", off),
       "A fill opacity of 0 gives no fill.");
   };
-  const paneLayers = () => paneBoundary() + sec("Ground", color("Background", "base.background", design.base.background) + color("Water", "base.water", design.base.water) + color("Green areas", "base.green", design.base.green)
+  const paneLayers = () => paneVisible() + paneBoundary() + paneGround() + sec("Colors of the layers", color("Background", "base.background", design.base.background) + color("Water", "base.water", design.base.water) + color("Green areas", "base.green", design.base.green)
       + color("Built-up land", "base.land", design.base.land) + color("Sand and beach", "base.sand", design.base.sand), "Colors of the base-map layers. They show when step 4 built the base-map layers.")
     + sec("Buildings and lines", color("Buildings", "base.buildings", design.base.buildings) + color("Building outline", "base.buildingLine", design.base.buildingLine)
       + color("Railways", "base.railways", design.base.railways) + color("Waterways", "base.waterways", design.base.waterways))
@@ -158,7 +172,7 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
     setPath(design, p, el.tagName === "SELECT" && p === "profile.extent" ? +v : v);
     if (el.type === "range") el.parentElement.querySelector("output").textContent = `${+(+v).toFixed(2)}${el.dataset.unit}`;
     if (p.startsWith("profile.")) { design.profile.preset = "custom"; if (el.type === "checkbox" || el.tagName === "SELECT") return (changed(), paint()); }
-    else if (p === "boundary.show") { design.theme = "custom"; return (changed(), paint()); }
+    else if (p === "boundary.show" || p === "ground.transparent") { design.theme = "custom"; return (changed(), paint()); }
     else if (p !== "name") design.theme = "custom";
     changed();
   });
@@ -204,11 +218,17 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
     paint(); paintBar();
     return true;
   }
+  /** A layer switched somewhere else (roadstyle's Layers box, the arrows switch): the design follows, and the page does nothing more. */
+  function setVisible(key, on) {
+    if (!(key in design.visible) || design.visible[key] === !!on) return;
+    design.visible[key] = !!on; design.theme = "custom";
+    save(); paintBar(); if (isOpen() && tab === "layers") { const el = $("design-pane").querySelector(`[data-p="visible.${key}"]`); if (el) el.checked = !!on; }
+  }
   const isOpen = () => document.body.classList.contains("editing-design");
   function open() { document.body.classList.add("editing-design"); paint(); }
   function close() { document.body.classList.remove("editing-design"); }
   return {
-    open, close, isOpen, tab: tabTo, get: () => design, text: () => D.toFile(design), set, load, patchProfile, profile, boundary: () => design.boundary, base: () => base,
+    open, close, isOpen, tab: tabTo, get: () => design, text: () => D.toFile(design), set, load, patchProfile, profile, boundary: () => design.boundary, setVisible, base: () => base,
     flush: async () => { clearTimeout(timer); await run(); while (busy) await new Promise((r) => setTimeout(r, 50)); },
     setCount: (text, bad) => { counts = { text, bad }; const el = $("design-count"); if (el) { el.textContent = text; el.classList.toggle("bad", !!bad); } },
     state: () => note,

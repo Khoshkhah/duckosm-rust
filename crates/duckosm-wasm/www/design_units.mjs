@@ -30,6 +30,40 @@ assert.deepEqual(bb, { show: false, color: "#2563eb", width: 8, dash: "solid", f
 assert.ok(JSON.stringify(D.applyToLook(look, { ...base, boundary: { ...base.boundary, color: "#000000", show: false } })) === JSON.stringify(look), "the boundary is not in the look");
 assert.deepEqual(Object.keys(D.BOUNDARY_DASH), ["solid", "dashed", "dotted", "dash-dot"]);
 
+// the themes are data: one plain object each, with every style value; the roads differ from theme to theme
+assert.ok(D.THEME_DATA.length >= 13 && new Set(D.THEME_DATA.map((t) => t.id)).size === D.THEME_DATA.length, "ids are unique");
+assert.deepEqual(D.THEME_DATA, JSON.parse(JSON.stringify(D.THEME_DATA)), "a theme is plain data (JSON)");
+const sig = new Set();
+for (const t of D.THEME_DATA) {
+  if (!t.look) {
+    for (const k of ["fill", "casing"]) assert.ok(t.roads[k]["*"], `${t.id}: roads.${k} has the key *`);
+    assert.ok(t.roads.width["*"] || D.GROUPS.every(([g]) => t.roads.width[g]), `${t.id}: width`);
+    for (const k of ["color", "halo_color", "halo_width"]) assert.ok(k in t.labels, `${t.id}: labels.${k}`);
+    assert.ok(t.arrows.color, `${t.id}: arrows.color`);
+    for (const k of ["color", "width", "dash", "fill", "fillOpacity"]) assert.ok(k in t.boundary, `${t.id}: boundary.${k}`);
+    for (const k of Object.keys(base.base).filter((x) => !["m_per_level", "max_height", "height_opacity"].includes(x))) assert.ok(t.base[k], `${t.id}: base.${k}`);
+  }
+  const d = D.makeTheme(base, t);
+  assert.ok(D.normalize(d, base).roads.fill.primary === d.roads.fill.primary, `${t.id}: the colors are valid`);
+  assert.deepEqual(d.profile, base.profile, `${t.id} keeps the profile`);
+  sig.add(JSON.stringify(d.roads));
+}
+assert.equal(sig.size, D.THEME_DATA.length, "every theme has its own road colors");
+// the ground and the layers
+assert.deepEqual(base.ground, { transparent: false, opacity: 0 }); assert.equal(D.groundAlpha(base), 1);
+assert.equal(D.groundAlpha({ ground: { transparent: true, opacity: 0.3 } }), 0.3);
+assert.equal(base.visible.arrows, false); assert.equal(base.visible.railways, false); assert.equal(base.visible.buildings, true); assert.equal(base.visible.motorway, true);
+assert.deepEqual(Object.keys(base.visible), D.VISIBLE_KEYS);
+assert.equal(D.classGroup("motorway_link"), "motorway"); assert.equal(D.classGroup("ferry"), null); assert.equal(D.classGroup("footway"), "paths");
+const ov = D.makeTheme(base, D.THEME_DATA.find((t) => t.id === "overlay"));
+assert.equal(ov.ground.transparent, true); assert.equal(D.groundAlpha(ov), 0);
+assert.ok(D.OVERLAY_KEYS.every((k) => ov.visible[k] === false) && ov.visible.names === true && ov.visible.primary === true && ov.visible.buildings3d === false, "the overlay hides every base-map layer and keeps the roads and the names");
+assert.equal(D.normalize({ visible: { water: "no", buildings: false }, ground: { transparent: 1, opacity: 7 } }, base).visible.water, true);
+assert.equal(D.normalize({ visible: { buildings: false }, ground: { transparent: 1, opacity: 7 } }, base).visible.buildings, false);
+assert.deepEqual(D.normalize({ ground: { transparent: 1, opacity: 7 } }, base).ground, { transparent: true, opacity: 1 });
+assert.deepEqual(D.PROFILES.roads.make().layers, { roads: true, base: false, edges: true });
+assert.ok(JSON.stringify(D.applyToLook(look, { ...base, ground: { transparent: true, opacity: 0 }, visible: { ...base.visible, water: false } })) === JSON.stringify(look), "the ground and the layers are not in the look");
+
 // a width factor scales the curve of its group only
 const w = structuredClone(base); w.roads.width.major = 2;
 const W = D.applyToLook(look, w);

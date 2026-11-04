@@ -274,6 +274,10 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   #design-panel .cols.two .col { justify-content: space-between; }
   #design-panel .cols.two input[type=number] { width: 56px; }
   #design-panel #design-count.bad { color: var(--error, #b91c1c); }
+  #design-panel .fix-group { margin: 12px 0 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  #design-panel .fix-group:first-child { margin-top: 0; }
+  #design-panel .sw5 i.none { background: repeating-conic-gradient(#c8c8c8 0 25%, #ffffff 0 50%) 0 0 / 8px 8px; }
+  #design-panel .col small { font-size: 11px; }
   #design-panel .design-bar { font-size: 12.5px; }
   #design-panel .design-bar .line { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
   #design-panel .design-bar b { font-weight: 600; }
@@ -799,6 +803,7 @@ import { initFixesPanel } from "./app/fixes_panel.js";
 import * as exporter from "./app/export.js";
 import * as designLib from "./app/design.js";
 import { initDesignPanel } from "./app/design_panel.js";
+import { rsSetArrows, rsHasArrows } from "./map/roadstyle/dashboard/arrows.js";       // the one-way arrows switch of roadstyle: the design reads and sets the same state
 import { rsDashboard } from "./map/roadstyle/dashboard/index.js";   // roadstyle's map dashboard (copied by build.sh at ROADSTYLE_COMMIT)
 import { rsFirstPaint } from "./map/roadstyle/dashboard/template.js";   // the classes of <html> before the first paint
 
@@ -920,7 +925,7 @@ const setData = (src, data) => loaded.then(() => map.getSource(src).setData(data
 const blue = "#2563eb";
 // the boundary of the area on the map: the layers area-fill, area-casing and area-line take the values of the design (card 10, designLib.defaultBoundary: the blue line of
 // the page before the card). The fill of the page hides while the roads show, because it would change their colors; the design can turn it on over the roads.
-let boundaryNow = designLib.defaultBoundary();
+let boundaryNow = designLib.defaultBoundary(), groundNow = designLib.defaultGround(), visibleNow = null;
 function paintBoundary(onRoads = roadsShown) {
   if (!map.getLayer("area-line")) return;
   const b = boundaryNow, vis = (on) => (on ? "visible" : "none");
@@ -2185,6 +2190,7 @@ async function useStyle(style) {
   roadsShown = true;
     document.dispatchEvent(new Event("duckosm:drawn"));
   rs.setStyle(style);
+  applyDesignLayers();
 }
 async function drawRoads() {
   const run = ++roadsRun, isFresh = fresh;
@@ -2208,6 +2214,7 @@ async function drawRoads() {
     //   // the road fields (the popup); the level editor puts its own here while it is open
     rs.setStyle(r.style);   // the dashboard reads the new roads style (its layers and metadata)
     roadsShown = true;
+    applyDesignLayers();                            // the ground and the layers of the design (roadstyle read the new style just now)
     document.dispatchEvent(new Event("duckosm:drawn"));
     // the first tiles: the map is drawn when it is idle (at most 60 s)
     await Promise.race([new Promise((ok) => map.once("idle", ok)), new Promise((ok) => setTimeout(ok, 60000))]);
@@ -2654,6 +2661,52 @@ $("fix-apply").onclick = () => {
   $("run").click();
 };
 
+// ---- the ground and the layers of the design (card 10): the ground is roadstyle's layer `bg`; the layers are roadstyle's own switches (rsSetOverlay for the base-map layers,
+// rsSetClasses for the road groups, rsSetBridges, rsSetTunnels, rsSetArrows, rsSetBuildings3D), so the design and roadstyle's Layers box show one state. The page
+// reads roadstyle's events and tells the design; `applying` keeps the page's own calls from coming back as changes. ----
+let applyingLayers = false;
+const hasLayer = (k) => {                                  // true, false, or undefined (the map is not drawn: not known)
+  if (!roadsShown) return undefined;
+  const ovs = window.RS_OVERLAYS ?? [];
+  if (designLib.OVERLAY_KEYS.includes(k)) return ovs.some((o) => o.label === k);
+  if (k === "buildings3d") return ovs.some((o) => o.label === "buildings" && o.extrude);
+  if (designLib.ROAD_GROUPS[k]) return (window.RS_CLASSES ?? []).some((c) => designLib.classGroup(c) === k);
+  if (k === "arrows") return rsHasArrows();
+  if (k === "names") return !!map.getLayer("rs-roads-labels");
+  return true;
+};
+function paintGround() {
+  if (map.getLayer("bg")) map.setPaintProperty("bg", "background-opacity", designLib.groundAlpha({ ground: groundNow }));
+}
+function applyVisible() {
+  const v = visibleNow;
+  if (!v || !roadsShown) return;
+  applyingLayers = true;
+  try {
+    if (window.RS_CLASSES?.length) window.rsSetClasses(window.RS_CLASSES.filter((c) => v[designLib.classGroup(c)] !== false));
+    window.rsSetBridges(v.bridges); window.rsSetTunnels(v.tunnels);
+    if (rsHasArrows()) rsSetArrows(v.arrows);
+    const ovs = window.RS_OVERLAYS ?? [];
+    for (const k of designLib.OVERLAY_KEYS) if (ovs.some((o) => o.label === k) && ovs.find((o) => o.label === k).visible !== v[k]) window.rsSetOverlay(k, v[k]);
+    if (ovs.some((o) => o.label === "buildings" && o.extrude) && window.rsGetBuildings3D() !== v.buildings3d) window.rsSetBuildings3D(v.buildings3d);
+    if (map.getLayer("rs-roads-labels")) map.setLayoutProperty("rs-roads-labels", "visibility", v.names ? "visible" : "none");
+  } finally { applyingLayers = false; }
+}
+const applyDesignLayers = () => { paintGround(); applyVisible(); };
+for (const [ev, key] of [["rs:arrowschange", "arrows"], ["rs:buildings3dchange", "buildings3d"]]) document.addEventListener(ev, (e) => { if (!applyingLayers) designPanel?.setVisible(key, e.detail.on); });
+document.addEventListener("rs:overlaychange", (e) => { if (!applyingLayers) designPanel?.setVisible(e.detail.overlay, e.detail.visible); });
+document.addEventListener("rs:filterchange", (e) => {
+  const d = e.detail;
+  if (applyingLayers || !designPanel) return;
+  if ("bridges" in d) designPanel.setVisible("bridges", d.bridges);
+  if ("tunnels" in d) designPanel.setVisible("tunnels", d.tunnels);
+  if (Array.isArray(d.visible)) for (const g of Object.keys(designLib.ROAD_GROUPS)) {
+    const cs = (window.RS_CLASSES ?? []).filter((c) => designLib.classGroup(c) === g);
+    if (cs.length) designPanel.setVisible(g, cs.some((c) => d.visible.includes(c)));
+  }
+});
+document.addEventListener("rs:basemapchange", paintGround);       // a base map changes the layer bg: the ground keeps its opacity
+
 // ---- card 10: the design (docs/dashboard.md). The panel is app/design_panel.js. A design is the style of the map (written into roadstyle's look and drawn
 // again by the map worker) and the profile of the tiles (the Export card reads it). It is kept in this browser (localStorage) and with the saved area
 // (design.json in its folder, app/area_store.js). ----
@@ -2683,7 +2736,8 @@ function designSaved(text) {
 }
 try {
   const look = await fetch("map/look.json").then((r) => r.json());
-  designPanel = await initDesignPanel({ $, esc, look, redraw: redrawDesign, onProfile: designChanged, onBoundary: (b) => { boundaryNow = b; paintBoundary(); }, onSave: designSaved });
+  designPanel = await initDesignPanel({ $, esc, look, redraw: redrawDesign, onProfile: designChanged, onBoundary: (b) => { boundaryNow = b; paintBoundary(); },
+    onGround: (g) => { groundNow = g; paintGround(); }, onVisible: (v) => { visibleNow = v; applyVisible(); }, has: hasLayer, onSave: designSaved });
   let stored = null;
   try { stored = localStorage.getItem("duckosm.design"); } catch (_) { /* no storage: the default design */ }
   if (!(stored && await designPanel.load(stored, { draw: false }))) designPanel.patchProfile({ format: duck.tileFormat, preset: "analysis" });     // no design yet: the tile format that the person chose before
