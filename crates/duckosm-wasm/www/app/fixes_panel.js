@@ -315,7 +315,7 @@ export async function initFixesPanel(ctx) {
   }
   async function loadWalls(id) {
     if (!hasFaces()) return [];
-    return (await safe(`SELECT from_node, to_node, face_index, face_type, computed_type, edited, door, length_m, street_name, ST_AsGeoJSON(geometry) AS g FROM main.building_faces WHERE building_id = ${id} ORDER BY face_index`))
+    return (await safe(`SELECT * EXCLUDE (geometry), ST_AsGeoJSON(geometry) AS g FROM main.building_faces WHERE building_id = ${id} ORDER BY face_index`))
       .map((r) => ({ ...r, from_node: Number(r.from_node), to_node: Number(r.to_node), face_index: Number(r.face_index) }));
   }
   const wallKey = (w) => `${w.from_node}|${w.to_node}`;
@@ -837,10 +837,10 @@ export async function initFixesPanel(ctx) {
     if (hasFaces()) {
       if (current === "building" && $("fix-walls-all").checked && map.getZoom() >= 16) {
         const b = map.getBounds();
-        const all = (await safe(`SELECT face_type AS t, edited AS e, building_id AS b, from_node AS f, to_node AS n, door AS d, ST_AsGeoJSON(geometry) AS g FROM main.building_faces WHERE ST_Intersects(geometry, ST_MakeEnvelope(${b.getWest()}, ${b.getSouth()}, ${b.getEast()}, ${b.getNorth()})) LIMIT 30000`))
+        const all = (await safe(`SELECT * EXCLUDE (geometry), ST_AsGeoJSON(geometry) AS g FROM main.building_faces WHERE ST_Intersects(geometry, ST_MakeEnvelope(${b.getWest()}, ${b.getSouth()}, ${b.getEast()}, ${b.getNorth()})) LIMIT 30000`))
         ;
-        feats = all.map((r) => asFeature(r.g, r.t, r.e, sel?.kind === "building" && Number(r.b) === sel.id && `${Number(r.f)}|${Number(r.n)}` === wallSel));
-        feats.push(...all.filter((r) => r.d).map((r) => doorDot(r.g)));
+        feats = all.map((r) => asFeature(r.g, r.face_type, r.edited, sel?.kind === "building" && Number(r.building_id) === sel.id && `${Number(r.from_node)}|${Number(r.to_node)}` === wallSel));
+        feats.push(...all.filter((r) => r.door).map((r) => doorDot(r.g)));
       } else if (current === "building" && sel?.kind === "building" && walls.length) {
         feats = walls.map((w) => asFeature(w.g, wallType(w), !!F.findFace(doc, sel.id, w.from_node, w.to_node) || w.edited, wallKey(w) === wallSel));
         feats.push(...walls.filter((w) => wallDoorNow(w)).map((w) => doorDot(w.g)), ...walls.map((w) => numberDot(w.g, w.face_index + 1)));

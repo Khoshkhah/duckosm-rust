@@ -203,6 +203,9 @@ with sync_playwright() as p:
     assert 22.4 in page.evaluate("window.fixesPanel.drawn().heights"), ("7 floors are 22.4 m in the 3D preview", page.evaluate("window.fixesPanel.drawn().heights"))
     print(f"a building: way {b['osm_id']}, floors 7 (3D preview 22.4 m), roof gabled, roof color #cc3300")
 
+    # a table of an older build (a saved area) has no column `door`: the walls still show
+    page.evaluate("window.duckApi.query('ALTER TABLE main.building_faces DROP COLUMN door')")
+    page.evaluate(f"window.fixesPanel.select('building', 'way', {b['osm_id']})")
     # the walls of the building: a list with a type for each wall (from main.building_faces), colored on the map; a change of type is a rule at once
     page.wait_for_function("document.querySelectorAll('#fix-form .wallrow').length >= 3", timeout=20_000)
     assert page.evaluate("window.fixesPanel.drawn().faces") >= 3, "the walls of the building are drawn"
