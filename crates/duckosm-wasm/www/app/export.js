@@ -213,7 +213,7 @@ export async function sumo(query, mode, area) {
 }
 
 import { decodeTile, encodeTile, addProps, indexOf } from "./mvt.js";
-import { qgisStyles, roadsQml, paletteOf, mapSvg, keplerMap } from "./export_style.js";
+import { qgisStyles, roadsQml, paletteOf, mapSvg, keplerMap, landColorsFrom } from "./export_style.js";
 
 // ---- tiles: the vector tiles of the map that is on screen (the roads and the base-map layers), made again by the map worker as MVT for a range of zooms,
 // and packed in one PMTiles v3 file or one MBTiles file. A tile is the layers of all the map's sources: MVT layers are repeated fields, so the bytes of two
@@ -627,10 +627,10 @@ export async function verify(id, r, { query, mode, modes = [mode] }) {
       g.drawImage(bmp, 0, 0);
       const px = g.getImageData(0, 0, bmp.width, bmp.height).data, bg = [0xef, 0xed, 0xe8];
       let other = 0;
-      for (let i = 0; i < px.length; i += 4 * 97) if (Math.abs(px[i] - bg[0]) + Math.abs(px[i + 1] - bg[1]) + Math.abs(px[i + 2] - bg[2]) > 12) other++;
+      for (let i = 0; i < px.length; i += 4 * 97) if (px[i + 3] > 10 && (r.transparent || Math.abs(px[i] - bg[0]) + Math.abs(px[i + 1] - bg[1]) + Math.abs(px[i + 2] - bg[2]) > 12)) other++;
       const share = other / (px.length / (4 * 97));
       if (share < 0.05) throw new Error(`the picture is almost empty (${(share * 100).toFixed(1)} percent of the pixels are not the background)`);
-      return { ok: true, text: `${bmp.width} x ${bmp.height} px, ${(share * 100).toFixed(0)} percent of the pixels are map (not the background color)` };
+      return { ok: true, text: `${bmp.width} x ${bmp.height} px, ${(share * 100).toFixed(0)} percent of the pixels are map (not the background)${r.transparent ? "; the background is transparent" : ""}` };
     }
     if (id === "svg") {
       const d = xml(new TextEncoder().encode(r.svg)), fills = d.querySelectorAll("#road-fills path").length, casings = d.querySelectorAll("#road-casings path").length;
@@ -732,9 +732,10 @@ export async function svg(query, mode, area, ctx) {
   let w = 180, s = 90, e = -180, n = -90;
   for (const r of roads) for (const [x, y] of r.geometry.coordinates) { w = Math.min(w, x); e = Math.max(e, x); s = Math.min(s, y); n = Math.max(n, y); }
   const polys = async (t) => ((await hasTable(query, "features", t)) ? (await query(`SELECT ST_AsGeoJSON(geom) AS g FROM features.${t}`)).map((r) => JSON.parse(r.g)) : []);
-  const polygons = { land: await polys("land"), water: await polys("water_polygons"), paved: await polys("paved"), buildings: await polys("buildings") };
-  const text = mapSvg({ bbox: [w, s, e, n], roads, polygons, palette: paletteOf(ctx.look), width: ctx.imageWidth ?? 2400 });
-  return { name: `${SLUG(area)}_${mode}_map.svg`, blob: new Blob([text], { type: "image/svg+xml" }), rows: roads.length, svg: text, polygons: Object.fromEntries(Object.entries(polygons).map(([k, v]) => [k, v.length])) };
+  const land = (await hasTable(query, "features", "land")) ? (await query("SELECT kind, ST_AsGeoJSON(geom) AS g FROM features.land")).map((r) => ({ kind: r.kind ?? "", geometry: JSON.parse(r.g) })) : [];
+  const polygons = { land, water: await polys("water_polygons"), paved: await polys("paved"), buildings: await polys("buildings") };
+  const text = mapSvg({ bbox: [w, s, e, n], roads, polygons, palette: paletteOf(ctx.look), width: ctx.imageWidth ?? 2400, transparent: !!ctx.transparent, background: ctx.look?.background?.light, landColors: landColorsFrom(ctx.style?.live) });
+  return { name: `${SLUG(area)}_${mode}_map.svg`, blob: new Blob([text], { type: "image/svg+xml" }), rows: roads.length, svg: text, transparent: !!ctx.transparent, polygons: Object.fromEntries(Object.entries(polygons).map(([k, v]) => [k, v.length])) };
 }
 
 /** The map as a PNG picture of the whole area, drawn by MapLibre with the style of the live map (the roads and the base-map layers; the background of the base map is left out). */
@@ -749,13 +750,14 @@ export async function png(query, mode, area, ctx) {
   const style = { ...ctx.style.live, state: Object.fromEntries(Object.entries(ctx.style.globalState ?? {}).map(([k, v]) => [k, { default: v }])) };
   style.sources = Object.fromEntries(Object.entries(style.sources).filter(([id]) => id.startsWith("rs-")));
   style.layers = style.layers.filter((l) => l.id === "bg" || (l.source && l.source in style.sources));
+  if (ctx.transparent) style.layers = style.layers.map((l) => (l.id === "bg" ? { ...l, paint: { ...l.paint, "background-opacity": 0 } } : l));     // no ground: the picture keeps its alpha channel
   const map = new window.maplibregl.Map({ container: box, style, bounds: [w, s, e, n], fitBoundsOptions: { padding: 0 }, interactive: false, attributionControl: false, pixelRatio: 1, fadeDuration: 0, canvasContextAttributes: { preserveDrawingBuffer: true }, preserveDrawingBuffer: true });
   try {
     await new Promise((ok, no) => { map.once("error", (ev) => no(ev.error)); map.once("idle", ok); });
     await new Promise((ok) => setTimeout(ok, 300));
     const blob = await new Promise((ok) => map.getCanvas().toBlob(ok, "image/png"));
     if (!blob) throw new Error("the browser could not make the picture");
-    return { name: `${SLUG(area)}_map.png`, blob, rows: 1, width, height };
+    return { name: `${SLUG(area)}_map.png`, blob, rows: 1, width, height, transparent: !!ctx.transparent };
   } finally { map.remove(); box.remove(); }
 }
 async function extentOf(query, mode) {

@@ -142,6 +142,20 @@ export function qgisStyles(look, layerNames) {
   return out;
 }
 
+/**
+ * The light colors of the land-use kinds from the live style: the layer `rs-ov0-fill` has a `match` on `kind`, each color is a plain color or a `case` on the theme (the last value is the light one).
+ * Gives {kind: color, "": the color of the other kinds}, or {} when the style has no such layer.
+ */
+export function landColorsFrom(live) {
+  const expr = live?.layers?.find((l) => l.id === "rs-ov0-fill")?.paint?.["fill-color"];
+  if (!Array.isArray(expr) || expr[0] !== "match") return {};
+  const light = (v) => (Array.isArray(v) ? light(v[v.length - 1]) : v);
+  const out = {};
+  for (let i = 2; i + 1 < expr.length; i += 2) for (const k of [].concat(expr[i])) out[k] = light(expr[i + 1]);
+  out[""] = light(expr[expr.length - 1]);
+  return out;
+}
+
 // ---- a picture of the area as SVG, drawn from the tables
 const mercator = (lon, lat) => { const r = (lat * Math.PI) / 180; return [(lon + 180) / 360, (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2]; };      // x and y of the Web Mercator square (0 to 1)
 
@@ -150,12 +164,13 @@ const mercator = (lon, lat) => { const r = (lat * Math.PI) / 180; return [(lon +
  * `data`: {bbox: [west, south, east, north], roads: [{highway, geometry (GeoJSON LineString)}], polygons: {land, water, paved, buildings: [GeoJSON geometry]}, palette, width (px)}.
  * The widths of the palette are pixels of the page's map: they scale with the zoom that the picture has.
  */
-export function mapSvg({ bbox, roads, polygons = {}, palette, width = 2400 }) {
+export function mapSvg({ bbox, roads, polygons = {}, palette, width = 2400, transparent = false, background = COLORS.background, landColors = {} }) {
   const [w, s, e, n] = bbox, [x0, y0] = mercator(w, n), [x1, y1] = mercator(e, s), spanX = x1 - x0, height = Math.max(1, Math.round((width * (y1 - y0)) / spanX));
   const scale = width / spanX, px = ([lon, lat]) => { const [x, y] = mercator(lon, lat); return `${((x - x0) * scale).toFixed(1)},${((y - y0) * scale).toFixed(1)}`; };
   const zoom = Math.log2(width / (256 * spanX)), k = Math.min(3, Math.max(0.12, 2 ** ((zoom - 16) * 0.8)));
   const ring = (r) => `M${r.map(px).join("L")}Z`;
   const poly = (g) => (g.type === "Polygon" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : []).map((p) => p.map(ring).join("")).join("");
+  const landGroups = () => { const by = {}; for (const l of polygons.land ?? []) (by[l.kind] ??= []).push(l.geometry); return Object.entries(by).map(([k, list]) => group(`land-${k || "other"}`, landColors[k] ?? LAND_COLORS[k] ?? landColors[""] ?? COLORS.land, list)).join(""); };
   const group = (id, fill, list, stroke) => (list?.length ? `<g id="${id}" fill="${fill}" fill-rule="evenodd"${stroke ? ` stroke="${stroke}" stroke-width="0.6"` : ""}><path d="${list.map(poly).join("")}"/></g>\n` : "");
   const line = (g) => (g.type === "LineString" ? [g.coordinates] : g.type === "MultiLineString" ? g.coordinates : []).map((c) => `M${c.map(px).join("L")}`).join("");
   const byClass = {};
@@ -163,8 +178,8 @@ export function mapSvg({ bbox, roads, polygons = {}, palette, width = 2400 }) {
   const order = CLASS_ORDER.filter((c) => byClass[c]);
   const strokes = (key, wkey) => order.map((c) => { const p = palette[c] ?? palette.residential ?? { fill: "#ffffff", casing: "#cfcdca", width: 2, casing_width: 3.5 };
     return `<path d="${byClass[c].join("")}" fill="none" stroke="${p[key]}" stroke-width="${(p[wkey] * k).toFixed(2)}" stroke-linecap="round" stroke-linejoin="round"${p.dash ? ` stroke-dasharray="${(p[wkey] * k * 2).toFixed(1)} ${(p[wkey] * k).toFixed(1)}"` : ""}/>`; }).join("\n");
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">\n<rect width="${width}" height="${height}" fill="${COLORS.background}"/>\n` +
-    group("land", COLORS.land, polygons.land) + group("water", COLORS.water, polygons.water) + group("paved", "#dedbd5", polygons.paved) + group("buildings", COLORS.building, polygons.buildings, COLORS.buildingLine) +
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">\n${transparent ? "" : `<rect width="${width}" height="${height}" fill="${background}"/>`}\n` +
+    landGroups() + group("water", COLORS.water, polygons.water) + group("paved", "#dedbd5", polygons.paved) + group("buildings", COLORS.building, polygons.buildings, COLORS.buildingLine) +
     `<g id="road-casings">\n${strokes("casing", "casing_width")}\n</g>\n<g id="road-fills">\n${strokes("fill", "width")}\n</g>\n</svg>\n`;
 }
 

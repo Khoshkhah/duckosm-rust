@@ -157,10 +157,19 @@ with sync_playwright() as p:
     fills = [p for g in sd.iter(ns + "g") if g.get("id") == "road-fills" for p in g.iter(ns + "path")]
     assert fills and sum(p.get("d").count("M") for p in fills) == n_roads, "one line for each road in the SVG"
     assert any(g.get("id") == "buildings" for g in sd.iter(ns + "g")) and any(g.get("id") == "water" for g in sd.iter(ns + "g"))
-    vp = browser.new_page(viewport={"width": 1200, "height": 900})
-    vp.goto(sv.resolve().as_uri())
+    assert any((g.get("id") or "").startswith("land-marina") for g in sd.iter(ns + "g")), "the land use is colored by kind (the harbour is `marina`)"
+    assert sd.find(ns + "rect") is not None, "a background rectangle by default"
+    vp = browser.new_page(viewport={"width": 1200, "height": 1100})
+    (out / "view.html").write_text(f'<body style="margin:0"><img src="{sv.resolve().as_uri()}" style="width:1200px;display:block">')
+    vp.goto((out / "view.html").resolve().as_uri())
+    vp.wait_for_timeout(1000)
     vp.screenshot(path=str(out / "map_svg.png"))
     vp.close()
+    # a transparent background: no rectangle in the SVG
+    page.check("#export-list .exp:has([data-fmt=svg]) .export-img-t")
+    sv2 = download(page, "svg")
+    assert XML.fromstring(sv2.read_text().split("\n", 1)[1]).find(ns + "rect") is None, "no background rectangle when it is transparent"
+    page.uncheck("#export-list .exp:has([data-fmt=svg]) .export-img-t")
     print(f"SVG: {len(fills)} classes, {n_roads} road lines")
 
     # the MapLibre style as a file, and a PNG picture of the area (the width is the field of its row)
@@ -172,6 +181,13 @@ with sync_playwright() as p:
     wpx, hpx = struct.unpack(">II", head[16:24])
     assert head[:8] == b"\x89PNG\r\n\x1a\n" and wpx == 1600 and hpx > 500, (wpx, hpx)
     print(f"PNG: {wpx} x {hpx} px")
+    page.check("#export-list .exp:has([data-fmt=png]) .export-img-t")
+    tp = download(page, "png")
+    from PIL import Image
+    im = Image.open(tp).convert("RGBA")
+    assert im.getpixel((2, 2))[3] == 0 and any(im.getpixel((x, y))[3] > 200 for x in range(0, im.width, 97) for y in range(0, im.height, 89)), "a transparent corner, and map pixels that are not"
+    page.uncheck("#export-list .exp:has([data-fmt=png]) .export-img-t")
+    print("PNG with a transparent background: the corner has alpha 0")
 
     # kepler.gl: a map file with the data and two layers colored by road class
     kp = json.loads(download(page, "kepler").read_text())
