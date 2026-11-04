@@ -6,10 +6,13 @@
 // makeRoads), format: "mvt" or "mlt", the format of the style}. Out: {style: JSON text, tableBytes: the road table as JSON bytes (each road's fields, middle, box and line), seconds, memoryMiB: the size of the WebAssembly memory, liveMiB: [held now, most held]} or
 // {error}. Then in: {tile: [source, z, x, y, format], id}. Out: {id, data: ArrayBuffer} (empty when nothing is in the tile).
 // {style: format, id}: the same style in another tile format. Out: {id, style: JSON text}.
+// {setLook: the look's JSON text, format, id}: the look with no new tile, when the tiles are still right for it (roadstyle's LiveMap.setLook,
+// docs/design/restyle_without_retile.md). Out: {id, style: JSON text} or {id, style: null}: the look needs new tiles (a new worker).
 // The page starts a new worker for each style: WebAssembly memory only grows, and a worker that ends gives it back.
 import init, { Look, styleSources, LiveMap, memoryBytes, liveBytes } from "./pkg/roadstyle_wasm.js";
 
 let tiler = null;   // a LiveMap: the tiles, and relevel (the level editor's changes) with no new style
+let levels = null;  // the look's keyword levels of the map: a new look gets the same (setLook)
 
 onmessage = async ({ data }) => {
   if (data.lines || data.ends) {
@@ -27,6 +30,15 @@ onmessage = async ({ data }) => {
   }
   if (data.style) {
     postMessage({ id: data.id, style: tiler.style(data.style) });
+    return;
+  }
+  if (data.setLook !== undefined) {
+    try {
+      const style = tiler ? tiler.setLook(Look.fromJson(data.setLook).withArg("levels", JSON.stringify(levels)), data.format) : undefined;
+      postMessage({ id: data.id, style: style ?? null });
+    } catch (e) {
+      postMessage({ id: data.id, error: String((e && e.message) || e) });
+    }
     return;
   }
   if (data.relevel) {
@@ -50,7 +62,8 @@ onmessage = async ({ data }) => {
     const [, look] = await Promise.all([init(), data.look ?? fetch(new URL("./look.json", import.meta.url)).then((r) => r.text())]);       // data.look: the page's design written into the look (app/design.js)
     const t = performance.now();
     // levels: "tags", or the stored levels' {edge_hash, n_edges}, which the engine checks
-    const l = Look.fromJson(look).withArg("levels", JSON.stringify(data.levels));
+    levels = data.levels;
+    const l = Look.fromJson(look).withArg("levels", JSON.stringify(levels));
     // stage 1 (the sources and the road table), then the vector tiles of stage 2
     const laps = [];
     const lap = (n) => laps.push([n, +((performance.now() - t) / 1000).toFixed(2)]);   // seconds since the start, for the page's step table

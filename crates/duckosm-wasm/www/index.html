@@ -2201,6 +2201,37 @@ function addOverview(style) {
     if (opaque) map.addLayer({ ...l, id: "rs-low-" + l.id, source: "rs-low" }, "rs-" + first.id);
   }
 }
+// A new look over the same tiles (roadstyle's LiveMap.setLook, docs/design/restyle_without_retile.md): each road layer, and its overview copy, gets the
+// new style's paint, layout and filter, and the images come again; the source, its tiles and the roads' feature state (the live colours) stay. Then
+// the dashboard reads the new style and the design's own paint comes on top, as after a draw. false: the new style has other layers (draw again).
+async function restyleRoads(style) {
+  const own = style.metadata?.["roadstyle:images"] || {};
+  const now = new Map(map.getStyle().layers.filter((l) => l.id.startsWith("rs-")).map((l) => [l.id, l]));
+  const roadIds = [...now.keys()].filter((id) => !id.startsWith("rs-low-"));
+  if (roadIds.length !== style.layers.length || style.layers.some((l) => !now.has("rs-" + l.id))) return false;
+  for (const n of Object.keys(own)) if (map.hasImage("rs-" + n)) map.removeImage("rs-" + n);
+  await addImages(Object.fromEntries(Object.entries(own).map(([n, v]) => ["rs-" + n, v])));
+  roadOrig.clear();                                 // paintRoads takes the new paint as the original
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  for (const l of style.layers) {
+    let json = JSON.stringify(l);
+    for (const n of Object.keys(own)) json = json.replaceAll(`"${n}"`, `"rs-${n}"`);   // the image names in the layout
+    const layer = JSON.parse(json);
+    for (const id of ["rs-" + l.id, "rs-low-" + l.id].filter((id) => now.has(id))) {
+      const was = now.get(id);
+      for (const k of new Set([...Object.keys(was.paint || {}), ...Object.keys(layer.paint || {})])) {
+        if (!same(was.paint?.[k], layer.paint?.[k])) map.setPaintProperty(id, k, layer.paint?.[k]);
+      }
+      for (const k of new Set([...Object.keys(was.layout || {}), ...Object.keys(layer.layout || {})])) {
+        if (!same(was.layout?.[k], layer.layout?.[k])) map.setLayoutProperty(id, k, layer.layout?.[k]);
+      }
+      if (!same(was.filter, layer.filter)) map.setFilter(id, layer.filter ?? null);
+    }
+  }
+  rs.setStyle(style);     // the dashboard reads the new style (its controls, its legend and its state)
+  applyDesignLayers();
+  return true;
+}
 // A new style for the roads that show (the editor's redraw, a change of the tile format): the old layers and sources go, the new ones come
 async function useStyle(style) {
   removeRoads();
@@ -2777,6 +2808,23 @@ async function redrawDesign(lookObj, isDefault, draw) {
   if (!draw) return "";
   if (editor) return "The level editor is open. The map shows this design after you close it and draw again.";
   if (!roadsShown) return "The map is not drawn yet. The design shows when you draw it (step 6).";
+  // a look that keeps the tiles (roadstyle's LiveMap.setLook, docs/design/restyle_without_retile.md): the new style over the same map, with no new
+  // worker and no tile cut again, and the roads keep their live colours. Else (or while a draw runs) the map is drawn again.
+  if (!drawing) {
+    try {
+      const t0 = performance.now();
+      const style = await duck.setLook();
+      window.lastRestyle = !style ? "the look needs new tiles" : "other layers";      // for the tests: why the map is drawn again
+      if (style && await restyleRoads(style)) {
+        window.lastRestyle = "same tiles";
+        $("mapnote").textContent = `${num(roadCount[$("mapmode").value] ?? 0)} roads, drawn in ${num((performance.now() - t0) / 1000, 2)} s (a new look on the same tiles)`;
+        return "The map shows this design.";
+      }
+    } catch (e) {
+      window.lastRestyle = "failed: " + e.message;
+      console.warn("a new look on the same tiles failed, the map is drawn again:", e);
+    }
+  }
   await showRoads();
   const note = $("mapnote").textContent;
   if (/^The map failed|needs more memory|draws at most/.test(note)) throw new Error(note);       // drawRoads writes its failure in the note and keeps the old map

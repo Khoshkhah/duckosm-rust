@@ -173,7 +173,7 @@ with sync_playwright() as p:
         page.click(f"#design-pane [data-look={t}]")
         settled(page)
         assert page.evaluate("window.designPanel.get().theme") == t and "could not draw" not in page.evaluate("window.designPanel.state()")
-        sigs[t] = page.evaluate("JSON.stringify(window.duckMap.getStyle().layers.find((l) => l.id === 'rs-roads-simple').paint['line-color']).slice(0, 700)")
+        sigs[t] = page.evaluate("JSON.stringify(window.duckMap.getStyle().layers.find((l) => l.id === 'rs-roads-simple').paint['line-color'])")   # the whole colour: the class colours are a lookup in it, not a table at its start
     assert len(set(sigs.values())) == len(ids), ("every theme gives its own road colors", [t for t in ids if list(sigs.values()).count(sigs[t]) > 1])
     # a road palette changes only the road colors: the base map of the design that is on now stays
     page.click("#design-pane [data-look=night]")

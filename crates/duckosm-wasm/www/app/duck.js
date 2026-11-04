@@ -503,6 +503,16 @@ export async function roadsStyle(mode, name, keep = []) {
   return { style: inFormat(out.style), roadTable, roadsSeconds, styleSeconds: out.seconds, memoryMiB: out.memoryMiB, liveMiB: out.liveMiB };
 }
 
+// A new look over the map that the worker holds (roadstyle's LiveMap.setLook, docs/design/restyle_without_retile.md): the new style when the map keeps
+// its tiles; null when the look needs new tiles (draw again), or when no map is drawn. The look is the one of setLookText (none: map/look.json).
+export async function setLook() {
+  if (!mapWorker) return null;
+  const text = lookText ?? await fetch(new URL("../map/look.json", import.meta.url)).then((r) => r.text());
+  const r = await ask({ setLook: text, format: tileFormat }, { style: null });
+  if (r.error) throw new Error(r.error);
+  return r.style ? inFormat(r.style) : null;
+}
+
 // a question to the map worker, answered by its id
 const ask = (msg, none) => !mapWorker ? Promise.resolve(none) : new Promise((done) => {
   const id = ++tileId;
