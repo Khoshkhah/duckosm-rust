@@ -11,7 +11,7 @@ Use it in a browser page, from the command line, or from Python. All three run t
 ### In the browser
 
 Open <https://khoshkhah.github.io/duckosm-rust/>. Search for a place, press the download button of the region file that covers it, and press **Build**. The page runs on your computer, and no server receives your data. It also fixes OSM data, draws the roads with [roadstyle](https://github.com/Khoshkhah/roadstyle) and exports to PMTiles, GeoPackage, GeoJSON, MATSim and SUMO.
-Next: [Your first map](docs/manual.md#your-first-map-in-the-browser) and [the page guide](docs/dashboard.md).
+Next: [Your first map](docs/first_map.md) and [the page guide](docs/dashboard.md).
 
 ### On the command line
 
@@ -43,10 +43,12 @@ Next: [the Python guide](docs/python.md).
 
 | For | Read |
 |---|---|
-| Users | [Manual](docs/manual.md), [page guide](docs/dashboard.md), [CLI](docs/cli.md), [Python](docs/python.md), [output tables](docs/output-tables.md) |
+| Users | [First map](docs/first_map.md), [page guide](docs/dashboard.md), [CLI](docs/cli.md), [Python](docs/python.md), [concepts](docs/concepts.md), [output tables](docs/output-tables.md), [troubleshooting](docs/troubleshooting.md) |
 | Developers | [Development](docs/development.md), [design](docs/design.md), [page code](docs/app.md), [benchmark](docs/benchmark.md), [to do](docs/todo.md) |
 | Decisions | [Name](docs/proposals/name.md), [hosting](docs/proposals/hosting.md) |
 | History | [Changelog](CHANGELOG.md) |
+
+The user documents are also a [mkdocs](https://www.mkdocs.org) site, as in duckOSM and roadstyle. To read it on your computer, run `pip install mkdocs mkdocs-material` and then `mkdocs serve`.
 
 ## Status
 

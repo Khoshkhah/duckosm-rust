@@ -21,7 +21,7 @@ Reasons, in order of weight:
 | Files of 16 MB and more | The largest file is the roadstyle module: 15.9 MB, 3.7 MB with gzip. |
 | Compression of `.wasm` | The three modules are 6.4 MB on the wire with gzip. |
 | Cache control | A deploy must not give a browser a new `index.html` with an old `app/duck.js`. |
-| A deploy from GitHub Actions | The workflow builds with nightly Rust and puts a secret key into the page ([pages.yml](../../.github/workflows/pages.yml)). |
+| A deploy from GitHub Actions | The workflow builds with nightly Rust and puts a secret key into the page ([pages.yml](https://github.com/Khoshkhah/duckosm-rust/blob/main/.github/workflows/pages.yml)). |
 | Free, or nearly | The page has no server work. The data stays in the browser. |
 
 ## What GitHub Pages does today
@@ -80,12 +80,12 @@ Cloudflare points new projects to Workers with static assets, and Pages still wo
 |---|---|
 | `.github/workflows/pages.yml` | A new deploy step with `wrangler-action`. Two repository secrets: `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. The build steps stay. |
 | `crates/duckosm-wasm/www/_headers` (new) | The two isolation headers on every path. `Cache-Control: no-cache` on `index.html`, and `public, max-age=31536000, immutable` on the versioned files. |
-| `coi-serviceworker.js` | Stays at first. With the real headers it does nothing ("a page that already has the headers does nothing", [serve.py](../../crates/duckosm-wasm/www/serve.py)). Remove it after a month without problems. |
+| `coi-serviceworker.js` | Stays at first. With the real headers it does nothing ("a page that already has the headers does nothing", [serve.py](https://github.com/Khoshkhah/duckosm-rust/blob/main/crates/duckosm-wasm/www/serve.py)). Remove it after a month without problems. |
 | `version_refs.py` | Stays. With `immutable` cache headers, the `?v=` on each file is what makes a deploy safe. |
 | The relay | Add the new address to `ALLOWED_ORIGINS` in `crates/duckosm-wasm/relay/wrangler.toml`, and run `npx wrangler deploy`. |
 | The Google Maps key | Add the new address to the allowed referrers of the key in the Google console. The key is limited to `https://khoshkhah.github.io/*` today. |
 | Saved areas | **They do not move.** The browser keeps them in the storage of one address (OPFS). At the new address, **Your areas** is empty. Download the `.zip` of the areas that you need before the move. |
-| Links | `README.md`, `docs/manual.md`, `docs/todo.md`, `docs/relay.md`, roadstyle docs, and duckOSM docs that name `khoshkhah.github.io/duckosm-rust`. |
+| Links | `README.md`, `docs/first_map.md`, `docs/todo.md`, `docs/relay.md`, roadstyle docs, and duckOSM docs that name `khoshkhah.github.io/duckosm-rust`. |
 
 ## Steps
 
@@ -100,3 +100,4 @@ Cloudflare points new projects to Workers with static assets, and Pages still wo
 1. Do you want a custom domain (for example for the project name, see [name.md](name.md))? A new name is the best moment to change the address, and you change it only one time.
 2. Is it acceptable that **Your areas** starts empty at the new address?
 3. Do you want pull-request previews on every pull request, or only on request?
+4. Where does the manual site (`mkdocs.yml`) go? The page already uses the one Pages site of this repository. The simple way is to build the manual in the same workflow into a folder `manual/` of the deployed site, with `mkdocs build --strict -d "$RUNNER_TEMP/site/manual"`. It needs no new host. Nothing is deployed yet.
