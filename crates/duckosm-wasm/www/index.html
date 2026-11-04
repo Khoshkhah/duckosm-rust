@@ -2846,7 +2846,7 @@ function designSaved(text) {
   designSave = setTimeout(() => { if (netBuilt) areaStore.saveDesign(designSlug(), text).catch(() => {}); }, 800);       // with the saved area
 }
 try {
-  const look = await fetch("map/look.json").then((r) => r.json());
+  const look = JSON.parse(await duck.pageLookText());
   designPanel = await initDesignPanel({ $, esc, look, redraw: redrawDesign, onProfile: designChanged, onBoundary: (b) => { boundaryNow = b; paintBoundary(); },
     onGround: (g) => { groundNow = g; paintGround(); }, onVisible: (v) => { visibleNow = v; applyVisible(); }, onRoads: (d) => { roadsNow = d; paintRoads(); }, has: hasLayer, preview: { get: previewValue, set: setPreview }, onSave: designSaved });
   let stored = null;
@@ -2974,7 +2974,7 @@ async function prepareArea() {
 }
 // the worker loads roadstyle's module by this URL (the deploy puts its version on it, version_refs.py)
 const editorPkgUrl = () => new URL("./map/pkg/roadstyle_wasm.js", location.href);
-const editorLook = () => (lookText ??= fetch("map/look.json").then((r) => r.text()));
+const editorLook = () => (lookText ??= duck.pageLookText());
 $("edit-open").onclick = async () => {
   // the editor draws every road of the area (all networks): the same limit as the map on a small device
   if (roadCount.all > window.mapMaxRoads) return editNote(`The level editor shows all ${num(roadCount.all)} roads of the area. ${SMALL_DEVICE ? "This device" : "A browser page"} draws at most ${num(roadLimit())}. ` +
@@ -3004,7 +3004,7 @@ $("edit-open").onclick = async () => {
     // `host`: the editor keeps the page's roads (it builds no roads or tiles of its own) and gives replaceRoads the edges that a change redrew;
     // `look`: the page's saved look, in which the editor finds the page's select and hover colours (it swaps them for its red and blue picks)
     editor = await levelEditor({ map, panel: $("sb"), backLabel: "Steps", pkgUrl, store, dashboard: rs, prefix: "rs-", levels: levels ?? undefined,
-      host: { edgeIdCol: "edge_id", replaceRoads }, look: await (lookText ??= fetch("map/look.json").then((r) => r.text())) });
+      host: { edgeIdCol: "edge_id", replaceRoads }, look: await (lookText ??= duck.pageLookText()) });
     lap("levelEditor()", t);
     lap("open, all", t0);
     editorStore = store;

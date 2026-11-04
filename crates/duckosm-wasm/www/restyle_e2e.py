@@ -3,9 +3,11 @@ after a build of Monaco's sample, roads get live colours (rsColor), and the Desi
 no tile is asked for again, the road layer gets the new colours, and the live colours stay. The themes Hollow (roads 10% wider) and
 Accessibility large (roads 1.8 times wider) keep the tiles too: the page's look has a buffer headroom of the widest ready theme (make_look.mjs).
 A design of your own with wider roads (2.5 times) needs more buffer than the tiles have, and draws a new map.
+The page reads map/look.json one time (duck.pageLookText): when the file changes while the page is open (a deploy), a theme still keeps the tiles.
 
     python crates/duckosm-wasm/www/restyle_e2e.py
 """
+import json
 import pathlib
 import sys
 
@@ -30,6 +32,11 @@ with sync_playwright() as p:
     browser = p.chromium.launch()
     page = browser.new_context(viewport={"width": 1400, "height": 900}).new_page()
     page.on("pageerror", lambda e: errors.append(str(e)))
+    # map/look.json changes while the page is open (as on a deploy): after the first draw, the server sends another headroom
+    look = json.loads((WWW / "map/look.json").read_text())
+    changed = {"now": False}
+    page.route("**/map/look.json*", lambda r: r.fulfill(status=200, content_type="application/json",
+                                                         body=json.dumps(dict(look, tiles=dict(look["tiles"], buffer_headroom=2.0)) if changed["now"] else look)))
     page.goto(url)
     page.wait_for_function("window.mapReady && window.timings && window.timings.duckdbStart", timeout=120_000)
     page.evaluate("localStorage.clear()")
@@ -42,9 +49,10 @@ with sync_playwright() as p:
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=600_000)
     if "folded" in (page.get_attribute("#step9-card", "class") or ""):
         page.click("#step9")
+    changed["now"] = True
     page.click("#design-open")
     page.click("#design-tab-theme")
-    assert theme(page, "light") == "same tiles", "the default look over the default map keeps the tiles"
+    assert theme(page, "light") == "same tiles", "the default look over the default map keeps the tiles, also when map/look.json changed"
 
     # live colours on some roads, as rs.setData and rsColor write them (the feature state rs_c on each road's row)
     page.evaluate("window.duckMap.jumpTo({center: [7.4246, 43.7384], zoom: 15})")
