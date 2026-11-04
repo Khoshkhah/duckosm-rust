@@ -207,7 +207,7 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
     const t = e.target.closest("[data-look]");
     if (t) {
       const keep = design.profile;
-      design = D.THEMES.find((x) => x.id === t.dataset.look).make(base);
+      design = D.THEMES.find((x) => x.id === t.dataset.look).make(base, design);          // a road palette keeps the base map of the design that is on now
       design.profile = keep; origin = null; changed(); return paint();
     }
     const pr = e.target.closest("[data-profile]");

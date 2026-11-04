@@ -36,6 +36,11 @@ assert.deepEqual(D.THEME_DATA, JSON.parse(JSON.stringify(D.THEME_DATA)), "a them
 const sig = new Set();
 for (const t of D.THEME_DATA) {
   if (!t.look) {
+    assert.ok(["light", "dark", "print", "overlay", "roadstyle"].includes(t.group) && typeof t.dark === "boolean", `${t.id}: group and dark`);
+    for (const k of ["fill", "casing"]) assert.ok(t.roadsOnly || t.roads[k]["*"], `${t.id}: roads.${k} has the key *`);
+    if (t.roadsOnly) assert.ok(!t.base && !t.labels && D.CLASSES.filter((c) => t.roads.fill[c] && t.roads.casing[c]).length >= 10, `${t.id}: a road palette names its classes and has no base map`);
+  }
+  if (!t.look && !t.roadsOnly) {
     for (const k of ["fill", "casing"]) assert.ok(t.roads[k]["*"], `${t.id}: roads.${k} has the key *`);
     assert.ok(t.roads.width["*"] || D.GROUPS.every(([g]) => t.roads.width[g]), `${t.id}: width`);
     for (const k of ["color", "halo_color", "halo_width"]) assert.ok(k in t.labels, `${t.id}: labels.${k}`);
@@ -49,6 +54,14 @@ for (const t of D.THEME_DATA) {
   sig.add(JSON.stringify(d.roads));
 }
 assert.equal(sig.size, D.THEME_DATA.length, "every theme has its own road colors");
+// a road palette keeps the base map and the other values of the design that is on now; a base-map theme sets them
+const nightD = D.makeTheme(base, D.THEME_DATA.find((t) => t.id === "night"));
+const amberOnNight = D.makeTheme(base, D.THEME_DATA.find((t) => t.id === "amber"), nightD);
+assert.deepEqual(amberOnNight.base, nightD.base); assert.deepEqual(amberOnNight.labels, nightD.labels);
+assert.equal(amberOnNight.roads.fill.motorway, "#f28c28"); assert.equal(amberOnNight.roads.fill.pedestrian, nightD.roads.fill.pedestrian, "a class that the palette lacks keeps its color");
+assert.equal(D.makeTheme(base, D.THEME_DATA.find((t) => t.id === "google"), nightD).base.background, "#f5f4f1");
+assert.deepEqual(D.THEME_DATA.filter((t) => t.group === "roadstyle").map((t) => t.id), ["google", "grey", "roadstyle", "osmcarto", "amber", "cartoroads", "highsat", "monoroads"]);
+assert.deepEqual(D.THEME_DATA.slice(0, 10).map((t) => t.id).slice(0, 2), ["light", "dark"], "Light and Dark are the first, the roadstyle themes come next");
 // the ground and the layers
 assert.deepEqual(base.ground, { transparent: false, opacity: 0 }); assert.equal(D.groundAlpha(base), 1);
 assert.equal(D.groundAlpha({ ground: { transparent: true, opacity: 0.3 } }), 0.3);

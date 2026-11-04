@@ -85,7 +85,7 @@ with sync_playwright() as p:
     page.click("#design-open")
     before = style_text(page)
         # the themes
-    assert page.locator("#design-pane .theme[data-look]").count() == 14 and page.get_attribute("#design-pane [data-look=light]", "aria-checked") == "true"
+    assert page.locator("#design-pane .theme[data-look]").count() == 21 and page.get_attribute("#design-pane [data-look=light]", "aria-checked") == "true"
     page.click("#design-pane [data-look=dark]")
     settled(page)
     assert page.get_attribute("#design-pane [data-look=dark]", "aria-checked") == "true" and page.evaluate("window.designPanel.get().theme") == "dark"
@@ -141,15 +141,25 @@ with sync_playwright() as p:
     # all the ready themes: each one loads, draws with no error and has its own road colors; the swatches show the ground, a road, its casing and the water
     page.click("#design-tab-theme")
     ids = page.eval_on_selector_all("#design-pane [data-look]", "(l) => l.map((x) => x.dataset.look)")
-    assert len(ids) == 14 and page.locator("#design-pane .sw5").first.locator("i").count() == 4
+    assert len(ids) == 21 and page.locator("#design-pane .sw5").first.locator("i").count() == 4
     assert page.locator("#design-pane [data-look=overlay] .sw5 i.none").count() == 2, "the overlay shows a checkerboard for the ground and the water"
     sigs = {}
     for t in ids:
+        if t in ("amber", "cartoroads", "highsat", "monoroads"):                  # a road palette keeps the base map and the other roads of the design that is on now: start from Light
+            page.click("#design-pane [data-look=light]")
         page.click(f"#design-pane [data-look={t}]")
         settled(page)
         assert page.evaluate("window.designPanel.get().theme") == t and "could not draw" not in page.evaluate("window.designPanel.state()")
         sigs[t] = page.evaluate("JSON.stringify(window.duckMap.getStyle().layers.find((l) => l.id === 'rs-roads-simple').paint['line-color']).slice(0, 700)")
     assert len(set(sigs.values())) == len(ids), ("every theme gives its own road colors", [t for t in ids if list(sigs.values()).count(sigs[t]) > 1])
+    # a road palette changes only the road colors: the base map of the design that is on now stays
+    page.click("#design-pane [data-look=night]")
+    page.click("#design-pane [data-look=amber]")
+    now = page.evaluate("window.designPanel.get()")
+    assert now["roads"]["fill"]["motorway"] == "#f28c28" and now["base"]["background"] == "#121417" and now["name"] == "Amber roads", "Amber roads on Night: amber roads, the Night ground"
+    page.click("#design-pane [data-look=google]")
+    assert page.evaluate("window.designPanel.get().base.background") == "#f5f4f1" and page.evaluate("window.designPanel.get().base.water") == "#aadaff", "a roadstyle base-map theme sets the ground and the water"
+    settled(page)
     print("themes loop: ok,", len(ids), "themes")
 
     # the theme Roads overlay: the ground is transparent (the layer bg has alpha 0), the base-map layers are off, the roads and the names stay; also on other base maps

@@ -302,7 +302,7 @@ The panel has five tabs.
 
 | Tab | What it sets |
 |---|---|
-| **Theme** | Fourteen ready themes, the name of the design, and **Download**, **Load a file** and **Reset**. |
+| **Theme** | Twenty-one ready themes, the name of the design, and **Download**, **Load a file** and **Reset**. |
 | **Roads** | The fill and the casing of 14 road classes, the width of 9 groups of classes, and the colors of the dark theme. |
 | **Text** | The street names (color, halo, size, first zoom) and the one-way arrows (color, size, first zoom). |
 | **Layers** | A switch for each layer, the boundary of the area (line, fill), the ground (transparent or not), the colors of the ground, water, green areas, built-up land, sand, buildings, railways and waterways, and the height of 3D buildings. |
@@ -312,14 +312,21 @@ The panel has five tabs.
 
 ![The Theme tab](img/dashboard/27-design-theme.png)
 
+The themes of roadstyle (group "roadstyle") use the real colors of roadstyle's data files (`rust/roadstyle-assets/files/data/`). The road colors are the colors of the files. A class with no casing in a file has its fill as casing. The sand of **Grey** is not in its file: it is the sand of OSM Carto with the transform of the file (saturation 0.12, then 35 percent to white).
+
 A theme is a full set of values: the road colors and widths, the text, the boundary, the base-map colors, the ground and the layers. A theme is one plain object (data) in `app/design.js`. One click on a theme replaces the style. After that, change any value in the other tabs. The theme then shows as "custom". A theme keeps your tile profile.
 
 Each button shows four cells: the ground, a road fill, its casing and the water. A checkerboard cell means that the ground is transparent, or that the layer is off.
 
 | Theme | What it is for |
 |---|---|
-| **Light** | The look that the page had before the design card. |
+| **Light (Liberty)** | The look that the page had before the design card: the colors of OpenFreeMap Liberty (roadstyle's theme liberty) with the google paths. |
 | **Dark** | Dim roads and ground, light text. For a dark screen or a projector. |
+| **Google like** | roadstyle's theme google: a light land, white streets with soft gray edges, yellow main roads, light blue water. |
+| **Grey** | roadstyle's theme grey: a quiet, light gray map for data. |
+| **roadstyle** | roadstyle's own look: the amber road palette on the OSM Carto base map. |
+| **OSM Carto** | roadstyle's theme osm_carto: the colors of the standard OpenStreetMap map. |
+| **Amber roads**, **Carto roads**, **High saturation**, **Mono roads** | roadstyle's road palettes amber, carto, highsat and mono. A palette changes only the road colors. The base map of the design that is on now stays. |
 | **Traffic** | Quiet gray roads and a pale ground. The colors of flow or speed stand out on it. |
 | **Print** | A white ground, dark outlines, wider roads and black text. |
 | **Pastel** | Soft colors and thin casings. For slides. |
@@ -329,7 +336,6 @@ Each button shows four cells: the ground, a road fill, its casing and the water.
 | **High contrast** | A white ground, black casings, bright fills, wide roads and large text. |
 | **Colorblind safe** | The Okabe-Ito colors. They stay clear for red-green color blindness. |
 | **Vintage** | A sepia ground and brown roads. For posters. |
-| **OSM like** | The colors of the standard OpenStreetMap map. |
 | **Roads overlay** | Only the roads, on a transparent ground. Strong colors and a dark casing. See below. |
 | **Roads overlay, dark** | The same overlay with light roads. For a dark map or a satellite map under it. |
 
