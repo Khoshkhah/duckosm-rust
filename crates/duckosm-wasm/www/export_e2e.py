@@ -81,6 +81,9 @@ with sync_playwright() as p:
     n_edges = rows(page, "SELECT count(*)::INTEGER AS n FROM driving.edges")[0]["n"]
     n_nodes = rows(page, "SELECT count(*)::INTEGER AS n FROM driving.nodes")[0]["n"]
     ids = {str(r["edge_id"]) for r in rows(page, "SELECT edge_id::VARCHAR AS edge_id FROM driving.edges")}
+    n_pairs = rows(page, "SELECT count(*)::INTEGER AS n FROM driving.edges WHERE is_reverse")[0]["n"]        # a two-way road is a forward edge and a reverse edge
+    n_roads = n_edges - n_pairs
+    assert n_pairs > 100 and n_roads < n_edges
 
     # GeoJSON: plain files (kepler.gl cannot open a .zip): one feature for each edge and for each node, the ids as text (a BIGINT hash is more than 2^53), no NaN
     gj = download(page, "geojson")
@@ -88,18 +91,24 @@ with sync_playwright() as p:
     roads = json.loads(gj.read_text())
     gn = download(page, "geojson_nodes")
     nodes = json.loads(gn.read_text())
-    assert roads["type"] == "FeatureCollection" and len(roads["features"]) == n_edges and len(nodes["features"]) == n_nodes
-    assert {f["properties"]["edge_id"] for f in roads["features"]} == ids, "the edge ids are the ids of the table, as text"
+    assert roads["type"] == "FeatureCollection" and len(roads["features"]) == n_roads and len(nodes["features"]) == n_nodes, (len(roads["features"]), n_roads)
+    both = [f["properties"]["edge_id"] for f in roads["features"]] + [f["properties"]["edge_id_reverse"] for f in roads["features"] if f["properties"]["edge_id_reverse"]]
+    assert set(both) == ids and len(both) == n_edges, "a two-way road is one feature: its forward edge id and the id of its reverse edge together are all the edge ids of the table, as text"
+    two = [f for f in roads["features"] if f["properties"]["twoway"]]
+    assert len(two) == n_pairs and all(f["properties"]["edge_id_reverse"] for f in two) and not any(f["properties"]["edge_id_reverse"] for f in roads["features"] if not f["properties"]["twoway"])
+    rev = rows(page, "SELECT ST_AsGeoJSON(geometry) AS g FROM driving.edges WHERE edge_id::VARCHAR = '" + two[0]["properties"]["edge_id_reverse"] + "'")[0]["g"]
+    assert json.loads(rev)["coordinates"][::-1] == two[0]["geometry"]["coordinates"], "the reverse edge is the same line the other way"
     assert all(f["geometry"]["type"] == "LineString" for f in roads["features"][:50]) and all(f["geometry"]["type"] == "Point" for f in nodes["features"][:50])
     assert "NaN" not in gj.read_text() and "Infinity" not in gj.read_text()
-    print(f"GeoJSON: {n_edges} roads and {n_nodes} nodes, plain files")
+    print(f"GeoJSON: {n_roads} roads ({n_pairs} of them two-way, once) and {n_nodes} nodes, plain files")
 
     # GeoPackage: a SQLite file with the GeoPackage tables, one row for each edge and node, and a geometry blob with the "GP" header and a WKB line
     import sqlite3
     import struct
     gp = sqlite3.connect(download(page, "gpkg"))
     assert gp.execute("PRAGMA application_id").fetchone()[0] == 0x47504B47
-    assert gp.execute("SELECT count(*) FROM roads").fetchone()[0] == n_edges and gp.execute("SELECT count(*) FROM nodes").fetchone()[0] == n_nodes
+    assert gp.execute("SELECT count(*) FROM roads").fetchone()[0] == n_roads and gp.execute("SELECT count(*) FROM nodes").fetchone()[0] == n_nodes
+    assert gp.execute("SELECT count(*) FROM roads WHERE twoway = 1").fetchone()[0] == n_pairs
     assert {r[0] for r in gp.execute("SELECT table_name FROM gpkg_contents")} == {"roads", "nodes"} and gp.execute("SELECT count(*) FROM gpkg_spatial_ref_sys WHERE srs_id = 4326").fetchone()[0] == 1
     blob, eid = gp.execute("SELECT geom, edge_id FROM roads ORDER BY fid LIMIT 1").fetchone()
     assert blob[:2] == b"GP" and blob[3] == 1 and struct.unpack("<i", blob[4:8])[0] == 4326 and blob[8] == 1 and struct.unpack("<I", blob[9:13])[0] == 2, "GP header, then a little-endian WKB LineString"
@@ -107,14 +116,14 @@ with sync_playwright() as p:
     x0, y0 = struct.unpack("<dd", blob[17:33])
     first = next(f for f in roads["features"] if f["properties"]["edge_id"] == eid)
     assert npts == len(first["geometry"]["coordinates"]) and abs(first["geometry"]["coordinates"][0][0] - x0) < 1e-9 and abs(first["geometry"]["coordinates"][0][1] - y0) < 1e-9
-    print(f"GeoPackage: {n_edges} roads and {n_nodes} nodes")
+    print(f"GeoPackage: {n_roads} roads and {n_nodes} nodes")
 
     # the segmented control picks the network of the files: Walking gives the walking edges
     page.click("#export-seg [data-m=walking]")
     assert page.get_attribute("#export-seg [data-m=walking]", "aria-checked") == "true" and page.input_value("#export-mode") == "walking"
     walk = sqlite3.connect(download(page, "gpkg"))
-    n_walk = rows(page, "SELECT count(*)::INTEGER AS n FROM walking.edges")[0]["n"]
-    assert walk.execute("SELECT count(*) FROM roads").fetchone()[0] == n_walk and n_walk != n_edges, (n_walk, n_edges)
+    n_walk = rows(page, "SELECT count(*)::INTEGER AS n FROM walking.edges WHERE NOT is_reverse")[0]["n"]
+    assert walk.execute("SELECT count(*) FROM roads").fetchone()[0] == n_walk and n_walk != n_roads, (n_walk, n_roads)
     page.click("#export-seg [data-m=driving]")
     print(f"Network control: Walking gives {n_walk} roads")
 

@@ -28,10 +28,23 @@ const zipOf = async (files) => {
   return new Blob([zipSync(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, strToU8(v)])))], { type: "application/zip" });
 };
 
-/** The roads as one GeoJSON file (a plain .geojson that kepler.gl, QGIS and web maps open; a LineString for each edge, the ids as text). */
+/**
+ * The roads for the files of Visualization, one row for each road, not for each direction. A two-way road is two edges in the tables (a forward edge `...f` and a reverse edge `...r`
+ * with `is_reverse`, the two nodes swapped): its row is the forward edge, with `edge_id_reverse` and `twoway`. A reverse edge that has no partner stays a row of its own.
+ * Gives the rows with `g` (GeoJSON text of the geometry), and the SQL fragment of the count.
+ */
+const PAIR = (m) => `(SELECT 1 FROM ${m}.edges f WHERE NOT f.is_reverse AND f.osm_id = e.osm_id AND f.source = e.target AND f.target = e.source AND left(f.edge_ref, length(f.edge_ref) - 1) = left(e.edge_ref, length(e.edge_ref) - 1))`;
+export const roadCountSql = (m) => `SELECT count(*) AS n FROM ${m}.edges e WHERE NOT e.is_reverse OR NOT EXISTS ${PAIR(m)}`;
+async function roadRows(query, m, geometry, extra = "") {
+  return query(`SELECT e.edge_id::VARCHAR AS edge_id, p.edge_id::VARCHAR AS edge_id_reverse, (p.edge_id IS NOT NULL) AS twoway, e.osm_id::VARCHAR AS osm_id, e.source::VARCHAR AS source, e.target::VARCHAR AS target,
+      e.name, e.highway, e.oneway, e.lanes, e.maxspeed_kmh, e.length_m, ${geometry} AS g${extra}
+    FROM ${m}.edges e LEFT JOIN ${m}.edges p ON NOT e.is_reverse AND p.is_reverse AND p.osm_id = e.osm_id AND p.source = e.target AND p.target = e.source AND left(p.edge_ref, length(p.edge_ref) - 1) = left(e.edge_ref, length(e.edge_ref) - 1)
+    WHERE NOT e.is_reverse OR NOT EXISTS ${PAIR(m)} ORDER BY e.edge_id`);
+}
+
+/** The roads as one GeoJSON file (a plain .geojson that kepler.gl, QGIS and web maps open; a LineString for each road, a two-way road once; the ids as text). */
 export async function geojson(query, mode, area) {
-  const roads = await query(`SELECT edge_id::VARCHAR AS edge_id, osm_id::VARCHAR AS osm_id, source::VARCHAR AS source, target::VARCHAR AS target, name, highway, oneway, lanes, maxspeed_kmh,
-    length_m, ST_AsGeoJSON(geometry) AS g FROM ${mode}.edges ORDER BY edge_id`);
+  const roads = await roadRows(query, mode, "ST_AsGeoJSON(e.geometry)");
   return { name: `${SLUG(area)}_${mode}_roads.geojson`, blob: featureCollection(roads), rows: roads.length };
 }
 
@@ -360,25 +373,25 @@ function edgeTile(list) {
 }
 const put0 = (g, v) => { while (v >= 128) { g.push((v & 127) | 128); v >>>= 7; } g.push(v); };
 
-/** A GeoPackage (OGC GeoPackage 1.2, SQLite): the tables `roads` (LineString) and `nodes` (Point) in EPSG:4326, with no spatial index. */
+/** A GeoPackage (OGC GeoPackage 1.2, SQLite): the tables `roads` (LineString, a two-way road once) and `nodes` (Point) in EPSG:4326, with no spatial index. */
 export async function geopackage(query, mode, area) {
   const SQL = await sqlite(), db = new SQL.Database();
-  const edges = await query(`SELECT edge_id::VARCHAR AS edge_id, osm_id::VARCHAR AS osm_id, source::VARCHAR AS source, target::VARCHAR AS target, name, highway, oneway, lanes, maxspeed_kmh, length_m,
-    ST_AsWKB(geometry) AS wkb, ST_XMin(geometry) AS x0, ST_YMin(geometry) AS y0, ST_XMax(geometry) AS x1, ST_YMax(geometry) AS y1 FROM ${mode}.edges ORDER BY edge_id`);
+  const edges = await roadRows(query, mode, "ST_AsWKB(e.geometry)", ", ST_XMin(e.geometry) AS x0, ST_YMin(e.geometry) AS y0, ST_XMax(e.geometry) AS x1, ST_YMax(e.geometry) AS y1");
+  for (const e of edges) e.wkb = e.g;
   const nodes = await query(`SELECT node_id::VARCHAR AS node_id, ST_AsWKB(geom) AS wkb, ST_X(geom) AS x, ST_Y(geom) AS y FROM ${mode}.nodes ORDER BY node_id`);
   const WGS84 = 'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]]';
   db.run(`PRAGMA application_id = 1196444487; PRAGMA user_version = 10200;
     CREATE TABLE gpkg_spatial_ref_sys (srs_name TEXT NOT NULL, srs_id INTEGER PRIMARY KEY, organization TEXT NOT NULL, organization_coordsys_id INTEGER NOT NULL, definition TEXT NOT NULL, description TEXT);
     CREATE TABLE gpkg_contents (table_name TEXT NOT NULL PRIMARY KEY, data_type TEXT NOT NULL, identifier TEXT UNIQUE, description TEXT DEFAULT '', last_change DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), min_x DOUBLE, min_y DOUBLE, max_x DOUBLE, max_y DOUBLE, srs_id INTEGER);
     CREATE TABLE gpkg_geometry_columns (table_name TEXT NOT NULL, column_name TEXT NOT NULL, geometry_type_name TEXT NOT NULL, srs_id INTEGER NOT NULL, z TINYINT NOT NULL, m TINYINT NOT NULL, CONSTRAINT pk_geom_cols PRIMARY KEY (table_name, column_name));
-    CREATE TABLE roads (fid INTEGER PRIMARY KEY AUTOINCREMENT, geom LINESTRING, edge_id TEXT, osm_id TEXT, source TEXT, target TEXT, name TEXT, highway TEXT, oneway INTEGER, lanes INTEGER, maxspeed_kmh REAL, length_m REAL);
+    CREATE TABLE roads (fid INTEGER PRIMARY KEY AUTOINCREMENT, geom LINESTRING, edge_id TEXT, edge_id_reverse TEXT, twoway INTEGER, osm_id TEXT, source TEXT, target TEXT, name TEXT, highway TEXT, oneway INTEGER, lanes INTEGER, maxspeed_kmh REAL, length_m REAL);
     CREATE TABLE nodes (fid INTEGER PRIMARY KEY AUTOINCREMENT, geom POINT, node_id TEXT);`);
   db.run("INSERT INTO gpkg_spatial_ref_sys VALUES ('Undefined cartesian SRS', -1, 'NONE', -1, 'undefined', NULL), ('Undefined geographic SRS', 0, 'NONE', 0, 'undefined', NULL), ('WGS 84', 4326, 'EPSG', 4326, ?, NULL)", [WGS84]);
   const geom = (wkb) => { const g = new Uint8Array(8 + wkb.length); g.set([0x47, 0x50, 0, 1, 0xe6, 0x10, 0, 0]); g.set(wkb, 8); return g; };      // "GP", version 0, flags (little endian, no envelope), srs_id 4326 (little endian)
   db.run("BEGIN");
-  const r = db.prepare("INSERT INTO roads (geom, edge_id, osm_id, source, target, name, highway, oneway, lanes, maxspeed_kmh, length_m) VALUES (?,?,?,?,?,?,?,?,?,?,?)");
+  const r = db.prepare("INSERT INTO roads (geom, edge_id, edge_id_reverse, twoway, osm_id, source, target, name, highway, oneway, lanes, maxspeed_kmh, length_m) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)");
   let box = [Infinity, Infinity, -Infinity, -Infinity];
-  for (const e of edges) { r.run([geom(e.wkb), e.edge_id, e.osm_id, e.source, e.target, e.name, e.highway, e.oneway ? 1 : 0, e.lanes, e.maxspeed_kmh, e.length_m]); box = [Math.min(box[0], e.x0), Math.min(box[1], e.y0), Math.max(box[2], e.x1), Math.max(box[3], e.y1)]; }
+  for (const e of edges) { r.run([geom(e.wkb), e.edge_id, e.edge_id_reverse, e.twoway ? 1 : 0, e.osm_id, e.source, e.target, e.name, e.highway, e.oneway ? 1 : 0, e.lanes, e.maxspeed_kmh, e.length_m]); box = [Math.min(box[0], e.x0), Math.min(box[1], e.y0), Math.max(box[2], e.x1), Math.max(box[3], e.y1)]; }
   r.free();
   const n = db.prepare("INSERT INTO nodes (geom, node_id) VALUES (?,?)");
   for (const p of nodes) n.run([geom(p.wkb), p.node_id]);
@@ -431,7 +444,7 @@ async function readPmtiles(bytes) {
 }
 
 export async function verify(id, r, { query, mode, modes = [mode] }) {
-  const nEdges = id === "pmtiles" || id === "mbtiles" || id === "geojson_nodes" ? 0 : await count(query, `SELECT count(*) AS n FROM ${mode}.edges`);
+  const nEdges = id === "pmtiles" || id === "mbtiles" || id === "geojson_nodes" ? 0 : await count(query, id === "geojson" || id === "gpkg" ? roadCountSql(mode) : `SELECT count(*) AS n FROM ${mode}.edges`);
   const nNodes = id === "pmtiles" || id === "mbtiles" || id === "geojson" ? 0 : await count(query, `SELECT count(*) AS n FROM ${mode}.nodes`);
   const same = (what, got, want) => { if (got !== want) throw new Error(`${what}: the file has ${fmt(got)}, the tables have ${fmt(want)}`); };
   try {
@@ -439,6 +452,10 @@ export async function verify(id, r, { query, mode, modes = [mode] }) {
       const g = JSON.parse(await r.blob.text()), want = id === "geojson" ? nEdges : nNodes;
       if (g.type !== "FeatureCollection") throw new Error("the file is not a FeatureCollection");
       same(id === "geojson" ? "roads" : "nodes", g.features.length, want);
+      if (id === "geojson") {                          // every edge of the table is a feature (forward) or the reverse of one
+        const ids = new Set(g.features.flatMap((f) => [f.properties.edge_id, f.properties.edge_id_reverse]).filter(Boolean));
+        same("edge ids", ids.size, await count(query, `SELECT count(*) AS n FROM ${mode}.edges`));
+      }
       const type = id === "geojson" ? "LineString" : "Point";
       if (g.features.some((f) => f.geometry?.type !== type)) throw new Error(`a feature is not a ${type}`);
       return { ok: true, text: `${fmt(want)} ${id === "geojson" ? "roads" : "nodes"}, the same as the tables; plain GeoJSON, every feature a ${type}` };
