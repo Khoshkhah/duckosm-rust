@@ -193,6 +193,8 @@ with sync_playwright() as p:
     wall = page.evaluate("(() => { const r = document.querySelector('#fix-form .wallrow'); return [r.dataset.a, r.dataset.b, r.dataset.computed]; })()")
     new_type = "party" if wall[2] != "party" else "side"
     page.select_option("#fix-form .wallrow select", new_type)
+    assert "building_faces" not in text(page) and not page.is_disabled("#fix-save") and "1 change not added yet" in page.inner_text("#fix-state"), "a wall type waits for Add to changes"
+    page.click("#fix-save")
     y = text(page)
     assert "building_faces" in y and f"type: {new_type}" in y and f"building: {b['osm_id']}" in y, y
     assert "edited" in (page.get_attribute("#fix-form .wallrow", "class") or "")
@@ -481,6 +483,8 @@ with sync_playwright() as p:
     assert page.is_visible("#fix-doors-legend") and "In view" in page.inner_text("#fix-doors-info")
     new_kind = "service" if door["kind"] != "service" else "main"
     page.select_option("#fix-form .doorrow >> nth=0 >> select", new_kind)
+    assert f"entrance: {new_kind}" not in text(page) and not page.is_disabled("#fix-save"), "a door kind waits for Add to changes"
+    page.click("#fix-save")
     y = text(page)
     assert f"id: {door['osm_id']}" in y and "type: node" in y and f"entrance: {new_kind}" in y, y
     print(f"doors: building {bid} has {n_doors} door(s), drawn as dots; the kind of door {door['osm_id']} is {door['kind']} now {new_kind}")

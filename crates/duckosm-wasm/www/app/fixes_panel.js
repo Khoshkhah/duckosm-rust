@@ -173,7 +173,7 @@ export async function initFixesPanel(ctx) {
     $("fix-save").textContent = inChanges ? "Update change" : "Add to changes";
     $("fix-save").disabled = $("fix-revert").disabled = touched.size === 0;
     $("fix-del").disabled = !inChanges;
-    $("fix-state").textContent = touched.size ? `${plural(touched.size, "field")} not added yet.` : inChanges ? "This object is in the changes." : "No change yet. Edit a field.";
+    $("fix-state").textContent = touched.size ? `${plural(touched.size, "change")} not added yet.` : inChanges ? "This object is in the changes." : "No change yet. Edit a field.";
     paintDots();
   }
 
@@ -220,10 +220,10 @@ export async function initFixesPanel(ctx) {
       html += section(`Walls <span class="muted">(${walls.length})</span>`, `<div class="wallbar"><button type="button" class="btn sm" data-wall-nav="-1">‹ Previous</button><button type="button" class="btn sm" data-wall-nav="1">Next ›</button><button type="button" class="btn sm" data-wall-nav="0" id="fix-wall-off">Unselect</button></div>
         <p class="small" id="fix-wallpos" style="margin:6px 0"></p>
         <p class="small" style="margin:0 0 6px">${Object.entries(FACE_COLORS).map(([t, c]) => `<span class="legend" style="margin-left:0;margin-right:8px"><i style="background:${c}"></i>${FACE_NAMES[t]}</span>`).join("")}</p>
-        <div class="walls">${walls.map((w) => { const t = wallType(w), ruled = !!F.findFace(doc, sel.id, w.from_node, w.to_node);
+        <div class="walls">${walls.map((w) => { const t = wallType(w), ruled = !!F.findFace(doc, sel.id, w.from_node, w.to_node) || touched.has(`@wall:${wallKey(w)}`);
           return `<div class="wallrow${ruled ? " edited" : ""}${wallKey(w) === wallSel ? " sel" : ""}" tabindex="0" data-key="${wallKey(w)}" data-a="${w.from_node}" data-b="${w.to_node}" data-computed="${w.computed_type}"><span class="k">#${w.face_index + 1}</span><span class="small">${Number(w.length_m).toFixed(1)} m${w.street_name ? ` · ${esc(w.street_name)}` : ""}</span>
           <select data-wall aria-label="Type of wall ${w.face_index + 1}">${Object.entries(FACE_NAMES).map(([k, v]) => `<option value="${k}"${k === t ? " selected" : ""}>${v}${k === w.computed_type ? " (computed)" : ""}</option>`).join("")}</select></div>`; }).join("")}</div>
-        <p class="why" style="margin:6px 0 0">Click a wall in the list or on the map to select it. A wall type goes to the changes when you pick it.</p>`);
+        <p class="why" style="margin:6px 0 0">Click a wall in the list or on the map to select it. A wall type waits for Add to changes, like a field.</p>`);
     } else if (sel.kind === "building" && !hasFaces() && sel.type === "way") {
       html += section("Walls", '<p class="why" style="margin:0">Build with the layers on to see the walls of a building and to give them a type.</p>');
     }
@@ -233,11 +233,11 @@ export async function initFixesPanel(ctx) {
         const orig = d.kind === "door" ? "" : d.kind, cur = doorKind(d), opts = DOOR_KINDS.some(([v]) => v === cur) ? DOOR_KINDS : [...DOOR_KINDS, [cur, cur]];
         return `<div class="doorrow${cur !== orig ? " edited" : ""}" data-id="${d.osm_id}" data-was="${esc(orig)}" tabindex="0"><span class="k">#${i + 1}</span><span class="small">${esc(addr(d) || d.name || `node ${d.osm_id}`)}${d.access ? ` · access ${esc(d.access)}` : ""}${d.level ? ` · level ${esc(d.level)}` : ""}${d.wheelchair ? ` · wheelchair ${esc(d.wheelchair)}` : ""}</span>
           <select data-door aria-label="Kind of door ${i + 1}">${opts.map(([v, n]) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(n)}</option>`).join("")}</select></div>`; }).join("")}</div>
-        <p class="why" style="margin:6px 0 0">Click a door to zoom to it. A door kind goes to the changes when you pick it. A new door needs a new node, which the fixes file cannot add yet.</p>`
+        <p class="why" style="margin:6px 0 0">Click a door to zoom to it. A door kind waits for Add to changes, like a field. A new door needs a new node, which the fixes file cannot add yet.</p>`
         : '<p class="why" style="margin:0">No door is mapped on this building in OSM.</p>');
     }
     const preset = new Set(fields.map((f) => f.key));
-    const other = Object.keys(draft).filter((k) => !preset.has(k) && !["exclude_modes", "remove", "note"].includes(k));
+    const other = Object.keys(draft).filter((k) => !preset.has(k) && k[0] !== "@" && !["exclude_modes", "remove", "note"].includes(k));
     html += section("Other tags", `<div class="other">${other.map((k) => `<div class="otherrow${k in rule.set || rule.delete.includes(k) ? " edited" : ""}"><span class="k" title="${esc(k)}">${esc(k)}</span><input type="text" data-key="${esc(k)}" value="${esc(draft[k])}" aria-label="${esc(k)}"><button type="button" class="btn sm" data-clear="${esc(k)}" title="Delete this tag" aria-label="Delete ${esc(k)}">×</button></div>`).join("") || '<span class="small muted">None.</span>'}
       <div class="otherrow add"><input type="text" id="fix-addkey" placeholder="key" aria-label="New tag, key"><input type="text" id="fix-addval" placeholder="value" aria-label="New tag, value"><button type="button" class="btn sm" id="fix-add">Add</button></div></div>
       <div class="grid2 fixgrid" style="margin-top:8px"><label for="fix-note" class="small">Note</label><input type="text" id="fix-note" value="${esc(draft.note)}" placeholder="Why"></div>`);
@@ -302,13 +302,15 @@ export async function initFixesPanel(ctx) {
       .map((r) => ({ ...r, osm_id: Number(r.osm_id) }));
   }
   // the kind of a door now: the rule of the node on top of the data (a door with only a `door` tag has no entrance tag: "")
-  const doorKind = (d) => { const r = F.ruleOf(doc, "node", d.osm_id); return "entrance" in r.set ? String(r.set.entrance) : r.delete.includes("entrance") ? "" : d.kind === "door" ? "" : d.kind; };
-  function setDoorKind(id, v, orig) {
+  const doorKindNow = (d) => { const r = F.ruleOf(doc, "node", d.osm_id); return "entrance" in r.set ? String(r.set.entrance) : r.delete.includes("entrance") ? "" : d.kind === "door" ? "" : d.kind; };
+  // a wall type and a door kind wait in the draft like a field, under the keys "@wall:from|to" and "@door:id" (a tag key never starts with "@"), until Add to changes
+  const doorKind = (d) => draft[`@door:${d.osm_id}`] ?? doorKindNow(d);
+  function applyDoorKind(id, v, orig) {
     const rule = structuredClone(F.ruleOf(doc, "node", id));
     if (!("entrance" in rule.was) && !("entrance" in rule.set) && !rule.delete.includes("entrance")) rule.was.entrance = orig === "" ? null : orig;
     delete rule.set.entrance; rule.delete = rule.delete.filter((x) => x !== "entrance");
     if (v === orig) delete rule.was.entrance; else if (v === "") rule.delete.push("entrance"); else rule.set.entrance = v;
-    commit(() => F.writeRule(doc, "node", id, rule));
+    F.writeRule(doc, "node", id, rule);
   }
   async function loadWalls(id) {
     if (!hasFaces()) return [];
@@ -349,24 +351,24 @@ export async function initFixesPanel(ctx) {
     const i = walls.findIndex((w) => wallKey(w) === wallSel);
     selectWall(wallKey(walls[i < 0 ? (dir > 0 ? 0 : walls.length - 1) : (i + dir + walls.length) % walls.length]), { zoom: true });
   }
-  const wallType = (w) => F.findFace(doc, sel.id, w.from_node, w.to_node)?.type ?? w.face_type;
+  const wallTypeNow = (w) => F.findFace(doc, sel.id, w.from_node, w.to_node)?.type ?? w.face_type;
+  const wallType = (w) => draft[`@wall:${wallKey(w)}`] ?? wallTypeNow(w);
 
 
   // ---- edits in the form
   function onInput(e) {
     const el = e.target;
     if (el.dataset?.door !== undefined) {                                        // the kind of a door: a node edit at once
-      const row = el.closest(".doorrow");
-      setDoorKind(Number(row.dataset.id), el.value, row.dataset.was);
+      const row = el.closest(".doorrow"), k = `@door:${row.dataset.id}`, d = doors.find((x) => x.osm_id === Number(row.dataset.id));
+      if (el.value === doorKindNow(d)) { touched.delete(k); delete draft[k]; } else { touched.add(k); draft[k] = el.value; }
       row.classList.toggle("edited", el.value !== row.dataset.was);
-      return;
+      return paintBar();
     }
     if (el.dataset?.wall !== undefined) {                                        // the type of a wall: a rule at once (a Save button is for tags)
-      const row = el.closest(".wallrow"), a = Number(row.dataset.a), b = Number(row.dataset.b);
-      commit(() => F.setFace(doc, sel.id, a, b, el.value, row.dataset.computed));
-      row.classList.toggle("edited", !!F.findFace(doc, sel.id, a, b));
-      drawFaces();
-      return;
+      const row = el.closest(".wallrow"), k = `@wall:${row.dataset.key}`, w = walls.find((x) => wallKey(x) === row.dataset.key);
+      if (el.value === wallTypeNow(w)) { touched.delete(k); delete draft[k]; } else { touched.add(k); draft[k] = el.value; }
+      row.classList.toggle("edited", touched.has(k) || !!F.findFace(doc, sel.id, w.from_node, w.to_node));
+      return paintBar();
     }
     if (el.name === "fix-ex") { draft.exclude_modes = [...document.querySelectorAll("input[name=fix-ex]:checked")].map((c) => c.value); touched.add("exclude_modes"); return paintBar(); }
     if (el.id === "fix-note") { draft.note = el.value; touched.add("note"); return paintBar(); }
@@ -387,7 +389,9 @@ export async function initFixesPanel(ctx) {
     }
     const rule = structuredClone(F.ruleOf(doc, sel.type, sel.id)), fields = presetsOf(), ruleFields = new Map(fields.filter(isRuleKey).map((f) => [f.key, f]));
     const dataMode = data.mode ?? {};
+    const specials = [...touched].filter((k) => k[0] === "@");                        // wall types and door kinds
     for (const k of touched) {
+      if (k[0] === "@") continue;
       if (k === "note") { rule.note = (draft.note ?? "").trim(); continue; }
       if (k === "exclude_modes") { draft.exclude_modes.length ? (rule.mode.exclude_modes = draft.exclude_modes) : delete rule.mode.exclude_modes; continue; }
       if (k === "remove") { draft.remove ? (rule.mode.remove = true) : delete rule.mode.remove; continue; }
@@ -414,8 +418,14 @@ export async function initFixesPanel(ctx) {
       } else if (v === data.tags[k] && !(k in rule.set)) { /* the same as the data: no change */ }
       else { rule.set[k] = v; rule.delete = rule.delete.filter((x) => x !== k); }
     }
-    commit(() => F.writeRule(doc, sel.type, sel.id, rule));
-    status(F.isEmptyRule(rule) ? "No change to add." : `Added to the changes: ${sel.type} ${sel.id}.`);
+    commit(() => {
+      F.writeRule(doc, sel.type, sel.id, rule);
+      for (const k of specials) {
+        if (k.startsWith("@wall:")) { const [a, b] = k.slice(6).split("|").map(Number), w = walls.find((x) => wallKey(x) === k.slice(6)); F.setFace(doc, sel.id, a, b, draft[k], w.computed_type); }
+        else { const id = Number(k.slice(6)), d = doors.find((x) => x.osm_id === id); applyDoorKind(id, draft[k], d.kind === "door" ? "" : d.kind); }
+      }
+    });
+    status(F.isEmptyRule(rule) && !specials.length ? "No change to add." : `Added to the changes: ${sel.type} ${sel.id}.`);
     touched = new Set();
     draft = initialDraft(); renderForm(); drawSelected(false);
   }
