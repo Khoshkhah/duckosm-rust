@@ -222,6 +222,8 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   #fix-panel .fix-hd { flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 15px; border-bottom: 1px solid var(--line); }
   #fix-panel .fix-hd h2 { margin: 0; font-size: 16px; text-transform: none; color: var(--fg); }
   #fix-panel .fix-hd .btn svg { width: 14px; height: 14px; }
+  #fix-panel #fix-hide { margin-left: auto; width: 32px; padding: 0; justify-content: center; }
+  html.rs-phone #fix-hide { display: none; }       /* a phone has the sheet's grip */
   #fix-panel .fix-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 15px; overscroll-behavior: contain; }
   #fix-panel .fix-tabs { flex: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 10px 15px 0; padding: 3px; background: var(--surface); border-radius: 10px; }
   #fix-panel .fix-tabs [role=tab] { position: relative; height: 34px; border: 0; border-radius: 8px; background: none; color: var(--muted); font: inherit; font-weight: 500; cursor: pointer; }
@@ -610,7 +612,7 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
   <p id="buildhint" class="why" aria-live="polite"></p>
 </footer>
 <div id="fix-panel" aria-label="Fix OSM data">
-  <div class="fix-hd"><button id="fix-back" class="btn" type="button"><svg><use href="#i-chevron"/></svg>Steps</button><h2>Fix OSM data</h2></div>
+  <div class="fix-hd"><button id="fix-back" class="btn" type="button"><svg><use href="#i-chevron"/></svg>Steps</button><h2>Fix OSM data</h2><button id="fix-hide" class="btn" type="button" title="Hide panel" aria-label="Hide panel" aria-controls="sb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/><path d="m8.5 9.5 2.5 2.5-2.5 2.5"/></svg></button></div>
   <div class="fix-tabs" role="tablist" aria-label="What to fix">
     <button role="tab" id="fix-tab-road" data-tab="road" aria-controls="fix-edit" aria-selected="true" type="button">Road<i class="dot" hidden title="Not added to the changes yet"></i></button>
     <button role="tab" id="fix-tab-building" data-tab="building" aria-controls="fix-edit" aria-selected="false" type="button">Building<i class="dot" hidden title="Not added to the changes yet"></i></button>
@@ -922,7 +924,7 @@ function showPanel(on, remember = true) {
 }
 if (kept("duckosm.panel") === "collapsed" && !phone.matches) showPanel(false);
 phone.addEventListener("change", () => { if (phone.matches) showPanel(true, false); });
-$("sb-hide").onclick = () => showPanel(false);
+$("sb-hide").onclick = $("fix-hide").onclick = () => showPanel(false);      // the second button is in the header of the Fix OSM data panel, which has no top row
 $("sb-show").onclick = () => { showPanel(true); $("sb-hide").focus(); };
 // the sheet and the panel move in a transition (0.15 s): each frame of it gives the padding, and its end gives the last one, also when the main
 // thread is busy

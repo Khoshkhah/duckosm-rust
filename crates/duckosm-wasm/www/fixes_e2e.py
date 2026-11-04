@@ -80,6 +80,13 @@ with sync_playwright() as p:
     page.click("#fix-open")
     assert all(page.is_visible(f"#fix-tab-{t}") for t in ("road", "building", "node", "turns", "new", "changes")), "the six tabs"
     assert page.get_attribute("#fix-tab-road", "aria-selected") == "true", "the panel opens on the Road tab"
+    # the panel hides (the map takes its place) and the button at the corner shows it again, with the tab and the picks as they were
+    page.click("#fix-hide")
+    page.wait_for_function("document.getElementById('sb').classList.contains('hidden')")
+    assert page.is_visible("#sb-show") and page.evaluate("document.body.classList.contains('editing-fixes')")
+    page.click("#sb-show")
+    page.wait_for_function("!document.getElementById('sb').classList.contains('hidden')")
+    assert page.is_visible("#fix-panel") and page.get_attribute("#fix-tab-road", "aria-selected") == "true"
     assert not page.is_visible("#fix-walls-all"), "the walls check box is only in the Building tab"
 
     # a click on a road: the form has the data of the road, all its tags are listed, and no popup shows
