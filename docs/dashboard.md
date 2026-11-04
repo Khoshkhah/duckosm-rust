@@ -291,7 +291,7 @@ Card 8 opens roadstyle's level editor for the roads that you built: change the l
 
 ![Card 9: the network and the export formats](img/dashboard/11b-export.png)
 
-Card 9 gives the network that you built to other software. It is off until a build ends. The files are made in your browser from the tables, and each **Download** button makes one file. The **Network** list shows the networks that you built (it shows when there is more than one).
+Card 9 gives the network that you built to other software. It is off until a build ends. The files are made in your browser from the tables, and each **Download** button makes one file. The **Network of the files** list (below the tiles) sets the network for GeoPackage, GeoJSON, MATSim and SUMO. It shows when you built more than one network. The tiles do not use it.
 
 | Format | File | What it has |
 |---|---|---|

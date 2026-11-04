@@ -68,6 +68,8 @@ with sync_playwright() as p:
     if "folded" in (page.get_attribute("#step9-card", "class") or ""):
         page.click("#step9")
     assert page.locator("#export-list [data-fmt]").count() == 6 and page.locator("#export-mode option").count() == 3
+    assert page.evaluate("document.getElementById('export-zmax').compareDocumentPosition(document.getElementById('export-mode-row')) & Node.DOCUMENT_POSITION_FOLLOWING"), "the network list comes after the tile section (it is for the files)"
+    assert page.evaluate("getComputedStyle(document.querySelector('#export-full').closest('.optrow')).display") == "flex", "the Everything row has the card's option style"
     n_edges = rows(page, "SELECT count(*)::INTEGER AS n FROM driving.edges")[0]["n"]
     n_nodes = rows(page, "SELECT count(*)::INTEGER AS n FROM driving.nodes")[0]["n"]
     ids = {str(r["edge_id"]) for r in rows(page, "SELECT edge_id::VARCHAR AS edge_id FROM driving.edges")}
