@@ -264,6 +264,7 @@ the hexagons of the [H3](https://h3geo.org) grid:
 - **The cap.** At most 500 cells and 5,000 km² (the count of cells times the average area of a cell of the level). A click that goes over
   a cap does nothing, and the text under the button says why. A mistake at a coarse level cannot ask for a huge build.
 - **The grid.** While the H3 tab shows, a transparent layer (`h3-grid`: thin gray lines, no fill) draws every hexagon in view at the chosen level, so you see what you can pick. The hexagon under the pointer is lit (`h3-hover`), and the picked cells are filled in blue (`h3-fill`). The grid is made again after each move of the map and each change of the level. When the view would have more than 4,000 hexagons (a small level at a low zoom), there is no grid, and the note under the hint says "Zoom in, or choose a bigger hexagon, to see the hexagons." The note also says how many hexagons are in view. The colors follow the theme: the light theme has dark gray lines and a blue hover, the dark theme has light lines, a white hover and a lighter blue for the picked cells (`h3Paint`). `h3_e2e.py` checks the grid, the lit hexagon and the two themes.
+- **H3 IDs and the name.** The Search tab takes H3 cell IDs (15 hex digits; several separated by spaces or commas, one level from 5 to 10, at most 500 cells and 5,000 km²). It makes the area from the cells with no network, opens the H3 tab and zooms to them. The suggested name is the ID of the first cell, with `-plus-N` for N more. A name that you typed stays when you pick more cells. A row of the base-map box, **H3 hexagons**, shows or hides the grid; a build from hexagons hides it.
 - **Card 1 stays open** while the H3 tab is open, because the person clicks more cells. With the other tabs, card 1 folds when the area
   is ready, as before.
 - Another way of making the area (a search result, a drawing, a file) removes the cells and their lines.
@@ -427,10 +428,7 @@ A change of format does not build the roads again. The map worker keeps its tile
 
 Each build is saved in the browser (OPFS, the origin private file system): the tables as Parquet files, `meta.json` (the
 name, the boundary, the fixes text, the summary and the table list) and a cache of the drawn roads (`viz_roads.parquet`,
-`viz_features.parquet`), and, when the build made one, the cut file `cut.osm.pbf` (so the **.osm.pbf** button of card 5 is there after a restore; the page reads the file from the browser storage only when you download it). The code is `www/app/area_store.js`. A new visit opens the **Saved** tab of card 1 when an area is saved
-(until 2026-11-04 a banner asked "Open your last area?"). The tab lists all areas, with **Open** and **Delete**. **Open**
-loads the area into DuckDB and draws the map again with no build (Monaco: 1.6 s). The tab bar of card 1 has one row for all
-its tabs.
+`viz_features.parquet`), and, when the build made one, the cut file `cut.osm.pbf` (so the **.osm.pbf** button of card 5 is there after a restore; the page reads the file from the browser storage only when you download it). The code is `www/app/area_store.js`. A new visit starts on the OpenFreeMap base map, with the card **Your areas** above card 1 (it shows only when an area is saved). A click on a row shows the boundary of the area on the map and zooms to it (a second click hides it). **Open** loads the area into DuckDB and draws the map again with no build (Monaco: 1.6 s). **Delete** asks a second click. The page does not redraw the boundary of the last build at the start, and a build does not save its blank base map as the choice for the next visit.
 
 - A save replaces the area: it removes all old files first, and writes `meta.json` last. A restore reads only the files that
   `meta.json` lists, so the tables of an older build (other modes) never come back.

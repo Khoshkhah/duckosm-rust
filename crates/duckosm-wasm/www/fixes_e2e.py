@@ -201,6 +201,11 @@ with sync_playwright() as p:
     assert "Wall 3 of" in page.inner_text("#fix-wallpos")
     page.click("[data-wall-nav='-1']"); page.click("[data-wall-nav='-1']")
     assert "Wall 1 of" in page.inner_text("#fix-wallpos")
+    page.click("[data-wall-nav='-1']")                      # Wall 1 and Previous: the last wall; its row scrolls into view above the bar at the bottom of the panel
+    page.wait_for_timeout(300)
+    assert page.evaluate("(() => { const r = document.querySelector('#fix-form .wallrow.sel').getBoundingClientRect(), b = document.querySelector('#fix-panel .fix-body').getBoundingClientRect(), bars = [...document.querySelectorAll('#fix-panel .fix-bar')].filter((x) => x.offsetParent).map((x) => x.getBoundingClientRect().top); return r.top >= b.top - 1 && r.bottom <= Math.min(b.bottom, ...bars) + 1; })()"), "the picked wall is under the bar or out of the panel"
+    page.click("[data-wall-nav='1']")
+    assert "Wall 1 of" in page.inner_text("#fix-wallpos")
     w3 = rows(page, f"SELECT ST_X(ST_LineInterpolatePoint(geometry, 0.5)) AS x, ST_Y(ST_LineInterpolatePoint(geometry, 0.5)) AS y FROM main.building_faces WHERE building_id = {b['osm_id']} AND face_index = 2")[0]
     px = at(page, w3["x"], w3["y"])
     page.mouse.click(*px)                                  # a real click on the third wall of the picked building
@@ -263,8 +268,30 @@ with sync_playwright() as p:
     assert page.get_attribute("#fix-out .turn", "data-to") in page.evaluate("JSON.stringify(duckMap.getFilter('fix-turn-hl'))"), "a hover on a row outlines its road"
     assert page.is_visible("#fix-turn-legend")
     print("the Turn tab draws the start road, the junction ring and the roads that leave it")
+    # the junctions are a list like the walls: the junction that the tab picked first has the mark, no row is wider than the panel, a row under the pointer has a tint
+    assert page.locator("#fix-via-list .junrow.sel").count() == 1 and page.eval_on_selector("#fix-via", "(s) => s.hidden")
+    assert page.evaluate("[...document.querySelectorAll('#fix-via-list .junrow, #fix-out .turn')].every((r) => r.getBoundingClientRect().right <= document.getElementById('fix-panel').getBoundingClientRect().right + 1)"), "a row is wider than the panel"
+    page.mouse.move(5, 5)
+    still = page.eval_on_selector("#fix-out .turn", "(r) => getComputedStyle(r).backgroundColor")
+    page.hover("#fix-out .turn")
+    assert page.eval_on_selector("#fix-out .turn", "(r) => getComputedStyle(r).backgroundColor") != still, "a row under the pointer changes its color"
+    # a click on a row of a road that leaves picks it: the mark stays and the map keeps the outline after the pointer goes; a second click drops it
+    page.click("#fix-out .turn .small")
+    to = page.get_attribute("#fix-out .turn", "data-to")
+    page.mouse.move(5, 5)
+    assert page.locator("#fix-out .turn.sel").count() == 1 and to in page.evaluate("JSON.stringify(duckMap.getFilter('fix-turn-hl'))"), "the picked road keeps its outline"
+    page.click("#fix-out .turn .small")
+    assert page.locator("#fix-out .turn.sel").count() == 0 and "-1" in page.evaluate("JSON.stringify(duckMap.getFilter('fix-turn-hl'))")
+    # the pick colors show in the dark theme too (the panel's accent, not a dark gray)
+    page.evaluate("rsSetTheme('dark')")
+    page.click("#fix-out .turn .small")
+    page.mouse.move(5, 5)
+    sel = page.eval_on_selector("#fix-out .turn.sel", "(r) => { const c = getComputedStyle(r); return [c.outlineColor, c.backgroundColor, getComputedStyle(document.getElementById('fix-panel')).backgroundColor]; }")
+    assert sel[0] != sel[1] and sel[1] != sel[2] and sel[0] != "rgb(17, 24, 39)", sel
+    page.click("#fix-out .turn .small")
+    page.evaluate("rsSetTheme('light')")
     # the junction list says how many roads leave each junction, and the roads that arrive can be the start road
-    assert "leave" in page.evaluate("document.querySelector('#fix-via').selectedOptions[0].textContent"), "the junction list has the number of roads that leave"
+    assert "leave" in page.inner_text("#fix-via-list .junrow.sel"), "the junction list has the number of roads that leave"
     arr = page.get_attribute("#fix-out [data-from]", "data-from")
     page.click("#fix-out [data-from]")
     page.wait_for_function(f"document.getElementById('fix-from').value === '{arr}'", timeout=10_000)
@@ -469,9 +496,9 @@ with sync_playwright() as p:
         print("DEBUG", page.evaluate("[window.fixesPanel.drawn(), document.getElementById('fix-nodes-info').textContent, duckMap.getZoom(), duckMap.getCenter(), document.querySelector('#fix-tab-node').getAttribute('aria-selected')]"), j)
         raise
     page.mouse.click(*px)
-    page.wait_for_function(f"document.querySelector('#fix-obj .objhead')?.textContent.includes('node {j['id']}') && document.querySelector('[data-quick=traffic_signals]')", timeout=20_000)
+    page.wait_for_function(f"document.querySelector('#fix-obj .objhead')?.textContent.includes('node {j['id']}') && document.querySelector('#fixf-highway')", timeout=20_000)
     assert "no traffic tag" in page.inner_text("#fix-obj"), page.inner_text("#fix-obj")
-    page.click("[data-quick=traffic_signals]")
+    page.select_option("#fixf-highway", "traffic_signals")
     assert page.input_value("#fixf-highway") == "traffic_signals"
     page.click("#fix-save")
     y = text(page)
@@ -480,13 +507,10 @@ with sync_playwright() as p:
     plain = rows(page, "SELECT nid::BIGINT AS id FROM (SELECT source AS nid, target AS o FROM driving.edges UNION ALL SELECT target, source FROM driving.edges) GROUP BY nid HAVING count(DISTINCT o) = 2 "
                        "AND nid IN (SELECT node_id FROM driving.way_nodes) AND nid NOT IN (SELECT osm_id FROM features.traffic) LIMIT 1")[0]["id"]
     page.evaluate(f"window.fixesPanel.select('node', 'node', {plain})")
-    page.wait_for_function(f"document.querySelector('#fix-obj .objhead')?.textContent.includes('node {plain}') && document.querySelector('[data-quick=traffic_signals]')", timeout=20_000)
-    assert page.is_disabled("[data-quick=traffic_signals]") and "at least 3 roads" in page.inner_text("#fix-obj .quickwhy"), page.inner_text("#fix-obj")
-    page.select_option("#fixf-highway", "traffic_signals")
-    page.click("#fix-save")
-    assert f"id: {plain}" not in text(page), "a signal is refused on a node with 2 roads"
+    page.wait_for_function(f"document.querySelector('#fix-obj .objhead')?.textContent.includes('node {plain}') && document.querySelector('#fixf-highway')", timeout=20_000)
+    assert page.evaluate("document.querySelector('#fixf-highway option[value=traffic_signals]').disabled") and "at least 3 roads" in page.inner_text("#fix-form .quickwhy"), page.inner_text("#fix-form")
     page.click("#fix-unselect")
-    print("the constraints: a node with 2 roads takes no traffic signal (the button is off with its reason, and Add to changes refuses it)")
+    print("the constraints: a node with 2 roads takes no traffic signal (the Kind option is off with its reason under it)")
 
     # Delete: a building (a way) and a road are deleted from the data (the rule `remove`), and they are in no table after the build
     ob = rows(page, f"SELECT osm_id FROM features.buildings WHERE osm_type = 'way' AND osm_id != {b['osm_id']} LIMIT 1")[0]["osm_id"]
@@ -526,7 +550,7 @@ with sync_playwright() as p:
         page.evaluate("document.getElementById('fixesyaml').click()")
     body = pathlib.Path(dl.value.path()).read_text()
     assert dl.value.suggested_filename == "osm_fixes.yaml" and "tag_edits" in body and f"id: {j['id']}" in body, (dl.value.suggested_filename, body[:200])
-    print(f"a traffic signal at the junction {j['id']}: a gray dot, a click, Add a traffic signal here, Add to changes, build again: it is in features.traffic")
+    print(f"a traffic signal at the junction {j['id']}: a gray dot, a click, Kind Traffic signals, Add to changes, build again: it is in features.traffic")
     print(f"after the build: lanes 7, walk type sidewalk, building floors {bt['l']} roof {bt['r']} {bt['c']}, node tags changed; amber features: {amber(page)}")
     # the Arrows switch in roadstyle's base-map box: on while the roads show, a click hides the one-way arrows, a second click brings them back
     ARROWS = "duckMap.getStyle().layers.filter((l) => l.type === 'symbol' && (JSON.stringify((l.layout || {})['icon-image'] || '').includes('oneway') || /arrows/.test(l.id)))"

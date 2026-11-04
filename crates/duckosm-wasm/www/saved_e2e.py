@@ -78,7 +78,18 @@ with sync_playwright() as p:
     assert not page.evaluate("document.getElementById('areas-card').hidden"), "the card \"Your areas\" shows on a new visit"
     assert page.get_attribute("#tab-find", "aria-selected") == "true", "Search stays the first tab"
     page.wait_for_selector("#areas-card .load-saved-area-btn", state="visible", timeout=30_000)
+    # a new visit shows the OpenFreeMap base map; a click on the row shows the boundary and zooms to it, a second click hides it, Open loads the area
+    page.wait_for_function("'vbm-openmaptiles' in duckMap.getStyle().sources", timeout=30_000)   # OpenFreeMap's vector style, although the build before set the blank base map
+    row = page.locator("#areas-card .saved-area")
+    row.locator("strong").click()
+    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['preview-line']}).length > 0 && !duckMap.isMoving()", timeout=30_000)
+    assert "picked" in row.get_attribute("class") and page.evaluate("duckMap.getZoom()") > 8, "the boundary shows"
+    row.locator("strong").click()
+    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['preview-line']}).length === 0", timeout=10_000)
+    row.locator("strong").click()
+    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['preview-line']}).length > 0", timeout=10_000)
     page.click(".load-saved-area-btn")
+    page.wait_for_function("duckMap.getSource('preview').serialize().data.features?.length === 0", timeout=30_000)
     page.wait_for_function("document.getElementById('buildstatus').textContent.startsWith('Restored') || document.getElementById('buildstatus').textContent.startsWith('Failed')", timeout=300_000)
     status = page.inner_text("#buildstatus")
     print(status)

@@ -120,6 +120,16 @@ def run(browser, phone):
     page.wait_for_function("duckMap.getPaintProperty('h3-grid', 'line-color') === '#e2e8f0'", timeout=10_000)
     page.evaluate("rsSetTheme('light')")
     page.wait_for_function("duckMap.getPaintProperty('h3-grid', 'line-color') === '#475569'", timeout=10_000)
+    # the row "H3 hexagons" of the base-map box (roadstyle's rsAddTopRow) shows or hides the layers
+    row = page.locator("label:has-text('H3 hexagons') input")
+    vis = lambda: page.evaluate("['h3-grid', 'h3-fill', 'h3-hover', 'h3-line'].map((l) => duckMap.getLayoutProperty(l, 'visibility') ?? 'visible')")  # noqa: E731
+    assert row.count() == 1 and row.evaluate("(c) => c.checked && !c.disabled") and set(vis()) == {"visible"}, (row.count(), vis())
+    row.evaluate("(c) => c.click()")
+    page.wait_for_function("duckMap.getLayoutProperty('h3-grid', 'visibility') === 'none'", timeout=10_000)
+    assert set(vis()) == {"none"} and page.evaluate("duckMap.queryRenderedFeatures({layers: ['h3-grid']}).length") == 0, vis()
+    row.evaluate("(c) => c.click()")
+    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['h3-grid']}).length > 10", timeout=20_000)
+    assert set(vis()) == {"visible"}, vis()
         # the four tabs fit in the panel and the page does not scroll sideways
     tabs = page.evaluate("[...document.querySelectorAll('#step1-card [role=tab]:not([hidden])')].map((t) => { const r = t.getBoundingClientRect(); return [r.left, r.right, r.width]; })")
     sb = page.evaluate("(() => { const r = document.getElementById('sb').getBoundingClientRect(); return [r.left, r.right]; })()")
@@ -162,6 +172,29 @@ def run(browser, phone):
     click("#h3-clear")
     cells(0)
     assert page.inner_text("#summary") == "" and page.evaluate("document.getElementById('h3-clear').disabled && document.getElementById('save').disabled")
+    # the Search tab takes H3 IDs: one cell, then seven; the name is the ID (the first cell and "-plus-6"); a wrong ID says so
+    def search_ids(text_):
+        click("#tab-find")
+        page.fill("#q", text_)
+        page.keyboard.press("Enter")
+
+    search_ids(centre)
+    cells(1)
+    assert page.get_attribute("#tab-h3", "aria-selected") == "true" and page.input_value("#name") == centre, (page.input_value("#name"), centre)
+    assert page.evaluate("window.h3Cells.has(" + json.dumps(centre) + ")") and page.get_attribute("#h3-level", "value") in (None, "9") or page.input_value("#h3-level") == "9"
+    page.wait_for_function("!duckMap.isMoving()")
+    search_ids(" ".join([centre, *ring]))
+    cells(7)
+    assert page.input_value("#name") == f"{centre}-plus-6", page.input_value("#name")
+    page.fill("#name", "my hexagons")
+    pick(ring[0])
+    cells(6)
+    assert page.input_value("#name") == "my hexagons", "a name that the person typed stays"
+    search_ids("123456789abcdef")
+    page.wait_for_function("document.getElementById('found').textContent.includes('not an H3 cell ID')", timeout=10_000)
+    click("#tab-h3")
+    click("#h3-clear")
+    cells(0)
     # two cells that do not touch are two polygons
     far = h3(page, "return h3.gridDiskDistances(args[0], 2)[2][0];", centre)
     pick(centre)
@@ -234,6 +267,12 @@ def run(browser, phone):
     pad = 0.01     # a road that crosses the border is kept whole
     assert n["n"] > 0 and n["w"] > box[0] - pad and n["s"] > box[1] - pad and n["e"] < box[2] + pad and n["n2"] < box[3] + pad, (n, box)
     print("build from the cells:", n["n"], "driving edges")
+    # a build from hexagons hides them (the boundary of the area stays, like for another area); the H3 tab shows them again
+    assert set(vis()) == {"none"} and not row.evaluate("(c) => c.checked"), (vis(), row.evaluate("(c) => c.checked"))
+    assert page.evaluate("duckMap.getLayer('area-line') !== undefined && duckMap.getLayoutProperty('area-line', 'visibility') !== 'none'"), "the boundary stays"
+    click("#tab-h3")
+    page.wait_for_function("(duckMap.getLayoutProperty('h3-grid', 'visibility') ?? 'visible') === 'visible'", timeout=10_000)
+    assert row.evaluate("(c) => c.checked")
     page.screenshot(path=str(out / "desk-4-built.png"))
     page.context.close()
 

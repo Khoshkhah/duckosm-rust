@@ -37,6 +37,23 @@ with sync_playwright() as p:
     z1 = page.evaluate("duckMap.getZoom()")
     assert z1 > z0 + 4, (z0, z1)
     print(f"a place: the boundary shows and the map zoomed from {z0:.1f} to {z1:.1f}")
+    # Unselect the area: the button of card 1 (or a second click on the chosen result) removes the boundary and the area, and another place can be chosen
+    clear = page.locator(".area-clear:visible")   # card 1 folds itself when the area is chosen: the button of card 2 shows
+    assert clear.is_enabled()
+    clear.click()
+    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['area-line']}).length === 0 && document.getElementById('summary').textContent === ''", timeout=10_000)
+    assert clear.is_disabled() and page.locator("#found input:checked").count() == 0 and page.inner_text("#summary") == ""
+    n = page.evaluate("window.areas")
+    page.click("#found label >> nth=0")
+    page.wait_for_function(f"window.areas > {n}", timeout=60_000)
+    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['area-line']}).length > 0", timeout=30_000)
+    page.evaluate("(() => { const l = document.querySelector('#found label'); l.dispatchEvent(new MouseEvent('mousedown', {bubbles: true})); l.click(); })()")     # a second click on the chosen result (card 1 is folded: no real click)
+    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['area-line']}).length === 0 && document.getElementById('summary').textContent === ''", timeout=10_000)
+    n = page.evaluate("window.areas")
+    search(page, "Narva")
+    page.click("#found label >> nth=0")
+    page.wait_for_function(f"window.areas > {n}", timeout=60_000)
+    print("Unselect: the button and a second click remove the boundary, and another place can be chosen")
     page.close()
 
     # Nominatim fails: the map moves to the box at once, the text stays, a second click asks again, and the box can be the area

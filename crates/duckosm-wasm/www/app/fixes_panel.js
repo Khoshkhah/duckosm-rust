@@ -16,7 +16,7 @@ const PANE = { road: "fix-edit", building: "fix-edit", node: "fix-edit", turns: 
 const HINTS = {
   road: ["Change the tags of a road: lanes, speed, sidewalk, surface and more.", "Click a road on the map, or type its OSM way ID."],
   building: ["Change the tags of a building: floors, height, roof and facade. Give each wall a type, and look at its doors.", "Click a building on the map, or type its OSM ID. The doors show as brown dots at zoom 17 or more."],
-  node: ["A node is one point of OSM. Here it is a traffic signal, a crossing, or a junction of the roads. To add a traffic signal, pick the junction (a gray dot) and press Add a traffic signal here. A change shows in the layer table features.traffic, not in the road edges.", "Click a dot on the map, or type the OSM node ID. The signals and crossings show at zoom 14 or more, and the junctions at zoom 16 or more."],
+  node: ["A node is one point of OSM. Here it is a traffic signal, a crossing, or a junction of the roads. To add a traffic signal, pick the junction (a gray dot), set Kind to Traffic signals and press Add to changes. A change shows in the layer table features.traffic, not in the road edges.", "Click a dot on the map, or type the OSM node ID. The signals and crossings show at zoom 14 or more, and the junctions at zoom 16 or more."],
 };
 const TURN_OUT = "#16a34a";                  // the roads that leave the junction of the Turn tab
 const DOOR_COLOR = "#92400e";                  // the doors of the Building tab: brown dots
@@ -129,6 +129,7 @@ export async function initFixesPanel(ctx) {
     }
     return "";
   }
+  let turnSel = null;                                // the road of the Turn list that is picked (its row has the mark and the map outlines it)
   const presetsOf = () => presets[sel?.kind ?? kind] ?? [];
   const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
   const isRuleKey = (f) => !!f.rule;
@@ -242,6 +243,11 @@ export async function initFixesPanel(ctx) {
       <div class="grid2 fixgrid" style="margin-top:8px"><label for="fix-note" class="small">Note</label><input type="text" id="fix-note" value="${esc(draft.note)}" placeholder="Why"></div>`);
     html += deleteSection(rule);
     box.innerHTML = html;
+    if (sel.kind === "node") {                       // the Kind field offers only what the node can have; the reason is under it
+      const hw = $("fixf-highway"), no = [["traffic_signals", "Traffic signals"], ["crossing", "Crossing"]].map(([k, n]) => [k, n, nodeRule(k, data)]).filter(([, , w]) => w);
+      for (const [k] of no) { const o = hw?.querySelector(`option[value="${k}"]`); if (o && hw.value !== k) o.disabled = true; }
+      if (hw && no.length) hw.closest(".fixgrid").insertAdjacentHTML("afterend", no.map(([, n, w]) => `<p class="why quickwhy" style="margin:4px 0 0">${n}: ${esc(w)}</p>`).join(""));
+    }
     $("fix-actions").hidden = false;
     paintBar(); paintWalls();
   }
@@ -264,14 +270,8 @@ export async function initFixesPanel(ctx) {
     const name = data.tags.name ? ` “${esc(data.tags.name)}”` : "";
     const head = `${KIND_NAME[sel.kind === "building" && sel.type === "relation" ? "relation" : sel.kind]} ${sel.type} ${sel.id}${name}`;
     const tagCount = Object.keys(data.tags).length;
-    let quick = "";
-    if (sel.kind === "node" && data.found && !data.tags.highway) {
-      const why = { traffic_signals: nodeRule("traffic_signals", data), crossing: nodeRule("crossing", data) };
-      quick = `<div class="row" style="margin-top:8px"><button type="button" class="btn sm" data-quick="traffic_signals"${why.traffic_signals ? " disabled" : ""}>Add a traffic signal here</button><button type="button" class="btn sm" data-quick="crossing"${why.crossing ? " disabled" : ""}>Add a crossing here</button></div>`
-        + [["Traffic signal", why.traffic_signals], ["Crossing", why.crossing]].filter(([, w]) => w).map(([n, w]) => `<p class="why quickwhy" style="margin:4px 0 0">${n}: ${esc(w)}</p>`).join("");
-    }
     box.innerHTML = `<div class="objhead">${head}</div>${data.found ? "" : '<p class="why">Not found in this area. A rule for this ID still works if the ID is right.</p>'}${data.facts.map((f) => `<div class="small muted">${esc(f)}</div>`).join("")}
-      <details class="alltags"><summary>All tags in the data (${tagCount})</summary><table>${Object.entries(data.tags).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("") || '<tr><td colspan="2" class="muted">No tags (build with the layers on to see them all).</td></tr>'}</table></details>${quick}`;
+      <details class="alltags"><summary>All tags in the data (${tagCount})</summary><table>${Object.entries(data.tags).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("") || '<tr><td colspan="2" class="muted">No tags (build with the layers on to see them all).</td></tr>'}</table></details>`;
   }
 
   async function select(k, type, id, { zoom = false, go = true } = {}) {
@@ -327,9 +327,19 @@ export async function initFixesPanel(ctx) {
     }
     if ($("fix-wall-off")) $("fix-wall-off").disabled = i < 0;
   }
+  // scroll a row of a list into view in the panel, above the bar that sticks to its bottom (scrollIntoView does not know the bar and leaves the row under it)
+  function reveal(row) {
+    const body = row?.closest(".fix-body");
+    if (!body) return;
+    const b = body.getBoundingClientRect(), r = row.getBoundingClientRect();
+    const bars = [...body.querySelectorAll(".fix-bar")].filter((x) => x.offsetParent).map((x) => x.getBoundingClientRect().top);
+    const bottom = Math.min(b.bottom, ...bars) - 8;
+    if (r.top < b.top + 8) body.scrollTop += r.top - b.top - 8;
+    else if (r.bottom > bottom) body.scrollTop += r.bottom - bottom;
+  }
   function selectWall(key, { zoom = false } = {}) {
     wallSel = key; paintWalls(); drawFaces();
-    $("fix-form").querySelector(".wallrow.sel")?.scrollIntoView({ block: "nearest" });
+    reveal($("fix-form").querySelector(".wallrow.sel"));
     const w = walls.find((x) => wallKey(x) === key);
     if (zoom && w) zoomTo(wallLine(w), 20);
   }
@@ -431,7 +441,7 @@ export async function initFixesPanel(ctx) {
     window.rsDeselect?.();
     document.querySelectorAll(".maplibregl-popup:not(.rs-tip)").forEach((p) => p.remove());
     leaveNode();
-    if (map.getLayer("fix-turn-hl")) map.setFilter("fix-turn-hl", ["==", ["get", "id"], -1]);
+    turnSel = null; paintTurnSel();
   }
   function setTab(name, { zoom = false } = {}) {
     if (name !== current) clearMapSelection();
@@ -542,10 +552,19 @@ export async function initFixesPanel(ctx) {
     $("fix-turn-clear").hidden = false; $("fix-turn-legend").hidden = !nodes.length;
     $("fix-via").innerHTML = js.map((r) => `<option value="${r.n}">Junction ${r.n} · ${r.c ? `${plural(r.c, "road")} ${r.c === 1 ? "leaves" : "leave"} it` : "no road leaves it"}</option>`).join("");
     if (via != null && nodes.includes(String(via))) $("fix-via").value = String(via);
+    $("fix-via-list").innerHTML = js.map((r, i) => `<div class="junrow" role="option" tabindex="0" data-n="${r.n}"><span class="k">${i + 1}</span><span><b>Junction ${r.n}</b><br><span class="small muted">${r.c ? `${plural(r.c, "road")} ${r.c === 1 ? "leaves" : "leave"} it` : "no road leaves it"}</span></span></div>`).join("");
+    paintJunctions();
     $("fix-out").innerHTML = nodes.length ? "" : `<p class="why">Way ${from} is not in the driving network.</p>`;
     if (nodes.length) await outgoing();
     drawSelected(zoom, { turn: nodes.length ? { via: $("fix-via").value } : null });
     if (!nodes.length) { turnOut = []; drawTurnRoads(); }
+  }
+  function paintJunctions({ scroll = false } = {}) {
+    for (const row of $("fix-via-list").querySelectorAll(".junrow")) { const on = row.dataset.n === $("fix-via").value; row.classList.toggle("sel", on); row.setAttribute("aria-selected", on); if (on && scroll) reveal(row); }
+  }
+  function paintTurnSel() {
+    for (const row of $("fix-out").querySelectorAll(".turn")) row.classList.toggle("sel", Number(row.dataset.to) === turnSel);
+    if (map.getLayer("fix-turn-hl")) map.setFilter("fix-turn-hl", ["==", ["get", "id"], turnSel ?? -1]);
   }
   async function outgoing() {
     const from = whole($("fix-from").value), via = Number($("fix-via").value);
@@ -557,7 +576,9 @@ export async function initFixesPanel(ctx) {
     const none = '<p class="why">No other road leaves this junction from this road. A road leaves it only when it is in the driving network and its direction goes away from the junction.</p>';
     $("fix-out").innerHTML = (roads.length ? "" : none) + arrivals;
     if (roads.length) $("fix-out").insertAdjacentHTML("afterbegin", roads.map((r) => `<div class="turn" data-to="${r.osm_id}"><span class="small">To <b>${esc(r.name || "no name")}</b> (${esc(r.highway)}, way ${r.osm_id})</span>${turnSelect(F.findTurn(doc, from, via, Number(r.osm_id))?.restriction)}</div>`).join(""));
-    for (const row of $("fix-out").querySelectorAll(".turn")) row.querySelector("select").onchange = paintTurnBar;
+    for (const row of $("fix-out").querySelectorAll(".turn")) { row.tabIndex = 0; row.querySelector("select").onchange = paintTurnBar; }
+    if (!roads.some((r) => Number(r.osm_id) === turnSel)) turnSel = null;
+    paintTurnSel();
     paintTurnBar();
   }
   // the rules that the person chose in the list and did not add yet
@@ -583,14 +604,14 @@ export async function initFixesPanel(ctx) {
     status(`Added to the changes: ${plural(d.length, "turn rule")}.`);
   };
   function clearTurns() {
-    $("fix-from").value = ""; $("fix-via").innerHTML = ""; $("fix-out").innerHTML = "";
+    $("fix-from").value = ""; $("fix-via").innerHTML = ""; $("fix-via-list").innerHTML = ""; turnSel = null; $("fix-out").innerHTML = "";
     $("fix-via-row").hidden = $("fix-turnsec").hidden = $("fix-turn-bar").hidden = $("fix-turn-clear").hidden = $("fix-turn-legend").hidden = true;
     turnOut = []; drawTurnRoads(); paintTurnBar(); drawSelected(false);
   }
   $("fix-turn-clear").onclick = clearTurns;
   $("fix-out").addEventListener("click", (e) => { const b = e.target.closest("[data-from]"); if (b) findTurns(Number(b.dataset.from), Number($("fix-via").value), { zoom: true }); });
   $("fix-turn-find").onclick = () => { const id = whole($("fix-from").value); id ? findTurns(id, null, { zoom: true }) : status("Type a way ID (a whole number)."); };
-  $("fix-via").onchange = () => { outgoing(); drawSelected(false, { turn: { via: $("fix-via").value } }); };
+  $("fix-via").onchange = () => { turnSel = null; paintJunctions({ scroll: true }); outgoing(); drawSelected(false, { turn: { via: $("fix-via").value } }); };
 
   // ---- the map: edited objects are amber, the selected object is blue
   const EMPTY = { type: "FeatureCollection", features: [] };
@@ -833,8 +854,15 @@ export async function initFixesPanel(ctx) {
     map.getSource("fix-turn")?.setData({ type: "FeatureCollection", features: feats });
     drawnCount.turn = feats.length;
   }
+  // a click (or Enter) on a junction row picks the junction; on a row of a turn road it picks the road (the same as a wall of a building)
+  const pickJunction = (row) => { if (!row || row.dataset.n === $("fix-via").value) return; $("fix-via").value = row.dataset.n; $("fix-via").onchange(); };
+  $("fix-via-list").addEventListener("click", (e) => pickJunction(e.target.closest(".junrow")));
+  $("fix-via-list").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickJunction(e.target.closest(".junrow")); } });
+  const pickTurn = (row) => { if (!row) return; turnSel = turnSel === Number(row.dataset.to) ? null : Number(row.dataset.to); paintTurnSel(); if (turnSel != null) reveal(row); };
+  $("fix-out").addEventListener("click", (e) => { if (!e.target.closest("select, button")) pickTurn(e.target.closest(".turn")); });
+  $("fix-out").addEventListener("keydown", (e) => { if (e.target.classList?.contains("turn") && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); pickTurn(e.target); } });
   $("fix-out").addEventListener("mouseover", (e) => { const r = e.target.closest(".turn"); if (r && map.getLayer("fix-turn-hl")) map.setFilter("fix-turn-hl", ["==", ["get", "id"], Number(r.dataset.to)]); });
-  $("fix-out").addEventListener("mouseout", (e) => { if (!e.relatedTarget?.closest?.(".turn") && map.getLayer("fix-turn-hl")) map.setFilter("fix-turn-hl", ["==", ["get", "id"], -1]); });
+  $("fix-out").addEventListener("mouseout", (e) => { if (!e.relatedTarget?.closest?.(".turn") && map.getLayer("fix-turn-hl")) map.setFilter("fix-turn-hl", ["==", ["get", "id"], turnSel ?? -1]); });
 
   let selToken = 0;
   async function drawSelected(zoom, { turn = null } = {}) {
@@ -1044,12 +1072,6 @@ export async function initFixesPanel(ctx) {
   $("fix-save").onclick = save;
   $("fix-unselect").onclick = unselect;
   $("fix-form").addEventListener("click", (e) => { if (e.target.closest("#fix-delete")) toggleDelete(); });
-  $("fix-obj").addEventListener("click", (e) => {                       // the quick buttons of a node that has no traffic tag: they fill the Kind field; Add to changes keeps it
-    const q = e.target.closest("[data-quick]");
-    if (!q || sel?.kind !== "node" || !data) return;
-    draft.highway = q.dataset.quick; touched.add("highway"); renderForm();
-    status(`Kind is ${q.dataset.quick === "crossing" ? "Crossing" : "Traffic signals"} now. Press Add to changes to keep it.`);
-  });
   $("fix-revert").onclick = () => { touched = new Set(); draft = initialDraft(); renderForm(); };
   for (const b of document.querySelectorAll("#fix-panel [data-review]")) b.onclick = () => setTab("changes");
   $("fix-pending").addEventListener("click", (e) => { const b = e.target.closest("[data-go]"); if (b) setTab(b.dataset.go, { zoom: true }); });
