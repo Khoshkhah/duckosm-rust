@@ -7,7 +7,11 @@ import { writeFeatures } from "../map/roadstyle/features_sql.js";
 // it. It loads the first time that the page needs it.
 import init, * as roadstylePkg from "../map/pkg/roadstyle_wasm.js";
 let roadstyleReady = null;
-export const roadstyle = () => (roadstyleReady ??= init().then(() => roadstylePkg));
+// The module is fetched and compiled once for the page, and each map worker gets the compiled module (a message), so a new worker does not download the 16 MB
+// file again: a private window of a browser has a cache too small for it, and a change of the design starts a new worker.
+let roadstyleCompiled = null;
+export const roadstyleModule = () => (roadstyleCompiled ??= WebAssembly.compileStreaming(fetch(new URL("../map/pkg/roadstyle_wasm_bg.wasm", import.meta.url))));
+export const roadstyle = () => (roadstyleReady ??= roadstyleModule().then((module_or_path) => init({ module_or_path })).then(() => roadstylePkg));
 
 // duckdb-wasm with DuckDB 1.5: the GEOMETRY type of the tables is core from 1.5 (the version that the geolibre-roadstyle spike tested)
 const DUCKDB = "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.33.1-dev57.0/+esm";
@@ -473,6 +477,7 @@ export async function roadsStyle(mode, name, keep = []) {
   const roads = inputs.roads.slice(), features = inputs.features?.slice(), levels = inputs.levels;
   const roadsSeconds = (performance.now() - t) / 1000;
   lap("SQL and features, all");
+  const wasmModule = await roadstyleModule();
   endMapWorker();
   const w = (mapWorker = new Worker(new URL("../map/map_worker.js", import.meta.url), { type: "module" }));
   const prefix = `rs://${++generation}/`;
@@ -491,7 +496,7 @@ export async function roadsStyle(mode, name, keep = []) {
       }
     };
     w.onerror = (e) => { endMapWorker(); fail(new Error(e.message || "the map worker failed")); };
-    w.postMessage({ look: lookText, roads, features, name, prefix, keep, levels, format: tileFormat, tableFields: [...new Set([...keep, ...TABLE_FIELDS])] }, [roads.buffer, ...(features ? [features.buffer] : [])]);
+    w.postMessage({ wasmModule, look: lookText, roads, features, name, prefix, keep, levels, format: tileFormat, tableFields: [...new Set([...keep, ...TABLE_FIELDS])] }, [roads.buffer, ...(features ? [features.buffer] : [])]);
   });
   // the road table is parsed by the page when it asks (after the first tiles): its own step, timed alone
   const roadTable = () => {
