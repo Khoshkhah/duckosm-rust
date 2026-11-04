@@ -84,7 +84,7 @@ with sync_playwright() as p:
     # the row: the whole name, the date and size on one line, a pill that says that the map opens fast, two buttons of one size, and a tint under the pointer
     assert page.evaluate("(() => { const n = document.querySelector('#areas-card .sa-name'); return n.scrollWidth <= n.clientWidth + 1 && getComputedStyle(n).textOverflow !== 'ellipsis'; })()"), "the name is not cut"
     assert "Opens fast" in page.inner_text("#areas-card .sa-pill") and page.evaluate("(() => { const [a, b] = [...document.querySelectorAll('#areas-card .sa-actions .btn')].map((x) => x.getBoundingClientRect()); return Math.abs(a.width - b.width) < 1 && Math.abs(a.height - b.height) < 1; })()"), "Open and Delete have one size"
-    assert "sidewalk rule" not in page.inner_text("#areas-card") and "roads" in page.inner_text("#areas-card .sa-sum"), "the note lists the networks, not the build log"
+    assert "sidewalk rule" not in page.inner_text("#areas-card") and page.locator("#areas-card .sa-chip").count() >= 1 and page.locator("#areas-card .sa-chip svg").count() == page.locator("#areas-card .sa-chip").count() and "roads" in page.get_attribute("#areas-card .sa-chip", "title"), "the chips list the networks with an icon, not the build log"
     page.mouse.move(5, 5)
     still = row.evaluate("(r) => getComputedStyle(r).backgroundColor")
     row.hover()

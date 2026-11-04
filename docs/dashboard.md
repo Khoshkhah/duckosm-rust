@@ -76,7 +76,7 @@ A build sets the Blank base map for its first drawing so that the roads are easy
 
 The card shows only when the browser has a saved area. Each build is saved in the browser (OPFS), with its tables, its drawing cache and its cut file.
 
-Each row has the name (in full), the date and size of the save, and a line with the networks and their roads (for example "Driving 2,765 roads · Walking 11,752 roads"). The pill **Opens fast** shows when the drawing of the roads is saved too, so **Open** shows the map with no wait. Without the pill, **Open** loads the tables and the page draws the map when you press **Show on map**.
+Each row has the name (in full), the date and size of the save, and a chip for each network with its icon (car, walker, bike) and its number of roads (point at a chip for the name). The pill **Opens fast** shows when the drawing of the roads is saved too, so **Open** shows the map with no wait. Without the pill, **Open** loads the tables and the page draws the map when you press **Show on map**.
 
 - **Click a row** to see the boundary of the area on the map. The map zooms to it. A second click hides it.
 - **Open** loads the area into DuckDB and draws the map again with no build (Monaco: 1.6 s).

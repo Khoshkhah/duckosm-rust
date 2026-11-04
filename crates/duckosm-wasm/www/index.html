@@ -424,7 +424,10 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
 .saved-area.picked { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
 .saved-area .sa-name { font-size: 14px; line-height: 1.3; overflow-wrap: anywhere; }
 .saved-area .sa-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
-.saved-area .sa-sum { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; font-size: 11.5px; line-height: 1.35; }
+.saved-area .sa-nets { display: flex; flex-wrap: wrap; gap: 6px; }
+.saved-area .sa-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 12.5px; color: var(--fg); }
+.saved-area .sa-chip svg { width: 16px; height: 16px; color: var(--mut); }
+.saved-area .sa-chip b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .saved-area .sa-pill { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--accent); color: var(--accent); background: var(--accent-soft); white-space: nowrap; }
 .saved-area .sa-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 2px; }
 .saved-area .sa-actions .btn { width: 100%; height: 32px; justify-content: center; }
@@ -1740,8 +1743,9 @@ async function renderSavedAreasList() {
     paintAreasCard(list.length);
     if (list.length && !areasShown && typeof autoFold === "function") { areasShown = true; autoFold(areasCard, false); }     // a visit starts with the list open (the last visit may have folded it)
     if (!list.length) { container.innerHTML = ""; return; }
-    // the networks of the build, from its summary text (the other lines of it are the log of the build, for example the sidewalk rule): "Driving 34,982 roads · Walking 11,752 roads"
-    const networks = (t) => [...String(t ?? "").matchAll(/^(\w+): (\d+) edges/gm)].map((m) => `${m[1][0].toUpperCase()}${m[1].slice(1)} ${num(+m[2])} roads`).join(" · ");
+    // the networks of the build, from its summary text (the other lines of it are the log of the build, for example the sidewalk rule): a chip with an icon and the number of roads for each
+    const NETS = { driving: ["car", "Driving"], walking: ["walk", "Walking"], cycling: ["bike", "Cycling"] };
+    const networks = (t) => [...String(t ?? "").matchAll(/^(\w+): (\d+) edges/gm)].map((m) => `<span class="sa-chip" title="${NETS[m[1]]?.[1] ?? m[1]}: ${num(+m[2])} roads">${icon(NETS[m[1]]?.[0] ?? "arrow")}<b>${num(+m[2])}</b></span>`).join("");
     const formatBytes = (b) => (b ? (b / 2 ** 20).toFixed(1) + " MB" : "");
     container.innerHTML = list.map((a) => {
       const dateStr = a.builtAt ? new Date(a.builtAt).toLocaleString() : "";
@@ -1749,7 +1753,7 @@ async function renderSavedAreasList() {
         <div class="saved-area" data-slug="${esc(a.slug)}" title="Show the boundary of the area on the map">
           <strong class="sa-name">${esc(a.name || a.slug)}</strong>
           <div class="sa-meta small muted">${dateStr}${a.sizeBytes ? " · " + formatBytes(a.sizeBytes) : ""}${a.hasViz ? ' <span class="sa-pill" title="The drawing of the roads is saved too: Open shows the map with no wait.">Opens fast</span>' : ""}</div>
-          ${networks(a.summary) ? `<div class="sa-sum small muted">${esc(networks(a.summary))}</div>` : ""}
+          ${networks(a.summary) ? `<div class="sa-nets" aria-label="Roads of each network">${networks(a.summary)}</div>` : ""}
           <div class="sa-actions">
             <button class="btn sm primary load-saved-area-btn" data-slug="${esc(a.slug)}">Open</button>
             <button class="btn sm del-saved-area-btn" data-slug="${esc(a.slug)}">Delete</button>
