@@ -354,3 +354,13 @@ Street View (Linked) and Google 3D need a Google Maps JavaScript API key, and th
 
 - **The settings of the map bar** (the gear button): paste each key. The browser keeps it for this site only (`localStorage`).
 - **`crates/duckosm-wasm/www/local_keys.json`**, a file that `.gitignore` leaves out of git: `{"google": "<key>", "mapillary": "<token>"}`. A page on `localhost` or `127.0.0.1` reads it at the start and gives the keys to roadstyle's dashboard as the page's keys. A key that the person saved in the settings is over it. The deployed page never reads the file.
+
+## The pictures of the dashboard guide
+
+`docs/dashboard.md` has pictures in `docs/img/dashboard/`. Make them again after a change of the page:
+
+```bash
+python crates/duckosm-wasm/www/docs_shots.py
+```
+
+The script builds Monaco in headless Chromium and needs the page built first. The Search picture needs the network.

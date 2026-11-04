@@ -80,7 +80,7 @@ def run(browser, name, dark=False, **context):
     f = page.evaluate("""() => { const i = document.getElementById('q').getBoundingClientRect(), h = document.getElementById('here').getBoundingClientRect();
         return [Math.round(i.top), Math.round(i.height), Math.round(h.top - i.top), Math.round(i.right - h.right), Math.round(h.left - i.left)]; }""")
     assert 0 <= f[2] <= 8 and 0 <= f[3] <= 8 and f[4] > f[1], ("the 'What is here?' button is inside the field, at its right", f)
-    assert page.get_attribute("#here", "aria-label") == "What is here? Click the map" and page.get_attribute("#q", "placeholder") == "City, region or country"
+    assert page.get_attribute("#here", "aria-label") == "What is here? Click the map" and page.get_attribute("#q", "placeholder") == "City, region, country or H3 ID"
     assert page.evaluate("document.getElementById('find').querySelector('.btn') === null"), "no Search button"
     text = page.inner_text("#step1-card")
     assert "Type a place first" not in text and "Then click the map" not in text and "Photon" not in text and "OpenStreetMap contributors" not in text, text

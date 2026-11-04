@@ -1,5 +1,7 @@
 # duckOSM in the browser: one app
 
+For a guide to every part of the page, with pictures, read [dashboard.md](dashboard.md). This file is the design and the history of the page.
+
 Status: done, 2026-10-22 (the result is at the end). Kaveh's decision: "One app, one map". The button **Use in duckOSM** of the boundary
 tool opened another page (`index.html`, with its old design). Now the build is part of the boundary tool's page:
 the user makes the area, builds it, and sees the roads on the same map, with no change of page.
