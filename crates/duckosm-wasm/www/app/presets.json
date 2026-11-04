@@ -713,5 +713,261 @@
         ]
       ]
     }
-  ]
+  ],
+  "_guards": {
+    "_doc": "Guards: one choice closes or narrows a field for another (app/fixes_panel.js, guardsOf). A rule has `if` (a key and the values that make it true; a key that ends with ! means: none of these values; the keys are the tags of the object, and `highway` of a road is its class), then `disable` (the fields that go off) and `allow` (a field and the only values that stay in its list), and a `reason` that shows under the field.",
+    "road": [
+      {
+        "if": {
+          "oneway": [
+            "true"
+          ]
+        },
+        "disable": [
+          "lanes_forward",
+          "lanes_backward",
+          "turn_lanes_backward"
+        ],
+        "reason": "A one-way road has its lanes in one direction: use Lanes, all and the turn lanes forward."
+      },
+      {
+        "if": {
+          "highway": [
+            "motorway",
+            "motorway_link",
+            "trunk",
+            "trunk_link"
+          ]
+        },
+        "disable": [
+          "sidewalk",
+          "cycleway",
+          "crossing"
+        ],
+        "allow": {
+          "surface": [
+            "asphalt",
+            "paved",
+            "concrete"
+          ],
+          "access": [
+            "yes",
+            "no"
+          ]
+        },
+        "reason": "A motorway or a trunk road has no sidewalk, no cycleway and no crossing, and its surface is paved."
+      },
+      {
+        "if": {
+          "highway": [
+            "primary",
+            "primary_link",
+            "secondary",
+            "secondary_link"
+          ]
+        },
+        "allow": {
+          "surface": [
+            "asphalt",
+            "paved",
+            "concrete",
+            "paving_stones",
+            "cobblestone"
+          ]
+        },
+        "reason": "A primary or a secondary road has a paved surface."
+      },
+      {
+        "if": {
+          "highway": [
+            "footway",
+            "path",
+            "steps",
+            "pedestrian",
+            "cycleway",
+            "bridleway",
+            "corridor"
+          ]
+        },
+        "disable": [
+          "sidewalk",
+          "cycleway",
+          "lanes",
+          "lanes_forward",
+          "lanes_backward",
+          "maxspeed",
+          "turn_lanes_forward",
+          "turn_lanes_backward"
+        ],
+        "reason": "A path for people has no sidewalk, no lanes and no speed limit of its own."
+      },
+      {
+        "if": {
+          "highway!": [
+            "footway",
+            "path",
+            "cycleway",
+            "pedestrian",
+            "steps"
+          ]
+        },
+        "disable": [
+          "crossing"
+        ],
+        "reason": "A crossing is a tag of a footway or a cycleway that crosses a road."
+      },
+      {
+        "if": {
+          "bridge": [
+            "yes",
+            "viaduct"
+          ]
+        },
+        "disable": [
+          "tunnel"
+        ],
+        "reason": "A road is a bridge or a tunnel, not both."
+      },
+      {
+        "if": {
+          "tunnel": [
+            "yes",
+            "building_passage"
+          ]
+        },
+        "disable": [
+          "bridge"
+        ],
+        "reason": "A road is a bridge or a tunnel, not both."
+      }
+    ],
+    "building": [
+      {
+        "if": {
+          "roof:shape": [
+            "flat"
+          ]
+        },
+        "disable": [
+          "roof:levels"
+        ],
+        "reason": "A flat roof has no roof levels."
+      },
+      {
+        "if": {
+          "roof:shape": [
+            ""
+          ]
+        },
+        "disable": [
+          "roof:levels"
+        ],
+        "reason": "Set the roof shape first."
+      },
+      {
+        "if": {
+          "building": [
+            "roof"
+          ]
+        },
+        "disable": [
+          "building:levels",
+          "building:material",
+          "building:colour",
+          "roof:levels"
+        ],
+        "reason": "A roof (a shelter) has no walls: no levels, no facade material and no facade color."
+      },
+      {
+        "if": {
+          "roof:material": [
+            "grass"
+          ]
+        },
+        "allow": {
+          "roof:shape": [
+            "flat",
+            "skillion",
+            "gabled",
+            "hipped"
+          ]
+        },
+        "reason": "A grass roof is flat or has a low slope."
+      }
+    ],
+    "node": [
+      {
+        "if": {
+          "highway!": [
+            "crossing",
+            "traffic_signals"
+          ]
+        },
+        "disable": [
+          "crossing",
+          "kerb",
+          "tactile_paving"
+        ],
+        "reason": "Crossing, kerb and tactile paving are for a crossing, or for a traffic signal with a crossing."
+      },
+      {
+        "if": {
+          "highway": [
+            "traffic_signals"
+          ]
+        },
+        "allow": {
+          "crossing": [
+            "traffic_signals"
+          ]
+        },
+        "reason": "A traffic signal with a crossing has crossing=traffic_signals."
+      },
+      {
+        "if": {
+          "highway!": [
+            "traffic_signals"
+          ]
+        },
+        "disable": [
+          "traffic_signals:direction"
+        ],
+        "reason": "The direction is for a traffic signal."
+      }
+    ],
+    "new_road": [
+      {
+        "if": {
+          "highway": [
+            "footway",
+            "cycleway",
+            "pedestrian"
+          ]
+        },
+        "disable": [
+          "lanes",
+          "maxspeed",
+          "oneway"
+        ],
+        "reason": "A path for people has no lanes, no speed limit and no one-way rule here."
+      },
+      {
+        "if": {
+          "highway": [
+            "primary",
+            "secondary",
+            "tertiary"
+          ]
+        },
+        "allow": {
+          "surface": [
+            "asphalt",
+            "paved",
+            "concrete"
+          ]
+        },
+        "reason": "A primary, secondary or tertiary road has a paved surface."
+      }
+    ]
+  }
 }

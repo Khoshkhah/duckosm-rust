@@ -120,6 +120,16 @@ with sync_playwright() as p:
     page.select_option("#fixf-sidewalk", "both")
     page.select_option("#fixf-surface", "paved")
     page.fill("#fixf-lanes", "7")
+    # guards: a one-way road closes the forward and backward lanes (with the reason under them); a choice that opens them again takes the guard away; a bridge closes the tunnel list
+    page.select_option("#fixf-oneway", "true")
+    assert page.is_disabled("#fixf-lanes_forward") and page.is_disabled("#fixf-lanes_backward") and "one direction" in page.inner_text("#fix-form"), "a one-way road closes the lanes for each direction"
+    assert page.input_value("#fixf-lanes") == "7", "the guard keeps the other fields"
+    page.select_option("#fixf-oneway", "false")
+    assert not page.is_disabled("#fixf-lanes_forward"), "a two-way road opens them"
+    page.select_option("#fixf-bridge", "yes")
+    assert page.is_disabled("#fixf-tunnel") and "bridge or a tunnel" in page.inner_text("#fix-form")
+    page.select_option("#fixf-bridge", "")
+    assert not page.is_disabled("#fixf-tunnel")
     page.click("#fix-save")
     y = text(page)
     assert f"id: {ROAD}" in y and "sidewalk: both" in y and "surface: paved" in y and "tag_edits" in y and "lanes: 7" in y, y
@@ -556,7 +566,10 @@ with sync_playwright() as p:
     page.mouse.click(*px)
     page.wait_for_function(f"document.querySelector('#fix-obj .objhead')?.textContent.includes('node {j['id']}') && document.querySelector('#fixf-highway')", timeout=20_000)
     assert "no traffic tag" in page.inner_text("#fix-obj"), page.inner_text("#fix-obj")
+    assert page.is_disabled("#fixf-kerb") and page.is_disabled("#fixf-crossing") and "for a crossing" in page.inner_text("#fix-form"), "a node with no kind has no crossing, kerb or tactile paving"
     page.select_option("#fixf-highway", "traffic_signals")
+    assert not page.is_disabled("#fixf-kerb") and page.is_disabled("#fixf-traffic_signals_direction") is False
+    assert page.eval_on_selector_all("#fixf-crossing option", "(o) => o.map((x) => x.value)") == ["", "traffic_signals"], "a traffic signal with a crossing has one crossing value"
     assert page.input_value("#fixf-highway") == "traffic_signals"
     page.click("#fix-save")
     y = text(page)

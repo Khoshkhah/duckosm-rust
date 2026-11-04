@@ -132,6 +132,8 @@ export async function initFixesPanel(ctx) {
     if (!d?.arms) return "This node is not on a road of the driving network.";
     if (d.classes.some((c) => NO_SIGNAL.has(c))) return "A motorway or a trunk road meets here: no signal and no crossing.";
     const cur = d.tags?.highway;
+    if (kind === "stop" || kind === "give_way") return d.arms < 3 ? "A stop sign or a give-way sign needs a junction of at least 3 roads." : "";
+    if (kind === "bus_stop") return "";
     if (kind === "traffic_signals") {
       if (cur === "crossing") return "This node is a crossing already.";
       if (d.arms < 3) return "A traffic signal needs a junction of at least 3 roads.";
@@ -161,11 +163,28 @@ export async function initFixesPanel(ctx) {
 
   const editedKey = (rule, f) => (isRuleKey(f) ? f.key in rule.mode : f.key in rule.set || rule.delete.includes(f.key));
 
-  function control(f, value) {
+  // ---- guards: one choice closes a field, or narrows the list of a field, for another (presets.json, `_guards`)
+  const guardRules = presets._guards ?? {};
+  const guardKeys = new Set(Object.values(guardRules).filter(Array.isArray).flat().flatMap((r) => Object.keys(r.if).map((k) => k.replace(/!$/, ""))));
+  function guardsOf(k, values) {
+    const off = new Map(), allow = new Map();
+    for (const r of guardRules[k] ?? []) {
+      const on = Object.entries(r.if).every(([key, vals]) => { const not = key.endsWith("!"), v = String(values[not ? key.slice(0, -1) : key] ?? ""); return not ? !vals.includes(v) : vals.includes(v); });
+      if (!on) continue;
+      for (const key of r.disable ?? []) if (!off.has(key)) off.set(key, r.reason);
+      for (const [key, vals] of Object.entries(r.allow ?? {})) allow.set(key, { vals: allow.has(key) ? allow.get(key).vals.filter((x) => vals.includes(x)) : vals, reason: r.reason });
+    }
+    return { off, allow };
+  }
+  // the reason under a field that a guard closed or narrowed
+  const guardNote = (f, g) => (g?.off.has(f.key) ? g.off.get(f.key) : g?.allow.has(f.key) && f.type === "choice" ? g.allow.get(f.key).reason : "");
+
+  function control(f, value, g = null) {
     const id = `fixf-${f.key.replace(/[^a-z0-9]/gi, "_")}`;
     let el;
     if (f.type === "choice") {
-      const opts = [["", "(not set)"], ...f.options];
+      const allowed = g?.allow.get(f.key)?.vals;
+      const opts = [["", "(not set)"], ...f.options.filter((o) => !allowed || allowed.includes(o[0]) || o[0] === value)];
       if (value !== "" && !opts.some((o) => o[0] === value)) opts.push([value, value]);
       el = `<select id="${id}" data-key="${esc(f.key)}">${opts.map((o) => `<option value="${esc(o[0])}"${o[0] === value ? " selected" : ""}>${esc(o[1])}</option>`).join("")}</select>`;
     } else if (f.type === "color") {
@@ -174,7 +193,7 @@ export async function initFixesPanel(ctx) {
     } else {
       el = `<input id="${id}" type="text" data-key="${esc(f.key)}" value="${esc(value)}"${f.type === "int" ? ' inputmode="numeric"' : ""}${f.placeholder ? ` placeholder="${esc(f.placeholder)}"` : ""}>`;
     }
-    return el;
+    return g?.off.has(f.key) ? el.replace(/<(select|input)/g, '<$1 disabled') : el;
   }
 
   // the number of fields that are not added to the changes yet, for each edit tab (the tab of the state in the variables, and the others in the stash)
@@ -221,8 +240,8 @@ export async function initFixesPanel(ctx) {
   function renderForm() {
     const box = $("fix-form");
     if (!sel || !data) { box.innerHTML = ""; $("fix-actions").hidden = true; return paintDots(); }
-    const rule = F.ruleOf(doc, sel.type, sel.id), fields = presetsOf();
-    const row = (f) => `<label for="fixf-${f.key.replace(/[^a-z0-9]/gi, "_")}" class="small${editedKey(rule, f) ? " edited" : ""}"${editedKey(rule, f) && f.key in rule.was ? ` title="Was: ${esc(rule.was[f.key] ?? "none")}"` : ""}>${esc(f.label)}${editedKey(rule, f) ? ` <button type="button" class="link" data-revert="${esc(f.key)}" title="Take this change back">↺</button>` : ""}</label>${control(f, draft[f.key] ?? "")}`;
+    const rule = F.ruleOf(doc, sel.type, sel.id), fields = presetsOf(), g = guardsOf(sel.kind, draft);
+    const row = (f) => `<label for="fixf-${f.key.replace(/[^a-z0-9]/gi, "_")}" class="small${editedKey(rule, f) || touched.has(f.key) ? " edited" : ""}"${editedKey(rule, f) && f.key in rule.was ? ` title="Was: ${esc(rule.was[f.key] ?? "none")}"` : ""}>${esc(f.label)}${editedKey(rule, f) ? ` <button type="button" class="link" data-revert="${esc(f.key)}" title="Take this change back">↺</button>` : ""}</label>${control(f, draft[f.key] ?? "", g)}${guardNote(f, g) ? `<p class="why gwhy">${esc(guardNote(f, g))}</p>` : ""}`;
     const section = (title, inner) => `<section class="fsec"><h3>${title}</h3>${inner}</section>`;
     let html = [...new Set(fields.map((f) => f.group ?? "Fields"))].map((g) => section(esc(g), `<div class="grid2 fixgrid">${fields.filter((f) => (f.group ?? "Fields") === g).map(row).join("")}</div>`)).join("");
     if (sel.kind === "road") {
@@ -257,7 +276,7 @@ export async function initFixesPanel(ctx) {
     html += deleteSection(rule);
     box.innerHTML = html;
     if (sel.kind === "node") {                       // the Kind field offers only what the node can have; the reason is under it
-      const hw = $("fixf-highway"), no = [["traffic_signals", "Traffic signals"], ["crossing", "Crossing"]].map(([k, n]) => [k, n, nodeRule(k, data)]).filter(([, , w]) => w);
+      const hw = $("fixf-highway"), no = [["traffic_signals", "Traffic signals"], ["crossing", "Crossing"], ["stop", "Stop"], ["give_way", "Give way"], ["bus_stop", "Bus stop"]].map(([k, n]) => [k, n, nodeRule(k, data)]).filter(([, , w]) => w);
       for (const [k] of no) { const o = hw?.querySelector(`option[value="${k}"]`); if (o && hw.value !== k) o.disabled = true; }
       if (hw && no.length) hw.closest(".fixgrid").insertAdjacentHTML("afterend", no.map(([, n, w]) => `<p class="why quickwhy" style="margin:4px 0 0">${n}: ${esc(w)}</p>`).join(""));
     }
@@ -405,6 +424,7 @@ export async function initFixesPanel(ctx) {
     el.closest(".otherrow")?.classList.add("edited");
     if (el.id) document.querySelector(`label[for="${el.id}"]`)?.classList.add("edited");
     paintBar();
+    if (e.type === "change" && guardKeys.has(k)) { const id = el.id; renderForm(); document.getElementById(id)?.focus(); }      // a choice that closes or narrows another field
   }
 
   function save() {
@@ -412,6 +432,14 @@ export async function initFixesPanel(ctx) {
     if (sel.kind === "node" && touched.has("highway") && ["traffic_signals", "crossing"].includes(draft.highway) && draft.highway !== data.tags.highway) {
       const why = nodeRule(draft.highway, data);
       if (why) return status(why, 7000);
+    }
+    const gd = guardsOf(sel.kind, draft);
+    for (const k of touched) {
+      const f = presetsOf().find((x) => x.key === k), v = String(draft[k] ?? "");
+      if (!f || v === "") continue;
+      if (gd.off.has(k) && v !== (data.tags[k] ?? "")) return status(`${f.label}: ${gd.off.get(k)}`, 7000);
+      const allow = gd.allow.get(k);
+      if (allow && !allow.vals.includes(v) && v !== (data.tags[k] ?? "")) return status(`${f.label}: ${allow.reason}`, 7000);
     }
     const rule = structuredClone(F.ruleOf(doc, sel.type, sel.id)), fields = presetsOf(), ruleFields = new Map(fields.filter(isRuleKey).map((f) => [f.key, f]));
     const dataMode = data.mode ?? {};
@@ -962,8 +990,14 @@ export async function initFixesPanel(ctx) {
   let draw = null, newDraft = {}, editNew = null;          // editNew: the id of a new road of the changes that is open for edit (its points stay)
   const newFields = presets.new_road ?? [];
   function renderNewForm() {
-    $("fix-newform").innerHTML = `<div class="grid2 fixgrid">${newFields.map((f) => `<label for="fixn-${f.key}" class="small">${esc(f.label)}</label>${control({ ...f }, newDraft[f.key] ?? "").replace(`id="fixf-${f.key.replace(/[^a-z0-9]/gi, "_")}"`, `id="fixn-${f.key}"`)}`).join("")}</div>`;
+    const g = guardsOf("new_road", newDraft);
+    $("fix-newform").innerHTML = `<div class="grid2 fixgrid">${newFields.map((f) => `<label for="fixn-${f.key}" class="small">${esc(f.label)}</label>${control({ ...f }, newDraft[f.key] ?? "", g).replace(`id="fixf-${f.key.replace(/[^a-z0-9]/gi, "_")}"`, `id="fixn-${f.key}"`)}${guardNote(f, g) ? `<p class="why gwhy">${esc(guardNote(f, g))}</p>` : ""}`).join("")}</div>`;
   }
+  $("fix-newform").addEventListener("change", (e) => {                 // a choice that closes or narrows another field
+    for (const f of newFields) { const el = document.getElementById(`fixn-${f.key}`); if (el) newDraft[f.key] = el.value; }
+    const id = e.target.id;
+    renderNewForm(); document.getElementById(id)?.focus();
+  });
   const drawn = () => { paintDots(); $("fix-draw-n").textContent = draw ? `${draw.pts.length} point${draw.pts.length === 1 ? "" : "s"}${draw.pts.some((p) => p.id != null) ? ", joins a junction" : ""}` : ""; };
   async function drawPreview() {
     ensureLayers();
