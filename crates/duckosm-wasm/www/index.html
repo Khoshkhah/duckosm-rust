@@ -1160,16 +1160,30 @@ $("found").addEventListener("focusin", point);
 $("found").onmouseleave = () => preview(null);
 $("found").onclick = (ev) => { const l = ev.target.closest("label.point"); if (l) fitTo(found[Number(l.dataset.i)].geometry); };
 let picked;
+// the boundary of a place did not come: the radio is off again (a second click asks again), the text stays under the list, and the box of the place (Photon's extent) can be the area
+function boundaryFailed(input, box, text) {
+  input.checked = false;
+  status(text, 8000);
+  $("found-err")?.remove();
+  $("found").insertAdjacentHTML("beforeend", `<p class="small error" id="found-err">${esc(text)} Select the place again to ask again, or <button type="button" class="link" id="use-box">use the box of the place</button>.</p>`);
+  $("use-box").onclick = () => {
+    $("found-err")?.remove();
+    preview(null);
+    setArea(polygons(box.geometry), { name: box.properties.name || box.properties.display_name.split(",")[0], osm_id: null, admin_level: null, source: `Photon box ${box.properties.osm_type} ${box.properties.osm_id}` });
+  };
+}
 $("found").onchange = async (ev) => {
   let f = found[Number(ev.target.value)];
-  const mine = (picked = f);
+  const box = f, mine = (picked = f);
+  $("found-err")?.remove();
   if (f.properties.photon) {
+    fitTo(f.geometry);                                  // the map moves at once, to the box of the place; the real boundary comes after
     status("Getting the boundary…", 0);
     try { [f] = await nominatim("lookup", { osm_ids: `${f.properties.osm_type[0].toUpperCase()}${f.properties.osm_id}` }); }
-    catch (e) { return status(`The boundary failed: ${e.message}`); }
+    catch (e) { if (picked === mine) boundaryFailed(ev.target, box, `The boundary failed: ${e.message}.`); return; }
     if (picked !== mine) return;
     status("");
-    if (!f || !polygons(f.geometry).length) return status("Nominatim has no boundary for this place.");
+    if (!f || !polygons(f.geometry).length) return boundaryFailed(ev.target, box, "Nominatim has no boundary for this place.");
   }
   const p = f.properties;
   const level = Number(p.extratags?.admin_level);
