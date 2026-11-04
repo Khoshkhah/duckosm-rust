@@ -225,6 +225,8 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   #export-seg button { display: flex; align-items: center; justify-content: center; gap: 6px; height: 38px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--fg); font-weight: 600; cursor: pointer; }
   #export-seg button svg { width: 16px; height: 16px; }
   #export-seg button[aria-checked=true] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #export-list .imgw { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; }
+  #export-list .imgw input { width: 80px; }
   #export-list .zoomrow { padding: 4px 0 8px; display: grid; gap: 6px; }
   #export-list .zoomrow input[type=number] { width: 58px; }
   #export-list .chk { grid-column: 1 / -1; font-size: 12px; line-height: 1.35; }
@@ -2427,6 +2429,8 @@ for (const old of [...document.querySelectorAll("section.step")]) {
   if (areaStore.isSupported) renderSavedAreasList();
 }
 // card 9, Export: the networks that the build made, and one row for each format
+let lookObj = null;
+const exportLook = async () => (lookObj ??= JSON.parse(await (lookText ??= fetch("map/look.json").then((r) => r.text()))));
 const exportQuery = async (sql) => { await duck.loadSpatial(); return (await duck.query(sql)).toArray().map((r) => r.toJSON()); };       // the spatial functions (ST_XMin, ST_AsGeoJSON) need the extension, which a restored area has not loaded yet
 const EXPORT_GROUPS = {
   Tiles: ["Tiles", "The map as vector tiles, for web maps and tile servers."],
@@ -2438,7 +2442,7 @@ function paintExport() {
   $("export-mode").value = modes.includes(was) ? was : modes[0] ?? "";
   const zoomRow = '<div class="zoomrow"><label class="optrow"><input type="checkbox" id="export-full" checked><span class="t"><b>Everything</b><small>All zooms, all networks, all road attributes and all layers.</small></span></label><span class="small">Zoom from <input id="export-zmin" type="number" min="0" max="18" value="10" aria-label="The lowest zoom"> to <input id="export-zmax" type="number" min="0" max="18" value="14" aria-label="The highest zoom"></span><span id="export-tiles" class="small"></span></div>';
   const network = `<section class="expsec netsec"><h3>Network</h3><p class="small muted">The files below use one network.</p><div class="segmented" id="export-seg" role="radiogroup" aria-label="Network of the files">${modes.map((m) => `<button type="button" role="radio" data-m="${m}" aria-checked="${m === $("export-mode").value}">${icon(({ driving: "car", walking: "walk", cycling: "bike" })[m] ?? "arrow")}${m[0].toUpperCase() + m.slice(1)}</button>`).join("")}</div></section>`;
-  const row = (f) => `<div class="exp"><b>${esc(f.title)}</b><button type="button" class="btn sm" data-fmt="${f.id}"${f.tiles ? " data-tiles" : ""}>Download</button><small>${esc(f.note)}</small></div>`;
+  const row = (f) => `<div class="exp"><b>${esc(f.title)}</b><button type="button" class="btn sm" data-fmt="${f.id}"${f.tiles || f.needsMap ? " data-tiles" : ""}>Download</button><small>${esc(f.note)}</small>${f.width ? '<label class="small imgw">Width <input type="number" class="export-img-w" min="500" max="8000" step="100" value="2400" aria-label="Width of the picture in pixels"> px</label>' : ""}</div>`;
   const section = (g) => `<section class="expsec"><h3>${EXPORT_GROUPS[g][0]}</h3><p class="small muted">${EXPORT_GROUPS[g][1]}</p>${g === "Tiles" ? zoomRow : ""}${exporter.FORMATS.filter((f) => f.group === g).map(row).join("")}</section>`;
   $("export-list").innerHTML = section("Tiles") + (modes.length > 1 ? network : "") + section("Visualization") + section("Simulation");
   paintTileCount();
@@ -2488,7 +2492,8 @@ $("export-list").addEventListener("click", async (e) => {
   b.disabled = true; $("export-status").textContent = `Making ${f.title}…`;
   try {
     const t0 = performance.now();
-    let ctx;
+    let ctx = { look: await exportLook(), imageWidth: Math.min(8000, Math.max(500, +b.closest(".exp").querySelector(".export-img-w")?.value || 2400)) };         // the colors and widths of the map, for the styles of the files
+    if (f.needsMap) ctx.style = { live: map.getStyle(), globalState: map.getGlobalState?.() ?? {} };
     if (f.tiles) {
       const full = $("export-full").checked;
       if (full && $("mapmode").value !== "all" && [...$("mapmode").options].some((o) => o.value === "all")) {       // all networks in one tile set: the map shows All
@@ -2497,7 +2502,7 @@ $("export-list").addEventListener("click", async (e) => {
         await $("mapmode").onchange();
         await window.mapDrawing;
       }
-      ctx = { style: { live: map.getStyle(), globalState: map.getGlobalState?.() ?? {} }, src: exportSource(), bbox: await exportExtent(), min: Math.max(0, +$("export-zmin").value || 0), max: Math.min(18, +$("export-zmax").value || 14),
+      ctx = { ...ctx, style: { live: map.getStyle(), globalState: map.getGlobalState?.() ?? {} }, src: exportSource(), bbox: await exportExtent(), min: Math.max(0, +$("export-zmin").value || 0), max: Math.min(18, +$("export-zmax").value || 14),
         extra: full ? exporter.edgeTiles(await exporter.roadFeatures(exportQuery, exportModes()), Math.max(0, +$("export-zmin").value || 0), Math.min(18, +$("export-zmax").value || 14)) : null,
         progress: (d, n) => { $("export-status").textContent = `Making ${f.title}: ${num(d)} of ${num(n)} tiles…`; } };
     }

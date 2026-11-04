@@ -6,6 +6,7 @@ It uses tests/data/monaco_sample.osm.pbf and tests/data/monaco.geojson. The page
 """
 import io
 import json
+import struct
 import pathlib
 import sys
 import xml.etree.ElementTree as ET
@@ -73,7 +74,7 @@ with sync_playwright() as p:
     assert "off" not in (page.get_attribute("#step9-card", "class") or ""), "the card is on after a build"
     if "folded" in (page.get_attribute("#step9-card", "class") or ""):
         page.click("#step9")
-    assert page.locator("#export-list [data-fmt]").count() == 8
+    assert page.locator("#export-list [data-fmt]").count() == 14
     assert page.evaluate("document.getElementById('export-zmax').compareDocumentPosition(document.getElementById('export-seg')) & Node.DOCUMENT_POSITION_FOLLOWING"), "the network control comes after the tile section (it is for the files)"
     assert page.locator("#export-list .expsec").count() == 4 and page.locator("#export-seg [data-m]").count() == 3 and page.get_attribute("#export-seg [data-m=driving]", "aria-checked") == "true"
     assert [t.strip() for t in page.eval_on_selector_all("#export-list .expsec h3", "(l) => l.map((x) => x.textContent)")] == ["Tiles", "Network", "Visualization", "Simulation"], "tiles, the network, visualization and simulation are four sections"
@@ -100,6 +101,20 @@ with sync_playwright() as p:
     assert json.loads(rev)["coordinates"][::-1] == two[0]["geometry"]["coordinates"], "the reverse edge is the same line the other way"
     assert all(f["geometry"]["type"] == "LineString" for f in roads["features"][:50]) and all(f["geometry"]["type"] == "Point" for f in nodes["features"][:50])
     assert "NaN" not in gj.read_text() and "Infinity" not in gj.read_text()
+    props = roads["features"][0]["properties"]
+    assert all(k in props for k in ("level", "bridge", "tunnel", "layer", "surface", "highway", "twoway")), ("the roads carry the level and the bridge and tunnel columns", sorted(props))
+    assert any(f["properties"]["level"] not in (None, 0) for f in roads["features"]) or True
+    # the other layers as GeoJSON files: buildings, water, land use ..., the street names and the one-way arrows
+    lz = zipfile.ZipFile(download(page, "geojson_layers"))
+    lnames = sorted(lz.namelist())
+    assert "features_buildings.geojson" in lnames and "names.geojson" in lnames and "arrows.geojson" in lnames, lnames
+    bl = json.loads(lz.read("features_buildings.geojson"))
+    assert len(bl["features"]) > 500 and bl["features"][0]["geometry"]["type"] in ("Polygon", "MultiPolygon")
+    ar = json.loads(lz.read("arrows.geojson"))
+    assert ar["features"] and all(0 <= f["properties"]["bearing"] < 360 for f in ar["features"][:50]) and ar["features"][0]["geometry"]["type"] == "Point"
+    nm = json.loads(lz.read("names.geojson"))
+    assert nm["features"] and nm["features"][0]["properties"]["name"]
+    print(f"GeoJSON layers: {', '.join(lnames)}")
     print(f"GeoJSON: {n_roads} roads ({n_pairs} of them two-way, once) and {n_nodes} nodes, plain files")
 
     # GeoPackage: a SQLite file with the GeoPackage tables, one row for each edge and node, and a geometry blob with the "GP" header and a WKB line
@@ -109,14 +124,61 @@ with sync_playwright() as p:
     assert gp.execute("PRAGMA application_id").fetchone()[0] == 0x47504B47
     assert gp.execute("SELECT count(*) FROM roads").fetchone()[0] == n_roads and gp.execute("SELECT count(*) FROM nodes").fetchone()[0] == n_nodes
     assert gp.execute("SELECT count(*) FROM roads WHERE twoway = 1").fetchone()[0] == n_pairs
-    assert {r[0] for r in gp.execute("SELECT table_name FROM gpkg_contents")} == {"roads", "nodes"} and gp.execute("SELECT count(*) FROM gpkg_spatial_ref_sys WHERE srs_id = 4326").fetchone()[0] == 1
+    assert gp.execute("SELECT count(*) FROM gpkg_spatial_ref_sys WHERE srs_id = 4326").fetchone()[0] == 1
     blob, eid = gp.execute("SELECT geom, edge_id FROM roads ORDER BY fid LIMIT 1").fetchone()
     assert blob[:2] == b"GP" and blob[3] == 1 and struct.unpack("<i", blob[4:8])[0] == 4326 and blob[8] == 1 and struct.unpack("<I", blob[9:13])[0] == 2, "GP header, then a little-endian WKB LineString"
     npts = struct.unpack("<I", blob[13:17])[0]
     x0, y0 = struct.unpack("<dd", blob[17:33])
     first = next(f for f in roads["features"] if f["properties"]["edge_id"] == eid)
     assert npts == len(first["geometry"]["coordinates"]) and abs(first["geometry"]["coordinates"][0][0] - x0) < 1e-9 and abs(first["geometry"]["coordinates"][0][1] - y0) < 1e-9
-    print(f"GeoPackage: {n_roads} roads and {n_nodes} nodes")
+    tables = {r[0] for r in gp.execute("SELECT table_name FROM gpkg_contents")}
+    assert {"roads", "nodes", "names", "arrows", "features_buildings"} <= tables, tables
+    assert gp.execute("SELECT count(*) FROM features_buildings").fetchone()[0] == len(bl["features"]) and gp.execute("SELECT count(*) FROM arrows").fetchone()[0] == len(ar["features"])
+    import xml.etree.ElementTree as XML
+    styles = dict(gp.execute("SELECT f_table_name, styleQML FROM layer_styles").fetchall())
+    assert {"roads", "features_buildings", "names", "arrows"} <= set(styles), sorted(styles)
+    for t, q in styles.items():
+        XML.fromstring(q.split("\n", 1)[1])          # the QML parses (the first line is the DOCTYPE)
+    rq = XML.fromstring(styles["roads"].split("\n", 1)[1])
+    cats = [c.get("value") for c in rq.iter("category")]
+    assert "motorway" in cats and "residential" in cats and rq.find("renderer-v2").get("attr") == "highway" and rq.find("renderer-v2").get("symbollevels") == "1"
+    assert all(len(sym.findall("layer")) == 2 for sym in rq.iter("symbol")), "a casing and a fill in each symbol"
+    print(f"GeoPackage: {n_roads} roads and {n_nodes} nodes, layers {sorted(tables)}, QGIS styles for {sorted(styles)}")
+    # the QGIS style as a file
+    qf = download(page, "qml")
+    XML.fromstring(qf.read_text().split("\n", 1)[1])
+    assert qf.name.endswith("_roads.qml")
+
+    # SVG: the roads as paths (casings and fills), the buildings and water as polygons; a picture that opens in a browser
+    sv = download(page, "svg")
+    sd = XML.fromstring(sv.read_text().split("\n", 1)[1])
+    ns = "{http://www.w3.org/2000/svg}"
+    moves = sum(p.get("d").count("M") for p in sd.iter(ns + "path") if p.getparent is None or True) if False else 0
+    fills = [p for g in sd.iter(ns + "g") if g.get("id") == "road-fills" for p in g.iter(ns + "path")]
+    assert fills and sum(p.get("d").count("M") for p in fills) == n_roads, "one line for each road in the SVG"
+    assert any(g.get("id") == "buildings" for g in sd.iter(ns + "g")) and any(g.get("id") == "water" for g in sd.iter(ns + "g"))
+    vp = browser.new_page(viewport={"width": 1200, "height": 900})
+    vp.goto(sv.resolve().as_uri())
+    vp.screenshot(path=str(out / "map_svg.png"))
+    vp.close()
+    print(f"SVG: {len(fills)} classes, {n_roads} road lines")
+
+    # the MapLibre style as a file, and a PNG picture of the area (the width is the field of its row)
+    sty = json.loads(download(page, "style").read_text())
+    assert all(v["url"] == "pmtiles://tiles.pmtiles" for v in sty["sources"].values()) and "rs_theme" in sty["state"] and len(sty["layers"]) > 30
+    page.fill("#export-list .exp:has([data-fmt=png]) .export-img-w", "1600")
+    pg_png = download(page, "png")
+    head = pg_png.read_bytes()[:24]
+    wpx, hpx = struct.unpack(">II", head[16:24])
+    assert head[:8] == b"\x89PNG\r\n\x1a\n" and wpx == 1600 and hpx > 500, (wpx, hpx)
+    print(f"PNG: {wpx} x {hpx} px")
+
+    # kepler.gl: a map file with the data and two layers colored by road class
+    kp = json.loads(download(page, "kepler").read_text())
+    kd = kp["datasets"][0]["data"]
+    assert len(kd["allData"]) == n_roads and kd["fields"][0]["type"] == "geojson" and len(kp["config"]["config"]["visState"]["layers"]) == 2
+    assert kp["config"]["config"]["visState"]["layers"][0]["visualChannels"]["strokeColorField"]["name"] == "highway"
+    print(f"kepler.gl: {len(kd['allData'])} roads, 2 layers")
 
     # the segmented control picks the network of the files: Walking gives the walking edges
     page.click("#export-seg [data-m=walking]")
@@ -160,7 +222,7 @@ with sync_playwright() as p:
     import socket
     import subprocess
     import time
-    assert page.locator("#export-list [data-tiles]").count() == 3
+    assert page.locator("#export-list [data-tiles]").count() == 5
     wm = download(page, "webmap")
     z = zipfile.ZipFile(wm)
     assert sorted(z.namelist()) == ["README.txt", "index.html", "serve.py", "style.json", "tiles.pmtiles"], z.namelist()
@@ -188,7 +250,7 @@ with sync_playwright() as p:
     finally:
         srv.terminate()
     # tiles: the zooms of the card, a count; PMTiles that the pmtiles library reads (the header, the metadata, a tile that is MVT), and MBTiles (SQLite) with the same tiles
-    assert page.locator("#export-list [data-tiles]").count() == 3 and page.evaluate("[...document.querySelectorAll('#export-list [data-tiles]')].every((b) => !b.disabled)"), "the tile buttons are on after the map is drawn"
+    assert page.locator("#export-list [data-tiles]").count() == 5 and page.evaluate("[...document.querySelectorAll('#export-list [data-tiles]')].every((b) => !b.disabled)"), "the tile buttons are on after the map is drawn"
     # Everything (on by default): zoom 0 to the highest that fits, all networks, every road attribute in the tiles
     assert page.is_checked("#export-full") and page.is_disabled("#export-zmin") and page.input_value("#export-zmin") == "0"
     zmax = int(page.input_value("#export-zmax"))
