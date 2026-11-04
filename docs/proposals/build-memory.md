@@ -4,7 +4,9 @@ Status: proposal for Kaveh, 2026-11-04. Nothing is built. This note is the build
 
 ## Summary
 
-The build runs in one WebAssembly module. A 32-bit module can use at most 4 GB, and a build that goes over this stops with `RuntimeError: unreachable`. Today the largest area that is known to fit is Kentucky (2,114,699 driving edges, 2,053 MiB). Iran (219 MB file) failed at 3,816 MiB. These two numbers are from 2026-10-21 and 2026-10-22. I measured a smaller area with the build of 2026-10-29 (below), and the cost of each edge there is higher than in the old numbers.
+The build runs in one WebAssembly module. A 32-bit module can use at most 4 GB, and a build that goes over this stops with `RuntimeError: unreachable`.
+
+The old numbers (2026-10-21 and 2026-10-22) said that Kentucky (2,114,699 driving edges) uses 2,053 MiB, and that Iran fails at 3,816 MiB. **I measured again on 2026-11-04 with the build of 2026-10-29, and the build now needs much more memory:** Kentucky driving alone uses **3,422 MiB**, which is 84% of the limit, and Estonia with three networks uses 2,305 MiB (it was 710 MiB for driving). The newer steps (the edge graph, the restrictions, the lane profile, the area tables) cost memory. Kentucky with three networks will not fit: walking alone adds more than 1 GB in Estonia (my estimate for Kentucky, not measured).
 
 The proposal has three levels, from cheap to large:
 
@@ -16,7 +18,27 @@ The output must stay equal to duckOSM 0.6.0 in every level.
 
 ## What is measured today
 
-The page shows the memory after each step ("Time and memory of each step"). I read the same log in Node with the build of 2026-10-29 (`crates/duckosm-wasm/www/pkg`), on Nacka (a 3.5 MB file) with the default options. The memory of a WebAssembly module only grows, so each number is the peak until then. All numbers are MiB.
+The page shows the memory after each step ("Time and memory of each step"). I read the same log in Node with the build of 2026-10-29 (`crates/duckosm-wasm/www/pkg`), with the default options. The memory of a WebAssembly module only grows, so each number is the peak until then. All numbers are MiB. The runner is `crates/duckosm-wasm/www/run_node.mjs` with the step log printed.
+
+**Large areas** (measured on 2026-11-04 with Kaveh's word):
+
+| Area (file) | Network | Edges | Peak | Per edge | Time |
+|---|---|---|---|---|---|
+| Tartu (cut) | driving, walking, cycling | 28,340 + 60,412 + 59,176 | 127 | | 1.2 s |
+| Estonia (121 MB) | driving | 769,662 | 1,045 | 1.39 KiB | 16.8 s |
+| Estonia | walking | 1,391,192 | 1,723 | 1.27 KiB | 25.4 s |
+| Estonia | driving, walking, cycling | 769,662 + 1,391,192 + 1,359,514 | 2,305 | | 48.8 s |
+| Kentucky (148 MB) | driving | 2,114,699 | **3,422** | 1.66 KiB | 61.4 s |
+| Kentucky | walking | not known | **failed with an error, not by memory** (see below) | | |
+
+The steps of Kentucky driving: read the file +890 (890), driving network +2,208 (3,098), driving files +324 (3,422). For Estonia with three networks: read the file +379, driving network +570, walking network +894, cycling network +462.
+
+Two cautions:
+
+- The Node runner gives the whole file to the module as bytes. The page reads the file as a `Blob` in pieces, so the peak in the page is probably lower by about the size of the file (121 MB, 148 MB). I did not measure the page.
+- The old numbers (Estonia 710 MiB, Kentucky 2,053 MiB) were for driving, before the newer steps. The build now uses 47% more for Estonia and 67% more for Kentucky.
+
+**A small area, step by step** (Nacka, a 3.5 MB file, walking has 56,120 edges and 165,754 rows in `edge_graph`):
 
 | Step | Walking only | Three networks |
 |---|---|---|
@@ -31,15 +53,17 @@ The page shows the memory after each step ("Time and memory of each step"). I re
 | Later steps (area tables, levels, lane profile) | +0 | +0 |
 | **Peak** | **89** | **112** |
 
-Walking in Nacka has 56,120 edges and 165,754 rows in `edge_graph`. Facts from the table:
+Facts from the tables:
 
-- **The peak is the largest network, not the sum.** The memory of the first network is reused. Three networks cost 26% more than walking alone, because the memory of the module does not shrink and some of it does not get reused.
-- **Walking alone: reading the file is 21% of the peak, the network 49%, the files 29%.** These are three separate places to save memory.
-- **About 1.6 KiB for each edge** in this small area (89 MiB ÷ 56,120 edges, my own division, with the fixed costs inside). The old measurements of large areas give 0.94 to 1.07 KiB for each edge. I do not know if the cost at scale is 1 KiB or 1.6 KiB with the current code. A small area has fixed costs. This needs a re-measure.
+- **The peak is the largest network plus a part of the others,** not the sum. Estonia with three networks (2,305) is 34% more than walking alone (1,723). The memory of an earlier network is reused in part.
+- **The cost is 1.3 to 1.7 KiB for each edge** in large areas, and about 1.6 KiB in Nacka. Driving in Kentucky is the highest (1.66 KiB). Walking has about 1.8 times more edges than driving for the same area.
+- **4 GB holds about 2.4 to 3 million edges** of one network at this cost. Kentucky driving (2.1 million) is already near the limit. Iran (219 MB) does not fit. I did not run it.
+- **Reading the file is a large part for big areas:** 379 of 1,045 MiB in Estonia driving (including the 121 MB of file bytes), and 890 of 3,422 MiB in Kentucky.
+- **Walking alone in Nacka:** reading the file 21% of the peak, the network 49%, the files 29%.
 
-At 1 KiB for each edge, 4 GB holds about 4 million edges. At 1.6 KiB, it holds about 2.6 million. Walking has about 1.8 times more edges than driving for the same area.
+**A finding that is not about memory.** The build of Kentucky walking stops with `duplicate (osm_id, source, target) after the splits: 1214406652 11251734036->11251734037`. The same error comes from the native CLI of release 0.3.0 (it used 2.8 GB before it stopped). So it is a fault of the build for this file, not of the browser. I did not investigate it.
 
-Native numbers, from [design.md](../design.md), section 7: Kentucky has a heap peak of 2,145 MiB on one thread. Iran has a heap peak of 5,222 MiB. So the native CLI also needs more than 4 GB for Iran, and a 64-bit module needs about the same.
+Native numbers, from [design.md](../design.md), section 7 (2026-10-22): Kentucky has a heap peak of 2,145 MiB on one thread, and Iran has a heap peak of 5,222 MiB. So the native CLI also needs more than 4 GB for Iran, and a 64-bit module needs about the same.
 
 ## Where the memory goes
 
@@ -79,7 +103,7 @@ Each step has a check, and a step starts only when the step before it is done. L
 
 | Step | Work | Check |
 |---|---|---|
-| 0 | **Measure.** Add the probe (option 1). Run Monaco, Nacka and Tartu with the page's step log. Then, with Kaveh's word, Estonia and Kentucky with the current build and all networks. | The table of this note has the current numbers. The real cost for each edge is known. |
+| 0 | **Measure.** Done in part (2026-11-04): the step log on Nacka, Tartu, Estonia and Kentucky, in Node. Still to do: the probe (option 1), which shows the memory by type and not only by step, and a run in the page with the `Blob` path. | The table of this note has the current numbers. The probe shows where the 1.3 to 1.7 KiB for each edge go. |
 | 1 | **The clear error** (option 6). | A test with a small limit shows the message, and no `RuntimeError: unreachable`. |
 | 2 | **Cheap savings** (options 2 and 3, then 4 if the probe shows it). | `cargo test -p duckosm-wasm` (the same 33 files as the native build), `tools/compare_tables.py` on Monaco and Tartu, and the memory in the table is lower. |
 | 3 | **Instances for each network** (option 5), if the probe shows that three networks cost much more than one. | Same checks. The time of a three-network build is not much worse. |
@@ -89,7 +113,7 @@ The golden tests are the safety net for every change: the tests of the workspace
 
 ## What I do not know
 
-- The memory at scale with the current code. The old numbers are from before the speed step, the sidewalk rule, the connectors, the graph, the restrictions and the lane profile.
+- The memory in the page. The page reads the file as a `Blob`, and the Node runner gives bytes.
 - Where the 26 MiB of the "files" step goes.
 - If the later steps (levels, lane profile, area tables) add memory in a large area. They add 0 in Nacka.
 - How much time the options cost in a large area.
@@ -97,6 +121,6 @@ The golden tests are the safety net for every change: the tests of the workspace
 
 ## Open questions for Kaveh
 
-1. Do you allow Estonia and Kentucky for step 0? They are the largest areas of the notes.
+1. Do you allow Iran for step 0? Iran is the area that you asked about. I expect it to fail, and it needs about 4 GB of RAM for a short time.
 2. Is "a clear error and about 1.5 times more area" enough for now, or must the build handle a whole country in the browser? The answer chooses between steps 2 and 3, and the large options.
 3. The page and the CLI share the same build code. Is a saving that helps only the browser (for example, options 5 and 6) acceptable?
