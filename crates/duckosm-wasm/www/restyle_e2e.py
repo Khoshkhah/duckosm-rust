@@ -1,8 +1,8 @@
 """A theme on the same tiles (roadstyle's LiveMap.setLook, roadstyle's docs/design/restyle_without_retile.md) in headless Chromium (Playwright):
 after a build of Monaco's sample, roads get live colours (rsColor), and the Design panel's theme Amber (other colours only) keeps the map's tiles:
-no tile is asked for again, the road layer gets the new colours, and the live colours stay. The theme Hollow (roads 10% wider) keeps the tiles
-too: the page's look has a buffer headroom of 1.35 (make_look.mjs). The theme Access (some roads 1.7 times wider) needs more buffer than the
-tiles have, and draws a new map.
+no tile is asked for again, the road layer gets the new colours, and the live colours stay. The themes Hollow (roads 10% wider) and
+Accessibility large (roads 1.8 times wider) keep the tiles too: the page's look has a buffer headroom of the widest ready theme (make_look.mjs).
+A design of your own with wider roads (2.5 times) needs more buffer than the tiles have, and draws a new map.
 
     python crates/duckosm-wasm/www/restyle_e2e.py
 """
@@ -66,10 +66,15 @@ with sync_playwright() as p:
     assert "same tiles" in (page.text_content("#mapnote") or "")
     print("a new look on the same tiles: ok,", len(rows), "live colours kept")
 
-    assert theme(page, "hollow") == "same tiles", "Hollow's wider roads fit in the tiles' buffer (headroom 1.35): the map keeps its tiles"
+    assert theme(page, "hollow") == "same tiles", "Hollow's wider roads fit in the tiles' buffer: the map keeps its tiles"
+    assert theme(page, "access") == "same tiles", "Accessibility large is the widest ready theme: the headroom covers it"
     assert page.evaluate(state, rows) == ["#ff00ff"] * len(rows), "the live colours stay"
     print("wider roads within the headroom keep the tiles: ok")
-    assert theme(page, "access") == "the look needs new tiles", "Access's roads need more buffer than the tiles have: a new map"
+    page.click("#design-tab-roads")
+    page.eval_on_selector("#design-pane [data-p='roads.width.major']", "(el) => { el.value = '2.5'; el.dispatchEvent(new Event('input', { bubbles: true })); }")
+    page.evaluate("window.designPanel.flush()")
+    page.wait_for_function("!window.mapDrawing && /shows this design|could not/.test(window.designPanel.state())", timeout=300_000)
+    assert page.evaluate("window.lastRestyle") == "the look needs new tiles", "roads 2.5 times wider need more buffer than the tiles have: a new map"
     assert "same tiles" not in (page.text_content("#mapnote") or "")
     print("a look that needs more buffer draws a new map: ok")
     browser.close()

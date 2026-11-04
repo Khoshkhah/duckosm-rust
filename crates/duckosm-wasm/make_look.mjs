@@ -2,6 +2,7 @@
 // The args are those of the Monaco map the page began with; the base map (roads' colours too) is the theme "liberty", paths "google".
 import { readFileSync, writeFileSync } from "node:fs";
 import init, { resolveLook } from "./www/map/pkg/roadstyle_wasm.js";
+import { THEME_DATA } from "./www/app/design.js";
 
 const dir = new URL("./www/map/", import.meta.url);
 await init({ module_or_path: readFileSync(new URL("pkg/roadstyle_wasm_bg.wasm", dir)) });
@@ -21,9 +22,9 @@ const look = resolveLook(JSON.stringify({
 }));
 // tiles.maxzoom 18 is the default; the page keeps it in the file too.
 // The tiles' buffer is the strokes' need times BUFFER_HEADROOM, so a design with roads up to this much wider keeps the map's tiles (roadstyle's
-// LiveMap.setLook, docs/design/restyle_without_retile.md in roadstyle). 1.35 covers 32 of the 33 themes of the Design panel (all but Access, x1.7);
-// the cost on a Burnaby sample: 4.3% more tile bytes.
-const BUFFER_HEADROOM = 1.35;
+// LiveMap.setLook, docs/design/restyle_without_retile.md in roadstyle). It is the largest width factor of the Design panel's ready themes (now
+// Accessibility large, x1.8): every ready theme keeps the tiles, also a new one after this file runs again. A wider design of your own makes a new map.
+const BUFFER_HEADROOM = Math.max(1, ...THEME_DATA.flatMap((t) => Object.values(t.roads?.width ?? {})));
 const out = JSON.parse(look.toJson());
 out.tiles.buffer_headroom = BUFFER_HEADROOM;
 writeFileSync(new URL("look.json", dir), JSON.stringify(out));
