@@ -1046,7 +1046,15 @@ export async function initFixesPanel(ctx) {
     setTimeout(() => { window.rsDeselect?.(); document.querySelectorAll(".maplibregl-popup:not(.rs-tip)").forEach((p) => p.remove()); });
   }
   map.on("click", onMapClick);
-  document.addEventListener("rs:select", (e) => {                       // a road: the dashboard's click on the roads (roadstyle), with no popup
+  // roadstyle picks the nearest road for a click within a few pixels of it, also when the click is on a building. The Road and Turn tabs ignore such a click
+  // (a building is picked in the Building tab). The point of the press comes first: the dashboard's click handler runs before the page's own.
+  let pressed = null;
+  for (const ev of ["mousedown", "touchstart"]) map.on(ev, (e) => { pressed = { p: e.lngLat, t: performance.now() }; });
+  async function onBuilding(p) {
+    if (!p || performance.now() - p.t > 2000 || !built("features", "buildings")) return false;       // a press that is older is not this select
+    return (await safe(`SELECT 1 FROM features.buildings WHERE ST_Intersects(geom, ST_Point(${p.p.lng}, ${p.p.lat})) LIMIT 1`)).length > 0;
+  }
+  document.addEventListener("rs:select", async (e) => {                       // a road: the dashboard's click on the roads (roadstyle), with no popup
     if (!open()) return;
     setTimeout(() => document.querySelectorAll(".maplibregl-popup:not(.rs-tip)").forEach((p) => p.remove()));
     if (draw && current === "new") { setTimeout(() => window.rsDeselect?.()); return; }              // a click while drawing adds a point (onMapClick)
@@ -1054,6 +1062,7 @@ export async function initFixesPanel(ctx) {
     if (!turns && current !== "road") return;                            // a building or a node is picked by its own click
     const id = Number(ctx.roadIdOfRow(e.detail?.id));
     if (!Number.isSafeInteger(id) || id <= 0) return;
+    if (await onBuilding(pressed)) { window.rsDeselect?.(); return; }
     if (turns) { $("fix-from").value = id; findTurns(id); }
     else select("road", "way", id);
   });

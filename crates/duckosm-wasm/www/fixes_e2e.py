@@ -168,6 +168,22 @@ with sync_playwright() as p:
     page.wait_for_function("window.fixesPanel.drawn().sel > 0", timeout=20_000)
     print("← Steps unselects everything on the map, and the panel shows the picked road again when it opens")
 
+    # a click on a building in the Road or the Turn tab picks no road: roadstyle takes the nearest road for a click within a few pixels, and the panel ignores it on a building
+    near = rows(page, "SELECT ST_X(ST_ClosestPoint(b.geom, e.geometry)) * 0.9 + ST_X(ST_PointOnSurface(b.geom)) * 0.1 AS x, ST_Y(ST_ClosestPoint(b.geom, e.geometry)) * 0.9 + ST_Y(ST_PointOnSurface(b.geom)) * 0.1 AS y "
+                       "FROM features.buildings b, driving.edges e WHERE b.osm_type = 'way' AND ST_Distance(b.geom, e.geometry) < 0.00003 ORDER BY ST_Area(b.geom) DESC LIMIT 1")[0]
+    px = at(page, near["x"], near["y"])
+    before = page.input_value("#fix-id")
+    page.mouse.click(*px)
+    page.wait_for_timeout(1500)
+    assert page.input_value("#fix-id") == before, ("a click on a building picked a road in the Road tab", before, page.input_value("#fix-id"))
+    page.click("#fix-tab-turns")
+    px = at(page, near["x"], near["y"])
+    page.mouse.click(*px)
+    page.wait_for_timeout(1500)
+    assert page.input_value("#fix-from") == "" and page.evaluate("document.getElementById('fix-turnsec').hidden"), "a click on a building picked a junction in the Turn tab"
+    page.click("#fix-tab-road")
+    print("a click on a building in the Road or the Turn tab picks no road and no junction")
+
     # a building: its tab, a real click, the preset fields (floors, roof shape, roof color)
     page.click("#fix-tab-building")
     b = rows(page, "SELECT osm_id, ST_X(ST_PointOnSurface(geom)) AS x, ST_Y(ST_PointOnSurface(geom)) AS y FROM features.buildings WHERE osm_type = 'way' "
