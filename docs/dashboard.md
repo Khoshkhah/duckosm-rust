@@ -233,7 +233,9 @@ How a wall gets its type, in order of strength:
 2. The street that the `addr:street` tag names is preferred (`address`).
 3. A wall faces a street that it can see: a line from one of three points of the wall reaches the street with no wall in the way. A street of a higher class wins (`street`).
 4. A building that sees no street gets the wall that faces the nearest street within 150 m (`inferred`, shown as "guess").
-5. A wall that points away from the front wall and faces no street is a back wall. A wall that two buildings share is a party wall.
+5. Walls that turn by less than 25 degrees are one run and have one type. A wall shorter than 3 m (a chamfer) has the type of its longer neighbour.
+6. A second wall is also a front wall (`corner`) when it faces another street, or the same facade, and the street is at most 20 m away, at most 8 m farther than the main front street, and not a much smaller class. A building has at most two of them.
+7. A wall that points away from the front wall and faces no street within 25 m is a back wall. A wall that two buildings share is a party wall.
 
 Check the walls that say "guess" or "no street seen". The method is in [osm-editing.md](osm-editing.md).
 
