@@ -47,7 +47,7 @@ onmessage = async ({ data }) => {
     return;
   }
   try {
-    const [, look] = await Promise.all([init(), fetch(new URL("./look.json", import.meta.url)).then((r) => r.text())]);
+    const [, look] = await Promise.all([init(data.wasmModule && { module_or_path: data.wasmModule }), fetch(new URL("./look.json", import.meta.url)).then((r) => r.text())]);
     const t = performance.now();
     // levels: "tags", or the stored levels' {edge_hash, n_edges}, which the engine checks
     const l = Look.fromJson(look).withArg("levels", JSON.stringify(data.levels));

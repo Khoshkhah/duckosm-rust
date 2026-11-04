@@ -8,6 +8,7 @@ It also has the relay of the page at /relay?url=... (the same rules as relay/wor
 can get a Geofabrik extract on this computer: open http://localhost:<port>/?relay=relay
 """
 import functools
+import gzip
 import http.server
 import pathlib
 import re
@@ -18,6 +19,7 @@ import urllib.parse
 import urllib.request
 
 WWW = pathlib.Path(__file__).resolve().parent
+GZIP_SUFFIXES = {".html", ".wasm", ".js", ".mjs", ".json", ".css", ".svg"}
 GEOFABRIK = re.compile(r"^https://download\.geofabrik\.de/[a-z0-9/_-]+-(latest|\d{6})\.osm\.pbf$")
 
 
@@ -35,15 +37,53 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
         super().end_headers()
 
+    gzipped = {}    # (path, modified time, size) -> the gzip bytes: a file is compressed once
+
+    def gzip_file(self, head=False):
+        """A module, script or data file as gzip when the browser accepts it: the 16 MB module of roadstyle is 3.6 MB. The page is often on an ssh tunnel
+        (slow), and a private window of a browser has no cache for a file that size, so each page load sends it again. False: not a file for this."""
+        if "gzip" not in self.headers.get("Accept-Encoding", "") or self.headers.get("Range"):
+            return False
+        path = pathlib.Path(self.translate_path(self.path))
+        if path.suffix not in GZIP_SUFFIXES or not path.is_file():
+            return False
+        st = path.stat()
+        if st.st_size < 4096:
+            return False
+        modified = self.date_time_string(st.st_mtime)
+        if self.headers.get("If-Modified-Since") == modified:
+            self.send_response(304)
+            self.end_headers()
+            return True
+        key = (str(path), st.st_mtime_ns, st.st_size)
+        if key not in self.gzipped:
+            self.gzipped[key] = gzip.compress(path.read_bytes(), 6)
+        body = self.gzipped[key]
+        self.send_response(200)
+        self.send_header("Content-Type", self.guess_type(str(path)))
+        self.send_header("Content-Encoding", "gzip")
+        self.send_header("Vary", "Accept-Encoding")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Last-Modified", modified)
+        self.end_headers()
+        if not head:
+            try:
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+        return True
+
     def do_GET(self):
         if self.path.startswith("/relay?"):
             return self.relay()
-        super().do_GET()
+        if not self.gzip_file():
+            super().do_GET()
 
     def do_HEAD(self):
         if self.path.startswith("/relay?"):
             return self.relay(head=True)
-        super().do_HEAD()
+        if not self.gzip_file(head=True):
+            super().do_HEAD()
 
     def relay(self, head=False):
         """relay/worker.js on this computer: a Geofabrik .osm.pbf file, streamed (the page is on the same site, so no CORS)."""
