@@ -26,8 +26,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     quiet = False
 
     def end_headers(self):
-        # a test server changes its files all the time: no cache, so that a page never mixes an old module with a new one (a browser keeps a file from Last-Modified alone)
-        self.send_header("Cache-Control", "no-store")
+        # a test server changes its files all the time, so a browser asks again for each file (no-cache: it sends If-Modified-Since, and the answer is 304 with no body
+        # when the file did not change). A page never mixes an old module with a new one, and the 16 MB module of roadstyle is not sent again for each new map worker
+        # (with no-store it was, two times for each change of the design: 20 s on an ssh tunnel).
+        self.send_header("Cache-Control", "no-cache")
         if self.isolated:
             self.send_header("Cross-Origin-Opener-Policy", "same-origin")
             self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
