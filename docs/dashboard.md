@@ -36,6 +36,7 @@ After a build the page looks like this:
 6. Show the map (step 6). Draw the roads on the map.
 7. Fix OSM data (step 7). Change roads, buildings, nodes and turns, and build again.
 8. Edit levels (step 8). Open the level editor.
+9. Export (step 9). Give the network or its tiles to other software: PMTiles, MBTiles, GeoPackage, GeoJSON, MATSim and SUMO.
 
 ## The bar of tools
 
@@ -285,6 +286,39 @@ A choice in one list closes a field, or narrows the list of a field, for another
 ## Step 8: Edit levels
 
 Card 8 opens roadstyle's level editor for the roads that you built: change the level of a road, and see the effect on bridges, tunnels and crossings. The level editor is described in [levels.md](levels.md).
+
+## Step 9: Export
+
+![Card 9: the network and the export formats](img/dashboard/11b-export.png)
+
+Card 9 gives the network that you built to other software. It is off until a build ends. The files are made in your browser from the tables, and each **Download** button makes one file. The **Network** list shows the networks that you built (it shows when there is more than one).
+
+| Format | File | What it has |
+|---|---|---|
+| **PMTiles** | `<area>_z<min>-<max>.pmtiles` | One PMTiles v3 file (gzip MVT tiles, Hilbert order, leaf directories for more than 4,000 tiles). For MapLibre, roadstyle and any static server. |
+| **MBTiles** | `<area>_z<min>-<max>.mbtiles` | The same tiles in a SQLite file (`metadata` and `tiles`, rows from the south). For QGIS and tile servers. |
+| **GeoPackage** | `<area>_<network>.gpkg` | The tables `roads` (LineString) and `nodes` (Point) in EPSG:4326, with no spatial index. For QGIS and ArcGIS. |
+| **GeoJSON** | `<area>_<network>_geojson.zip` | `<network>_roads.geojson` (a LineString for each edge, with `edge_id`, `osm_id`, name, class, one-way, lanes, speed and length) and `<network>_nodes.geojson`. Coordinates are longitude and latitude. |
+| **MATSim network** | `<area>_<network>_matsim_network.xml` | A `network_v2.dtd` file: a node for each node, and a link for each edge with length (m), free speed (m/s), capacity (vehicles per hour), lanes and mode (`car`, `walk` or `bike`). Coordinates are meters in the UTM zone of the area. |
+| **SUMO plain XML** | `<area>_<network>_sumo.zip` | `.nod.xml`, `.edg.xml` and `.con.xml` and a `README.txt` with the `netconvert` command. An edge has its shape, lanes, speed and priority. The connections are the legal turns of the edge graph (turn restrictions applied). |
+
+The tiles are the tiles of the map on the screen, made again by the map worker as MVT. Two fields set them:
+
+- **Zoom from ... to ...** The lowest and the highest zoom (0 to 18). The card shows the number of tiles for the extent of the network. The limit is 40,000 tiles: if the count is higher, the buttons are off, and you use fewer zooms.
+- The buttons for tiles are off until **Show on map** (step 6) has drawn the map. A tile that has nothing in it is left out.
+- A tile has all the layers of the map. In roadstyle's tiles, the layer `simple` has the roads and the layers `ov0`, `ov1` and so on have the base-map layers (water, land use, buildings). A tile joins the layers of all the sources of the map.
+
+Facts about the files:
+
+- The ids are the `edge_id` and `node_id` values of the tables, as text. They are 64-bit hashes, so a program that reads them as numbers can lose digits.
+- The speed is `maxspeed_kmh` when the edge has it. If not, the page uses a default for the class (for example 50 km/h for a secondary road). The lanes default to 1. The capacity is 2,000 vehicles per hour and lane for a motorway, and 800 for a small road.
+- To make a SUMO network, unpack the `.zip` and run the command of the README:
+
+```bash
+netconvert --node-files area_driving.nod.xml --edge-files area_driving.edg.xml --connection-files area_driving.con.xml -o area_driving.net.xml
+```
+
+The page does not run `netconvert`, so the SUMO files are not checked against SUMO here. The simulator adapters with lanes, junction shapes and traffic lights are in the SimReady project.
 
 ## The dark theme and the phone
 

@@ -212,7 +212,12 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   .sb-foot { flex: none; display: grid; grid-template-columns: 1fr 1.5fr; gap: 8px; padding: 12px 15px 14px; border-top: 1px solid var(--line); }
 
   /* steps 3 to 5: the data, the build, the result (docs/app.md) */
-  #step7-card [hidden], #step8-card [hidden], #fix-panel [hidden] { display: none; }
+  #step7-card [hidden], #step8-card [hidden], #step9-card [hidden], #fix-panel [hidden] { display: none; }
+  #export-list .exp { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+  #export-list .exp small { grid-column: 1; color: var(--mut); line-height: 1.35; }
+  #export-list .zoomrow { grid-template-columns: 1fr; padding-top: 8px; }
+  #export-list .zoomrow input { width: 58px; }
+  #export-list .grp { margin: 12px 0 0; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mut); }
   /* the fixes' own panel (like the level editor's): the steps, the title and the footer go while it is open, and the road popup is off */
   #fix-panel { display: none; }
   body.editing-fixes #sb .sb-top, body.editing-fixes #sb .sb-body, body.editing-fixes #sb .sb-foot { display: none; }
@@ -611,6 +616,13 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
   <p id="editnote" class="progress" aria-live="polite"></p>
 </section>
 
+<section id="step9-card" class="step" aria-labelledby="step9">
+  <h2 id="step9"><span class="n">9</span>Export</h2>
+  <div class="grid2" id="export-mode-row"><label for="export-mode" class="small">Network</label><select id="export-mode"></select></div>
+  <div id="export-list"></div>
+  <p id="export-status" class="progress" aria-live="polite"></p>
+</section>
+
 </div>
 
 <footer class="sb-foot">
@@ -700,6 +712,7 @@ window.duckApi = duck;   // for the tests (drawLaps, tileStats)
 import * as regions from "./app/regions.js";
 import * as areaStore from "./app/area_store.js";
 import { initFixesPanel } from "./app/fixes_panel.js";
+import * as exporter from "./app/export.js";
 import { rsDashboard } from "./map/roadstyle/dashboard/index.js";   // roadstyle's map dashboard (copied by build.sh at ROADSTYLE_COMMIT)
 import { rsFirstPaint } from "./map/roadstyle/dashboard/template.js";   // the classes of <html> before the first paint
 
@@ -1662,6 +1675,7 @@ async function restoreSavedArea(slug) {
     }
 
     netBuilt = true;
+    document.dispatchEvent(new Event("duckosm:built"));
     fixesApplied = !!meta.fixesYaml;
     builtFixes = meta.fixesYaml ?? null;
     savedCut = meta.hasCut ? (meta.slug || slug) : null;      // the cut file of the saved area: the .osm.pbf button reads it from the browser storage
@@ -1942,6 +1956,7 @@ $("run").onclick = async () => {
       [...out.summary.matchAll(/^(\w+): (\d+) edges, (\d+) nodes/gm)].map((m) =>
         `<tr><td>${icon(NET[m[1]]?.[0] ?? "arrow")}${NET[m[1]]?.[1] ?? esc(m[1])}</td><td>${num(+m[2])}</td><td>${num(+m[3])}</td></tr>`).join("") + "</tbody></table>";
     netBuilt = true;
+    document.dispatchEvent(new Event("duckosm:built"));
     fixesApplied = !!fixes;
     fixesPanel?.rebuilt();                          // the tables are new: the panel loads the picked objects again and draws its changes again
     $("fix-why").textContent = fixes ? "Built with these fixes." : "";
@@ -2068,6 +2083,7 @@ async function useStyle(style) {
   removeRoads();
   await addRoadStyle(style);
   roadsShown = true;
+    document.dispatchEvent(new Event("duckosm:drawn"));
   rs.setStyle(style);
 }
 async function drawRoads() {
@@ -2092,6 +2108,7 @@ async function drawRoads() {
     //   // the road fields (the popup); the level editor puts its own here while it is open
     rs.setStyle(r.style);   // the dashboard reads the new roads style (its layers and metadata)
     roadsShown = true;
+    document.dispatchEvent(new Event("duckosm:drawn"));
     // the first tiles: the map is drawn when it is idle (at most 60 s)
     await Promise.race([new Promise((ok) => map.once("idle", ok)), new Promise((ok) => setTimeout(ok, 60000))]);
     if (run !== roadsRun) { fresh ||= isFresh; return; }
@@ -2287,6 +2304,13 @@ const CARD_HELP = {
     ["Show on map", "Draws the roads with roadstyle. Click a road to see its data."],
     ["Google key", "Street View (Linked) and Google 3D need a Google Maps JavaScript API key. The gear button of the map bar saves it in this browser only."]],
     note: link(DOCS.google, "How to get a Google key") },
+  9: { title: "Export", intro: "Give the network to other software. The files are made in this browser from the tables of the build.", terms: [
+    ["PMTiles and MBTiles", "The vector tiles of the map in one file, for the zooms that you choose. They need the map (step 6)."],
+    ["GeoPackage", "Roads (lines) and nodes (points) in one .gpkg file, for QGIS and ArcGIS."],
+    ["GeoJSON", "Roads and nodes as GeoJSON files, for QGIS and web maps."],
+    ["MATSim network", "A network.xml with a link for each edge: length, free speed, capacity and lanes. Meters in the UTM zone of the area."],
+    ["SUMO plain XML", "Node, edge and connection files for netconvert. The connections are the legal turns of the build (turn restrictions applied)."],
+    ["Network", "The network to export: driving, walking or cycling (the ones that you built)."]] },
   7: { title: "Fix OSM data", intro: "Correct known errors of OpenStreetMap, and add information, with rules. A rule changes the tags of one road, building or node, or one turn. The rules are a duckOSM fixes file.", terms: [
     ["Edit", "Click a road, a building or a node on the map (the buttons say which), or type its OSM ID. The panel shows its data. Change it with the fields (sidewalk, cycleway, surface, floors, roof shape, colors) or add a tag. Save the rule."],
     ["Turns", "Pick the road that a turn starts on and the junction. Then give each road that leaves it a turn rule. Driving only."],
@@ -2323,7 +2347,9 @@ const STEP = {
   6: { ready: () => (netBuilt ? "" : "after step 4"), done: () => roadsShown },
   7: { ready: () => (netBuilt ? "" : "after step 4"), done: () => fixesApplied, optional: true },   // optional: the page does not open it by itself
   8: { ready: () => (netBuilt && levelsTable() ? "" : "after step 4"), done: () => levelsApplied },
+  9: { ready: () => (netBuilt ? "" : "after step 4"), done: () => exported, optional: true },
 };
+let exported = false;
 let current = null;                                // the step that the page opened last
 let areasAutoFolded = false;                       // the card "Your areas" folded by itself once
 function refreshSteps() {
@@ -2383,6 +2409,62 @@ for (const old of [...document.querySelectorAll("section.step")]) {
   rs.sections.hide("areas");                          // it shows when the list has an area
   if (areaStore.isSupported) renderSavedAreasList();
 }
+// card 9, Export: the networks that the build made, and one row for each format
+const exportQuery = async (sql) => (await duck.query(sql)).toArray().map((r) => r.toJSON());
+function paintExport() {
+  const modes = [...new Set(duck.tables.filter((t) => t.table === "edges").map((t) => t.mode))];
+  const sel = $("export-mode"), was = sel.value;
+  sel.innerHTML = modes.map((m) => `<option value="${m}">${m[0].toUpperCase() + m.slice(1)}</option>`).join("");
+  sel.value = modes.includes(was) ? was : modes[0] ?? "";       // (roadstyle's list shows the new value after this)
+  $("export-mode-row").hidden = modes.length < 2;
+  let last = "";
+  const zoomRow = '<div class="exp zoomrow"><span class="small">Zoom from <input id="export-zmin" type="number" min="0" max="18" value="10" aria-label="The lowest zoom"> to <input id="export-zmax" type="number" min="0" max="18" value="14" aria-label="The highest zoom"></span><span id="export-tiles" class="small"></span></div>';
+  $("export-list").innerHTML = exporter.FORMATS.map((f) => `${f.group !== last ? `<p class="grp">${(last = f.group)}</p>${f.tiles ? zoomRow : ""}` : ""}<div class="exp"><b>${esc(f.title)}</b><button type="button" class="btn sm" data-fmt="${f.id}"${f.tiles ? " data-tiles" : ""}>Download</button><small>${esc(f.note)}</small></div>`).join("");
+  paintTileCount();
+}
+// the tiles of the map (card 6): the sources of the map's style, in MVT; the box is the extent of the network; the zooms are the two numbers of the card
+let exportBox = null;
+async function exportExtent() {
+  if (exportBox) return exportBox;
+  const mode = $("export-mode").value || "driving";
+  const [e] = await exportQuery(`SELECT min(ST_XMin(geometry)) AS w, min(ST_YMin(geometry)) AS s, max(ST_XMax(geometry)) AS e, max(ST_YMax(geometry)) AS n FROM ${mode}.edges`);
+  return (exportBox = [e.w, e.s, e.e, e.n]);
+}
+const exportSource = () => ({
+  urls: Object.entries(map.getStyle().sources).filter(([id, src]) => id.startsWith("rs-") && src.type === "vector" && src.tiles?.length).map(([, src]) => src.tiles[0].replace(/([?&])f=[a-z]+/, "$1f=mvt").replace(/^(rs:[^?]*)$/, "$1?f=mvt")),
+  tile: (u) => duck.tile(u),
+});
+async function paintTileCount() {
+  const out = $("export-tiles");
+  if (!out) return;
+  const lo = Math.max(0, Math.min(18, +$("export-zmin").value || 0)), hi = Math.max(lo, Math.min(18, +$("export-zmax").value || lo));
+  const n = exporter.tileCount(await exportExtent(), lo, hi);
+  out.textContent = n > exporter.MAX_TILES ? `${num(n)} tiles: too many (at most ${num(exporter.MAX_TILES)}). Use fewer zooms.` : `${num(n)} tiles.`;
+  for (const b of document.querySelectorAll("#export-list [data-tiles]")) b.disabled = n > exporter.MAX_TILES || !roadsShown;
+}
+$("export-list").addEventListener("input", (e) => { if (e.target.id === "export-zmin" || e.target.id === "export-zmax") paintTileCount(); });
+document.addEventListener("duckosm:built", () => { exportBox = null; });
+document.addEventListener("duckosm:drawn", () => { paintTileCount(); });
+$("export-list").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-fmt]");
+  if (!b || b.disabled) return;
+  const f = exporter.FORMATS.find((x) => x.id === b.dataset.fmt), mode = $("export-mode").value;
+  b.disabled = true; $("export-status").textContent = `Making ${f.title}…`;
+  try {
+    const t0 = performance.now();
+    const ctx = f.tiles ? { src: exportSource(), bbox: await exportExtent(), min: Math.max(0, +$("export-zmin").value || 0), max: Math.min(18, +$("export-zmax").value || 14),
+      progress: (d, n) => { $("export-status").textContent = `Making ${f.title}: ${num(d)} of ${num(n)} tiles…`; } } : undefined;
+    const r = await f.run(exportQuery, mode, $("name").value.trim() || areaName, ctx);
+    const a = Object.assign(document.createElement("a"), { download: r.name, href: URL.createObjectURL(r.blob) });
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href));
+    exported = true; refreshSteps();
+    $("export-status").textContent = `${r.name}: ${num(r.rows)} ${f.tiles ? "tiles" : "edges"}, ${num(r.blob.size / 1024, 0)} KB, ${num((performance.now() - t0) / 1000, 1)} s.`;
+    window.lastExport = { name: r.name, size: r.blob.size, rows: r.rows, connections: r.connections };       // for export_e2e.py
+  } catch (err) {
+    $("export-status").textContent = `The export failed: ${err.message}`;
+  } finally { b.disabled = false; }
+});
+document.addEventListener("duckosm:built", paintExport);
 stepsReady = true;
 rs.help.set(HELP);
 refreshSteps();

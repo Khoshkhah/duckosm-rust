@@ -23,7 +23,7 @@ out.mkdir(parents=True, exist_ok=True)
 server = start(0, quiet=True, directory=WWW)
 url = f"http://127.0.0.1:{server.server_address[1]}/index.html?maxroads=0"
 errors = []
-CARDS = ["step1-card", "step2-card", "extracts-box", "step4-card", "step5-card", "step6-card", "step7-card", "step8-card"]
+CARDS = ["step1-card", "step2-card", "extracts-box", "step4-card", "step5-card", "step6-card", "step7-card", "step8-card", "step9-card"]
 STATE = """() => Object.fromEntries([...document.querySelectorAll('.step')].map((c) => [c.id, (c.classList.contains('folded') ? 'F' : 'O') + (c.classList.contains('off') ? '-off' : '') + (c.querySelector('.done').hidden ? '' : '-done')]))"""
 checked_links = {}
 
