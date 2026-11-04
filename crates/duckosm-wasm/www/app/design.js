@@ -450,19 +450,28 @@ export const THEME_DATA = [
 const expand = (map, keys, now) => Object.fromEntries(keys.map((k) => [k, map[k] ?? map["*"] ?? now[k]]));
 /**
  * The design of a theme (an object of THEME_DATA) on top of `b`, the design of the look: it has every style value, and keeps the profile and the dark ranges of `b`.
- * A theme with `roadsOnly` (a road palette) changes only the road colors of `now`, the design that is on now (`b` when none): the base map stays.
+ * A theme with `roadsOnly` (a road palette) changes only the road colors of `now`, the design that is on now (`b` when none): the base map stays. It draws the
+ * roads with the full fill and casing (defaultRoadOpacity), because a palette on Roads hollow (fill 0) would change colors that do not show.
  */
 export function makeTheme(b, t, now = b) {
   const d = clone(t.roadsOnly ? now : b);
   d.name = t.name; d.theme = t.id;
   if (t.look) return d;
   d.roads = { fill: expand(t.roads.fill, CLASSES, d.roads.fill), casing: expand(t.roads.casing, CLASSES, d.roads.casing), width: t.roads.width ? expand(t.roads.width, GROUPS.map(([g]) => g), d.roads.width) : d.roads.width,
-    opacity: { ...(t.roadsOnly ? d.roads.opacity : defaultRoadOpacity()), ...t.roads.opacity } };
+    opacity: { ...defaultRoadOpacity(), ...t.roads.opacity } };
   if (t.roadsOnly) return d;
   Object.assign(d.labels, t.labels); Object.assign(d.arrows, t.arrows); Object.assign(d.boundary, t.boundary); Object.assign(d.base, t.base);
   Object.assign(d.ground, t.ground); Object.assign(d.visible, t.visible);          // a theme names the layers that it hides (visible: false) and the ground that it makes transparent
   return d;
 }
+/** The kinds of the ready themes, in the order of the theme list: what a theme changes when you pick it. */
+export const THEME_KINDS = [
+  ["map", "Whole map", "These set the roads, the base map, the text and the layers."],
+  ["overlay", "Roads on any map", "These set the roads and hide the base map: the map under the roads shows through."],
+  ["palette", "Road colors", "These change only the road colors. The base map, the text and the layers of the design that is on now stay."],
+];
+/** The kind of a ready theme (a key of THEME_KINDS). */
+export const themeKind = (t) => (t.roadsOnly ? "palette" : t.group === "overlay" ? "overlay" : "map");
 /** The filters of the theme list (the buttons above it). "yours" shows the themes that the person saved, and none of the ready themes. */
 export const THEME_FILTERS = [["all", "All"], ["light", "Light"], ["dark", "Dark"], ["overlay", "Overlay"], ["print", "Print"], ["roads", "Roads only"], ["roadstyle", "roadstyle"], ["yours", "Yours"]];
 /** Whether a ready theme (an object of THEME_DATA, or of THEMES) is in a filter and has the words of a search (all the words are in its name, its note or its group). */

@@ -76,7 +76,11 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
   const shownThemes = () => D.THEMES.filter((t) => D.themeMatches(t, themeFilter, themeQuery));
   const readyList = () => {
     const list = shownThemes();
-    return list.length ? list.map(themeCard).join("") : `<p class="why">No ready theme has these words in this filter.</p>`;
+    if (!list.length) return `<p class="why">No ready theme has these words in this filter.</p>`;
+    return D.THEME_KINDS.map(([k, n, why]) => {
+      const of = list.filter((t) => D.themeKind(t) === k);
+      return of.length ? `<div class="kind" data-kind="${k}"><b>${n}</b><small>${why}</small></div>${of.map(themeCard).join("")}` : "";
+    }).join("");
   };
   const paneTheme = () => sec("Ready themes", `<input type="search" id="theme-search" placeholder="Search themes: google, dark, print…" value="${esc(themeQuery)}" aria-label="Search themes">
       <div class="chips" role="group" aria-label="Filter themes">${D.THEME_FILTERS.map(([k, n]) => `<button type="button" class="chip" data-tf="${k}" aria-pressed="${themeFilter === k}">${n}</button>`).join("")}</div>
@@ -237,7 +241,7 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
     const t = e.target.closest("[data-look]");
     if (t) {
       const keep = design.profile;
-      design = D.THEMES.find((x) => x.id === t.dataset.look).make(base, design);          // a road palette keeps the base map of the design that is on now
+      design = D.THEMES.find((x) => x.id === t.dataset.look).make(base, design);          // a road palette keeps the base map of the design that is on now (D.THEME_KINDS)
       design.profile = keep; origin = null; changed(); return paint();
     }
     const pr = e.target.closest("[data-profile]");

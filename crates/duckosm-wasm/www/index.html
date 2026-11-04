@@ -265,6 +265,9 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   #design-panel .themes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   #design-panel .theme { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px; text-align: left; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--fg); font: inherit; cursor: pointer; }
   #design-panel .theme:hover { border-color: var(--accent); }
+  #design-panel .themes .kind { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+  #design-panel .themes .kind:first-child { margin-top: 0; }
+  #design-panel .themes .kind small { color: var(--muted); font-size: 12px; line-height: 1.35; }
   #design-panel .theme[aria-checked=true] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
   #design-panel .theme small { color: var(--muted); font-size: 12px; line-height: 1.35; }
   #design-panel .sw5 { display: flex; width: 100%; height: 14px; border-radius: 4px; overflow: hidden; border: 1px solid var(--line); }
