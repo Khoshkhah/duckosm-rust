@@ -681,6 +681,9 @@ export async function initFixesPanel(ctx) {
       map.addLayer({ id: "fix-faces-line", type: "line", source: "fix-faces", layout: { "line-cap": "round" },
         paint: { "line-color": ["match", ["get", "t"], "front", FACE_COLORS.front, "back", FACE_COLORS.back, "party", FACE_COLORS.party, FACE_COLORS.side], "line-width": 4.5 } });
       map.addLayer({ id: "fix-faces-door", type: "circle", source: "fix-faces", filter: ["==", ["get", "door"], 1], paint: { "circle-radius": 6.5, "circle-color": "#0ea5e9", "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });   // a wall with a door: a dot in the middle of it
+      map.addLayer({ id: "fix-faces-label", type: "symbol", source: "fix-faces", filter: ["has", "n"],      // the number of a wall of the picked building, as in the list
+        layout: { "text-field": ["concat", "#", ["get", "n"]], "text-font": ["Noto Sans Bold"], "text-size": 13, "text-allow-overlap": true, "text-ignore-placement": true },
+        paint: { "text-color": "#111827", "text-halo-color": "#ffffff", "text-halo-width": 2.5 } });
     }
     if (!map.getSource("fix-3d")) {                  // the edited buildings, as extrusions with their height and facade color (tilt the map to see them)
       map.addSource("fix-3d", { type: "geojson", data: EMPTY });
@@ -828,6 +831,8 @@ export async function initFixesPanel(ctx) {
     ensureLayers();
     let feats = [];
     const asFeature = (g, t, e, s = 0) => { try { return { type: "Feature", properties: { t, e: e ? 1 : 0, s: s ? 1 : 0 }, geometry: JSON.parse(g) }; } catch { return null; } };
+    const mid = (g) => { const c = JSON.parse(g).coordinates; return [(c[0][0] + c[1][0]) / 2, (c[0][1] + c[1][1]) / 2]; };
+    const numberDot = (g, n) => { try { return { type: "Feature", properties: { n }, geometry: { type: "Point", coordinates: mid(g) } }; } catch { return null; } };
     const doorDot = (g) => { try { const c = JSON.parse(g).coordinates; return { type: "Feature", properties: { door: 1 }, geometry: { type: "Point", coordinates: [(c[0][0] + c[1][0]) / 2, (c[0][1] + c[1][1]) / 2] } }; } catch { return null; } };
     if (hasFaces()) {
       if (current === "building" && $("fix-walls-all").checked && map.getZoom() >= 16) {
@@ -838,7 +843,7 @@ export async function initFixesPanel(ctx) {
         feats.push(...all.filter((r) => r.d).map((r) => doorDot(r.g)));
       } else if (current === "building" && sel?.kind === "building" && walls.length) {
         feats = walls.map((w) => asFeature(w.g, wallType(w), !!F.findFace(doc, sel.id, w.from_node, w.to_node) || w.edited, wallKey(w) === wallSel));
-        feats.push(...walls.filter((w) => wallDoorNow(w)).map((w) => doorDot(w.g)));
+        feats.push(...walls.filter((w) => wallDoorNow(w)).map((w) => doorDot(w.g)), ...walls.map((w) => numberDot(w.g, w.face_index + 1)));
       }
     }
     if (my !== faceToken) return;

@@ -206,6 +206,8 @@ with sync_playwright() as p:
     # the walls of the building: a list with a type for each wall (from main.building_faces), colored on the map; a change of type is a rule at once
     page.wait_for_function("document.querySelectorAll('#fix-form .wallrow').length >= 3", timeout=20_000)
     assert page.evaluate("window.fixesPanel.drawn().faces") >= 3, "the walls of the building are drawn"
+    page.wait_for_function("duckMap.querySourceFeatures('fix-faces').filter((f) => f.properties.n).length >= 3", timeout=20_000)     # the numbers of the walls on the map, as in the list (#1, #2, ...)
+    assert page.evaluate("duckMap.getLayer('fix-faces-label').layout.get ? true : !!duckMap.getLayer('fix-faces-label')")
     wall = page.evaluate("(() => { const r = document.querySelector('#fix-form .wallrow'); return [r.dataset.a, r.dataset.b, r.dataset.computed]; })()")
     new_type = "party" if wall[2] != "party" else "side"
     page.select_option("#fix-form .wallrow select", new_type)
