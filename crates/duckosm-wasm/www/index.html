@@ -1365,7 +1365,21 @@ loaded.then(() => {
   map.addLayer({ id: "h3-hover", type: "fill", source: "h3hover", paint: { "fill-color": blue, "fill-opacity": 0.12 } });
   map.addLayer({ id: "h3-line", type: "line", source: "h3cells", paint: { "line-color": blue, "line-width": 1.5, "line-opacity": 0.7 } });
   map.on("moveend", h3Grid);
+  h3Paint();
 });
+// the colors of the H3 layers follow the theme: dark gray lines vanish on the dark map, so the dark theme has light lines, a white hover and a lighter blue for the picks
+function h3Paint(theme = document.documentElement.dataset.rsTheme) {
+  if (!map.getLayer("h3-grid")) return;
+  const dark = theme === "dark", pick = dark ? "#60a5fa" : blue;
+  map.setPaintProperty("h3-grid", "line-color", dark ? "#e2e8f0" : "#475569");
+  map.setPaintProperty("h3-grid", "line-opacity", dark ? 0.6 : 0.5);
+  map.setPaintProperty("h3-hover", "fill-color", dark ? "#ffffff" : blue);
+  map.setPaintProperty("h3-hover", "fill-opacity", dark ? 0.2 : 0.12);
+  map.setPaintProperty("h3-fill", "fill-color", pick);
+  map.setPaintProperty("h3-fill", "fill-opacity", dark ? 0.3 : 0.22);
+  map.setPaintProperty("h3-line", "line-color", pick);
+}
+document.addEventListener("rs:themechange", (e) => h3Paint(e.detail?.theme));
 // zoom in until about 150 hexagons are in view (a zoom step is 4 times the area); the button in the note does it, and the tab does it when it opens on a view that is too large
 const h3ZoomIn = () => map.easeTo({ zoom: Math.min(map.getZoom() + Math.max(1, Math.log(h3Estimate / 150) / Math.log(4)), 18), duration: 600 });
 $("h3-grid-note").addEventListener("click", (e) => { if (e.target.closest("#h3-zoom")) h3ZoomIn(); });

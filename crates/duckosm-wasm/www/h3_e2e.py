@@ -115,6 +115,11 @@ def run(browser, phone):
     if not phone:
         page.mouse.move(700, 450)
         page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['h3-hover']}).length > 0", timeout=10_000)
+    # the dark theme: light lines on the dark map (dark gray lines were not seen), and back
+    page.evaluate("rsSetTheme('dark')")
+    page.wait_for_function("duckMap.getPaintProperty('h3-grid', 'line-color') === '#e2e8f0'", timeout=10_000)
+    page.evaluate("rsSetTheme('light')")
+    page.wait_for_function("duckMap.getPaintProperty('h3-grid', 'line-color') === '#475569'", timeout=10_000)
         # the four tabs fit in the panel and the page does not scroll sideways
     tabs = page.evaluate("[...document.querySelectorAll('#step1-card [role=tab]:not([hidden])')].map((t) => { const r = t.getBoundingClientRect(); return [r.left, r.right, r.width]; })")
     sb = page.evaluate("(() => { const r = document.getElementById('sb').getBoundingClientRect(); return [r.left, r.right]; })()")
