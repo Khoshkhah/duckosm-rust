@@ -182,7 +182,7 @@ with sync_playwright() as p:
     shot(page, "26-design-card", "#step9-card")
     page.click("#design-open")
     page.wait_for_selector("#design-panel", state="visible")
-    page.set_viewport_size({"width": 1400, "height": 1750})       # the Theme tab has 14 themes: a tall window shows them all
+    page.set_viewport_size({"width": 1400, "height": 3600})       # the Theme tab has 33 themes: a tall window shows them all
     shot(page, "27-design-theme")
     page.set_viewport_size({"width": 1400, "height": 900})
     page.click("#design-tab-roads")
@@ -206,6 +206,11 @@ with sync_playwright() as p:
     page.evaluate("window.rsSetBasemap('satellite')")
     page.wait_for_timeout(5000)
     shot(page, "33-design-overlay")
+    page.click("#design-pane [data-look=ghost]")                  # the roads ghost on the satellite map
+    page.evaluate("window.designPanel.flush()")
+    page.wait_for_function("!window.mapDrawing && /shows this design/.test(window.designPanel.state())", timeout=180_000)
+    page.wait_for_timeout(2500)
+    shot(page, "35-design-ghost")
     page.evaluate("window.rsSetBasemap('blank')")
     page.evaluate("rsSetTheme('light')")                           # the satellite map turned the page dark
     page.click("#design-pane [data-look=light]")

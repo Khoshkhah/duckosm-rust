@@ -173,3 +173,19 @@ assert.ok(JSON.stringify(out.width[2]).includes("__rs_k") && !JSON.stringify(out
 assert.deepEqual(out.gap[5].slice(0, 4), ["interpolate", ["linear"], ["zoom"], 12], "the zoom stays at the top");
 assert.equal(D.roadOutline(["literal", 3]), null); assert.equal(D.roadOutline(undefined), null);
 assert.equal(D.withAlpha("#ff8000", 0.5), "rgba(255,128,0,0.5)");
+
+// the filter and the search of the theme list
+const ids = (f, q = "") => D.THEME_DATA.filter((t) => D.themeMatches(t, f, q)).map((t) => t.id);
+assert.equal(ids("all").length, D.THEME_DATA.length); assert.deepEqual(ids("yours"), []);
+assert.deepEqual(ids("overlay"), ["overlay", "overlaydark", "hollow", "ghost"]);
+assert.deepEqual(ids("print"), ["print", "toner", "graytone"]);
+assert.deepEqual(ids("roadstyle"), ["google", "grey", "roadstyle", "osmcarto", "amber", "cartoroads", "highsat", "monoroads"]);
+assert.deepEqual(ids("roads"), ["overlay", "overlaydark", "amber", "cartoroads", "highsat", "monoroads", "hollow", "ghost"].sort((a, b) => ids("roads").indexOf(a) - ids("roads").indexOf(b)));
+assert.ok(ids("dark").every((i) => D.THEME_DATA.find((t) => t.id === i).dark) && ids("dark").includes("night") && ids("dark").includes("neon") && !ids("dark").includes("light"));
+assert.ok(ids("light").includes("light") && ids("light").includes("waze") && !ids("light").includes("overlay") && !ids("light").includes("dark"));
+assert.ok(ids("all", "google").includes("google") && ids("all", "Google LIKE").join() === "google", "a search finds the name, in any letters; all the words must match");
+assert.deepEqual(ids("dark", "google"), [], "the search works inside a filter");
+assert.ok(ids("all", "satellite").includes("overlay") && ids("all", "roadstyle").length >= 8, "a search finds words of the note and of the group");
+assert.deepEqual(ids("all", "zzz"), []);
+assert.ok(D.THEME_FILTERS.map(([k]) => k).join() === "all,light,dark,overlay,print,roads,roadstyle,yours");
+console.log("design_units: the theme list passed");

@@ -25,6 +25,7 @@ const setPath = (o, path, v) => {
 
 export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => {}, onBoundary = () => {}, onGround = () => {}, onVisible = () => {}, onRoads = () => {}, has = () => true, preview = { get: () => "other", set: () => {} }, onSave = () => {} }) {
   const base = D.defaultsOf(look);
+  let themeFilter = "all", themeQuery = "";                                                 // the filter and the search above the theme list
   let mine = UT.readAll(), origin = null, ask = null, armed = null, renaming = null, nameDraft = "", keepDraft = false, mineMsg = "";       // the themes that the person saved (app/user_themes.js)
   let design = structuredClone(base), tab = "theme", lastKey = null, timer = null, busy = false, again = false, note = "", counts = { text: "", bad: false };
   const styleKey = (d) => {                                          // the profile, the boundary, the ground, the layers and the opacity are not in the look: they draw no new map
@@ -63,7 +64,7 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
         <div class="row"><button type="button" class="btn" id="mine-save">Save as a theme</button></div>`
       + (ask ? `<p class="small" role="alert">A theme named "${esc(ask.name)}" exists. Replace it? <button type="button" class="btn sm" data-mine-do="replace">Replace</button> <button type="button" class="btn sm" data-mine-do="keep-old">Cancel</button></p>` : "")
       + `<p class="small" id="mine-msg" role="status">${esc(mineMsg)}</p>`
-      + (mine.length ? `<div class="themes" id="mine-list">${mine.map(mineCard).join("")}</div>` : '<p class="why">No saved theme yet. Pick a theme, change it, and save it here with a name.</p>')
+      + (mine.length ? `<div class="themes" id="mine-list">${mineShown().map(mineCard).join("")}</div>` : '<p class="why">No saved theme yet. Pick a theme, change it, and save it here with a name.</p>')
       + `<div class="row"><button type="button" class="btn" id="mine-download" ${mine.length ? "" : "disabled"}>Download all my themes</button><button type="button" class="btn" id="mine-load">Load themes from a file</button></div><input id="mine-file" type="file" accept=".json,application/json" hidden>`,
       "Your themes are for all areas. A saved area keeps the design that it used. They stay in this browser: download them to use them on another computer.");
   };
@@ -72,7 +73,15 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
     return sec("Preview on", `<label class="drow2"><span>Base map</span><select id="design-preview" aria-label="Preview on">${[["checkerboard", "Checkerboard"], ["blank", "Blank"], ["openfreemap", "OpenFreeMap"], ["satellite", "Satellite"]].map(([k, n]) => `<option value="${k}" ${v === k ? "selected" : ""}>${n}</option>`).join("")}${v === "other" ? '<option value="other" selected disabled>Other (base-map box)</option>' : ""}</select></label>`,
       "This changes only the map under the roads. It is the base map of the base-map box: one choice in two places. A transparent ground shows the checkerboard on the Blank map.");
   };
-  const paneTheme = () => sec("Ready themes", `<div class="themes" role="radiogroup" aria-label="Ready themes">${D.THEMES.map(themeCard).join("")}</div>`, "Pick a theme with one click, then change any value in the other tabs. A theme keeps your tile profile.")
+  const shownThemes = () => D.THEMES.filter((t) => D.themeMatches(t, themeFilter, themeQuery));
+  const readyList = () => {
+    const list = shownThemes();
+    return list.length ? list.map(themeCard).join("") : `<p class="why">No ready theme has these words in this filter.</p>`;
+  };
+  const paneTheme = () => sec("Ready themes", `<input type="search" id="theme-search" placeholder="Search themes: google, dark, print…" value="${esc(themeQuery)}" aria-label="Search themes">
+      <div class="chips" role="group" aria-label="Filter themes">${D.THEME_FILTERS.map(([k, n]) => `<button type="button" class="chip" data-tf="${k}" aria-pressed="${themeFilter === k}">${n}</button>`).join("")}</div>
+      <p class="small muted" id="theme-count" role="status"></p>
+      <div class="themes" id="ready-list" role="radiogroup" aria-label="Ready themes">${readyList()}</div>`, "Pick a theme with one click, then change any value in the other tabs. A theme keeps your tile profile.")
     + panePreview() + paneMine()
     + sec("Your design", `<label class="drow2"><span>Name</span><input type="text" data-p="name" value="${esc(design.name)}" maxlength="60" aria-label="Name of the design"></label>
       <div class="row"><button type="button" class="btn" id="design-download">Download</button><button type="button" class="btn" id="design-load">Load a file</button><button type="button" class="btn" id="design-reset">Reset</button></div>
@@ -145,10 +154,23 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
   function paint() {
     $("design-pane").innerHTML = PANES[tab]();
     for (const t of TABS) $(`design-tab-${t}`).setAttribute("aria-selected", String(t === tab));
+    if (tab === "theme") paintThemeList();
     $("design-pane").setAttribute("aria-labelledby", `design-tab-${tab}`);
     $("design-pane").dataset.tab = tab;
     paintBar();
   }
+  /** The list of ready themes again (a filter or a search changed): the search field keeps its focus. */
+  function paintThemeList() {
+    const list = $("ready-list");
+    if (!list) return;
+    const n = shownThemes().length, yours = themeFilter === "yours";
+    list.innerHTML = yours ? '<p class="why">Your themes are below.</p>' : readyList();
+    $("theme-count").textContent = yours ? `${mineShown().length} of ${mine.length} of your themes` : `${n} of ${D.THEMES.length} ready themes`;
+    for (const b of $("design-pane").querySelectorAll("[data-tf]")) b.setAttribute("aria-pressed", String(b.dataset.tf === themeFilter));
+    const m = $("mine-list");
+    if (m) m.innerHTML = mineShown().map(mineCard).join("");
+  }
+  const mineShown = () => (themeFilter === "all" || themeFilter === "yours" ? mine.filter((t) => String(themeQuery).toLowerCase().split(/\s+/).filter(Boolean).every((w) => t.name.toLowerCase().includes(w))) : []);          // your themes show in All and Yours
   function paintBar() {
     $("design-name").textContent = design.name;
     $("design-changes").textContent = D.changes({ ...design, profile: 0 }, { ...base, profile: 0 }).length ? "Style: changed" : "Style: default";
@@ -222,6 +244,8 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
     if (pr) { design.profile = D.normalizeProfile(D.PROFILES[pr.dataset.profile].make()); changed(); return paint(); }
     const cols = e.target.closest("[data-cols]");
     if (cols) { design.profile.columns = cols.dataset.cols === "all" ? [...D.EDGE_COLUMNS] : ["edge_id"]; design.profile.preset = "custom"; changed(); return paint(); }
+    const tf = e.target.closest("[data-tf]");
+    if (tf) { themeFilter = tf.dataset.tf; return paintThemeList(); }
     const mb = e.target.closest("[data-mine-do]");
     if (mb) return mineAction(mb.dataset.mineDo, mb.closest("[data-mine]")?.dataset.mine);
     if (e.target.id === "mine-save") return mineSave();
@@ -288,6 +312,7 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
     }
   }
   $("design-pane").addEventListener("input", (e) => {
+    if (e.target.id === "theme-search") { themeQuery = e.target.value; paintThemeList(); }
     if (e.target.id === "mine-name") nameDraft = e.target.value;
     if (e.target.id === "mine-keep") keepDraft = e.target.checked;
   });

@@ -85,7 +85,7 @@ with sync_playwright() as p:
     page.click("#design-open")
     before = style_text(page)
         # the themes
-    assert page.locator("#design-pane .theme[data-look]").count() == 23 and page.get_attribute("#design-pane [data-look=light]", "aria-checked") == "true"
+    assert page.locator("#design-pane .theme[data-look]").count() == 33 and page.get_attribute("#design-pane [data-look=light]", "aria-checked") == "true"
     page.click("#design-pane [data-look=dark]")
     settled(page)
     assert page.get_attribute("#design-pane [data-look=dark]", "aria-checked") == "true" and page.evaluate("window.designPanel.get().theme") == "dark"
@@ -138,10 +138,33 @@ with sync_playwright() as p:
     import numpy as np
     from PIL import Image
 
+    # the search and the filter of the theme list
+    page.click("#design-tab-theme")
+    ready = lambda: page.eval_on_selector_all("#ready-list [data-look]", "(l) => l.map((x) => x.dataset.look)")
+    assert page.text_content("#theme-count").strip() == "33 of 33 ready themes" and len(ready()) == 33
+    assert ready()[:4] == ["light", "dark", "overlay", "overlaydark"], "Light and Dark are first, the Roads overlay next"
+    page.fill("#theme-search", "google")
+    assert "google" in ready() and len(ready()) < 6 and page.is_visible("#theme-search"), ("a search for google finds the theme Google like", ready())
+    page.fill("#theme-search", "Google like")
+    assert ready() == ["google"] and page.text_content("#theme-count").strip() == "1 of 33 ready themes"
+    page.fill("#theme-search", "")
+    for flt, want in (("overlay", ["overlay", "overlaydark", "hollow", "ghost"]), ("print", ["print", "toner", "graytone"]), ("roadstyle", ["google", "grey", "roadstyle", "osmcarto", "amber", "cartoroads", "highsat", "monoroads"])):
+        page.click(f"#design-pane [data-tf={flt}]")
+        assert ready() == want, (flt, ready())
+    page.click("#design-pane [data-tf=dark]")
+    assert {"dark", "night", "neon", "chalk", "blueprint", "simview"} <= set(ready()) and "light" not in ready() and page.get_attribute("#design-pane [data-tf=dark]", "aria-pressed") == "true"
+    page.click("#design-pane [data-tf=roads]")
+    assert {"amber", "overlay", "hollow"} <= set(ready()) and "dark" not in ready()
+    page.click("#design-pane [data-tf=yours]")
+    assert ready() == [] and "Your themes are below" in page.text_content("#ready-list")
+    page.click("#design-pane [data-tf=all]")
+    assert len(ready()) == 33
+    print("theme list: filter and search ok")
+
     # all the ready themes: each one loads, draws with no error and has its own road colors; the swatches show the ground, a road, its casing and the water
     page.click("#design-tab-theme")
     ids = page.eval_on_selector_all("#design-pane [data-look]", "(l) => l.map((x) => x.dataset.look)")
-    assert len(ids) == 23 and page.locator("#design-pane .sw5").first.locator("i").count() == 4
+    assert len(ids) == 33 and page.locator("#design-pane .sw5").first.locator("i").count() == 4
     assert page.locator("#design-pane [data-look=overlay] .sw5 i.none").count() == 2, "the overlay shows a checkerboard for the ground and the water"
     sigs = {}
     for t in ids:

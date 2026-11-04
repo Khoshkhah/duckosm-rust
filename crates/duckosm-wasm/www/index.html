@@ -285,6 +285,10 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   #design-panel .design-bar #design-notice { min-height: 0; color: var(--fg); }
   #design-panel .design-bar #design-notice:empty { display: none; }
   #design-panel .theme.mine { cursor: default; }
+  #design-panel #theme-search { width: 100%; height: 34px; margin-bottom: 6px; }
+  #design-panel .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+  #design-panel .chip { height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); color: var(--fg); font: inherit; font-size: 12.5px; cursor: pointer; }
+  #design-panel .chip[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: #fff; }
   #design-panel .theme.mine[aria-current=true] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
   #design-panel .theme.mine .acts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
   #design-panel .theme.mine input[type=text] { width: 100%; height: 30px; }

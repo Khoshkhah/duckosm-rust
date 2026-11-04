@@ -302,7 +302,7 @@ The panel has five tabs.
 
 | Tab | What it sets |
 |---|---|
-| **Theme** | Twenty-three ready themes, the name of the design, and **Download**, **Load a file** and **Reset**. |
+| **Theme** | Thirty-three ready themes, the name of the design, and **Download**, **Load a file** and **Reset**. |
 | **Roads** | The fill and the casing of 14 road classes, the width of 9 groups of classes, and the colors of the dark theme. |
 | **Text** | The street names (color, halo, size, first zoom) and the one-way arrows (color, size, first zoom). |
 | **Layers** | A switch for each layer, the boundary of the area (line, fill), the ground (transparent or not), the colors of the ground, water, green areas, built-up land, sand, buildings, railways and waterways, and the height of 3D buildings. |
@@ -315,6 +315,8 @@ The panel has five tabs.
 The themes of roadstyle (group "roadstyle") use the real colors of roadstyle's data files (`rust/roadstyle-assets/files/data/`). The road colors are the colors of the files. A class with no casing in a file has its fill as casing. The sand of **Grey** is not in its file: it is the sand of OSM Carto with the transform of the file (saturation 0.12, then 35 percent to white).
 
 A theme is a full set of values: the road colors and widths, the text, the boundary, the base-map colors, the ground and the layers. A theme is one plain object (data) in `app/design.js`. One click on a theme replaces the style. After that, change any value in the other tabs. The theme then shows as "custom". A theme keeps your tile profile.
+
+The list is long, so it has a search field and filter buttons above it. Type words in **Search themes**: a theme shows if its name, its note or its group has all the words (for example, `google` or `dark satellite`). The buttons **All**, **Light**, **Dark**, **Overlay** (the roads overlay themes), **Print**, **Roads only** (the overlay themes and the road palettes), **roadstyle** and **Yours** limit the list. A line under them says how many themes show. The search and a filter work together. **Yours** shows only your saved themes (see below). Each theme has a `group` and a `dark` value in `THEME_DATA` for the filters. Light and Dark are first in the list, and the Roads overlay themes come next.
 
 Each button shows four cells: the ground, a road fill, its casing and the water. A checkerboard cell means that the ground is transparent, or that the layer is off.
 
@@ -336,6 +338,16 @@ Each button shows four cells: the ground, a road fill, its casing and the water.
 | **High contrast** | A white ground, black casings, bright fills, wide roads and large text. |
 | **Colorblind safe** | The Okabe-Ito colors. They stay clear for red-green color blindness. |
 | **Vintage** | A sepia ground and brown roads. For posters. |
+| **Waze like** | A pale blue-gray ground, white roads with a thin gray casing, blue water and bright main roads. |
+| **Transit and bikes** | Gray roads, strong green cycleways and blue footways and paths. For walking and cycling networks. |
+| **Neon night** | A black ground and thin neon roads (cyan, magenta, yellow by class). No base-map fill. For traffic flow on top. |
+| **Chalkboard** | A dark green-gray ground and thin white chalk lines. No fills. |
+| **Topo** | A light green-beige ground, brown roads, strong green areas and blue water. For hills and parks. |
+| **Toner** | Pure black and white: thick black roads on a white ground. For printing and photocopies. |
+| **Grayscale print** | Gray levels only. For a black-and-white printer. |
+| **Simulation view** | A dark gray ground, light gray roads with a clear outline, and the one-way arrows on. Like a traffic simulator. |
+| **Accessibility large** | A white ground, very wide roads, large black text with a white halo and yellow main roads. |
+| **Emergency** | A pale ground, red main roads, orange secondary roads and large names. For the routes of emergency vehicles. |
 | **Roads overlay** | Only the roads, on a transparent ground. Strong colors and a dark casing. See below. |
 | **Roads overlay, dark** | The same overlay with light roads. For a dark map or a satellite map under it. |
 | **Roads hollow** | Only the outline of each road, in the color of its class, with no fill. |
@@ -346,6 +358,8 @@ There is no theme for the Satellite base map. A theme can hide a layer, but it c
 ### Preview on
 
 The **Preview on** control is in the Theme tab. It changes only the map under the roads: **Checkerboard**, **Blank**, **OpenFreeMap** or **Satellite**. It is the same choice as the base-map box of the bar, and the two always agree: if you pick a base map in the box, the control shows it. A map with a transparent ground (the Roads overlay themes) has no color of its own, so on the Blank base map you see the color of the map container and the theme does not look transparent. For this reason the Blank base map shows a checkerboard under the ground by itself while the ground is transparent. Pick **Blank** to see the plain color, or a base map to see the roads on it. While the ground is transparent and the base map is Blank or the checkerboard, the bar of the panel says: "The ground is transparent: pick a base map in the base-map box to see it through."
+
+![Roads ghost on the satellite base map](img/dashboard/35-design-ghost.png)
 
 ### Your themes
 
@@ -381,7 +395,7 @@ Each class has a color input for the fill and one for the casing. The casing is 
 
 A width factor scales the whole width curve of a group. For example, 2 doubles the width of the roads of the group at all zooms. The groups come from roadstyle: motorway and trunk, primary, secondary, tertiary, residential and unclassified, living street, service, pedestrian, and footway, path, cycleway and track.
 
-**Opacity** has two sliders, **Fill opacity** and **Casing opacity** (0 to 100 percent). 100 percent is the opacity of the style. A lower value lets the map under the roads show through: a satellite map or 3D buildings. The switch **Casing as an outline** draws the casing only outside the fill. This matters when the fill is not opaque. Without it, the casing is under the fill, and the road looks dark and muddy over a satellite map, because the casing shows through the fill. With it, the casing has a gap of the width of the fill, so the map shows through the whole fill. The page does this in the paint of roadstyle's road layers (`line-opacity`, and `line-gap-width` for the casing). A change shows at once and draws no new map. The opacity is `design.roads.opacity` (`{fill, casing, outline}`). The opacity is not per class or per group: roadstyle's road layer has one opacity for all classes.
+**Opacity** has two sliders, **Fill opacity** and **Casing opacity** (0 to 100 percent). 100 percent is the opacity of the style. A lower value lets the map under the roads show through: a satellite map or 3D buildings. The switch **Casing as an outline** draws the casing only outside the fill. This matters when the fill is not opaque. Without it, the casing is under the fill, and the road looks dark and muddy over a satellite map, because the casing shows through the fill. With it, the casing has a gap of the width of the fill, so the map shows through the whole fill. The page does this in the paint of roadstyle's road layers (`line-opacity`, and `line-gap-width` for the casing). A change shows at once and draws no new map. The opacity is `design.roads.opacity` (`{fill, casing, outline}`). The opacity is not per class or per group: roadstyle's road layer has one opacity for all classes. A road is drawn in pieces, and where two pieces overlap (a junction, a round end) a fill that is not opaque shows a spot that is a little stronger.
 
 The dark theme of the map does not use the colors of the light theme directly. roadstyle changes each light color to a dark one. The **Dark mode** section sets the range of lightness of that change for the road fill, the casing, the areas and the text (0 is black, 1 is white). It also sets the dark ground.
 
