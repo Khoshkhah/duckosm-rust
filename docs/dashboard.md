@@ -17,7 +17,7 @@ The page has three parts:
 | Part | Where | What it does |
 |---|---|---|
 | The map | The whole window | Shows the base map, the area that you chose, and the roads after a build. |
-| The panel | The left side (a bottom sheet on a phone) | Holds the cards: **Your areas**, then steps 1 to 8. |
+| The panel | The left side (a bottom sheet on a phone) | Holds the cards: **Your areas**, then steps 1 to 10. |
 | The bar | The right side of the map | Holds the tools of the map: theme, zoom, street view, base map and more. |
 
 The cards follow the steps of the work. A card is off (gray) until the card before it is ready. For example, **Build** stays off until you choose an area and give a data source. Each card has a title, a **?** button that opens its help window, and a chevron that folds the card. A check mark on the title means that the step is done.
@@ -37,6 +37,7 @@ After a build the page looks like this:
 7. Fix OSM data (step 7). Change roads, buildings, nodes and turns, and build again.
 8. Edit levels (step 8). Open the level editor.
 9. Export (step 9). Give the network or its tiles to other software: PMTiles, MBTiles, GeoPackage, GeoJSON, MATSim and SUMO.
+10. Design (step 10). Change the colors, widths and text of the map, and set the profile of the tiles. This step is on at all times.
 
 ## The bar of tools
 
@@ -305,19 +306,21 @@ Card 9 gives the network that you built to other software. It is off until a bui
 | **MATSim network** | `<area>_<network>_matsim_network.xml` | A `network_v2.dtd` file: a node for each node, and a link for each edge with length (m), free speed (m/s), capacity (vehicles per hour), lanes and mode (`car`, `walk` or `bike`). Coordinates are meters in the UTM zone of the area. |
 | **SUMO plain XML** | `<area>_<network>_sumo.zip` | `.nod.xml`, `.edg.xml` and `.con.xml` and a `README.txt` with the `netconvert` command. An edge has its shape, lanes, speed and priority. The connections are the legal turns of the edge graph (turn restrictions applied). |
 
-The tiles are the tiles of the map on the screen, made again by the map worker as MVT. The card has a check box and two fields for them:
+The tiles are the tiles of the map on the screen, made again by the map worker as MVT. The tile profile of [step 10](#step-10-design) sets what they hold. The card shows the name of the profile and has these fields:
 
-- **Everything** (on by default). The export has the whole map: zoom 0 up to the highest zoom that stays under the limit (for Monaco, 0 to 16), all the networks in one tile set, every attribute of every road, and all the layers of the build. If the map shows one network, the page switches it to **All** (card 6) and draws it again first. Monaco gives a 5.6 MB file.
-- **Zoom from ... to ...** The lowest and the highest zoom (0 to 18). These fields are off while **Everything** is on. With **Everything** off, the file has only the tiles of the map as they are (the layers of roadstyle's look, without the extra attributes), for the zooms that you set. The card shows the number of tiles for the extent of the network. The limit is 40,000 tiles: if the count is higher, the buttons are off, and you use fewer zooms.
+- **Layer edges** (on in the Analysis profile, which is the profile at the first visit). The export has the layer `edges` with every road of every network and the columns of the profile. If the map shows one network, the page switches it to **All** (card 6) and draws it again first. Monaco gives a file of about 5.6 MB with the Analysis profile.
+- **Zoom from ... to ...** The lowest and the highest zoom (0 to 18). **The highest zoom that fits the limit** sets the highest zoom to the highest one that keeps the tiles under the limit (zoom 16 at the most). The card shows the number of tiles for the extent of the network. The limit is 40,000 tiles unless you change it in step 10. If the count is higher, the buttons are off. Use fewer zooms or raise the limit.
 - The buttons for tiles are off until **Show on map** (step 6) has drawn the map. A tile that has nothing in it is left out.
+
+The fields of the card are the fields of the profile. A change in card 9 shows in card 10, and the other way. The profile also sets the layers (roads, base map, edges), the columns, the zoom where each road class starts, the extent and the buffer.
 
 What a tile has:
 
 | Layer | What it is |
 |---|---|
-| `edges` | Only with **Everything**. One LineString for each piece of a road in the tile, clipped to the tile with a small buffer. Each piece has all the columns of its edge: `edge_id`, `osm_id`, `edge_ref`, `source`, `target`, `name`, `highway`, `oneway`, `lanes`, `surface`, `maxspeed_kmh`, `bridge`, `tunnel`, `junction`, `layer`, `service`, `access`, `length_m` and `cost_s`, and a flag for each network that has the edge (`driving`, `walking`, `cycling`). The ids are text. A lower road class starts at a higher zoom: motorway, trunk and primary from zoom 0, secondary from 8, tertiary from 10, unclassified from 11, residential and living street from 12, all other classes from 13. At the highest zoom, every edge is in the tiles. |
-| `simple`, `slots` | roadstyle's layers for drawing the roads (shapes, classes, one-way marks, labels). The map style reads them. They do not carry the attributes of an edge. |
-| `ov0`, `ov1`, ... | The base-map layers of the build: water, land use, buildings (with `height`), railways and more. They need a build with **Layers** on. |
+| `edges` | Only with **Layer edges**. One LineString for each piece of a road in the tile, clipped to the tile with a buffer (64 units of 4,096 by default). Each piece has the columns of the profile (all by default): `edge_id`, `osm_id`, `edge_ref`, `source`, `target`, `name`, `highway`, `oneway`, `lanes`, `surface`, `maxspeed_kmh`, `bridge`, `tunnel`, `junction`, `layer`, `service`, `access`, `length_m` and `cost_s`, and a flag for each network that has the edge (`driving`, `walking`, `cycling`). The ids are text. A lower road class starts at a higher zoom. By default: motorway, trunk and primary from zoom 0, secondary from 8, tertiary from 10, unclassified from 11, residential and living street from 12, all other classes from 13. The profile can change these zooms. At a zoom that is equal to or higher than the start zoom of every class, every edge is in the tiles. |
+| `simple`, `slots` | roadstyle's layers for drawing the roads (shapes, classes, one-way marks, labels). The map style reads them. They do not carry the attributes of an edge. The profile switch **Roads** keeps or drops them. |
+| `ov0`, `ov1`, ... | The base-map layers of the build: water, land use, buildings (with `height`), railways and more. They need a build with **Layers** on. The profile switch **Base map** keeps or drops them. |
 
 The OpenFreeMap background of the page is not in the tiles: it is not ours.
 
@@ -329,7 +332,7 @@ The OpenFreeMap background of the page is not in the tiles: it is not ours.
 | GeoPackage | The number of roads and nodes, the application id and the header of a geometry. |
 | MATSim | The number of nodes and links, and that every link joins two nodes of the file. |
 | SUMO | The number of nodes, edges and connections, and that every edge joins two nodes of the file. The page does not run `netconvert`. |
-| PMTiles | The directories (root and leaf), the number of tiles, the zooms in the header and the layers of the biggest tile. With **Everything**, also that all edges of all networks are in the tiles of the highest zoom. |
+| PMTiles | The directories (root and leaf), the number of tiles, the zooms in the header and the layers of the biggest tile. With **Layer edges**, also that all edges of all networks (of the classes that start at or below the highest zoom) are in the tiles of the highest zoom. |
 | MBTiles | The number of tiles, the zooms and that a tile is gzip. |
 
 A check is not a test with other software. To test with real tools, open the file in QGIS (GeoPackage, MBTiles, GeoJSON), in a PMTiles viewer or MapLibre (PMTiles), in MATSim, or with `netconvert` (SUMO). `export_e2e.py` runs all the checks on Monaco.
@@ -345,6 +348,95 @@ netconvert --node-files area_driving.nod.xml --edge-files area_driving.edg.xml -
 ```
 
 The page does not run `netconvert`, so the SUMO files are not checked against SUMO here. The simulator adapters with lanes, junction shapes and traffic lights are in the SimReady project.
+
+## Step 10: Design
+
+![Card 10: the design and the tile profile](img/dashboard/26-design-card.png)
+
+Card 10 sets the look of the map and the profile of the tile files. It is on at all times and does not wait for a build. Push **Edit design**. The panel of the design takes the place of the steps. **Steps** goes back to the steps. **Hide panel** hides the panel on a computer.
+
+A change shows on the map after half a second. The page draws the map again with the new design, as it does when you change the network. The bar at the bottom of the panel says "Drawing the map…" and then "The map shows this design." If the map is not drawn yet, the design shows at the next draw (step 6).
+
+The panel has five tabs.
+
+| Tab | What it sets |
+|---|---|
+| **Theme** | Four ready themes (Light, Dark, Traffic, Print), the name of the design, and **Download**, **Load a file** and **Reset**. |
+| **Roads** | The fill and the casing of 14 road classes, the width of 9 groups of classes, and the colors of the dark theme. |
+| **Text** | The street names (color, halo, size, first zoom) and the one-way arrows (color, size, first zoom). |
+| **Layers** | The colors of the ground, water, green areas, built-up land, sand, buildings, railways and waterways, and the height of 3D buildings. |
+| **Tiles** | The tile profile: zooms, layers, columns, class zooms, extent, buffer, tile limit and tile format. |
+
+### Theme
+
+![The Theme tab](img/dashboard/27-design-theme.png)
+
+A theme is a full set of values. One click on a theme replaces the style. After that, change any value in the other tabs. The theme then shows as "custom". A theme keeps your tile profile.
+
+- **Light** is the look that the page had before the design card.
+- **Dark** has dim roads, a dark ground and light text.
+- **Traffic** has quiet gray roads and a pale ground. The colors of flow or speed stand out on it.
+- **Print** has a white ground, dark outlines, wider roads and black text.
+
+**Download** saves the design as one `.design.json` file. **Load a file** reads such a file and draws it. A file that is not a duckOSM design file does not load, and the design stays as it is. **Reset** goes back to the Light style and keeps the tile profile.
+
+![The map in the Dark theme](img/dashboard/32-design-dark-map.png)
+
+### Roads
+
+![The Roads tab](img/dashboard/28-design-roads.png)
+
+Each class has a color input for the fill and one for the casing. The casing is the outline of the road. A link road has the colors of its class.
+
+A width factor scales the whole width curve of a group. For example, 2 doubles the width of the roads of the group at all zooms. The groups come from roadstyle: motorway and trunk, primary, secondary, tertiary, residential and unclassified, living street, service, pedestrian, and footway, path, cycleway and track.
+
+The dark theme of the map does not use the colors of the light theme directly. roadstyle changes each light color to a dark one. The **Dark mode** section sets the range of lightness of that change for the road fill, the casing, the areas and the text (0 is black, 1 is white). It also sets the dark ground.
+
+### Text
+
+![The Text tab](img/dashboard/29-design-text.png)
+
+The street names have a color, a halo (a color and a width), a size factor and a first zoom. The names of small roads show two zooms after the first zoom. The one-way arrows have a color, a size factor and a first zoom. The switch that turns the arrows on or off is in the base-map box of the bar.
+
+### Layers
+
+![The Layers tab](img/dashboard/30-design-layers.png)
+
+The colors are for the base-map layers of step 4. A map that was built without the base-map layers has no ground, water or buildings to color. One color covers a group of land-use classes: **Green areas** covers forest, wood, grass, park and others, and **Built-up land** covers residential, commercial, industrial and others. The 3D buildings have a height for each floor, a highest building and an opacity.
+
+### Tiles
+
+![The Tiles tab](img/dashboard/31-design-tiles.png)
+
+The tile profile is for the tile files of step 9. The map uses its format. Three ready profiles fill the fields:
+
+| Profile | Zoom | Layers | Use |
+|---|---|---|---|
+| **Web map small** | 0 to 14 | Roads and base map | A small file for a web map. |
+| **Analysis** | 0 to the highest zoom under the limit | Roads, base map and the layer `edges` with all columns | Every road of every network, with its attributes. This is the profile at the first visit. |
+| **Simulation preview** | 10 to the highest zoom under the limit | Roads and the layer `edges` with 13 columns | The columns that a simulation needs. |
+
+The fields:
+
+- **Zoom** has the lowest and the highest zoom. **The highest zoom that fits the limit** lets the page count the tiles and pick the highest zoom under the limit.
+- **Layers in the files** has three switches. **Roads** is roadstyle's road layers (`simple` for the roads, `slots` for the names and the arrows). **Base map** is the base-map layers (`ov0`, `ov1` and more). **Layer edges** is the layer of step 9 with every road of every network.
+- **Columns of the layer edges** lists the attributes of a road. `edge_id` is always in the layer. A flag for each network is also always in the layer.
+- **Road class start zoom** gives the zoom where a class comes into the layer `edges`. A lower class is left out at a lower zoom, and the file stays small. A class that is not in the list starts at zoom 13.
+- **Format of the map** is MLT (smaller) or MVT. It is the same choice as **Map tiles** in step 6. The tile files always hold MVT.
+- **Extent** and **Buffer** are in tile units. They are for the layer `edges`. The tiles of the map have the extent 4096.
+- **Tile limit** is the largest number of tiles that a file can have (1,000 to 200,000). More tiles take more time and memory. The Export card shows the number of tiles and turns the tile buttons off above the limit.
+
+### How the Export card uses the profile
+
+Card 9 shows the name of the profile, the zoom range and the number of tiles. Its fields are the fields of the profile. If you change **Layer edges**, the zoom or **The highest zoom that fits the limit** in card 9, the profile changes in card 10, and the other way. **Edit the tile profile (step 10)** in card 9 opens the Tiles tab.
+
+### Where the design is kept
+
+- In this browser, as the last design that you used. A new area starts with it.
+- With the saved area, as the file `design.json` in the folder of the area. **Open** on a saved area in **Your areas** brings its design back before the map is drawn. A new build of the same area keeps the file.
+- In a file that you download. The file has the version of the format (`"format": "duckosm-design"`, `"version": 1`).
+
+The style is written into roadstyle's look (`map/look.json`) and the map worker makes the map and its tiles from that look. The map and the files of step 9 have the same style for this reason. The code is in `app/design.js` (the values, the themes and the profiles) and `app/design_panel.js` (the panel).
 
 ## The dark theme and the phone
 

@@ -350,6 +350,9 @@ export async function zipAll(areaName, boundary) {
 // map asks for (tile()), until the next style (a worker that ends gives its memory back). keep: the road properties in the tiles, with the
 // ones the style reads. The road table (the fields of each road, for roadstyle's dashboard: the popup) comes with the style.
 let look = null, mapWorker = null, generation = 0, tileId = 0;
+// The look of the next draw: the text of map/look.json with the design written into it (app/design.js). None: the worker reads map/look.json.
+let lookText = null;
+export const setLookText = (t) => { lookText = t || null; };
 // The tile format of the roads map: "mlt" (the default, roadstyle's format with smaller tiles) or "mvt". The style has the format (the
 // source's encoding) and each tile address has it (&f=, after the generation's ?g=), so that a tile of the other format is never reused.
 export let tileFormat = "mlt";
@@ -488,7 +491,7 @@ export async function roadsStyle(mode, name, keep = []) {
       }
     };
     w.onerror = (e) => { endMapWorker(); fail(new Error(e.message || "the map worker failed")); };
-    w.postMessage({ roads, features, name, prefix, keep, levels, format: tileFormat, tableFields: [...new Set([...keep, ...TABLE_FIELDS])] }, [roads.buffer, ...(features ? [features.buffer] : [])]);
+    w.postMessage({ look: lookText, roads, features, name, prefix, keep, levels, format: tileFormat, tableFields: [...new Set([...keep, ...TABLE_FIELDS])] }, [roads.buffer, ...(features ? [features.buffer] : [])]);
   });
   // the road table is parsed by the page when it asks (after the first tiles): its own step, timed alone
   const roadTable = () => {

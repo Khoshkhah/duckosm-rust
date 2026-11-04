@@ -40,6 +40,26 @@ export async function requestPersistence() {
   return false;
 }
 
+// The design of the area (docs/dashboard.md, card 10): one JSON file in the area's folder. A new build keeps it.
+const DESIGN_FILE = "design.json";
+// Save the text of the design file in the folder of a saved area. An area that is not saved has no folder: the design stays in the page (false).
+export async function saveDesign(slug, text) {
+  const areasDir = await getAreasDir();
+  if (!areasDir) return false;
+  let dir;
+  try { dir = await areasDir.getDirectoryHandle(keyOf(slug)); } catch (_) { return false; }
+  const w = await (await dir.getFileHandle(DESIGN_FILE, { create: true })).createWritable();
+  await w.write(new TextEncoder().encode(text));
+  await w.close();
+  return true;
+}
+// The text of the design file of a saved area, or null
+export async function loadDesign(slug) {
+  const areasDir = await getAreasDir();
+  if (!areasDir) return null;
+  try { return await (await (await areasDir.getDirectoryHandle(keyOf(slug))).getFileHandle(DESIGN_FILE)).getFile().then((f) => f.text()); } catch (_) { return null; }
+}
+
 // Save a built area and all its Parquet files into OPFS
 // `cut`: the bytes of cut.osm.pbf (the area as cut from the region file), kept as a file of the area so that its download is there after a restore
 export async function saveArea(slug, meta, tablesData, vizData = null, cut = null) {
@@ -52,7 +72,7 @@ export async function saveArea(slug, meta, tablesData, vizData = null, cut = nul
   // A save replaces the area: remove all files of an earlier build first (other modes, raw_* files, the old
   // drawing cache), so a restore never mixes two builds. meta.json goes last, so a half-written save has no meta.
   for await (const [existingName, existingHandle] of dir.entries()) {
-    if (existingHandle.kind === "file") await dir.removeEntry(existingName).catch(() => {});
+    if (existingHandle.kind === "file" && existingName !== DESIGN_FILE) await dir.removeEntry(existingName).catch(() => {});      // the design belongs to the area, not to a build
   }
 
   let totalBytes = 0;

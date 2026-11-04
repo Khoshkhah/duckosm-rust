@@ -2,7 +2,7 @@
 // crates/duckosm-wasm/build.sh) makes a MapLibre style with vector-tile sources from roads.parquet (map/roadstyle/roads_sql.js), the
 // base-map layers (features.parquet, map/roadstyle/features_sql.js; optional) and the look (map/look.json), and then makes each tile when
 // the map asks for it.
-// In: {roads: Uint8Array, features: Uint8Array or undefined, name, prefix, keep, levels: the look's keyword levels (roads_sql.js
+// In: {look: the look's JSON text (the page's design; none: map/look.json), roads: Uint8Array, features: Uint8Array or undefined, name, prefix, keep, levels: the look's keyword levels (roads_sql.js
 // makeRoads), format: "mvt" or "mlt", the format of the style}. Out: {style: JSON text, tableBytes: the road table as JSON bytes (each road's fields, middle, box and line), seconds, memoryMiB: the size of the WebAssembly memory, liveMiB: [held now, most held]} or
 // {error}. Then in: {tile: [source, z, x, y, format], id}. Out: {id, data: ArrayBuffer} (empty when nothing is in the tile).
 // {style: format, id}: the same style in another tile format. Out: {id, style: JSON text}.
@@ -47,7 +47,7 @@ onmessage = async ({ data }) => {
     return;
   }
   try {
-    const [, look] = await Promise.all([init(), fetch(new URL("./look.json", import.meta.url)).then((r) => r.text())]);
+    const [, look] = await Promise.all([init(), data.look ?? fetch(new URL("./look.json", import.meta.url)).then((r) => r.text())]);       // data.look: the page's design written into the look (app/design.js)
     const t = performance.now();
     // levels: "tags", or the stored levels' {edge_hash, n_edges}, which the engine checks
     const l = Look.fromJson(look).withArg("levels", JSON.stringify(data.levels));

@@ -579,6 +579,18 @@ The check: `editor_e2e.py` (headless Chromium, Monaco through the File tab). It 
 `.duckdb` download, a map of one mode, the duckOSM base-map layers while the editor is open, and **← Steps** with no change. It writes `editor.png` and
 `editor-dark.png` (the dark theme).
 
+### Step 10: design
+
+Card 10 sets the style of the map and the profile of the tiles (the guide is in [dashboard.md](dashboard.md#step-10-design)). It has a panel of its own, built like the fixes panel (`#design-panel`, `app/design_panel.js`). It is on at all times, because the design does not need a build.
+
+- **One object.** A design is one plain object (`app/design.js`) with every value: the road fills and casings, the width factors, the labels, the arrows, the base-map colors, the dark ranges and the profile. A file, a theme and the stored copy have the same shape. `normalize` repairs a wrong value and fills a missing one from the design of the look.
+- **How the style reaches the map.** `applyToLook` writes the design into a copy of `map/look.json`: the classes' colors in `roads.styles.classes`, the width curves in `roads.model.width`, and the other sections that the engine reads. It writes only the values that differ from the look, so the default design changes nothing. The panel gives the copy to `duck.setLookText`, and `showRoads` draws the map again. The worker (`map_worker.js`) reads `data.look` in place of `look.json`. `design_units.mjs` loads each theme in roadstyle's `Look.fromJson`.
+- **Why a new draw and not a paint change.** The colors of a road are in the tile data (an index into the colors of the style), so a new color needs new tiles. The page draws the map again, as it does for a change of network.
+- **What the look cannot change.** The tiles of roadstyle have the extent 4096 (the engine says `tiles.extent is 2048, the tiles are made with 4096`). The extent and the buffer of the profile are for the layer `edges` only. A draw that fails keeps the old map, and the panel shows the message.
+- **The profile.** `PROFILES` has Web map small, Analysis and Simulation preview. Card 9 reads `designPanel.profile()` for the zooms, the layers (`layerKeep` drops `simple`, `slots` or the `ov*` layers from the tiles of the worker), and the options of `edgeTiles` (columns, extent, buffer, class start zooms). Its fields call `designPanel.patchProfile`. The format of the map follows the profile: `profile.format` and the select **Map tiles** of card 6 are one value.
+- **Where it is kept.** `localStorage` key `duckosm.design` (the last design) and `design.json` in the folder of the saved area (`areaStore.saveDesign` and `loadDesign`). `saveArea` removes every file of an older build except `design.json`. A restore reads the file before the first draw.
+- **Tests.** `design_units.mjs` (Node: the default design, each theme in `Look.fromJson`, repair of wrong values, the file, the tile writers), `design_e2e.py` (Monaco: each tab changes the style of the live map, the profile reaches the Export card and its files, Download and Load, the stored copy and the saved area) and `phone_design_e2e.py` (390 x 844).
+
 ## The map
 
 - The roads of roadstyle's style go onto the same map: their sources and layers are added with the prefix

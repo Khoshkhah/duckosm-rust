@@ -19,8 +19,8 @@ STATIC = re.compile(r"""(\b(?:from|import)\s*)(["'])(""" + REL + r""")\2""")
 CALL = re.compile(r"""(\b(?:import|new URL|fetch)\s*\()([^()]*)\)""")
 ATTR = re.compile(r"""(\b(?:src|href)=)(["'])(""" + REL + r""")\2""")
 # strings that are names, not references: the zip's file, the level editor's store files (levels_info.json, edges.json), the saved areas' file in the
-# private file system (meta.json), wasm-bindgen's import module of the wasm file
-NAMES = {"layers.json", "levels_info.json", "edges.json", "meta.json"}
+# private file system (meta.json, design.json), wasm-bindgen's import module of the wasm file
+NAMES = {"layers.json", "levels_info.json", "edges.json", "meta.json", "design.json"}
 
 # roadstyle 0.26.3's svproviders.js adds this name to the address of a CDN (`_SP_PSV + "index.min.css"`): not a file of the page
 NAMES |= {"index.min.css"}

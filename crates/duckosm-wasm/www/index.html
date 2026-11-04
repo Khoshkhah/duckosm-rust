@@ -214,7 +214,7 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   .sb-foot { flex: none; display: grid; grid-template-columns: 1fr 1.5fr; gap: 8px; padding: 12px 15px 14px; border-top: 1px solid var(--line); }
 
   /* steps 3 to 5: the data, the build, the result (docs/app.md) */
-  #step7-card [hidden], #step8-card [hidden], #step9-card [hidden], #fix-panel [hidden] { display: none; }
+  #step7-card [hidden], #step8-card [hidden], #step9-card [hidden], #step10-card [hidden], #fix-panel [hidden], #design-panel [hidden] { display: none; }
   #export-list .expsec { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px 4px; margin-top: 12px; background: var(--bg); }
   #export-list .expsec h3 { margin: 0 0 2px; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--fg); }
   #export-list .expsec > .small.muted { margin: 0 0 6px; }
@@ -235,34 +235,77 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   body.editing-fixes #sb .sb-top, body.editing-fixes #sb .sb-body, body.editing-fixes #sb .sb-foot { display: none; }
   body.editing-fixes #fix-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
   body.editing-fixes #sb #rs-fold-all { display: none; }
+  /* the design's own panel: the same shell (header, tabs, body, bar); the road popup stays, so a click on a road still shows it */
+  #design-panel { display: none; }
+  body.editing-design #sb .sb-top, body.editing-design #sb .sb-body, body.editing-design #sb .sb-foot { display: none; }
+  body.editing-design #design-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  body.editing-design #sb #rs-fold-all { display: none; }
+  div#design-panel .fix-tabs { grid-template-columns: repeat(5, 1fr); gap: 2px; margin-inline: 10px; }
+  div#design-panel .fix-tabs [role=tab] { padding: 0 2px; font-size: 13px; }
+  #design-panel .fix-hd .dname { font-size: 12px; color: var(--muted); margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 38%; }
+  #design-panel #design-hide { margin-left: 0; width: 32px; padding: 0; justify-content: center; }
+  #design-panel .drow2 { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 13px; }
+  #design-panel .drow2 > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+  #design-panel .drow2.cls { grid-template-columns: 1fr 52px 52px; }
+  #design-panel .drow2.two { grid-template-columns: 1fr 70px 70px; }
+  #design-panel .drow2.rng { grid-template-columns: 1fr minmax(90px, 140px) 3.6em; }
+  #design-panel .drow2.rng output { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
+  #design-panel .rhead { display: grid; grid-template-columns: 1fr 52px 52px; gap: 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 4px; }
+  #design-panel .rhead span { text-align: center; }
+  #design-panel input[type=color] { width: 100%; min-width: 44px; height: 30px; padding: 1px 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); cursor: pointer; }
+  #design-panel input[type=number], #design-panel select { height: 32px; min-width: 0; width: 100%; }
+  #design-panel .drow2 > select { width: auto; max-width: 11em; }
+  #design-panel input[type=text] { width: 100%; height: 32px; min-width: 0; }
+  #design-panel .drow2:has(input[type=text]) { grid-template-columns: 4em 1fr; }
+  #design-panel .optrow { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); cursor: pointer; margin-bottom: 6px; }
+  #design-panel .optrow:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+  #design-panel .optrow input { margin: 2px 0 0; accent-color: var(--accent); flex: none; }
+  #design-panel .optrow .t { display: flex; flex-direction: column; gap: 2px; }
+  #design-panel .optrow small { color: var(--muted); font-size: 12px; line-height: 1.35; }
+  #design-panel .themes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  #design-panel .theme { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px; text-align: left; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--fg); font: inherit; cursor: pointer; }
+  #design-panel .theme:hover { border-color: var(--accent); }
+  #design-panel .theme[aria-checked=true] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+  #design-panel .theme small { color: var(--muted); font-size: 12px; line-height: 1.35; }
+  #design-panel .sw5 { display: flex; width: 100%; height: 14px; border-radius: 4px; overflow: hidden; border: 1px solid var(--line); }
+  #design-panel .sw5 i { flex: 1; }
+  #design-panel .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; font-size: 12.5px; }
+  #design-panel .cols .col { display: flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+  #design-panel .cols.two .col { justify-content: space-between; }
+  #design-panel .cols.two input[type=number] { width: 56px; }
+  #design-panel #design-count.bad { color: var(--error, #b91c1c); }
+  #design-panel .design-bar { font-size: 12.5px; }
+  #design-panel .design-bar .line { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  #design-panel .design-bar b { font-weight: 600; }
+  #design-panel .design-bar .st { margin: 2px 0 0; min-height: 1.3em; color: var(--muted); line-height: 1.3; }
   body.editing-fixes .maplibregl-popup:not(.rs-tip) { display: none !important; }
-  #fix-panel .fix-hd { flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 15px; border-bottom: 1px solid var(--line); }
-  #fix-panel .fix-hd h2 { margin: 0; font-size: 16px; text-transform: none; color: var(--fg); }
-  #fix-panel .fix-hd .btn svg { width: 14px; height: 14px; }
-  #fix-panel #fix-hide { margin-left: auto; width: 32px; padding: 0; justify-content: center; }
+  :is(#fix-panel, #design-panel) .fix-hd { flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 15px; border-bottom: 1px solid var(--line); }
+  :is(#fix-panel, #design-panel) .fix-hd h2 { margin: 0; font-size: 16px; text-transform: none; color: var(--fg); }
+  :is(#fix-panel, #design-panel) .fix-hd .btn svg { width: 14px; height: 14px; }
+  :is(#fix-panel, #design-panel) :is(#fix-hide, #design-hide) { margin-left: auto; width: 32px; padding: 0; justify-content: center; }
   html.rs-phone #fix-hide { display: none; }       /* a phone has the sheet's grip */
-  #fix-panel .fix-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 15px; overscroll-behavior: contain; }
-  #fix-panel .fix-tabs { flex: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 10px 15px 0; padding: 3px; background: var(--surface); border-radius: 10px; }
-  #fix-panel .fix-tabs [role=tab] { position: relative; height: 34px; border: 0; border-radius: 8px; background: none; color: var(--muted); font: inherit; font-weight: 500; cursor: pointer; }
-  #fix-panel .fix-tabs [role=tab][aria-selected=true] { background: var(--bg); color: var(--fg); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
-  #fix-panel .fix-tabs .dot { position: absolute; top: 6px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; }
-  #fix-panel .fsec { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin: 0 0 10px; }
+  :is(#fix-panel, #design-panel) .fix-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 15px; overscroll-behavior: contain; }
+  :is(#fix-panel, #design-panel) .fix-tabs { flex: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 10px 15px 0; padding: 3px; background: var(--surface); border-radius: 10px; }
+  :is(#fix-panel, #design-panel) .fix-tabs [role=tab] { position: relative; height: 34px; border: 0; border-radius: 8px; background: none; color: var(--muted); font: inherit; font-weight: 500; cursor: pointer; }
+  :is(#fix-panel, #design-panel) .fix-tabs [role=tab][aria-selected=true] { background: var(--bg); color: var(--fg); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+  :is(#fix-panel, #design-panel) .fix-tabs .dot { position: absolute; top: 6px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; }
+  :is(#fix-panel, #design-panel) .fsec { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin: 0 0 10px; }
   #fix-panel .walls-all:not([hidden]) { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
-  #fix-panel .fsec-hd { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
-  #fix-panel .fsec-hd h3 { margin: 0; }
-  #fix-panel .fsec h3 { margin: 0 0 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
-  #fix-panel .fsec.danger { border-color: #dc2626; }
-  #fix-panel .fsec.danger h3 { color: #b91c1c; }
+  :is(#fix-panel, #design-panel) .fsec-hd { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+  :is(#fix-panel, #design-panel) .fsec-hd h3 { margin: 0; }
+  :is(#fix-panel, #design-panel) .fsec h3 { margin: 0 0 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  :is(#fix-panel, #design-panel) .fsec.danger { border-color: #dc2626; }
+  :is(#fix-panel, #design-panel) .fsec.danger h3 { color: #b91c1c; }
   #fix-panel #fix-delete { border-color: #dc2626; color: #b91c1c; }
   #fix-panel .chg.del { border-left-color: #dc2626; }
-  #fix-panel .fsec .fixgrid { margin-top: 0; grid-template-columns: 8.5em 1fr; }
-  #fix-panel .fsec > .row:first-of-type, #fix-panel .fsec > p.why + .row { margin-top: 0; }
-  #fix-panel .fix-bar { position: sticky; bottom: 0; margin: 0 -15px -12px; padding: 10px 15px 12px; background: var(--bg); border-top: 1px solid var(--line); }
-  #fix-panel .fix-bar .row { margin-top: 0; }
-  #fix-panel .fix-bar p { margin: 6px 0 0; }
+  :is(#fix-panel, #design-panel) .fsec .fixgrid { margin-top: 0; grid-template-columns: 8.5em 1fr; }
+  :is(#fix-panel, #design-panel) .fsec > .row:first-of-type, :is(#fix-panel, #design-panel) .fsec > p.why + .row { margin-top: 0; }
+  :is(#fix-panel, #design-panel) .fix-bar { position: sticky; bottom: 0; margin: 0 -15px -12px; padding: 10px 15px 12px; background: var(--bg); border-top: 1px solid var(--line); }
+  :is(#fix-panel, #design-panel) .fix-bar .row { margin-top: 0; }
+  :is(#fix-panel, #design-panel) .fix-bar p { margin: 6px 0 0; }
   #fix-panel #fix-apply { width: 100%; }
-  #fix-panel .barline { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; }
-  #fix-panel .barline .link { white-space: nowrap; }
+  :is(#fix-panel, #design-panel) .barline { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+  :is(#fix-panel, #design-panel) .barline .link { white-space: nowrap; }
   @media (max-width: 700px) {
     #fix-panel #fix-actions .row { flex-wrap: nowrap; }
     #fix-panel #fix-actions .row .btn.primary { flex: 2 1 0; }
@@ -270,9 +313,9 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
     #fix-panel .long { display: none; }
   }
   @media (min-width: 701px) { #fix-panel .short { display: none; } }
-  #fix-panel .fix-bar .row { flex-wrap: wrap; }
-  #fix-panel .fix-bar .row .btn { flex: 1 1 0; white-space: nowrap; }
-  #fix-panel .fix-bar .row .btn.primary { flex: 1 1 100%; }
+  :is(#fix-panel, #design-panel) .fix-bar .row { flex-wrap: wrap; }
+  :is(#fix-panel, #design-panel) .fix-bar .row .btn { flex: 1 1 0; white-space: nowrap; }
+  :is(#fix-panel, #design-panel) .fix-bar .row .btn.primary { flex: 1 1 100%; }
   #fix-panel .fix-pending { border: 1px solid #f59e0b; border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; background: rgba(245, 158, 11, 0.1); }
   #fix-panel .fix-pending b { display: block; margin-bottom: 4px; }
   #fix-panel .fix-group { margin: 12px 0 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
@@ -280,13 +323,13 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   #fix-panel .bits li { display: flex; gap: 6px; }
   #fix-panel .bits .k { color: var(--muted); min-width: 6.5em; }
   #fix-panel .bits .was { color: var(--muted); text-decoration: line-through; }
-  #fix-panel .fix-pane { margin-top: 2px; }
-  #fix-panel .fix-pane .grid2 { grid-template-columns: 7.5em 1fr; }
+  :is(#fix-panel, #design-panel) .fix-pane { margin-top: 2px; }
+  :is(#fix-panel, #design-panel) .fix-pane .grid2 { grid-template-columns: 7.5em 1fr; }
   #fix-panel .fixgrid { margin-top: 10px; }
   #fix-panel .turn { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; margin-top: 6px; }
   #fix-panel .turn select { max-width: 11em; }
-  #fix-panel .badge { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 99px; background: #f59e0b; color: #1f1300; font-size: 11px; line-height: 18px; font-weight: 600; }
-  #fix-panel .badge:empty { display: none; }
+  :is(#fix-panel, #design-panel) .badge { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 99px; background: #f59e0b; color: #1f1300; font-size: 11px; line-height: 18px; font-weight: 600; }
+  :is(#fix-panel, #design-panel) .badge:empty { display: none; }
   #fix-panel .fix-obj { margin-top: 10px; }
   #fix-panel .objhead { font-weight: 600; }
   #fix-panel .alltags { margin-top: 6px; font-size: 12px; }
@@ -295,7 +338,7 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   #fix-panel .alltags td:first-child { color: var(--muted); white-space: nowrap; }
   #fix-panel label.edited { color: #b45309; font-weight: 600; }
   #fix-panel label.edited::before { content: "● "; color: #f59e0b; }
-  #fix-panel .link { border: 0; background: none; color: var(--accent, #2563eb); cursor: pointer; padding: 0 2px; font: inherit; }
+  :is(#fix-panel, #design-panel) .link { border: 0; background: none; color: var(--accent, #2563eb); cursor: pointer; padding: 0 2px; font: inherit; }
   #fix-panel .colorrow { display: grid; grid-template-columns: 1fr 38px; gap: 6px; }
   #fix-panel .colorrow input[type=color] { width: 38px; height: 36px; padding: 2px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); }
   #fix-panel .other { display: flex; flex-direction: column; gap: 6px; }
@@ -646,6 +689,12 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
   <p id="export-status" class="progress" aria-live="polite"></p>
 </section>
 
+<section id="step10-card" class="step" aria-labelledby="step10">
+  <h2 id="step10"><span class="n">10</span>Design</h2>
+  <p id="design-sum" class="why" style="margin-top:0"></p>
+  <div class="row"><button id="design-open" class="btn" type="button">Edit design</button></div>
+</section>
+
 </div>
 
 <footer class="sb-foot">
@@ -722,6 +771,18 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
     </div>
   </div>
 </div>
+<div id="design-panel" aria-label="Design">
+  <div class="fix-hd"><button id="design-back" class="btn" type="button"><svg><use href="#i-chevron"/></svg>Steps</button><h2>Design</h2><span class="dname" id="design-name"></span><button id="design-hide" class="btn" type="button" title="Hide panel" aria-label="Hide panel" aria-controls="sb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/><path d="m8.5 9.5 2.5 2.5-2.5 2.5"/></svg></button></div>
+  <div class="fix-tabs" role="tablist" aria-label="What to design">
+    <button role="tab" id="design-tab-theme" data-tab="theme" aria-controls="design-pane" aria-selected="true" type="button">Theme</button>
+    <button role="tab" id="design-tab-roads" data-tab="roads" aria-controls="design-pane" aria-selected="false" type="button">Roads</button>
+    <button role="tab" id="design-tab-text" data-tab="text" aria-controls="design-pane" aria-selected="false" type="button">Text</button>
+    <button role="tab" id="design-tab-layers" data-tab="layers" aria-controls="design-pane" aria-selected="false" type="button">Layers</button>
+    <button role="tab" id="design-tab-tiles" data-tab="tiles" aria-controls="design-pane" aria-selected="false" type="button">Tiles</button>
+  </div>
+  <div class="fix-body"><div id="design-pane" class="fix-pane" role="tabpanel"></div></div>
+  <div class="fix-bar design-bar" style="margin: 0; padding: 8px 15px 10px"><div class="line"><b id="design-changes">Style: default</b><button id="design-export" class="link" type="button">Export →</button></div><p class="st" id="design-state" role="status" aria-live="polite"></p></div>
+</div>
 </div>
 </div>
 <button id="sb-show" title="Show panel" aria-label="Show panel" aria-controls="sb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/><path d="m10.5 9.5-2.5 2.5 2.5 2.5"/></svg></button>
@@ -736,6 +797,8 @@ import * as regions from "./app/regions.js";
 import * as areaStore from "./app/area_store.js";
 import { initFixesPanel } from "./app/fixes_panel.js";
 import * as exporter from "./app/export.js";
+import * as designLib from "./app/design.js";
+import { initDesignPanel } from "./app/design_panel.js";
 import { rsDashboard } from "./map/roadstyle/dashboard/index.js";   // roadstyle's map dashboard (copied by build.sh at ROADSTYLE_COMMIT)
 import { rsFirstPaint } from "./map/roadstyle/dashboard/template.js";   // the classes of <html> before the first paint
 
@@ -967,7 +1030,7 @@ function showPanel(on, remember = true) {
 }
 if (kept("duckosm.panel") === "collapsed" && !phone.matches) showPanel(false);
 phone.addEventListener("change", () => { if (phone.matches) showPanel(true, false); });
-$("sb-hide").onclick = $("fix-hide").onclick = () => showPanel(false);      // the second button is in the header of the Fix OSM data panel, which has no top row
+$("sb-hide").onclick = $("fix-hide").onclick = $("design-hide").onclick = () => showPanel(false);      // the other two are in the headers of the Fix OSM data panel and the Design panel, which have no top row
 $("sb-show").onclick = () => { showPanel(true); $("sb-hide").focus(); };
 // the sheet and the panel move in a transition (0.15 s): each frame of it gives the padding, and its end gives the last one, also when the main
 // thread is busy
@@ -1687,6 +1750,9 @@ async function restoreSavedArea(slug) {
       $("fixes").onchange?.();
     }
 
+    const designText = await areaStore.loadDesign(slug);       // the design of this area (card 10), before the first draw
+    if (designText && designPanel) await designPanel.load(designText, { draw: false });
+
     progress("Loading Parquet tables into DuckDB…");
     await duck.restoreTables(saved.tables);
 
@@ -1966,6 +2032,7 @@ $("run").onclick = async () => {
       status("The area could not be saved in this browser (" + (e.name === "QuotaExceededError" ? "storage is full" : e.message) + "). It is still on the page.", 8000);
     }
     localStorage.setItem("duckosm.lastArea", areaSlug);
+    if (designPanel) areaStore.saveDesign(areaSlug, designPanel.text()).catch(() => {});
     renderSavedAreasList();
     // the networks of the build: one row for each, with its roads (edges) and junctions (nodes), in roadstyle's table
     const NET = { driving: ["car", "Driving"], walking: ["walk", "Walking"], cycling: ["bike", "Cycling"] };
@@ -2217,6 +2284,7 @@ $("tilefmt").value = duck.tileFormat;
 $("tilefmt").onchange = async () => {
   const f = $("tilefmt").value;
   keep("duckosm.tileformat", f);
+  designPanel?.patchProfile({ format: f });
   if (!roadsShown) return duck.setTileFormat(f);   // the next draw has it
   try {
     await useStyle(await duck.styleIn(f));
@@ -2280,6 +2348,8 @@ const HELP = {
     ["6 Visualization", "Show the roads on the map."],
     ["7 Fix OSM data", "Correct errors of OpenStreetMap and add information (sidewalk, floors, roof, colors, turn rules) with rules, and build the networks again."],
     ["8 Edit levels", "Change the drawing order of the roads by hand."],
+    ["9 Export", "Give the network to other software: tiles, GeoPackage, GeoJSON, MATSim and SUMO."],
+    ["10 Design", "Change the colors, widths and text of the map, and set the profile of the tiles that step 9 makes. The page keeps the design with the area."],
     ["Google key", "Street View (Linked) and Google 3D need a Google Maps key. The gear button of the map bar saves it in this browser only."],
   ],
   note: `Documentation: ${link(DOCS.app, "this page (docs/app.md)")} · ${link(DOCS.features, "duckOSM features tables")} · ${link(DOCS.fixes, "fix OpenStreetMap errors")} · ` +
@@ -2334,6 +2404,13 @@ const CARD_HELP = {
     ["Changes", "All rules. A click shows the object on the map, in amber. Undo, redo, download the rules, or delete one."],
     ["Apply and build again", "Runs step 4 again with the rules, and makes the tables again. The tags that you change are in the new tables."]],
     note: link(DOCS.fixes, "The format of the fixes file") },
+  10: { title: "Design", intro: "The style of the map and the profile of the tiles. A change shows on the map after a short wait, and the Export card uses the same profile.", terms: [
+    ["Theme", "Four ready themes: Light, Dark, Traffic and Print. Pick one, then change any value. Download saves the design as one .json file. Load a file puts it back."],
+    ["Roads", "The fill and the casing of each road class, the width of each group, and the colors of the dark theme."],
+    ["Text", "The street names (color, halo, size, first zoom) and the one-way arrows."],
+    ["Layers", "The colors of water, land, buildings, railways and waterways, and the height of 3D buildings. They need the base-map layers of step 4."],
+    ["Tiles", "The profile of the tile files: the zooms, the layers, the columns of the layer edges, the zoom where each road class starts, the extent, the buffer and the tile limit."]],
+    note: link(DOCS.app, "docs/dashboard.md") },
   8: { title: "Edit levels", intro: "Change the drawing order of the roads by hand with roadstyle's level editor: which road goes over which one, where two roads join, the heads and the line ends.", terms: [
     ["The editor", "It takes this panel (the sheet on a phone)."],
     ["← Steps", "Comes back to the steps and puts the applied edits into the tables."],
@@ -2365,8 +2442,10 @@ const STEP = {
   7: { ready: () => (netBuilt ? "" : "after step 4"), done: () => fixesApplied, optional: true },   // optional: the page does not open it by itself
   8: { ready: () => (netBuilt && levelsTable() ? "" : "after step 4"), done: () => levelsApplied },
   9: { ready: () => (netBuilt ? "" : "after step 4"), done: () => exported, optional: true },
+  10: { ready: () => "", done: () => designEdited, optional: true },        // the design needs no build: the map and the tile profile take it when they are made
 };
 let exported = false;
+let designPanel = null, designEdited = false;      // card 10 (app/design_panel.js)
 let current = null;                                // the step that the page opened last
 let areasAutoFolded = false;                       // the card "Your areas" folded by itself once
 function refreshSteps() {
@@ -2436,7 +2515,7 @@ const EXPORT_GROUPS = {
 function paintExport() {
   const modes = exportModes(), was = $("export-mode").value;
   $("export-mode").value = modes.includes(was) ? was : modes[0] ?? "";
-  const zoomRow = '<div class="zoomrow"><label class="optrow"><input type="checkbox" id="export-full" checked><span class="t"><b>Everything</b><small>All zooms, all networks, all road attributes and all layers.</small></span></label><span class="small">Zoom from <input id="export-zmin" type="number" min="0" max="18" value="10" aria-label="The lowest zoom"> to <input id="export-zmax" type="number" min="0" max="18" value="14" aria-label="The highest zoom"></span><span id="export-tiles" class="small"></span></div>';
+  const zoomRow = '<div class="zoomrow"><p class="small muted" id="export-profile"></p><label class="optrow"><input type="checkbox" id="export-full"><span class="t"><b>Layer edges</b><small>Every road of every network, with the columns of the profile.</small></span></label><span class="small">Zoom from <input id="export-zmin" type="number" min="0" max="18" value="0" aria-label="The lowest zoom"> to <input id="export-zmax" type="number" min="0" max="18" value="14" aria-label="The highest zoom"></span><label class="small"><input type="checkbox" id="export-auto"> The highest zoom that fits the limit</label><span id="export-tiles" class="small"></span><button type="button" class="link" id="export-design">Edit the tile profile (step 10) →</button></div>';
   const network = `<section class="expsec netsec"><h3>Network</h3><p class="small muted">The files below use one network.</p><div class="segmented" id="export-seg" role="radiogroup" aria-label="Network of the files">${modes.map((m) => `<button type="button" role="radio" data-m="${m}" aria-checked="${m === $("export-mode").value}">${icon(({ driving: "car", walking: "walk", cycling: "bike" })[m] ?? "arrow")}${m[0].toUpperCase() + m.slice(1)}</button>`).join("")}</div></section>`;
   const row = (f) => `<div class="exp"><b>${esc(f.title)}</b><button type="button" class="btn sm" data-fmt="${f.id}"${f.tiles ? " data-tiles" : ""}>Download</button><small>${esc(f.note)}</small></div>`;
   const section = (g) => `<section class="expsec"><h3>${EXPORT_GROUPS[g][0]}</h3><p class="small muted">${EXPORT_GROUPS[g][1]}</p>${g === "Tiles" ? zoomRow : ""}${exporter.FORMATS.filter((f) => f.group === g).map(row).join("")}</section>`;
@@ -2462,23 +2541,38 @@ const exportSource = () => ({
   urls: [...new Set(Object.entries(map.getStyle().sources).filter(([id, src]) => id.startsWith("rs-") && src.type === "vector" && src.tiles?.length).map(([, src]) => src.tiles[0].replace(/([?&])f=[a-z]+/, "$1f=mvt").replace(/^(rs:[^?]*)$/, "$1?f=mvt")))],      // the roads and low-zoom sources have one address
   tile: (u) => duck.tile(u),
 });
+// the layers of the map's tiles that the profile keeps: roadstyle's road layers (simple: the roads, slots: the names and the arrows) or the base-map layers (ov0, ov1, ...: the overlays)
+const ROAD_LAYER = /^(simple|slots)$/;
+const layerKeep = (p) => (name) => name === "edges" || (ROAD_LAYER.test(name) ? p.layers.roads : p.layers.base);
 const exportModes = () => [...new Set(duck.tables.filter((t) => t.table === "edges").map((t) => t.mode))];
-const fullMaxZoom = (box) => { let z = 0; for (let k = 0; k <= 16; k++) { if (exporter.tileCount(box, 0, k) > exporter.MAX_TILES) break; z = k; } return z; };
+const profile = () => designPanel?.profile() ?? designLib.defaultProfile();
+const fullMaxZoom = (box, lo, limit) => { let z = lo; for (let k = lo; k <= 16; k++) { if (exporter.tileCount(box, lo, k) > limit) break; z = k; } return z; };
+// the zooms of the profile: the highest one is the highest that keeps the tiles under the limit when the profile says auto
+const profileZooms = (box, p = profile()) => [p.minzoom, p.auto ? fullMaxZoom(box, p.minzoom, p.maxTiles) : p.maxzoom];
 async function paintTileCount() {
   const out = $("export-tiles");
   if (!out) return;
+  const p = profile();
+  $("export-profile").textContent = `Tile profile: ${designLib.PROFILES[p.preset]?.name ?? "Your own"}. Limit: ${num(p.maxTiles)} tiles.`;
+  $("export-full").checked = p.layers.edges; $("export-auto").checked = p.auto;
   let box;
   try { box = await exportExtent(); } catch (e) { out.textContent = `The extent of the network is not known: ${e.message}`; return; }
-  const full = $("export-full").checked;
-  if (full) { $("export-zmin").value = 0; $("export-zmax").value = fullMaxZoom(box); }
-  $("export-zmin").disabled = $("export-zmax").disabled = full;
-  const lo = Math.max(0, Math.min(18, +$("export-zmin").value || 0)), hi = Math.max(lo, Math.min(18, +$("export-zmax").value || lo));
-  const n = exporter.tileCount(box, lo, hi);
-  out.textContent = n > exporter.MAX_TILES ? `${num(n)} tiles: too many (at most ${num(exporter.MAX_TILES)}). Use fewer zooms.` : `${num(n)} tiles.`;
-  for (const b of document.querySelectorAll("#export-list [data-tiles]")) b.disabled = n > exporter.MAX_TILES || !roadsShown;
+  const [lo, hi] = profileZooms(box, p);
+  $("export-zmin").value = lo; $("export-zmax").value = hi;
+  $("export-zmax").disabled = p.auto;
+  const n = exporter.tileCount(box, lo, hi), bad = n > p.maxTiles;
+  out.textContent = bad ? `${num(n)} tiles: too many (at most ${num(p.maxTiles)}). Use fewer zooms or raise the limit in step 10.` : `${num(n)} tiles.`;
+  designPanel?.setCount(out.textContent, bad);
+  for (const b of document.querySelectorAll("#export-list [data-tiles]")) b.disabled = bad || !roadsShown;
 }
-$("export-list").addEventListener("input", (e) => { if (["export-zmin", "export-zmax", "export-full"].includes(e.target.id)) paintTileCount(); });
-$("export-list").addEventListener("change", (e) => { if (e.target.id === "export-full") paintTileCount(); });
+// the card's own fields are the profile's fields: a change goes to the profile (step 10), which keeps it and tells the card
+$("export-list").addEventListener("input", (e) => {
+  const p = profile();
+  if (e.target.id === "export-zmin" || e.target.id === "export-zmax") designPanel?.patchProfile({ minzoom: +$("export-zmin").value || 0, maxzoom: +$("export-zmax").value || 0 });
+  if (e.target.id === "export-full") designPanel?.patchProfile({ layers: { ...p.layers, edges: e.target.checked } });
+  if (e.target.id === "export-auto") designPanel?.patchProfile({ auto: e.target.checked });
+});
+$("export-list").addEventListener("click", (e) => { if (e.target.id === "export-design") { designPanel?.open(); designPanel?.tab("tiles"); } });
 document.addEventListener("duckosm:built", () => { exportBox = null; });
 document.addEventListener("duckosm:drawn", () => { paintTileCount(); });
 $("export-list").addEventListener("click", async (e) => {
@@ -2490,15 +2584,16 @@ $("export-list").addEventListener("click", async (e) => {
     const t0 = performance.now();
     let ctx;
     if (f.tiles) {
-      const full = $("export-full").checked;
-      if (full && $("mapmode").value !== "all" && [...$("mapmode").options].some((o) => o.value === "all")) {       // all networks in one tile set: the map shows All
+      const p = profile(), box = await exportExtent(), [lo, hi] = profileZooms(box, p);
+      if (!p.layers.roads && !p.layers.base && !p.layers.edges) throw new Error("the profile has no layer: turn one on in step 10");
+      if (p.layers.edges && $("mapmode").value !== "all" && [...$("mapmode").options].some((o) => o.value === "all")) {       // all networks in one tile set: the map shows All
         $("export-status").textContent = "Drawing all networks…";
         $("mapmode").value = "all";
         await $("mapmode").onchange();
         await window.mapDrawing;
       }
-      ctx = { src: exportSource(), bbox: await exportExtent(), min: Math.max(0, +$("export-zmin").value || 0), max: Math.min(18, +$("export-zmax").value || 14),
-        extra: full ? exporter.edgeTiles(await exporter.roadFeatures(exportQuery, exportModes()), Math.max(0, +$("export-zmin").value || 0), Math.min(18, +$("export-zmax").value || 14)) : null,
+      ctx = { src: exportSource(), bbox: box, min: lo, max: hi, classFrom: p.classFrom, keep: layerKeep(p),
+        extra: p.layers.edges ? exporter.edgeTiles(await exporter.roadFeatures(exportQuery, exportModes()), lo, hi, { extent: p.extent, buffer: p.buffer, columns: p.columns, modes: exportModes(), classFrom: p.classFrom }) : null,
         progress: (d, n) => { $("export-status").textContent = `Making ${f.title}: ${num(d)} of ${num(n)} tiles…`; } };
     }
     const r = await f.run(exportQuery, mode, $("name").value.trim() || areaName, ctx);
@@ -2510,7 +2605,7 @@ $("export-list").addEventListener("click", async (e) => {
     b.closest(".exp").insertAdjacentHTML("beforeend", `<small class="chk ${chk.ok ? "ok" : "bad"}">${chk.ok ? "✓ Checked: " : "✗ Problem: "}${esc(chk.text)}</small>`);
     window.lastCheck = chk;
     $("export-status").textContent = `${r.name}: ${num(r.rows)} ${f.tiles ? "tiles" : "edges"}, ${num(r.blob.size / 1024, 0)} KB, ${num((performance.now() - t0) / 1000, 1)} s.`;
-    window.lastExport = { name: r.name, size: r.blob.size, rows: r.rows, connections: r.connections };       // for export_e2e.py
+    window.lastExport = { name: r.name, size: r.blob.size, rows: r.rows, connections: r.connections, layers: r.layers, min: r.min, max: r.max };       // for export_e2e.py
   } catch (err) {
     $("export-status").textContent = `The export failed: ${err.message}`;
   } finally { b.disabled = false; }
@@ -2541,6 +2636,51 @@ $("fix-apply").onclick = () => {
   closeFixes();
   $("fix-why").textContent = "Building the networks again with the fixes…";
   $("run").click();
+};
+
+// ---- card 10: the design (docs/dashboard.md). The panel is app/design_panel.js. A design is the style of the map (written into roadstyle's look and drawn
+// again by the map worker) and the profile of the tiles (the Export card reads it). It is kept in this browser (localStorage) and with the saved area
+// (design.json in its folder, app/area_store.js). ----
+let designSave = null;
+const designSlug = () => areaStore.sanitizeSlug(areaName || $("name").value);
+async function redrawDesign(lookObj, isDefault, draw) {
+  duck.setLookText(isDefault ? null : JSON.stringify(lookObj));       // the next draw reads this look
+  if (!draw) return "";
+  if (editor) return "The level editor is open. The map shows this design after you close it and draw again.";
+  if (!roadsShown) return "The map is not drawn yet. The design shows when you draw it (step 6).";
+  await showRoads();
+  const note = $("mapnote").textContent;
+  if (/^The map failed|needs more memory|draws at most/.test(note)) throw new Error(note);       // drawRoads writes its failure in the note and keeps the old map
+  return "The map shows this design.";
+}
+function designChanged(p) {
+  if (p.format !== duck.tileFormat) { $("tilefmt").value = p.format; $("tilefmt").onchange(); }       // the format of the map follows the profile
+  paintTileCount();
+}
+function designSaved(text) {
+  const d = JSON.parse(text);
+  designEdited = designLib.changes({ ...d, profile: 0 }, { ...designPanel.base(), profile: 0 }).length > 0;
+  $("design-sum").textContent = `${d.name}${designEdited ? " (changed)" : ""}. Tile profile: ${designLib.PROFILES[d.profile.preset]?.name ?? "your own"}.`;
+  refreshSteps();
+  clearTimeout(designSave);
+  designSave = setTimeout(() => { if (netBuilt) areaStore.saveDesign(designSlug(), text).catch(() => {}); }, 800);       // with the saved area
+}
+try {
+  const look = await fetch("map/look.json").then((r) => r.json());
+  designPanel = await initDesignPanel({ $, esc, look, redraw: redrawDesign, onProfile: designChanged, onSave: designSaved });
+  let stored = null;
+  try { stored = localStorage.getItem("duckosm.design"); } catch (_) { /* no storage: the default design */ }
+  if (!(stored && await designPanel.load(stored, { draw: false }))) designPanel.patchProfile({ format: duck.tileFormat, preset: "analysis" });     // no design yet: the tile format that the person chose before
+  designSaved(designPanel.text());
+} catch (e) { $("design-sum").textContent = "The design panel did not start: " + e.message; $("design-open").disabled = true; }
+window.designPanel = designPanel;                 // for the tests (design_e2e.py)
+const closeDesign = () => { designPanel?.close(); padMap(); map.resize(); };
+$("design-open").onclick = () => designPanel?.open();
+$("design-back").onclick = closeDesign;
+$("design-export").onclick = () => {
+  closeDesign();
+  const c = cards.find((x) => x.id === "step9-card");
+  if (c && !c.classList.contains("off")) { autoFold(c, false); c.scrollIntoView({ block: "nearest" }); }
 };
 
 // ---- card 8: roadstyle's level editor on the page's map (docs/app.md). The page makes the level area from the tables (makeArea) and keeps

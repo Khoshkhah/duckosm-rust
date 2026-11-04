@@ -149,8 +149,9 @@ with sync_playwright() as p:
     print(f"SUMO: {len(es)} edges, {len(cs)} connections")
     # tiles: the zooms of the card, a count; PMTiles that the pmtiles library reads (the header, the metadata, a tile that is MVT), and MBTiles (SQLite) with the same tiles
     assert page.locator("#export-list [data-tiles]").count() == 2 and page.evaluate("[...document.querySelectorAll('#export-list [data-tiles]')].every((b) => !b.disabled)"), "the tile buttons are on after the map is drawn"
-    # Everything (on by default): zoom 0 to the highest that fits, all networks, every road attribute in the tiles
-    assert page.is_checked("#export-full") and page.is_disabled("#export-zmin") and page.input_value("#export-zmin") == "0"
+    # the profile at the first visit (Analysis, step 10): the layer edges, zoom 0 to the highest that fits, all networks, every road attribute in the tiles
+    assert page.is_checked("#export-full") and page.is_checked("#export-auto") and page.is_disabled("#export-zmax") and page.input_value("#export-zmin") == "0"
+    assert "Analysis" in page.text_content("#export-profile")
     zmax = int(page.input_value("#export-zmax"))
     assert zmax >= 14, zmax
     page.wait_for_function("/\\d+ tiles\\./.test(document.getElementById('export-tiles').textContent)")
@@ -181,6 +182,7 @@ with sync_playwright() as p:
     assert ev["lowClasses"] is None or set(ev["lowClasses"]) <= {"motorway", "trunk", "primary", "primary_link", "motorway_link", "trunk_link"}, ev["lowClasses"]
     print(f"Everything: zoom 0 to {zmax}, {len(ev['ids'])} edges of {union} in the tiles of zoom {zmax} ({ev['pieces']} pieces), low zoom classes {ev['lowClasses']}")
     page.uncheck("#export-full")
+    page.uncheck("#export-auto")
     page.fill("#export-zmin", "12")
     page.fill("#export-zmax", "14")
     page.wait_for_function("/\\d+ tiles\\./.test(document.getElementById('export-tiles').textContent)")

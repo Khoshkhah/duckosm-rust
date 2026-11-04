@@ -177,6 +177,32 @@ with sync_playwright() as p:
     page.click("#sb-show")
     page.click("#fix-back")
 
+    # card 10: the Design panel, one picture for each tab, and the map in the Dark theme
+    unfold(page, "step10-card")
+    shot(page, "26-design-card", "#step10-card")
+    page.click("#design-open")
+    page.wait_for_selector("#design-panel", state="visible")
+    shot(page, "27-design-theme")
+    page.click("#design-tab-roads")
+    shot(page, "28-design-roads")
+    page.click("#design-tab-text")
+    shot(page, "29-design-text")
+    page.click("#design-tab-layers")
+    shot(page, "30-design-layers")
+    page.click("#design-tab-tiles")
+    shot(page, "31-design-tiles")
+    page.click("#design-tab-theme")
+    page.click("#design-pane [data-look=dark]")
+    page.evaluate("window.designPanel.flush()")
+    page.wait_for_function("!window.mapDrawing && /shows this design/.test(window.designPanel.state())", timeout=180_000)
+    page.wait_for_timeout(2500)
+    shot(page, "32-design-dark-map")
+    page.click("#design-pane [data-look=light]")
+    page.evaluate("window.designPanel.flush()")
+    page.wait_for_function("!window.mapDrawing && /shows this design/.test(window.designPanel.state())", timeout=180_000)
+    page.click("#design-back")
+    page.evaluate("localStorage.removeItem('duckosm.design')")        # the next visit (below) starts with the Light design
+
     # the card "Your areas": the built area is saved, a new visit lists it
     page2 = ctx.new_page()
     page2.on("pageerror", lambda e: errors.append(str(e)))
