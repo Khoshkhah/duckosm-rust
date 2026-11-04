@@ -630,11 +630,12 @@ with sync_playwright() as p:
     assert page.evaluate(f"{ARROWS}.length") > 0, "the roads style has arrow layers"
     page.click("#rs-toolbar .bm-ctrl .bm-icon")
     page.wait_for_selector("#rs-top-arrows", state="visible", timeout=10_000)
-    assert page.is_checked("#rs-top-arrows") and page.is_enabled("#rs-top-arrows")
-    page.click("#rs-top-arrows")
+    assert not page.is_checked("#rs-top-arrows") and page.is_enabled("#rs-top-arrows"), "the arrows are off at the start"
     page.wait_for_function(f"{ARROWS}.every((l) => duckMap.getLayoutProperty(l.id, 'visibility') === 'none')", timeout=10_000)
     page.click("#rs-top-arrows")
     page.wait_for_function(f"{ARROWS}.every((l) => duckMap.getLayoutProperty(l.id, 'visibility') !== 'none')", timeout=10_000)
+    page.click("#rs-top-arrows")
+    page.wait_for_function(f"{ARROWS}.every((l) => duckMap.getLayoutProperty(l.id, 'visibility') === 'none')", timeout=10_000)
     print("the Arrows switch hides and shows the one-way arrows")
     browser.close()
     server.shutdown()

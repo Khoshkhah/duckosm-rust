@@ -6,6 +6,8 @@
 <title>duckOSM in the browser</title>
 <!-- on localhost only (a test page): a red bar with the first error of the page and the file and line, so a failure can be read without the console. A click on the bar closes it. -->
 <script>
+// the one-way arrows are off at the first visit: roadstyle reads this key when it loads (the switch "Arrows" of the base-map box), so it is set before the modules run; a choice that the person made stays
+try { if (localStorage.getItem("rs-top:arrows") === null) localStorage.setItem("rs-top:arrows", "0"); } catch (e) { /* no storage: the default of roadstyle */ }
 if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   const show = (text) => {
     if (document.getElementById("errbar")) return;

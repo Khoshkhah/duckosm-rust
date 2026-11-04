@@ -28,14 +28,26 @@ const zipOf = async (files) => {
   return new Blob([zipSync(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, strToU8(v)])))], { type: "application/zip" });
 };
 
-/** Roads and nodes as two GeoJSON files in one zip. */
+/** The roads as one GeoJSON file (a plain .geojson that kepler.gl, QGIS and web maps open; a LineString for each edge, the ids as text). */
 export async function geojson(query, mode, area) {
   const roads = await query(`SELECT edge_id::VARCHAR AS edge_id, osm_id::VARCHAR AS osm_id, source::VARCHAR AS source, target::VARCHAR AS target, name, highway, oneway, lanes, maxspeed_kmh,
     length_m, ST_AsGeoJSON(geometry) AS g FROM ${mode}.edges ORDER BY edge_id`);
+  return { name: `${SLUG(area)}_${mode}_roads.geojson`, blob: featureCollection(roads), rows: roads.length };
+}
+
+/** The nodes (the junctions and the ends of the roads) as one GeoJSON file of points. */
+export async function geojsonNodes(query, mode, area) {
   const nodes = await query(`SELECT node_id::VARCHAR AS node_id, ST_AsGeoJSON(geom) AS g FROM ${mode}.nodes ORDER BY node_id`);
-  const fc = (rows, props) => JSON.stringify({ type: "FeatureCollection", features: rows.map((r) => ({ type: "Feature", properties: props(r), geometry: JSON.parse(r.g) })) });
-  const keep = ({ g, ...p }) => Object.fromEntries(Object.entries(p).map(([k, v]) => [k, typeof v === "bigint" ? String(v) : v]));
-  return { name: `${SLUG(area)}_${mode}_geojson.zip`, blob: await zipOf({ [`${mode}_roads.geojson`]: fc(roads, keep), [`${mode}_nodes.geojson`]: fc(nodes, keep) }), files: 2, rows: roads.length, nodes: nodes.length };
+  return { name: `${SLUG(area)}_${mode}_nodes.geojson`, blob: featureCollection(nodes), rows: nodes.length };
+}
+
+// one FeatureCollection, one feature on each line (a file of 100 MB is read by a streaming reader too); a missing number is `null`, never NaN
+function featureCollection(rows) {
+  const lines = rows.map((r) => {
+    const { g, ...p } = r;
+    return JSON.stringify({ type: "Feature", properties: Object.fromEntries(Object.entries(p).map(([k, v]) => [k, typeof v === "bigint" ? String(v) : typeof v === "number" && !Number.isFinite(v) ? null : v])), geometry: JSON.parse(g) });
+  });
+  return new Blob(['{"type":"FeatureCollection","features":[\n', lines.join(",\n"), "\n]}\n"], { type: "application/geo+json" });
 }
 
 /** A MATSim network (network_v2.dtd): the nodes, and one link for each edge. */
@@ -419,15 +431,17 @@ async function readPmtiles(bytes) {
 }
 
 export async function verify(id, r, { query, mode, modes = [mode] }) {
-  const nEdges = id === "pmtiles" || id === "mbtiles" ? 0 : await count(query, `SELECT count(*) AS n FROM ${mode}.edges`);
-  const nNodes = id === "pmtiles" || id === "mbtiles" ? 0 : await count(query, `SELECT count(*) AS n FROM ${mode}.nodes`);
+  const nEdges = id === "pmtiles" || id === "mbtiles" || id === "geojson_nodes" ? 0 : await count(query, `SELECT count(*) AS n FROM ${mode}.edges`);
+  const nNodes = id === "pmtiles" || id === "mbtiles" || id === "geojson" ? 0 : await count(query, `SELECT count(*) AS n FROM ${mode}.nodes`);
   const same = (what, got, want) => { if (got !== want) throw new Error(`${what}: the file has ${fmt(got)}, the tables have ${fmt(want)}`); };
   try {
-    if (id === "geojson") {
-      const z = await unzip(r.blob), td = new TextDecoder();
-      const roads = JSON.parse(td.decode(z[`${mode}_roads.geojson`])), nodes = JSON.parse(td.decode(z[`${mode}_nodes.geojson`]));
-      same("roads", roads.features.length, nEdges); same("nodes", nodes.features.length, nNodes);
-      return { ok: true, text: `${fmt(nEdges)} roads and ${fmt(nNodes)} nodes, the same as the tables` };
+    if (id === "geojson" || id === "geojson_nodes") {
+      const g = JSON.parse(await r.blob.text()), want = id === "geojson" ? nEdges : nNodes;
+      if (g.type !== "FeatureCollection") throw new Error("the file is not a FeatureCollection");
+      same(id === "geojson" ? "roads" : "nodes", g.features.length, want);
+      const type = id === "geojson" ? "LineString" : "Point";
+      if (g.features.some((f) => f.geometry?.type !== type)) throw new Error(`a feature is not a ${type}`);
+      return { ok: true, text: `${fmt(want)} ${id === "geojson" ? "roads" : "nodes"}, the same as the tables; plain GeoJSON, every feature a ${type}` };
     }
     if (id === "gpkg") {
       const db = new (await sqlite()).Database(new Uint8Array(await r.blob.arrayBuffer()));
@@ -498,7 +512,8 @@ export const FORMATS = [
   { id: "pmtiles", group: "Tiles", title: "PMTiles", note: "The vector tiles of the map (MVT) in one file, for MapLibre, roadstyle and any static server. Needs the map (step 6).", run: pmtilesFile, tiles: true },
   { id: "mbtiles", group: "Tiles", title: "MBTiles", note: "The same tiles in a SQLite file, for QGIS and tile servers. Needs the map (step 6).", run: mbtilesFile, tiles: true },
   { id: "gpkg", group: "Visualization", title: "GeoPackage", note: "Roads (lines) and nodes (points) in one .gpkg file, for QGIS and ArcGIS. EPSG:4326, no spatial index.", run: geopackage, modes: ["driving", "walking", "cycling"] },
-  { id: "geojson", group: "Visualization", title: "GeoJSON", note: "Roads and nodes as two GeoJSON files (a .zip), for QGIS, kepler.gl and other web maps.", run: geojson, modes: ["driving", "walking", "cycling"] },
+  { id: "geojson", group: "Visualization", title: "GeoJSON roads", note: "One .geojson file of lines, one for each edge. For kepler.gl, QGIS and web maps.", run: geojson, modes: ["driving", "walking", "cycling"] },
+  { id: "geojson_nodes", group: "Visualization", title: "GeoJSON nodes", note: "One .geojson file of points: the junctions and the ends of the roads.", run: geojsonNodes, modes: ["driving", "walking", "cycling"] },
   { id: "matsim", group: "Simulation", title: "MATSim network", note: "network.xml: nodes, and a link for each edge with length, free speed, capacity and lanes. Meters in the UTM zone of the area.", run: matsim, modes: ["driving", "walking", "cycling"] },
   { id: "sumo", group: "Simulation", title: "SUMO plain XML", note: "Three XML files and a README (a .zip). Run the command of the README (netconvert, a SUMO tool) to make the SUMO network file.", run: sumo, modes: ["driving", "walking", "cycling"] },
 ];

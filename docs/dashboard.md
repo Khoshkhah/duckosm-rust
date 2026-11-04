@@ -65,7 +65,7 @@ The bar is roadstyle's. From the top to the bottom:
 The box has three groups:
 
 - **Base map.** One choice: OpenFreeMap Liberty or Positron (vector maps), OpenStreetMap, Esri Gray, Esri Streets, Esri Satellite or Blank. A map and its dark twin share one choice, so the theme can change the map to its dark twin.
-- **On top.** Hillshade, Labels (street names), 3D buildings and Arrows (the direction of one-way roads). The choice is kept for each base map.
+- **On top.** Hillshade, Labels (street names), 3D buildings and Arrows (the direction of one-way roads). The choice is kept for each base map. The arrows are off at the first visit: switch them on here.
 - **Map layers and H3 hexagons.** **Map layers** shows or hides the layers that a build makes (water, land use, buildings). **H3 hexagons** shows or hides the grid of the H3 tab.
 
 A build sets the Blank base map for its first drawing so that the roads are easy to see. This does not change your saved choice: the next visit starts on your base map.
@@ -300,7 +300,8 @@ Card 9 gives the network that you built to other software. It is off until a bui
 | **PMTiles** | `<area>_z<min>-<max>.pmtiles` | One PMTiles v3 file (gzip MVT tiles, Hilbert order, leaf directories for more than 4,000 tiles). For MapLibre, roadstyle and any static server. |
 | **MBTiles** | `<area>_z<min>-<max>.mbtiles` | The same tiles in a SQLite file (`metadata` and `tiles`, rows from the south). For QGIS and tile servers. |
 | **GeoPackage** | `<area>_<network>.gpkg` | The tables `roads` (LineString) and `nodes` (Point) in EPSG:4326, with no spatial index. For QGIS and ArcGIS. |
-| **GeoJSON** | `<area>_<network>_geojson.zip` | `<network>_roads.geojson` (a LineString for each edge, with `edge_id`, `osm_id`, name, class, one-way, lanes, speed and length) and `<network>_nodes.geojson`. Coordinates are longitude and latitude. |
+| **GeoJSON roads** | `<area>_<network>_roads.geojson` | One plain `.geojson` file: a LineString for each edge, with `edge_id`, `osm_id`, `source`, `target`, name, class, one-way, lanes, speed and length. Longitude and latitude. kepler.gl, QGIS and web maps open it directly. |
+| **GeoJSON nodes** | `<area>_<network>_nodes.geojson` | One plain `.geojson` file of points: the junctions and the ends of the roads, with `node_id`. |
 | **MATSim network** | `<area>_<network>_matsim_network.xml` | A `network_v2.dtd` file: a node for each node, and a link for each edge with length (m), free speed (m/s), capacity (vehicles per hour), lanes and mode (`car`, `walk` or `bike`). Coordinates are meters in the UTM zone of the area. |
 | **SUMO plain XML** | `<area>_<network>_sumo.zip` | `.nod.xml`, `.edg.xml` and `.con.xml` and a `README.txt` with the `netconvert` command. An edge has its shape, lanes, speed and priority. The connections are the legal turns of the edge graph (turn restrictions applied). |
 
@@ -324,7 +325,7 @@ The OpenFreeMap background of the page is not in the tiles: it is not ours.
 
 | Format | What the page checks |
 |---|---|
-| GeoJSON | The number of roads and nodes. |
+| GeoJSON roads and nodes | The number of features, that the file is a FeatureCollection, and that every feature is a LineString (roads) or a Point (nodes). |
 | GeoPackage | The number of roads and nodes, the application id and the header of a geometry. |
 | MATSim | The number of nodes and links, and that every link joins two nodes of the file. |
 | SUMO | The number of nodes, edges and connections, and that every edge joins two nodes of the file. The page does not run `netconvert`. |
