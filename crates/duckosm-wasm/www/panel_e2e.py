@@ -23,7 +23,7 @@ out.mkdir(parents=True, exist_ok=True)
 server = start(0, quiet=True, directory=WWW)
 url = f"http://127.0.0.1:{server.server_address[1]}/index.html?maxroads=0"
 errors = []
-CARDS = ["step1-card", "step2-card", "extracts-box", "step4-card", "step5-card", "step6-card", "step7-card", "step8-card"]
+CARDS = ["step1-card", "step2-card", "extracts-box", "step4-card", "step5-card", "step6-card", "step7-card", "step8-card", "step9-card"]
 STATE = """() => Object.fromEntries([...document.querySelectorAll('.step')].map((c) => [c.id, (c.classList.contains('folded') ? 'F' : 'O') + (c.classList.contains('off') ? '-off' : '') + (c.querySelector('.done').hidden ? '' : '-done')]))"""
 checked_links = {}
 
@@ -80,7 +80,7 @@ def run(browser, name, dark=False, **context):
     f = page.evaluate("""() => { const i = document.getElementById('q').getBoundingClientRect(), h = document.getElementById('here').getBoundingClientRect();
         return [Math.round(i.top), Math.round(i.height), Math.round(h.top - i.top), Math.round(i.right - h.right), Math.round(h.left - i.left)]; }""")
     assert 0 <= f[2] <= 8 and 0 <= f[3] <= 8 and f[4] > f[1], ("the 'What is here?' button is inside the field, at its right", f)
-    assert page.get_attribute("#here", "aria-label") == "What is here? Click the map" and page.get_attribute("#q", "placeholder") == "City, region or country"
+    assert page.get_attribute("#here", "aria-label") == "What is here? Click the map" and page.get_attribute("#q", "placeholder") == "City, region, country or H3 ID"
     assert page.evaluate("document.getElementById('find').querySelector('.btn') === null"), "no Search button"
     text = page.inner_text("#step1-card")
     assert "Type a place first" not in text and "Then click the map" not in text and "Photon" not in text and "OpenStreetMap contributors" not in text, text

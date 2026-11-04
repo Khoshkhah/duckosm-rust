@@ -225,6 +225,7 @@ fn street_segments(edges: &[duckosm_core::model::Edge], out: &mut Vec<building_f
                 edge_id: e.edge_id,
                 osm_id: e.osm_id,
                 name: e.attrs.name.clone(),
+                highway: e.attrs.highway.clone(),
             });
         }
     }
@@ -567,7 +568,7 @@ pub fn run<W: Write + Send>(
         log.step("elevation metadata");
     }
     if let Some(r) = raw.as_ref().filter(|_| p.building_faces) {
-        let faces = building_faces::building_faces(&r.ways, &r.nodes, &streets, &fixes.face_edits);
+        let faces = building_faces::building_faces(&r.ways, &r.nodes, &r.relations, &streets, &fixes.face_edits);
         duckosm_parquet::write_building_faces_to(file("building_faces_main.parquet")?, &faces)?;
         let mut buildings: Vec<i64> = faces.iter().map(|f| f.building_id).collect();
         buildings.dedup();
