@@ -45,8 +45,8 @@ fn monaco_faces() {
     let (n, one) = run("faces-1", None);
     assert_eq!(
         n,
-        Some((9907, 1231)),
-        "walls and buildings (all 1,231 buildings of the cut have walls)"
+        Some((10909, 1262)),
+        "walls and buildings (all 1,231 building ways and 31 multipolygon buildings of the cut have walls)"
     );
     let (_, two) = run("faces-2", None);
     assert_eq!(
@@ -63,7 +63,7 @@ fn monaco_faces() {
     let yaml = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("faces-rule.yaml");
     std::fs::write(&yaml, "extra:\n  building_faces:\n    - {building: 48807846, from_node: 619263365, to_node: 619263371, type: side}\n").unwrap();
     let (n, edited) = run("faces-3", Some(yaml));
-    assert_eq!(n, Some((9907, 1231)), "a rule changes no row count");
+    assert_eq!(n, Some((10909, 1262)), "a rule changes no row count");
     assert_eq!(
         wall(&edited, 48807846, 619263371, 619263365),
         ("side".into(), "front".into(), true)

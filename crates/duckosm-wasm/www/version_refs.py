@@ -25,6 +25,9 @@ NAMES = {"layers.json", "levels_info.json", "edges.json", "meta.json"}
 # roadstyle 0.26.3's svproviders.js adds this name to the address of a CDN (`_SP_PSV + "index.min.css"`): not a file of the page
 NAMES |= {"index.min.css"}
 
+# app/export.js adds these names to the address of the sql.js CDN (`base + "sql-wasm.js"`): not a file of the page
+NAMES |= {"sql-wasm.js"}
+
 
 def version(text, v):
     tag = lambda path: f"{path}?v={v}"  # noqa: E731

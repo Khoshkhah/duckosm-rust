@@ -12,3 +12,4 @@ __pycache__/
 /crates/duckosm-wasm/www/map/pkg/
 /crates/duckosm-wasm/www/map/roadstyle/
 /crates/duckosm-wasm/relay/.wrangler/
+/crates/duckosm-wasm/www/local_keys.json

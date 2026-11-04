@@ -53,10 +53,10 @@ export function upsertTagEdit(doc, edit) {
 const sameWall = (e, building, a, b) => e.building === building && ((e.from_node === a && e.to_node === b) || (e.from_node === b && e.to_node === a));
 export const findFace = (doc, building, a, b) => faceEdits(doc).find((e) => sameWall(e, building, a, b)) ?? null;
 
-// a rule that gives the computed type is not a change: it is removed
-export function setFace(doc, building, a, b, type, computed) {
+// a rule that gives the computed type and no door is not a change: it is removed. `door`: the kind of door of the wall ("" or null: no door)
+export function setFace(doc, building, a, b, type, computed, door = "") {
   const list = faceEdits(doc).filter((e) => !sameWall(e, building, a, b));
-  if (type !== computed) list.push({ building, from_node: a, to_node: b, type });
+  if (type !== computed || door) list.push({ building, from_node: a, to_node: b, type, ...(door ? { door } : {}) });
   if (list.length) (doc.extra ??= {}).building_faces = list;
   else if (doc.extra) { delete doc.extra.building_faces; if (!Object.keys(doc.extra).length) delete doc.extra; }
 }
@@ -67,6 +67,10 @@ export function addNewWay(doc, way) {
   const id = Math.max(NEW_WAY_MIN - 1, ...newWays(doc).map((w) => w.id)) + 1;
   (doc.new_ways ??= []).push({ id, nodes: way.nodes, tags: way.tags, ...(way.note ? { note: way.note } : {}) });
   return id;
+}
+export function updateNewWayTags(doc, id, tags) {
+  const w = newWays(doc).find((x) => x.id === id);
+  if (w) w.tags = tags;
 }
 export function deleteNewWay(doc, id) {
   doc.new_ways = newWays(doc).filter((w) => w.id !== id);
@@ -112,6 +116,15 @@ export function objects(doc) {
 }
 
 // a short text of the rule, for the list of changes
+// the fields of a change as rows for the list of changes: {k, was, now}; was is null when the data had no value, now is null when the change deletes the field
+export function describeBits(doc, type, id) {
+  const { mode, set, delete: del, was } = ruleOf(doc, type, id), bits = [];
+  const from = (k) => (k in was ? (was[k] === null || was[k] === "" ? "" : String(was[k])) : null);
+  for (const [k, v] of Object.entries(mode)) bits.push(k === "exclude_modes" ? { k: "not in", was: null, now: v.join(", ") } : k === "remove" ? { k: "object", was: null, now: "deleted from the data" } : { k, was: from(k), now: String(v) });
+  for (const [k, v] of Object.entries(set)) bits.push({ k, was: from(k), now: String(v) });
+  for (const k of del) bits.push({ k, was: from(k), now: null });
+  return bits;
+}
 export function describe(doc, type, id) {
   const { mode, set, delete: del, was } = ruleOf(doc, type, id), bits = [];
   const from = (k) => (k in was ? ` (was ${was[k] === null || was[k] === "" ? "none" : was[k]})` : "");

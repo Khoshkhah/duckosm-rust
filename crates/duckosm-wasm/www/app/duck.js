@@ -48,6 +48,7 @@ export const TABLES = {
   level_heads: "The head lengths that you set in the level editor, for each road.",
   level_caps: "The line ends that you set in the level editor, for each road.",
   building_faces: "One row for each wall of a building: its type (front, back, side, party wall), length, direction and the street that it faces. Your rules for walls are in face_type; computed_type is what the method gave.",
+  building_entrances: "One row for each door of the area: a node with an entrance or door tag (kind, access, address, level), and the building whose outline has it (NULL when none).",
   building_info: "One row for each building: floors, height, roof shape, roof and facade colors (as #rrggbb) and materials, read from its OSM tags.",
 };
 export const REFERENCE = "https://khoshkhah.github.io/duckOSM/reference/database/";
@@ -208,6 +209,7 @@ export async function loadFeatures(files, sql) {
     tables.push({ mode: "features", table, name, bytes, rows });
   }
   await buildingInfo();
+  await buildingEntrances();                      // from raw.nodes and raw.ways: it must come before raw goes
   await conn.query("DROP SCHEMA IF EXISTS raw CASCADE");
 }
 
@@ -251,6 +253,36 @@ async function buildingInfo() {
     tables.push({ mode: "main", table: "building_info", name, bytes, rows });
   } catch (e) {
     console.warn("building_info was not made:", e.message);       // the build goes on without it
+  }
+}
+
+// main.building_entrances (docs/osm-editing.md, doors): the doors of the area. A door is a node with `entrance` or `door`; its building is the building way that has the node in its outline
+// (the smallest id when two buildings share it). It is not in duckOSM's output: the page makes it for the fixes panel and for SQL.
+const BUILDING_ENTRANCES_SQL = String.raw`
+CREATE OR REPLACE TABLE main.building_entrances AS
+WITH e AS (
+  SELECT osm_id, tags, lon, lat FROM raw.nodes WHERE map_extract(tags, 'entrance')[1] IS NOT NULL OR map_extract(tags, 'door')[1] IS NOT NULL
+), j AS (
+  SELECT node_id, min(building_id) AS building_id FROM (
+    SELECT w.osm_id AS building_id, unnest(w.refs) AS node_id FROM raw.ways w WHERE map_extract(w.tags, 'building')[1] IS NOT NULL)
+  WHERE node_id IN (SELECT osm_id FROM e) GROUP BY node_id)
+SELECT e.osm_id, 'node' AS osm_type, coalesce(map_extract(e.tags, 'entrance')[1], 'door') AS kind, map_extract(e.tags, 'door')[1] AS door,
+       map_extract(e.tags, 'access')[1] AS access, map_extract(e.tags, 'addr:housenumber')[1] AS housenumber, map_extract(e.tags, 'addr:street')[1] AS street,
+       map_extract(e.tags, 'level')[1] AS level, map_extract(e.tags, 'wheelchair')[1] AS wheelchair, map_extract(e.tags, 'name')[1] AS name,
+       j.building_id, e.tags, ST_Point(e.lon, e.lat) AS geom
+FROM e LEFT JOIN j ON j.node_id = e.osm_id;`;
+async function buildingEntrances() {
+  try {
+    await conn.query(BUILDING_ENTRANCES_SQL);
+    const name = "building_entrances_main.parquet";
+    await db.dropFile(name).catch(() => {});
+    await conn.query(`COPY (SELECT * EXCLUDE (tags) FROM main.building_entrances) TO '${name}' (FORMAT parquet)`);
+    const bytes = await db.copyFileToBuffer(name);
+    await db.dropFile(name);
+    const rows = Number((await conn.query("SELECT count(*) AS n FROM main.building_entrances")).toArray()[0].n);
+    tables.push({ mode: "main", table: "building_entrances", name, bytes, rows });
+  } catch (e) {
+    console.warn("building_entrances was not made:", e.message);       // the build goes on without it
   }
 }
 

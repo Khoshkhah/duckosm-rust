@@ -1,5 +1,7 @@
 # duckOSM in the browser: one app
 
+For a guide to every part of the page, with pictures, read [dashboard.md](dashboard.md). This file is the design and the history of the page.
+
 Status: done, 2026-10-22 (the result is at the end). Kaveh's decision: "One app, one map". The button **Use in duckOSM** of the boundary
 tool opened another page (`index.html`, with its old design). Now the build is part of the boundary tool's page:
 the user makes the area, builds it, and sees the roads on the same map, with no change of page.
@@ -107,7 +109,7 @@ bar, `rs.sheet()` and `rs.freeArea()`, each box (it must be inside the screen), 
 ```
 +----------------------------+
 | [#] duckOSM          [☾][<]|
-| (1) CHOOSE AN AREA         |   unchanged: Search | Draw | File
+| (1) CHOOSE AN AREA         |   Search | Draw | File | H3
 | (2) THE AREA               |   unchanged: name, km², polygons, vertices
 | (3) THE DATA               |   [Region file | Overpass | Cut file]
 |     Region file: [select]  |   the suggested extracts below, as today
@@ -199,11 +201,13 @@ The changes:
 **The limit on a small device.** About 1,000 MiB plus 14 KB for each road on the map fits the measurements (Monaco
 13,298 roads: 1,077 MiB; Tartu 64,828: 2,050 MiB; Burnaby 151,770: 3,174 MiB). With 1.5 GB, a phone can thus show about
 40,000 roads. On a small device (`navigator.deviceMemory` 4 GB or less, or a touch screen; Safari has no
-`deviceMemory`), the page draws at most 40,000 roads. A larger map gives the note "This map has N roads; on this device
-the map can show up to 40,000. Choose a network that is smaller, use a desktop browser, or a smaller area. SQL and the
-downloads work." The level editor (all the roads of the area) has the same limit. A draw that fails with a memory error
-gives the same advice. `?maxroads=N` in the address changes the limit (`?maxroads=0`: no limit), so a phone with more
-memory can try. Burnaby on a phone: the build, SQL and the downloads work; its map (151,770 roads, or 62,453 for
+`deviceMemory`), the page draws at most 40,000 roads. On a desktop page the limit is 200,000 roads, the limit of roadstyle's
+engine (its memory; since 2026-11-04 the page checks it before it draws, and before that the engine failed with its own message
+and the page added "up to ∞"). A larger map gives the note "This map has N roads. A browser page draws at most 200,000 roads (its
+memory). Choose one network: Driving 57,951 roads, Walking 132,122 roads. Or use a smaller area. SQL and the downloads work."
+The note lists the networks that fit, with their roads. The level editor (all the roads of the area) has the same limit. A draw
+that fails with a memory error gives the same advice. `?maxroads=N` in the address changes the limit (`?maxroads=0`: no limit,
+and the engine can still fail), so a phone with more memory can try. `roads_limit_e2e.py` checks the note and the limits. Burnaby on a phone: the build, SQL and the downloads work; its map (151,770 roads, or 62,453 for
 "Driving") is over the limit.
 
 **The tiles in a fast zoom.** The roads source `rs-roads` has the roads and all the layers of the area map (land, water, buildings), so a tile that is not loaded leaves a square of the whole map empty. MapLibre draws such a tile from loaded parents and from loaded children up to 3 zooms deeper (`maxOverzooming`), so a fast zoom out, past zooms that have no loaded tile, showed the background colour for 0.5 to 1.7 s (Burnaby, pitch 60, headless Chromium, software GL). Two changes (`app/duck.js` `tile()`, `index.html` `addOverview()`): the page keeps the waiting tile requests, sends the newest first, two at a time, and skips a request that MapLibre aborted; and a second source `rs-low` (the same tiles, zoom 6 to 9) gives copies of the opaque fill layers under the real layers, so the area always has land and water. The test `tile-lag/zoom/black.py` (not in the repository) measured black time 0 ms in 7 of 8 zoom-out runs (path from zoom 9, zoom 7 and zoom 6.3; one run from zoom 8: 0.4 s), against 0.26 to 1.7 s without. The zoom in was never black in these paths. A tile of zoom 10 to 13 has 0.5 to 0.9 MB, and MapLibre needs 0.4 to 0.7 s to parse it: smaller low-zoom tiles are roadstyle's to make.
@@ -244,6 +248,38 @@ many metres on all sides, in the UTM zone of its centre. The page makes the grow
 size in card 2 and the saved GeoJSON all use the grown area; the map shows it. The shape as chosen stays in `area.base`, so a new value (or 0)
 makes the area again from it. The saved GeoJSON has `buffer_m` in its properties when it is above 0. Card 2 stays open beside step 3 after an area is chosen (the other cards fold as before), so the buffer is in view; the card shows the size as "km² · +500 m". Test: `python crates/duckosm-wasm/www/buffer_e2e.py <out folder>`.
 
+### Step 1: the H3 tab
+
+Kaveh (2026-11-03): "in step 1, it is good if we can select an area based on hexagon in H3". The fourth tab of card 1 makes the area from
+the hexagons of the [H3](https://h3geo.org) grid:
+
+- **The level.** A list of the levels 5 to 10, each with the average edge and area of one cell, for example `Level 8: edge 531 m, 0.737 km²`.
+  The default is level 8. A new level removes the picked cells (cells of two levels do not mix), and the page says so.
+- **The picks.** A click on the map picks the cell at that point; a second click on the same cell removes it. The map shows the lines of
+  all picked cells, and the usual blue area (the union) under them. Under the list, the text gives the number of cells and the area in km²
+  (for example `6 cells, 0.63 km²`) and **Clear the cells** removes all. While no cell is picked, the button is off and the text under it
+  says what to do (no tooltip). The pointer on the map is a hand while the tab is open.
+- **The area.** The page joins the cells with `cellsToMultiPolygon` of [h3-js](https://github.com/uber/h3-js) (pinned: `h3-js@4.2.1`
+  from cdn.jsdelivr.net, in the import map; the page loads it at the first use of the tab). Cells that touch make one polygon. A ring of
+  cells keeps its hole. Cells that do not touch make a multipolygon. From here the area goes the same way as a file or a drawing:
+  card 2, the buffer, the extracts, the GeoJSON and the build. The GeoJSON has `source: "h3"`, `h3_level` and `h3_cells` in its properties.
+- **The cap.** At most 500 cells and 5,000 km² (the count of cells times the average area of a cell of the level). A click that goes over
+  a cap does nothing, and the text under the button says why. A mistake at a coarse level cannot ask for a huge build.
+- **The grid.** While the H3 tab shows, a transparent layer (`h3-grid`: thin gray lines, no fill) draws every hexagon in view at the chosen level, so you see what you can pick. The hexagon under the pointer is lit (`h3-hover`), and the picked cells are filled in blue (`h3-fill`). The grid is made again after each move of the map and each change of the level. When the view would have more than 4,000 hexagons (a small level at a low zoom), there is no grid, and the note under the hint says "Zoom in, or choose a bigger hexagon, to see the hexagons." The note also says how many hexagons are in view. The colors follow the theme: the light theme has dark gray lines and a blue hover, the dark theme has light lines, a white hover and a lighter blue for the picked cells (`h3Paint`). `h3_e2e.py` checks the grid, the lit hexagon and the two themes.
+- **H3 IDs and the name.** The Search tab takes H3 cell IDs (15 hex digits; several separated by spaces or commas, one level from 5 to 10, at most 500 cells and 5,000 km²). It makes the area from the cells with no network, opens the H3 tab and zooms to them. The suggested name is the ID of the first cell, with `-plus-N` for N more. A name that you typed stays when you pick more cells. A row of the base-map box, **H3 hexagons**, shows or hides the grid; a build from hexagons hides it.
+- **Card 1 stays open** while the H3 tab is open, because the person clicks more cells. With the other tabs, card 1 folds when the area
+  is ready, as before.
+- Another way of making the area (a search result, a drawing, a file) removes the cells and their lines.
+
+On a phone the four tabs fit in the sheet. A tap on the map picks a cell. Two taps less than 500 ms apart are a double tap (MapLibre), and
+the map zooms in place of a pick.
+
+Test: `python crates/duckosm-wasm/www/h3_e2e.py <out folder>` (Monaco). On a computer: the six levels with their sizes; six clicks around
+one cell make one polygon with a hole, and the area of card 2 is the sum of the areas of the cells; a seventh click fills the hole; a click
+on a cell removes it; two cells apart make two polygons; Clear; another way of making the area removes the cells; another level removes them; the cap
+stops the 20th cell of level 5; a build of Monaco from seven cells gives driving roads that all lie near the cells. On a phone (390 × 844):
+the tabs fit, there is no sideways scroll, and taps pick the cells above the sheet.
+
 ### Step 3: the data
 
 Three tabs, as the three sources of the old page:
@@ -260,8 +296,8 @@ The page keeps the selected file only in memory. After a reload, the user select
 
 - The modes (three check boxes) and, under **Advanced: corrections to the map data**, the OSM fixes file
   (duckOSM `osm_overrides`), with one sentence that tells what it is (Kaveh found the first label unclear).
-- **Drawing order**: "Optimized (slower)" (roadstyle's solver) by default since 2026-10-24, or "From the tags (fast)"
-  ([levels.md](levels.md)). Monaco: the build takes about 0.5 s more with the solver.
+- **Drawing order**: the build always uses "Optimized" (roadstyle's solver; the page has no choice since 2026-11-04,
+  [levels.md](levels.md)). Monaco: the build takes about 0.5 s more with the solver.
 - **Base map layers** (a check box, on): with a region file, the build also makes duckOSM's base-map layers
   (`features.*`), see [features.md](features.md).
 - **Build** (in the footer) starts the build in the Web Worker (`build_worker.js`, with threads when the page
@@ -307,6 +343,9 @@ and the two download buttons between them. With three modes, the line takes thre
     DuckDB with direct IO, which the page sets when DuckDB starts (the cause:
     [browser.md](browser.md), "The .duckdb download"). If the file fails, a message says that the zip has
     `make_duckdb.sql`.
+  - **Download .yaml** (next to the other buttons): `osm_fixes.yaml`, the fixes file that the build used (the rules of
+    card 7). The button shows only when the build used fixes. A restored area has it too, because the saved area keeps the
+    text that it was built with.
   - **Download .osm.pbf** (next to the .duckdb button): `<area>.osm.pbf`, the area as it was cut from the region file. It
     has the nodes, ways and relations of osmium's `smart` cut (the raw cut, [features.md](features.md)) with all their
     tags, before the OSM fixes change them, and it keeps the replication time of the region file. Other tools can read it
@@ -391,9 +430,7 @@ A change of format does not build the roads again. The map worker keeps its tile
 
 Each build is saved in the browser (OPFS, the origin private file system): the tables as Parquet files, `meta.json` (the
 name, the boundary, the fixes text, the summary and the table list) and a cache of the drawn roads (`viz_roads.parquet`,
-`viz_features.parquet`). The code is `www/app/area_store.js`. A new visit shows a banner above the cards: **Open**
-loads the last area into DuckDB and draws the map again with no build (Monaco: 1.6 s). The **Saved** tab of card 1 lists all
-areas, with **Open** and **Delete**.
+`viz_features.parquet`), and, when the build made one, the cut file `cut.osm.pbf` (so the **.osm.pbf** button of card 5 is there after a restore; the page reads the file from the browser storage only when you download it). The code is `www/app/area_store.js`. A new visit starts on the OpenFreeMap base map, with the card **Your areas** above card 1 (it shows only when an area is saved). A click on a row shows the boundary of the area on the map and zooms to it (a second click hides it). **Open** loads the area into DuckDB and draws the map again with no build (Monaco: 1.6 s). **Delete** asks a second click. The page does not redraw the boundary of the last build at the start, and a build does not save its blank base map as the choice for the next visit.
 
 - A save replaces the area: it removes all old files first, and writes `meta.json` last. A restore reads only the files that
   `meta.json` lists, so the tables of an older build (other modes) never come back.
@@ -411,35 +448,38 @@ The rules are a fixes file: duckOSM's `overrides` and `turn_restrictions`, and t
 (`app/fixes.js`) and writes the YAML from them. It never edits the YAML text, and it does not show it. The card needs the build. It shows the number of changes and one button,
 **Edit fixes**, which opens the **fixes panel** (`app/fixes_panel.js`).
 
-- **The panel** is the page's one panel, as the level editor is: the steps, the title and the footer go while it is open, and **← Steps** brings them back. **Apply and build again** is fixed at the bottom,
-  with the number of changes. It closes the panel and runs step 4 with the rules.
-- **Edit.** Three buttons say what a click on the map picks: **Roads**, **Buildings** or **Nodes**. A road comes from a click on the road (roadstyle's pick, with no popup), a building from a click in its footprint,
-  and a node from a click near it. Only the nodes of `features.traffic` can be picked: traffic signals and crossings. An OSM ID typed in the field and **Load** do the same. The panel then shows:
-  - the object's name and kind, and what the networks have of it (for a road: the edges, the length and the walk type of each mode);
-  - **All tags in the data**: every tag of the object (the `<mode>.ways` table for a road, `features.buildings` for a building, `features.traffic` for a node);
-  - the **preset fields** of its kind (`app/presets.json`: one list for each of road, building and node), each filled with the value that the data has now. A road has name, one-way, lanes, layer, max speed, surface, access,
-    sidewalk, cycleway, crossing, bridge, tunnel and turn lanes. A building has kind, floors (`building:levels`), height, roof shape, roof floors, roof color, facade color and the materials. A node has kind, crossing,
-    signal direction, kerb and tactile paving. A new field is a new line in the file;
-  - **Other tags**: all other tags, each with a value field and a delete button, and a row to add a tag;
-  - for a road: the modes that the road is not in, and **Remove the road**; and a note.
-  An edited field has an amber label and a **↺** button that takes the change back. **Save** writes the rule. **Reset form** shows the saved rule again. **Delete rule** removes every change of the object.
-  Only the fields that you change go into the rule. A value that you clear is a deleted tag (`delete`). A value that is the same as the data is not a change.
-- **Turns.** Click a road (or type its way ID) and press **Find turns**. The panel lists the junctions at the end of the road and, for the junction you pick, the roads that leave it. Each road has a select for the turn rule
-  (`no_left_turn`, `only_straight_on` and the others of duckOSM). The rules are for the driving mode. A saved rule shows a note and goes into **Changes**.
-- **Changes.** All rules in one list, with a count on the tab: roads, buildings, nodes and turns, each with a short text ("lanes 7, sidewalk=both"). A click on a change selects the object, zooms to it and opens it in **Edit**.
-  **Undo** and **Redo** act on the whole list. **Download** saves `osm_fixes.yaml`. **Clear all** removes every rule.
+- **The panel** is the page's one panel, as the level editor is: the steps and the title go while it is open, and **← Steps** brings them back. It has six tabs: **Road**, **Building**, **Node**, **Turn**, **New road** and **Changes**
+  (the design is in [osm-editing.md](osm-editing.md), "The panel"). The one **Build again** button is at the bottom of **Changes**. It closes the panel and runs step 4 with the rules.
+- **Road, Building and Node.** Each tab has its own picked object, form and draft. A road comes from a click on the road (roadstyle's pick, with no popup), a building from a click in its footprint, and a node from a click near it.
+  Only the nodes of `features.traffic` can be picked: traffic signals and crossings. The Node tab draws them as dots in view (zoom 14 or more). An OSM ID typed in the field and **Load** do the same. The tab shows sections:
+  - **Pick** and **Selected**: the name and kind, what the networks have of the object (for a road: the edges, the length and the walk type of each mode), and **All tags in the data** (the `<mode>.ways` table for a road,
+    `features.buildings` for a building, `features.traffic` for a node);
+  - the **preset fields** of its kind (`app/presets.json`: one list for each of road, building and node, each field with a `group` that is its section), filled with the value that the data has now. A road has Basics (name, one-way),
+    Lanes and speed, Sidewalk, cycleway, crossing, Surface and access, and Level (layer, bridge, tunnel). A building has Basics, Size (floors, height), Roof and Facade. A node has Basics (name, kind), Crossing (crossing, kerb, tactile paving)
+    and Traffic signals (direction). A new field is a new line in the file;
+  - **Other tags**: all other tags, each with a value field and a delete button, a row to add a tag, and a note; for a road also **Modes** (the modes that the road is not in, and **Remove the road**).
+  An edited field has an amber label and a **↺** button that takes the change back. **Add to changes** (it says **Update change** when the object has a change) writes the rule. **Reset form** shows the saved rule again.
+  **Remove from changes** removes every change of the object. A tab that has fields that are not added has an amber dot. Only the fields that you change go into the rule. A value that you clear is a deleted tag (`delete`).
+  A value that is the same as the data is not a change.
+- **Turn.** Click a road (or type its way ID) and press **Find turns**. The panel lists the junctions at the end of the road and, for the junction you pick, the roads that leave it. Each road has a select for the turn rule
+  (`no_left_turn`, `only_straight_on` and the others of duckOSM). The rules are for the driving mode. A choice is a change after **Add to changes**, which adds all the chosen rules.
+- **Changes.** All rules in one list, with a count on the tab, in groups (roads, buildings, walls, nodes, turn rules, new roads). Each item shows each field as `was → now` ("lanes 1 → 7"). A click on a change picks the object in its tab and zooms to it.
+  **Undo** and **Redo** act on the whole list. **Download** saves `osm_fixes.yaml`. **Clear all** removes every rule. **Build again** waits, with its reason under it, while a tab has edits that are not added.
+  The page keeps the changes in this browser for each area name (`duckosm.fixes:<name>` in `localStorage`), and it brings them back when you open the panel or change the name.
 - **3D preview.** An edited building is also drawn as an extrusion (tilt the map to see it): its height is `height` or the floors times 3.2 m (6 m when the data has neither), and its color is `building:colour`, then `roof:colour`. The rule is on top of the data, so a change shows before the next build. The page's 3D buildings tool (the OpenFreeMap base map) does not use `features.buildings`, so it does not show your changes.
-- **New roads.** **Draw a new road** (in **Edit**) starts a tool: click the points of the road on the map (a click within 14 px of a junction joins it: the road then has that junction's OSM node id, so it is part of the network), pick the kind (residential, service, footway, cycleway and more), the name, one-way, lanes, max speed and surface (`new_road` in `app/presets.json`), and press **Finish the road** (or Enter; Esc cancels). The rule is in `new_ways` (duckOSM's format: the id starts at 9,000,000,000,000; a node is an OSM node id or `[lon, lat]`). A new road is in **Changes** (amber on the map) and in the tables after the next build. A road that does not join a junction is a separate piece of the network. Only the junctions of the nodes tables can be joined, not a point inside a road.
-- **Was to now.** The first time you change a key, the rule keeps what the data had (`was`, in `extra.tag_edits`; the build does not read it). **Changes** shows it: `lanes 7 (was 2)`, `sidewalk=both (was none)`. The label of an edited field has the old value as its title.
-- **Walls.** For a building, after a build with the layers, **Edit** lists its walls (`main.building_faces`, [osm-editing.md](osm-editing.md)): the length, the street that the wall faces, and a select for its type (front, back, side, party wall). A change is a rule at once (`extra.building_faces`) and shows in **Changes**. The map draws the walls of the selected building (front green, back red, side grey, party wall purple); a wall with a rule has an amber glow. A check box shows the walls of all buildings in view.
+- **New roads.** **Draw a new road** (in the **New road** tab) starts a tool: click the points of the road on the map (a click within 14 px of a junction joins it: the road then has that junction's OSM node id, so it is part of the network), pick the kind (residential, service, footway, cycleway and more), the name, one-way, lanes, max speed and surface (`new_road` in `app/presets.json`), and press **Finish the road** (or Enter; Esc cancels). The rule is in `new_ways` (duckOSM's format: the id starts at 9,000,000,000,000; a node is an OSM node id or `[lon, lat]`). A new road is in **Changes** (amber on the map) and in the tables after the next build. A road that does not join a junction is a separate piece of the network. Only the junctions of the nodes tables can be joined, not a point inside a road.
+- **Was to now.** The first time you change a key, the rule keeps what the data had (`was`, in `extra.tag_edits`; the build does not read it). **Changes** shows it: `lanes 2 → 7`, `sidewalk none → both`. The label of an edited field has the old value as its title.
+- **Walls.** For a building, after a build with the layers, the **Building** tab lists its walls (click a row or a wall on the map to select it; **Previous**, **Next** and **Unselect** are above the list) (`main.building_faces`, [osm-editing.md](osm-editing.md)): the length, the street that the wall faces, and a select for its type (front, back, side, party wall). A wall type is a change at once (`extra.building_faces`) and shows in **Changes**. The map draws the walls of the selected building (front green, back red, side grey, party wall purple); a wall with a rule has an amber glow. A check box shows the walls of all buildings in view.
 - **`main.building_info`.** After a build with the layers, the page makes this table (docs/tables.md): one row for each building, with floors, height, roof shape, colors and materials from its tags. A rule that sets `building:levels` changes `levels` after the next build.
 - **The map.** Every object with a rule has an amber glow (a line for a road, a filled outline for a building, a ring for a node and for the junction of a turn rule). The selected object is blue.
 - The **Fixes** file of step 4 loads into the same rules. A build always reads the rules of card 7. A saved area keeps the text that it was built with. A file with an error shows a message and changes nothing.
 - The page reads and writes the YAML with js-yaml (loaded from cdn.jsdelivr.net, as MapLibre is). The build reads it with the Rust parser (`crates/duckosm-build/src/config.rs`), which rejects keys it does not know.
 - Limits: the changes act at the next build, not live. A node must be a traffic signal or a crossing to be picked. A building that is a multipolygon relation can be picked (its tags change through `relation` rules).
 
-The check: `fixes_e2e.py` (Monaco). It clicks a real road, a building and a node (the form has the data, no popup), changes them with the preset fields, adds a tag and deletes a tag, adds a turn rule, uses the list of changes
-(select, delete, undo, redo), loads a bad file and a duckOSM file, builds again, and checks the tables: the lanes of the road, its walking type (`sidewalk`), the floors, roof shape and color of the building, and the tags of the node.
+`phone_fixes_e2e.py` opens each tab at 390 x 844 and fails on a horizontal overflow.
+
+The check: `fixes_e2e.py` (Monaco). It opens the six tabs (a tab keeps its own object, and the Building tab has no road form), clicks a real road, a building and a node (the form has the data, no popup), changes them with the preset fields and **Add to changes**, adds a tag and deletes a tag, adds a turn rule, uses the list of changes
+(select, delete, undo, redo), checks that **Build again** waits for an edit that is not added, that the browser keeps the changes, loads a bad file and a duckOSM file, builds again, checks that the changes and the picked road are there after the build, and checks the tables: the lanes of the road, its walking type (`sidewalk`), the floors, roof shape and color of the building, and the tags of the node.
 
 ### Step 8: edit the levels
 
@@ -546,6 +586,7 @@ The check: `editor_e2e.py` (headless Chromium, Monaco through the File tab). It 
   asks for them (protocol `rs://`, [browser.md](browser.md)). They are over the base map and under the area line, the
   matches, the extracts and the drawn shapes. The style's images (the one-way arrow) are added under the same
   prefix. A layer with `text-font` gets a font of OpenFreeMap (Noto Sans).
+- The look has the one-way arrows and the street names on (`arrows: true, labels: true` in `crates/duckosm-wasm/make_look.mjs`, since 2026-11-04). The names use the glyph files of OpenFreeMap (`https://tiles.openfreemap.org/fonts/`), which the base map's labels load too: on Monaco the fonts are 37 files and 3.1 MB with the names on and off. Roadstyle leaves a road without an arrow when it is too short: a stretch of at least 8 m gets one arrow after the clearance of half the road's width plus 2 m at each junction, and when a road is too short for its name and an arrow, the name wins (roadstyle `docs/design/arrows_and_names.md`).
 - When the roads show, the fill of the area goes away and only its line stays, so the fill does not change
   the colors of the roads.
 - The base map (since roadstyle `fc59e6c`, 2026-10-25) has the theme "liberty" and stops at the area's boundary. `map/look.json` is version 2: `make_look.mjs` makes it, and the worker sets `levels` with `withArg`.

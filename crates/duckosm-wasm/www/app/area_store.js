@@ -41,7 +41,8 @@ export async function requestPersistence() {
 }
 
 // Save a built area and all its Parquet files into OPFS
-export async function saveArea(slug, meta, tablesData, vizData = null) {
+// `cut`: the bytes of cut.osm.pbf (the area as cut from the region file), kept as a file of the area so that its download is there after a restore
+export async function saveArea(slug, meta, tablesData, vizData = null, cut = null) {
   const areasDir = await getAreasDir();
   if (!areasDir) return false;
 
@@ -101,6 +102,21 @@ export async function saveArea(slug, meta, tablesData, vizData = null) {
     }
   }
 
+  let hasCut = false;
+  if (cut && cut.byteLength) {
+    try {
+      const cutHandle = await dir.getFileHandle("cut.osm.pbf", { create: true });
+      const cutWriter = await cutHandle.createWritable();
+      await cutWriter.write(cut instanceof Uint8Array ? cut : new Uint8Array(cut));
+      await cutWriter.close();
+      totalBytes += cut.byteLength;
+      hasCut = true;
+    } catch (e) {
+      console.warn("Could not write cut.osm.pbf:", e);
+      await dir.removeEntry("cut.osm.pbf").catch(() => {});
+    }
+  }
+
   const metaData = {
     ...meta,
     storeVersion: STORE_VERSION,
@@ -110,6 +126,7 @@ export async function saveArea(slug, meta, tablesData, vizData = null) {
     sizeBytes: totalBytes,
     tables: savedTableDescriptors,
     hasViz,
+    hasCut,
     vizMode: vizData?.mode || meta.vizMode || "all",
     levels: vizData?.levels || meta.levels || "tags"
   };
@@ -225,6 +242,18 @@ export async function loadArea(slug) {
   }
 
   return { meta, tables, files, viz: viz.roads ? viz : null };
+}
+
+// The cut file of a saved area as a File (it stays on the disk: the page reads it only when it is downloaded), or null
+export async function loadCutFile(slug) {
+  const areasDir = await getAreasDir();
+  if (!areasDir) return null;
+  try {
+    const dir = await areasDir.getDirectoryHandle(keyOf(slug));
+    return await (await dir.getFileHandle("cut.osm.pbf")).getFile();
+  } catch (_) {
+    return null;
+  }
 }
 
 // List all saved areas in OPFS

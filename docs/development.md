@@ -184,6 +184,12 @@ python crates/duckosm-wasm/www/panel_e2e.py out-panel
 python crates/duckosm-wasm/www/buttons_e2e.py out-buttons
 ```
 
+Check the H3 tab of card 1 (hexagons picked with clicks; the area, the cap and a build of Monaco from the cells; a phone too):
+
+```bash
+python crates/duckosm-wasm/www/h3_e2e.py out-h3
+```
+
 Check the generation of the tiles (the dashboard's red message and the hidden vector layers when the tiles are of another road set,
 and the normal path):
 
@@ -341,3 +347,20 @@ maturin sdist -m crates/duckosm-py/Cargo.toml -o sdist                          
 The `manylinux2014` wheel with DuckDB needs only glibc 2.17 (it has no libstdc++ dependency) and passed
 `tests/test_wheel.py` in a new virtual environment. The wheel from a plain `maturin build` needs glibc 2.35.
 Not checked: macOS, Windows, aarch64, and a real old Linux distribution.
+
+## Keys for a local test of the page
+
+Street View (Linked) and Google 3D need a Google Maps JavaScript API key, and the Mapillary photos need a Mapillary client token. The page does not have them in its code. Two ways to give them in a test:
+
+- **The settings of the map bar** (the gear button): paste each key. The browser keeps it for this site only (`localStorage`).
+- **`crates/duckosm-wasm/www/local_keys.json`**, a file that `.gitignore` leaves out of git: `{"google": "<key>", "mapillary": "<token>"}`. A page on `localhost` or `127.0.0.1` reads it at the start and gives the keys to roadstyle's dashboard as the page's keys. A key that the person saved in the settings is over it. The deployed page never reads the file.
+
+## The pictures of the dashboard guide
+
+`docs/dashboard.md` has pictures in `docs/img/dashboard/`. Make them again after a change of the page:
+
+```bash
+python crates/duckosm-wasm/www/docs_shots.py
+```
+
+The script builds Monaco in headless Chromium and needs the page built first. The Search picture needs the network.
