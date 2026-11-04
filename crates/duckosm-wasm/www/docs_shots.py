@@ -107,9 +107,9 @@ with sync_playwright() as p:
     shot(page, "10-result", "#step5-card")
     unfold(page, "step6-card")
     shot(page, "11-visualization", "#step6-card")
-    unfold(page, "step9-card")
+    unfold(page, "step10-card")
     page.set_viewport_size({"width": 1400, "height": 1800})      # the card is taller than the panel
-    shot(page, "11b-export", "#step9-card")
+    shot(page, "11b-export", "#step10-card")
     page.set_viewport_size({"width": 1400, "height": 900})
     shot(page, "12-map-after-build")
 
@@ -177,9 +177,9 @@ with sync_playwright() as p:
     page.click("#sb-show")
     page.click("#fix-back")
 
-    # card 10: the Design panel, one picture for each tab, and the map in the Dark theme
-    unfold(page, "step10-card")
-    shot(page, "26-design-card", "#step10-card")
+    # card 9: the Design panel, one picture for each tab, and the map in the Dark theme
+    unfold(page, "step9-card")
+    shot(page, "26-design-card", "#step9-card")
     page.click("#design-open")
     page.wait_for_selector("#design-panel", state="visible")
     page.set_viewport_size({"width": 1400, "height": 1750})       # the Theme tab has 14 themes: a tall window shows them all

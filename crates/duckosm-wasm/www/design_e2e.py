@@ -1,4 +1,4 @@
-"""The card Design (step 10, docs/dashboard.md) in headless Chromium (Playwright): every tab changes the live map, the profile reaches the Export card and its files,
+"""The card Design (step 9, docs/dashboard.md) in headless Chromium (Playwright): every tab changes the live map, the profile reaches the Export card and its files,
 and the design is kept in the browser with the saved area.
 
     python crates/duckosm-wasm/www/design_e2e.py [out folder]
@@ -59,18 +59,18 @@ with sync_playwright() as p:
     page.evaluate("localStorage.clear()")
 
     # the card: number 10, ready before a build, with its own button; the panel has five tabs, the header, and the bar
-    card = page.locator("#step10-card")
-    assert card.count() == 1 and page.text_content("#step10-card .rs-sec-title").strip() == "Design" and page.text_content("#step10-card .n") == "10"
-    assert "off" not in (page.get_attribute("#step10-card", "class") or ""), "the design needs no build"
-    if "folded" in (page.get_attribute("#step10-card", "class") or ""):
-        page.click("#step10")
+    card = page.locator("#step9-card")
+    assert card.count() == 1 and page.text_content("#step9-card .rs-sec-title").strip() == "Design" and page.text_content("#step9-card .n") == "9"
+    assert "off" not in (page.get_attribute("#step9-card", "class") or ""), "the design needs no build"
+    if "folded" in (page.get_attribute("#step9-card", "class") or ""):
+        page.click("#step9")
     assert page.is_visible("#design-open") and not page.is_visible("#design-panel")
     page.click("#design-open")
     assert page.evaluate("document.body.classList.contains('editing-design')") and page.is_visible("#design-panel") and not page.is_visible("#fix-panel") and not page.is_visible("#step1-card")
     assert page.locator("#design-panel [role=tab]").count() == 5 and page.text_content("#design-panel h2") == "Design"
     assert page.is_visible("#design-back") and page.is_visible("#design-hide") and page.is_visible("#design-changes")
     page.click("#design-back")
-    assert not page.is_visible("#design-panel") and page.is_visible("#step10-card"), "Steps comes back to the steps"
+    assert not page.is_visible("#design-panel") and page.is_visible("#step9-card"), "Steps comes back to the steps"
     print("card and panel: ok")
 
     page.set_input_files("#file", str(ROOT / "tests/data/monaco.geojson"))
@@ -289,8 +289,8 @@ with sync_playwright() as p:
     assert page.is_disabled("#design-pane [data-col=name]") and page.is_disabled("#design-pane [data-p='profile.classFrom.motorway']"), "the columns and the class zooms are for the layer edges"
     assert re.search(r"\d+ tiles", page.text_content("#design-count")), page.text_content("#design-count")
     page.click("#design-back")
-    if "folded" in (page.get_attribute("#step9-card", "class") or ""):
-        page.click("#step9")
+    if "folded" in (page.get_attribute("#step10-card", "class") or ""):
+        page.click("#step10")
     assert not page.is_checked("#export-full") and not page.is_checked("#export-auto") and page.input_value("#export-zmin") == "0" and page.input_value("#export-zmax") == "14" and not page.is_disabled("#export-zmax")
     assert "Web map small" in page.text_content("#export-profile")
     path, chk = download(page, "pmtiles")

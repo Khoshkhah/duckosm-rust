@@ -40,7 +40,7 @@ export async function requestPersistence() {
   return false;
 }
 
-// The design of the area (docs/dashboard.md, card 10): one JSON file in the area's folder. A new build keeps it.
+// The design of the area (docs/dashboard.md, card 9): one JSON file in the area's folder. A new build keeps it.
 const DESIGN_FILE = "design.json";
 // Save the text of the design file in the folder of a saved area. An area that is not saved has no folder: the design stays in the page (false).
 export async function saveDesign(slug, text) {

@@ -1,4 +1,4 @@
-// The design of the map (docs/dashboard.md, card 10): the style of the roads and the base map, and the profile of the tiles.
+// The design of the map (docs/dashboard.md, card 9): the style of the roads and the base map, and the profile of the tiles.
 // This file has no page code, so Node can run it (design_units.mjs). A design is one plain object. It holds every value, not only the changes,
 // so a design file does not depend on the look that it was made from.
 //

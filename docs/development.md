@@ -219,10 +219,10 @@ and the Google key, the windows; and the phone form at 390 × 844). The test nee
 python crates/duckosm-wasm/www/dashboard_e2e.py out-dashboard
 ```
 
-Check the Design card (step 10) and the tile profile. `design_units.mjs` runs in Node and needs no browser: the default design changes nothing in the
+Check the Design card (step 9) and the tile profile. `design_units.mjs` runs in Node and needs no browser: the default design changes nothing in the
 look, each theme loads in roadstyle's `Look.fromJson`, the tile writers follow the profile. `design_e2e.py` builds Monaco and changes the style in each tab, then
 reads the live map, the Export card, the PMTiles files and the stored design. `phone_design_e2e.py` opens each tab at 390 × 844
-([app.md](app.md), "Step 10: design"):
+([app.md](app.md), "Step 9: design"):
 
 ```bash
 node crates/duckosm-wasm/www/design_units.mjs

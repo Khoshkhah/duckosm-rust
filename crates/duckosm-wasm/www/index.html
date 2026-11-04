@@ -390,11 +390,11 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   #step4-card .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
   #step4-card .mode { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font-weight: 500; cursor: pointer; }
   #step4-card .mode:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
-  :is(#step4-card, #step9-card) .mode input, :is(#step4-card, #step9-card) .optrow input { margin: 0; accent-color: var(--accent); flex: none; }
-  :is(#step4-card, #step9-card) .optrow { display: flex; gap: 10px; align-items: flex-start; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); cursor: pointer; }
-  :is(#step4-card, #step9-card) .optrow:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
-  :is(#step4-card, #step9-card) .optrow .t { display: flex; flex-direction: column; gap: 2px; }
-  :is(#step4-card, #step9-card) .optrow small { color: var(--muted); font-size: 12px; line-height: 1.35; }
+  :is(#step4-card, #step10-card) .mode input, :is(#step4-card, #step10-card) .optrow input { margin: 0; accent-color: var(--accent); flex: none; }
+  :is(#step4-card, #step10-card) .optrow { display: flex; gap: 10px; align-items: flex-start; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); cursor: pointer; }
+  :is(#step4-card, #step10-card) .optrow:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+  :is(#step4-card, #step10-card) .optrow .t { display: flex; flex-direction: column; gap: 2px; }
+  :is(#step4-card, #step10-card) .optrow small { color: var(--muted); font-size: 12px; line-height: 1.35; }
   #step4-card details.drow { margin: 0; padding: 10px 0 0; border-radius: 0; background: none; border-top: 1px solid var(--line); }       /* flat rows: roadstyle's rule makes a details a box (padding, radius, background) */
   #step4-card details.drow > summary { display: flex; align-items: center; justify-content: space-between; list-style: none; color: var(--fg); font-size: 13px; font-weight: 500; }
   #step4-card details.drow > summary::-webkit-details-marker { display: none; }
@@ -687,16 +687,16 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
 </section>
 
 <section id="step9-card" class="step" aria-labelledby="step9">
-  <h2 id="step9"><span class="n">9</span>Export</h2>
-  <input id="export-mode" type="hidden" value="driving">
-  <div id="export-list"></div>
-  <p id="export-status" class="progress" aria-live="polite"></p>
+  <h2 id="step9"><span class="n">9</span>Design</h2>
+  <p id="design-sum" class="why" style="margin-top:0"></p>
+  <div class="row"><button id="design-open" class="btn" type="button">Edit design</button></div>
 </section>
 
 <section id="step10-card" class="step" aria-labelledby="step10">
-  <h2 id="step10"><span class="n">10</span>Design</h2>
-  <p id="design-sum" class="why" style="margin-top:0"></p>
-  <div class="row"><button id="design-open" class="btn" type="button">Edit design</button></div>
+  <h2 id="step10"><span class="n">10</span>Export</h2>
+  <input id="export-mode" type="hidden" value="driving">
+  <div id="export-list"></div>
+  <p id="export-status" class="progress" aria-live="polite"></p>
 </section>
 
 </div>
@@ -923,7 +923,7 @@ maplibregl.addProtocol("rs", async (params, abort) => ({ data: await duck.tile(p
 const setData = (src, data) => loaded.then(() => map.getSource(src).setData(data ?? empty));
 
 const blue = "#2563eb";
-// the boundary of the area on the map: the layers area-fill, area-casing and area-line take the values of the design (card 10, designLib.defaultBoundary: the blue line of
+// the boundary of the area on the map: the layers area-fill, area-casing and area-line take the values of the design (card 9, designLib.defaultBoundary: the blue line of
 // the page before the card). The fill of the page hides while the roads show, because it would change their colors; the design can turn it on over the roads.
 let boundaryNow = designLib.defaultBoundary(), groundNow = designLib.defaultGround(), visibleNow = null;
 function paintBoundary(onRoads = roadsShown) {
@@ -1771,7 +1771,7 @@ async function restoreSavedArea(slug) {
       $("fixes").onchange?.();
     }
 
-    const designText = await areaStore.loadDesign(slug);       // the design of this area (card 10), before the first draw
+    const designText = await areaStore.loadDesign(slug);       // the design of this area (card 9), before the first draw
     if (designText && designPanel) await designPanel.load(designText, { draw: false });
 
     progress("Loading Parquet tables into DuckDB…");
@@ -2371,8 +2371,8 @@ const HELP = {
     ["6 Visualization", "Show the roads on the map."],
     ["7 Fix OSM data", "Correct errors of OpenStreetMap and add information (sidewalk, floors, roof, colors, turn rules) with rules, and build the networks again."],
     ["8 Edit levels", "Change the drawing order of the roads by hand."],
-    ["9 Export", "Give the network to other software: tiles, GeoPackage, GeoJSON, MATSim and SUMO."],
-    ["10 Design", "Change the colors, widths and text of the map, and set the profile of the tiles that step 9 makes. The page keeps the design with the area."],
+    ["9 Design", "Change the colors, widths and text of the map, and set the profile of the tiles that step 10 makes. The page keeps the design with the area."],
+    ["10 Export", "Give the network to other software: tiles, GeoPackage, GeoJSON, MATSim and SUMO."],
     ["Google key", "Street View (Linked) and Google 3D need a Google Maps key. The gear button of the map bar saves it in this browser only."],
   ],
   note: `Documentation: ${link(DOCS.app, "this page (docs/app.md)")} · ${link(DOCS.features, "duckOSM features tables")} · ${link(DOCS.fixes, "fix OpenStreetMap errors")} · ` +
@@ -2414,7 +2414,7 @@ const CARD_HELP = {
     ["Show on map", "Draws the roads with roadstyle. Click a road to see its data."],
     ["Google key", "Street View (Linked) and Google 3D need a Google Maps JavaScript API key. The gear button of the map bar saves it in this browser only."]],
     note: link(DOCS.google, "How to get a Google key") },
-  9: { title: "Export", intro: "Give the network to other software. The files are made in this browser from the tables of the build.", terms: [
+  10: { title: "Export", intro: "Give the network to other software. The files are made in this browser from the tables of the build.", terms: [
     ["PMTiles and MBTiles", "The vector tiles of the map in one file, for the zooms that you choose. They need the map (step 6)."],
     ["GeoPackage", "Roads (lines) and nodes (points) in one .gpkg file, for QGIS and ArcGIS."],
     ["GeoJSON", "Roads and nodes as GeoJSON files, for QGIS and web maps."],
@@ -2427,7 +2427,7 @@ const CARD_HELP = {
     ["Changes", "All rules. A click shows the object on the map, in amber. Undo, redo, download the rules, or delete one."],
     ["Apply and build again", "Runs step 4 again with the rules, and makes the tables again. The tags that you change are in the new tables."]],
     note: link(DOCS.fixes, "The format of the fixes file") },
-  10: { title: "Design", intro: "The style of the map and the profile of the tiles. A change shows on the map after a short wait, and the Export card uses the same profile.", terms: [
+  9: { title: "Design", intro: "The style of the map and the profile of the tiles. A change shows on the map after a short wait, and the Export card uses the same profile.", terms: [
     ["Theme", "Four ready themes: Light, Dark, Traffic and Print. Pick one, then change any value. Download saves the design as one .json file. Load a file puts it back."],
     ["Roads", "The fill and the casing of each road class, the width of each group, and the colors of the dark theme."],
     ["Text", "The street names (color, halo, size, first zoom) and the one-way arrows."],
@@ -2464,11 +2464,11 @@ const STEP = {
   6: { ready: () => (netBuilt ? "" : "after step 4"), done: () => roadsShown },
   7: { ready: () => (netBuilt ? "" : "after step 4"), done: () => fixesApplied, optional: true },   // optional: the page does not open it by itself
   8: { ready: () => (netBuilt && levelsTable() ? "" : "after step 4"), done: () => levelsApplied },
-  9: { ready: () => (netBuilt ? "" : "after step 4"), done: () => exported, optional: true },
-  10: { ready: () => "", done: () => designEdited, optional: true },        // the design needs no build: the map and the tile profile take it when they are made
+  9: { ready: () => "", done: () => designEdited, optional: true },        // the design needs no build: the map and the tile profile take it when they are made
+  10: { ready: () => (netBuilt ? "" : "after step 4"), done: () => exported, optional: true },
 };
 let exported = false;
-let designPanel = null, designEdited = false;      // card 10 (app/design_panel.js)
+let designPanel = null, designEdited = false;      // card 9 (app/design_panel.js)
 let current = null;                                // the step that the page opened last
 let areasAutoFolded = false;                       // the card "Your areas" folded by itself once
 function refreshSteps() {
@@ -2528,7 +2528,7 @@ for (const old of [...document.querySelectorAll("section.step")]) {
   rs.sections.hide("areas");                          // it shows when the list has an area
   if (areaStore.isSupported) renderSavedAreasList();
 }
-// card 9, Export: the networks that the build made, and one row for each format
+// card 10, Export: the networks that the build made, and one row for each format
 const exportQuery = async (sql) => { await duck.loadSpatial(); return (await duck.query(sql)).toArray().map((r) => r.toJSON()); };       // the spatial functions (ST_XMin, ST_AsGeoJSON) need the extension, which a restored area has not loaded yet
 const EXPORT_GROUPS = {
   Tiles: ["Tiles", "The map as vector tiles, for web maps and tile servers."],
@@ -2538,7 +2538,7 @@ const EXPORT_GROUPS = {
 function paintExport() {
   const modes = exportModes(), was = $("export-mode").value;
   $("export-mode").value = modes.includes(was) ? was : modes[0] ?? "";
-  const zoomRow = '<div class="zoomrow"><p class="small muted" id="export-profile"></p><label class="optrow"><input type="checkbox" id="export-full"><span class="t"><b>Layer edges</b><small>Every road of every network, with the columns of the profile.</small></span></label><span class="small">Zoom from <input id="export-zmin" type="number" min="0" max="18" value="0" aria-label="The lowest zoom"> to <input id="export-zmax" type="number" min="0" max="18" value="14" aria-label="The highest zoom"></span><label class="small"><input type="checkbox" id="export-auto"> The highest zoom that fits the limit</label><span id="export-tiles" class="small"></span><button type="button" class="link" id="export-design">Edit the tile profile (step 10) →</button></div>';
+  const zoomRow = '<div class="zoomrow"><p class="small muted" id="export-profile"></p><label class="optrow"><input type="checkbox" id="export-full"><span class="t"><b>Layer edges</b><small>Every road of every network, with the columns of the profile.</small></span></label><span class="small">Zoom from <input id="export-zmin" type="number" min="0" max="18" value="0" aria-label="The lowest zoom"> to <input id="export-zmax" type="number" min="0" max="18" value="14" aria-label="The highest zoom"></span><label class="small"><input type="checkbox" id="export-auto"> The highest zoom that fits the limit</label><span id="export-tiles" class="small"></span><button type="button" class="link" id="export-design">Edit the tile profile (step 9) →</button></div>';
   const network = `<section class="expsec netsec"><h3>Network</h3><p class="small muted">The files below use one network.</p><div class="segmented" id="export-seg" role="radiogroup" aria-label="Network of the files">${modes.map((m) => `<button type="button" role="radio" data-m="${m}" aria-checked="${m === $("export-mode").value}">${icon(({ driving: "car", walking: "walk", cycling: "bike" })[m] ?? "arrow")}${m[0].toUpperCase() + m.slice(1)}</button>`).join("")}</div></section>`;
   const row = (f) => `<div class="exp"><b>${esc(f.title)}</b><button type="button" class="btn sm" data-fmt="${f.id}"${f.tiles ? " data-tiles" : ""}>Download</button><small>${esc(f.note)}</small></div>`;
   const section = (g) => `<section class="expsec"><h3>${EXPORT_GROUPS[g][0]}</h3><p class="small muted">${EXPORT_GROUPS[g][1]}</p>${g === "Tiles" ? zoomRow : ""}${exporter.FORMATS.filter((f) => f.group === g).map(row).join("")}</section>`;
@@ -2584,11 +2584,11 @@ async function paintTileCount() {
   $("export-zmin").value = lo; $("export-zmax").value = hi;
   $("export-zmax").disabled = p.auto;
   const n = exporter.tileCount(box, lo, hi), bad = n > p.maxTiles;
-  out.textContent = bad ? `${num(n)} tiles: too many (at most ${num(p.maxTiles)}). Use fewer zooms or raise the limit in step 10.` : `${num(n)} tiles.`;
+  out.textContent = bad ? `${num(n)} tiles: too many (at most ${num(p.maxTiles)}). Use fewer zooms or raise the limit in step 9.` : `${num(n)} tiles.`;
   designPanel?.setCount(out.textContent, bad);
   for (const b of document.querySelectorAll("#export-list [data-tiles]")) b.disabled = bad || !roadsShown;
 }
-// the card's own fields are the profile's fields: a change goes to the profile (step 10), which keeps it and tells the card
+// the card's own fields are the profile's fields: a change goes to the profile (step 9), which keeps it and tells the card
 $("export-list").addEventListener("input", (e) => {
   const p = profile();
   if (e.target.id === "export-zmin" || e.target.id === "export-zmax") designPanel?.patchProfile({ minzoom: +$("export-zmin").value || 0, maxzoom: +$("export-zmax").value || 0 });
@@ -2608,7 +2608,7 @@ $("export-list").addEventListener("click", async (e) => {
     let ctx;
     if (f.tiles) {
       const p = profile(), box = await exportExtent(), [lo, hi] = profileZooms(box, p);
-      if (!p.layers.roads && !p.layers.base && !p.layers.edges) throw new Error("the profile has no layer: turn one on in step 10");
+      if (!p.layers.roads && !p.layers.base && !p.layers.edges) throw new Error("the profile has no layer: turn one on in step 9");
       if (p.layers.edges && $("mapmode").value !== "all" && [...$("mapmode").options].some((o) => o.value === "all")) {       // all networks in one tile set: the map shows All
         $("export-status").textContent = "Drawing all networks…";
         $("mapmode").value = "all";
@@ -2661,7 +2661,7 @@ $("fix-apply").onclick = () => {
   $("run").click();
 };
 
-// ---- the ground and the layers of the design (card 10): the ground is roadstyle's layer `bg`; the layers are roadstyle's own switches (rsSetOverlay for the base-map layers,
+// ---- the ground and the layers of the design (card 9): the ground is roadstyle's layer `bg`; the layers are roadstyle's own switches (rsSetOverlay for the base-map layers,
 // rsSetClasses for the road groups, rsSetBridges, rsSetTunnels, rsSetArrows, rsSetBuildings3D), so the design and roadstyle's Layers box show one state. The page
 // reads roadstyle's events and tells the design; `applying` keeps the page's own calls from coming back as changes. ----
 let applyingLayers = false;
@@ -2707,7 +2707,7 @@ document.addEventListener("rs:filterchange", (e) => {
 });
 document.addEventListener("rs:basemapchange", paintGround);       // a base map changes the layer bg: the ground keeps its opacity
 
-// ---- card 10: the design (docs/dashboard.md). The panel is app/design_panel.js. A design is the style of the map (written into roadstyle's look and drawn
+// ---- card 9: the design (docs/dashboard.md). The panel is app/design_panel.js. A design is the style of the map (written into roadstyle's look and drawn
 // again by the map worker) and the profile of the tiles (the Export card reads it). It is kept in this browser (localStorage) and with the saved area
 // (design.json in its folder, app/area_store.js). ----
 let designSave = null;
@@ -2749,7 +2749,7 @@ $("design-open").onclick = () => designPanel?.open();
 $("design-back").onclick = closeDesign;
 $("design-export").onclick = () => {
   closeDesign();
-  const c = cards.find((x) => x.id === "step9-card");
+  const c = cards.find((x) => x.id === "step10-card");
   if (c && !c.classList.contains("off")) { autoFold(c, false); c.scrollIntoView({ block: "nearest" }); }
 };
 

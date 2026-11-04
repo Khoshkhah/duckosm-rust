@@ -27,8 +27,8 @@ with sync_playwright() as p:
     page.wait_for_function("!document.getElementById('run').hasAttribute('aria-busy') && !document.getElementById('step7-card').classList.contains('off')", timeout=600000)
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=600000)
     # the card opens the panel in the sheet (a tap, as on a phone)
-    if "folded" in (page.get_attribute("#step10-card", "class") or ""):
-        page.evaluate("document.getElementById('step10').click()")
+    if "folded" in (page.get_attribute("#step9-card", "class") or ""):
+        page.evaluate("document.getElementById('step9').click()")
     page.evaluate("document.getElementById('design-open').click()")
     page.wait_for_timeout(800)
     assert page.evaluate("document.body.classList.contains('editing-design')")

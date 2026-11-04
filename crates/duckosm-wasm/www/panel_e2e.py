@@ -64,8 +64,8 @@ def run(browser, name, dark=False, **context):
     # ---- the start: all cards in view, folded; step 1 is open; the later steps are disabled with their reason
     assert [c for c in st()] == CARDS and st()["step1-card"] == "O", st()
     s = st()
-    assert s["step2-card"] == "F-off" and s["step4-card"] == "F-off" and s["step5-card"] == "F-off" and s["step6-card"] == "F-off" and s["step7-card"] == "F-off" and s["step8-card"] == "F-off" and s["step9-card"] == "F-off", s
-    assert s["step10-card"] == "F", "step 10 (Design) is active at the start: the design needs no build"
+    assert s["step2-card"] == "F-off" and s["step4-card"] == "F-off" and s["step5-card"] == "F-off" and s["step6-card"] == "F-off" and s["step7-card"] == "F-off" and s["step8-card"] == "F-off" and s["step10-card"] == "F-off", s
+    assert s["step9-card"] == "F", "step 9 (Design) is active at the start: the design needs no build"
     assert s["extracts-box"] == "F", "step 3 is active (a cut file needs no area)"
     assert page.inner_text("#step2-card .after") == "after step 1" and page.inner_text("#step4-card .after") == "after step 3"
     assert page.evaluate("document.getElementById('step5').disabled"), "the title of a disabled card does not open it"

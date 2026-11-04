@@ -1,4 +1,4 @@
-// Export of a built network for other software (docs/dashboard.md, "Step 9: Export"): GeoJSON, MATSim and SUMO. Each function reads the tables of one
+// Export of a built network for other software (docs/dashboard.md, "Step 10: Export"): GeoJSON, MATSim and SUMO. Each function reads the tables of one
 // network in DuckDB (`query(sql)` gives the rows as objects) and gives `{ name, blob }` for a download. Nothing here changes a table.
 //
 // Ids: `edge_id` and `node_id` are BIGINT hashes, so they go to the files as text (a JavaScript number loses the low digits).
