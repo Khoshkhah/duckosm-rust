@@ -23,9 +23,9 @@ async function utmOf(query, mode) {
 }
 
 const text = (s) => new Blob([s], { type: "application/xml" });
-const zipOf = async (files) => {
+const zipOf = async (files) => {         // files: name to text or bytes
   const { zipSync, strToU8 } = await import("https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js");
-  return new Blob([zipSync(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, strToU8(v)])))], { type: "application/zip" });
+  return new Blob([zipSync(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, typeof v === "string" ? strToU8(v) : v])))], { type: "application/zip" });
 };
 
 /**
@@ -61,6 +61,85 @@ function featureCollection(rows) {
     return JSON.stringify({ type: "Feature", properties: Object.fromEntries(Object.entries(p).map(([k, v]) => [k, typeof v === "bigint" ? String(v) : typeof v === "number" && !Number.isFinite(v) ? null : v])), geometry: JSON.parse(g) });
   });
   return new Blob(['{"type":"FeatureCollection","features":[\n', lines.join(",\n"), "\n]}\n"], { type: "application/geo+json" });
+}
+
+// ---- the web map: the tiles, the style of this page's map and a viewer in one .zip. The tiles have no style (a viewer like QGIS shows only lines); the style of the live map
+// (roadstyle's layers, with its global state) draws them as this page does.
+
+/** The style of the web map from the live style of the page: the layers of the roads and the base-map layers (sources `rs-*`) on the PMTiles file, with the global state of the map. */
+export function packageStyle(live, globalState) {
+  const sources = {};
+  for (const [id, src] of Object.entries(live.sources)) {
+    if (!id.startsWith("rs-") || src.type !== "vector") continue;
+    const { tiles, encoding, ...rest } = src;            // the tiles of the file are MVT
+    sources[id] = { ...rest, url: "pmtiles://tiles.pmtiles" };
+  }
+  return {
+    version: 8, name: "duckOSM", glyphs: live.glyphs, sources,
+    state: Object.fromEntries(Object.entries(globalState ?? {}).map(([k, v]) => [k, { default: v }])),   // the layers read `global-state` (theme, switches); without it MapLibre stops on them
+    layers: live.layers.filter((l) => l.id === "bg" || (l.source && l.source in sources)),
+  };
+}
+
+const VIEWER = `<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>duckOSM map</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pmtiles@3.2.1/dist/pmtiles.js"></script>
+<style>html, body, #map { margin: 0; height: 100%; }</style>
+<div id="map"></div>
+<script>
+// The tiles (tiles.pmtiles) and the style (style.json) are read from this folder. PMTiles needs range requests: start the folder with "python serve.py".
+const protocol = new pmtiles.Protocol();
+maplibregl.addProtocol("pmtiles", protocol.tile);
+Promise.all([fetch("style.json").then((r) => r.json()), new pmtiles.PMTiles("tiles.pmtiles").getHeader()]).then(([style, h]) => {
+  window.map = new maplibregl.Map({ container: "map", style, bounds: [h.minLon, h.minLat, h.maxLon, h.maxLat], fitBoundsOptions: { padding: 20 }, hash: true });
+  map.addControl(new maplibregl.NavigationControl(), "top-right");
+  map.addControl(new maplibregl.ScaleControl(), "bottom-left");
+});
+</script>
+</html>
+`;
+
+const SERVER = `"""A small web server with range requests (PMTiles needs them; "python -m http.server" has none). Run:  python serve.py [port]  and open http://localhost:8000/"""
+import http.server, os, re, sys
+
+
+class Handler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        r, p = self.headers.get("Range"), self.translate_path(self.path)
+        m = re.match(r"bytes=(\\d+)-(\\d*)", r or "")
+        if m and os.path.isfile(p):
+            size = os.path.getsize(p)
+            a = int(m[1])
+            b = min(int(m[2]) if m[2] else size - 1, size - 1)
+            self.send_response(206)
+            self.send_header("Content-Range", f"bytes {a}-{b}/{size}")
+            self.send_header("Content-Length", str(b - a + 1))
+            self.send_header("Content-Type", self.guess_type(p))
+            self.end_headers()
+            with open(p, "rb") as f:
+                f.seek(a)
+                self.wfile.write(f.read(b - a + 1))
+        else:
+            super().do_GET()
+
+    def end_headers(self):
+        self.send_header("Accept-Ranges", "bytes")
+        super().end_headers()
+
+
+http.server.ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1]) if len(sys.argv) > 1 else 8000), Handler).serve_forever()
+`;
+
+/** The web map package: tiles.pmtiles, style.json, index.html, serve.py and a README, in one .zip. `ctx.style`: {live, globalState} of the map on screen. */
+async function webMap(query, mode, area, ctx) {
+  const t = await tileFile("pmtiles", ctx, area);
+  const style = packageStyle(ctx.style.live, ctx.style.globalState);
+  const readme = `Web map of ${area}, from duckOSM-rust.\n\n1. Unpack this folder.\n2. In the folder run:  python serve.py\n3. Open http://localhost:8000/ in a browser.\n\nThe map is drawn from tiles.pmtiles with style.json (the style of the duckOSM-rust page) by MapLibre GL JS and the pmtiles library, which the page loads from a CDN (internet needed).\n` +
+    `The tiles have zoom ${ctx.min} to ${ctx.max}. The layers: ${t.layers.join(", ")}.\nQGIS and other tools that read the tiles directly show the layers with no style: use this web map for the look of the page.\nLimits: the icons of crossings and traffic signals and the arrows are added by the page in the browser and are not in the package.\n`;
+  const zip = await zipOf({ "tiles.pmtiles": new Uint8Array(await t.blob.arrayBuffer()), "style.json": JSON.stringify(style), "index.html": VIEWER, "serve.py": SERVER, "README.txt": readme });
+  return { name: `${SLUG(area)}_webmap.zip`, blob: zip, rows: t.rows, tiles: t.tiles, layers: t.layers, min: ctx.min, max: ctx.max, style, pmtiles: t.blob, edgeTiles: ctx.extra ?? null };
 }
 
 /** A MATSim network (network_v2.dtd): the nodes, and one link for each edge. */
@@ -444,8 +523,8 @@ async function readPmtiles(bytes) {
 }
 
 export async function verify(id, r, { query, mode, modes = [mode] }) {
-  const nEdges = id === "pmtiles" || id === "mbtiles" || id === "geojson_nodes" ? 0 : await count(query, id === "geojson" || id === "gpkg" ? roadCountSql(mode) : `SELECT count(*) AS n FROM ${mode}.edges`);
-  const nNodes = id === "pmtiles" || id === "mbtiles" || id === "geojson" ? 0 : await count(query, `SELECT count(*) AS n FROM ${mode}.nodes`);
+  const nEdges = id === "pmtiles" || id === "mbtiles" || id === "webmap" || id === "geojson_nodes" ? 0 : await count(query, id === "geojson" || id === "gpkg" ? roadCountSql(mode) : `SELECT count(*) AS n FROM ${mode}.edges`);
+  const nNodes = id === "pmtiles" || id === "mbtiles" || id === "webmap" || id === "geojson" ? 0 : await count(query, `SELECT count(*) AS n FROM ${mode}.nodes`);
   const same = (what, got, want) => { if (got !== want) throw new Error(`${what}: the file has ${fmt(got)}, the tables have ${fmt(want)}`); };
   try {
     if (id === "geojson" || id === "geojson_nodes") {
@@ -488,6 +567,20 @@ export async function verify(id, r, { query, mode, modes = [mode] }) {
       for (const e of edg.querySelectorAll("edge")) if (!ids.has(e.getAttribute("from")) || !ids.has(e.getAttribute("to"))) throw new Error(`edge ${e.getAttribute("id")} has a node that is not in the file`);
       return { ok: true, text: `${fmt(nEdges)} edges, ${fmt(nNodes)} nodes and ${fmt(want)} connections, the same as the tables. Not run through netconvert here` };
     }
+    if (id === "webmap") {
+      const z = await unzip(r.blob), want = ["tiles.pmtiles", "style.json", "index.html", "serve.py", "README.txt"];
+      for (const n of want) if (!z[n]) throw new Error(`the .zip has no ${n}`);
+      const style = JSON.parse(new TextDecoder().decode(z["style.json"]));
+      const srcs = Object.values(style.sources);
+      if (!srcs.length || srcs.some((x) => x.url !== "pmtiles://tiles.pmtiles")) throw new Error("a source of the style does not read tiles.pmtiles");
+      if (!style.state || !("rs_theme" in style.state)) throw new Error("the style has no global state (the layers need it)");
+      const keys = new Set([...JSON.stringify(style.layers).matchAll(/\["global-state","([^"]+)"\]/g)].map((m) => m[1]));
+      for (const k of keys) if (!(k in style.state)) throw new Error(`the layers read the global state ${k}, which the style does not have`);
+      const p = await readPmtiles(z["tiles.pmtiles"]);
+      same("tiles", p.tiles.length, r.tiles);
+      if (!new TextDecoder().decode(z["index.html"]).includes("pmtiles://") && !new TextDecoder().decode(z["index.html"]).includes("addProtocol")) throw new Error("the viewer does not read PMTiles");
+      return { ok: true, text: `${style.layers.length} layers on tiles.pmtiles (${fmt(p.tiles.length)} tiles, zoom ${p.h.min} to ${p.h.max}); the global state of every layer is in the style; the viewer and serve.py are in the .zip` };
+    }
     if (id === "pmtiles") {
       const p = await readPmtiles(new Uint8Array(await r.blob.arrayBuffer()));
       same("tiles", p.tiles.length, r.tiles); same("tiles in the header", p.h.tiles, r.tiles);
@@ -526,6 +619,7 @@ async function edgesCheck(r, query, modes) {
 
 /** The formats of the card Export: id, title, what it is for, the group, the function, and the networks that it takes. */
 export const FORMATS = [
+  { id: "webmap", group: "Tiles", title: "Web map (tiles, style and viewer)", note: "A .zip with the tiles, the style of this page's map and a viewer page. Run \"python serve.py\" in the folder and open it in a browser: the map looks like this page. Needs the map (step 6).", run: webMap, tiles: true },
   { id: "pmtiles", group: "Tiles", title: "PMTiles", note: "The vector tiles of the map (MVT) in one file, for MapLibre, roadstyle and any static server. Needs the map (step 6).", run: pmtilesFile, tiles: true },
   { id: "mbtiles", group: "Tiles", title: "MBTiles", note: "The same tiles in a SQLite file, for QGIS and tile servers. Needs the map (step 6).", run: mbtilesFile, tiles: true },
   { id: "gpkg", group: "Visualization", title: "GeoPackage", note: "Roads (lines) and nodes (points) in one .gpkg file, for QGIS and ArcGIS. kepler.gl cannot open it: use GeoJSON there.", run: geopackage, modes: ["driving", "walking", "cycling"] },

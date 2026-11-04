@@ -73,7 +73,7 @@ with sync_playwright() as p:
     assert "off" not in (page.get_attribute("#step9-card", "class") or ""), "the card is on after a build"
     if "folded" in (page.get_attribute("#step9-card", "class") or ""):
         page.click("#step9")
-    assert page.locator("#export-list [data-fmt]").count() == 7
+    assert page.locator("#export-list [data-fmt]").count() == 8
     assert page.evaluate("document.getElementById('export-zmax').compareDocumentPosition(document.getElementById('export-seg')) & Node.DOCUMENT_POSITION_FOLLOWING"), "the network control comes after the tile section (it is for the files)"
     assert page.locator("#export-list .expsec").count() == 4 and page.locator("#export-seg [data-m]").count() == 3 and page.get_attribute("#export-seg [data-m=driving]", "aria-checked") == "true"
     assert [t.strip() for t in page.eval_on_selector_all("#export-list .expsec h3", "(l) => l.map((x) => x.textContent)")] == ["Tiles", "Network", "Visualization", "Simulation"], "tiles, the network, visualization and simulation are four sections"
@@ -156,8 +156,39 @@ with sync_playwright() as p:
     assert len(cs) == want and all(c.get("from") in ids and c.get("to") in ids for c in cs), (len(cs), want)
     assert "netconvert" in z.read("README.txt").decode()
     print(f"SUMO: {len(es)} edges, {len(cs)} connections")
+    # Web map: a .zip with the tiles, the style, a viewer and a small server; run the server, open the viewer in a new browser page, and the roads are drawn with no errors
+    import socket
+    import subprocess
+    import time
+    assert page.locator("#export-list [data-tiles]").count() == 3
+    wm = download(page, "webmap")
+    z = zipfile.ZipFile(wm)
+    assert sorted(z.namelist()) == ["README.txt", "index.html", "serve.py", "style.json", "tiles.pmtiles"], z.namelist()
+    site = out / "webmap_site"
+    site.mkdir(exist_ok=True)
+    z.extractall(site)
+    st = json.loads((site / "style.json").read_text())
+    assert all(s["url"] == "pmtiles://tiles.pmtiles" for s in st["sources"].values()) and "rs_theme" in st["state"] and len(st["layers"]) > 30
+    sock = socket.socket(); sock.bind(("127.0.0.1", 0)); wport = sock.getsockname()[1]; sock.close()
+    srv = subprocess.Popen(["python3", "serve.py", str(wport)], cwd=site)
+    try:
+        time.sleep(1.5)
+        wp = browser.new_page(viewport={"width": 1100, "height": 800})
+        werrs = []
+        wp.on("console", lambda m: m.type == "error" and werrs.append(m.text[:160]))
+        wp.on("pageerror", lambda e: werrs.append(str(e)))
+        wp.goto(f"http://127.0.0.1:{wport}/index.html#15/43.7384/7.4246")
+        wp.wait_for_function("window.map && map.loaded() && map.areTilesLoaded()", timeout=90_000)
+        wp.wait_for_timeout(1500)
+        drawn = wp.evaluate("map.queryRenderedFeatures({layers: map.getStyle().layers.filter((l) => l.source === 'rs-roads' && l.type === 'line').map((l) => l.id)}).length")
+        assert drawn > 200 and not werrs, (drawn, werrs[:3])
+        wp.screenshot(path=str(out / "webmap.png"))
+        print(f"Web map: the viewer draws {drawn} road features from the package, no errors")
+        wp.close()
+    finally:
+        srv.terminate()
     # tiles: the zooms of the card, a count; PMTiles that the pmtiles library reads (the header, the metadata, a tile that is MVT), and MBTiles (SQLite) with the same tiles
-    assert page.locator("#export-list [data-tiles]").count() == 2 and page.evaluate("[...document.querySelectorAll('#export-list [data-tiles]')].every((b) => !b.disabled)"), "the tile buttons are on after the map is drawn"
+    assert page.locator("#export-list [data-tiles]").count() == 3 and page.evaluate("[...document.querySelectorAll('#export-list [data-tiles]')].every((b) => !b.disabled)"), "the tile buttons are on after the map is drawn"
     # Everything (on by default): zoom 0 to the highest that fits, all networks, every road attribute in the tiles
     assert page.is_checked("#export-full") and page.is_disabled("#export-zmin") and page.input_value("#export-zmin") == "0"
     zmax = int(page.input_value("#export-zmax"))

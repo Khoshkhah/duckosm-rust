@@ -297,6 +297,7 @@ Card 9 gives the network that you built to other software. It is off until a bui
 
 | Format | File | What it has |
 |---|---|---|
+| **Web map** | `<area>_webmap.zip` | `tiles.pmtiles` (the tiles), `style.json` (the style of this page's map: roadstyle's layers with their global state), `index.html` (a MapLibre viewer), `serve.py` (a small web server with range requests) and a `README.txt`. Unpack it, run `python serve.py` in the folder, and open `http://localhost:8000/`: the map looks like this page. The viewer loads MapLibre and the pmtiles library from a CDN, so it needs internet. The icons of crossings and traffic signals, and the one-way arrows, are added by the page in the browser and are not in the package. |
 | **PMTiles** | `<area>_z<min>-<max>.pmtiles` | One PMTiles v3 file (gzip MVT tiles, Hilbert order, leaf directories for more than 4,000 tiles). For MapLibre, roadstyle and any static server. |
 | **MBTiles** | `<area>_z<min>-<max>.mbtiles` | The same tiles in a SQLite file (`metadata` and `tiles`, rows from the south). For QGIS and tile servers. |
 | **GeoPackage** | `<area>_<network>.gpkg` | The tables `roads` (LineString, a two-way road once, with `twoway` and `edge_id_reverse` as in GeoJSON) and `nodes` (Point) in EPSG:4326, with no spatial index. For QGIS and ArcGIS. kepler.gl cannot open GeoPackage: use **GeoJSON roads** there. |
@@ -321,6 +322,8 @@ What a tile has:
 
 The OpenFreeMap background of the page is not in the tiles: it is not ours.
 
+**Tiles have no style.** A tile file has the data of the map (shapes and properties), not its colors. A program that reads the tiles directly, for example QGIS, shows the layers with a default style: only thin lines. To see the map as this page draws it, use the **Web map** package: its `style.json` has the style, and MapLibre draws the tiles with it. You can also load `style.json` in any MapLibre-based tool (for example Maputnik) with the PMTiles file; a tool that cannot read MapLibre's `global-state` expressions will not draw all layers.
+
 **The check.** After each download, the page reads the file that it made and compares it with the tables. A line under the format says what it found: a green "Checked" line (for example "2,765 roads and 1,719 nodes, the same as the tables"), or a red "Problem" line with the first difference. The checks:
 
 | Format | What the page checks |
@@ -329,6 +332,7 @@ The OpenFreeMap background of the page is not in the tiles: it is not ours.
 | GeoPackage | The number of roads and nodes, the application id and the header of a geometry. |
 | MATSim | The number of nodes and links, and that every link joins two nodes of the file. |
 | SUMO | The number of nodes, edges and connections, and that every edge joins two nodes of the file. The page does not run `netconvert`. |
+| Web map | The five files are in the .zip, every source of the style reads `tiles.pmtiles`, every global state that a layer reads is in the style, and the PMTiles directories read back. `export_e2e.py` also runs `serve.py`, opens the viewer in a browser and counts the road features that it draws. |
 | PMTiles | The directories (root and leaf), the number of tiles, the zooms in the header and the layers of the biggest tile. With **Everything**, also that all edges of all networks are in the tiles of the highest zoom. |
 | MBTiles | The number of tiles, the zooms and that a tile is gzip. |
 

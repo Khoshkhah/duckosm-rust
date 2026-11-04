@@ -2497,7 +2497,7 @@ $("export-list").addEventListener("click", async (e) => {
         await $("mapmode").onchange();
         await window.mapDrawing;
       }
-      ctx = { src: exportSource(), bbox: await exportExtent(), min: Math.max(0, +$("export-zmin").value || 0), max: Math.min(18, +$("export-zmax").value || 14),
+      ctx = { style: { live: map.getStyle(), globalState: map.getGlobalState?.() ?? {} }, src: exportSource(), bbox: await exportExtent(), min: Math.max(0, +$("export-zmin").value || 0), max: Math.min(18, +$("export-zmax").value || 14),
         extra: full ? exporter.edgeTiles(await exporter.roadFeatures(exportQuery, exportModes()), Math.max(0, +$("export-zmin").value || 0), Math.min(18, +$("export-zmax").value || 14)) : null,
         progress: (d, n) => { $("export-status").textContent = `Making ${f.title}: ${num(d)} of ${num(n)} tiles…`; } };
     }
