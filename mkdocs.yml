@@ -1,0 +1,74 @@
+site_name: duckosm-rust
+site_description: An OpenStreetMap file to a routable road network (GeoParquet and DuckDB), equal to duckOSM 0.6.0. A CLI, a Python wheel and a browser page.
+repo_url: https://github.com/Khoshkhah/duckosm-rust
+repo_name: Khoshkhah/duckosm-rust
+
+theme:
+  name: material
+  font:
+    text: IBM Plex Sans
+    code: JetBrains Mono
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle: { icon: material/weather-night, name: Dark mode }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle: { icon: material/weather-sunny, name: Light mode }
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - toc:
+      permalink: true
+      # GitHub-style anchors, so the in-page links of the docs work on the site too
+      slugify: !!python/object/apply:pymdownx.slugs.slugify { kwds: { case: lower } }
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - Get started:
+      - Your first map: first_map.md
+  - Guides:
+      - The browser page: dashboard.md
+      - The CLI: cli.md
+      - The Python wheel: python.md
+      - When the page does not work: troubleshooting.md
+  - Concepts:
+      - Concepts: concepts.md
+  - Reference:
+      - Output tables: output-tables.md
+  - Development:
+      - Development: development.md
+      - Design: design.md
+      - Benchmark: benchmark.md
+      - The page code: app.md
+      - The browser plan: browser.md
+      - Editing OSM data: osm-editing.md
+      - Base-map layers: features.md
+      - Drawing levels: levels.md
+      - Lane profile: lane_profile.md
+      - Bus routes: bus.md
+      - Edge graph: edge_graph.md
+      - Boundary tool: boundary_tool.md
+      - Relay: relay.md
+      - Tables not made yet: tables.md
+      - To do: todo.md
+  - Proposals:
+      - The name: proposals/name.md
+      - Hosting: proposals/hosting.md

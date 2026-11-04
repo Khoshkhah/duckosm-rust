@@ -2,7 +2,7 @@
 
 A build writes one table for each part of the road network. This page lists the tables and their columns. The numbers come from a build of the Monaco sample (`tests/data/monaco_sample.osm.pbf`, three networks).
 
-- To make the tables, read the [manual](manual.md).
+- To make the tables, read [Your first map](first_map.md).
 - To see how the tables are made and tested against duckOSM, read [design.md](design.md).
 - To see the tables that are not made yet, read [tables.md](tables.md).
 - duckOSM has the same reference for its own tables: [database.md](https://github.com/Khoshkhah/duckOSM/blob/main/docs/reference/database.md).
@@ -167,4 +167,4 @@ These tables exist only when you give the build more than an `.osm.pbf` file.
 | `raw.nodes`, `raw.ways`, `raw.relations` and the base-map layers `features.*` | A boundary (`--boundary` in the CLI, an area in the page) | [features.md](features.md) |
 | `main.building_faces`, `main.building_info`, `main.building_entrances` | The base-map layers (the page makes them; the CLI makes `building_faces` with `--building-faces`) | [osm-editing.md](osm-editing.md) |
 | `bus.routes`, `bus.route_edges` | A boundary, and the driving network | [bus.md](bus.md) |
-| `nodes.ele`, `edges.z_from`, `z_to`, `z_vertices` | A DEM file (`--dem`) | [CHANGELOG.md](../CHANGELOG.md) |
+| `nodes.ele`, `edges.z_from`, `z_to`, `z_vertices` | A DEM file (`--dem`) | [CHANGELOG.md](https://github.com/Khoshkhah/duckosm-rust/blob/main/CHANGELOG.md) |

@@ -51,7 +51,7 @@ With `strict=True` (the default), the call raises an error when the config asks 
 dr.edge_id_hash(167625756, 1790048630, 25185687)     # 16871577064511426, the edge_id in edges.parquet of the Monaco sample
 ```
 
-[tools/edge_id_reference.py](../tools/edge_id_reference.py) has the same hash in plain Python.
+[tools/edge_id_reference.py](https://github.com/Khoshkhah/duckosm-rust/blob/main/tools/edge_id_reference.py) has the same hash in plain Python.
 
 ## Use it with duckOSM
 

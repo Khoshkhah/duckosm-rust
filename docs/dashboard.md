@@ -2,7 +2,7 @@
 
 This guide describes each part of the duckOSM-rust page, from the top of the panel to the last card. Each part has a picture and a list of what you can do. The page runs fully in your browser: no server receives your area or your data.
 
-- For a first map in five minutes, read [Your first map](manual.md#your-first-map-in-the-browser) in the manual.
+- For a first map in five minutes, read [Your first map](first_map.md).
 - To see how the page is made (files, code), read [app.md](app.md).
 - To see how the fixes are saved and applied, read [osm-editing.md](osm-editing.md).
 - To see the columns of each table that a build writes, read [tables.md](tables.md).

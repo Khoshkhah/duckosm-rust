@@ -7,7 +7,7 @@ The repository is `duckosm-rust`. It is a Cargo workspace. Its first crate is `d
 
 This document is based on duckOSM 0.6.0 (git tag `v0.6.0`) and DuckDB 1.5.3. The numbers come from
 `monaco.duckdb` in the duckOSM folder, built on 2026-10-21. The experiments in section 5 are in
-[tools/edge_id_reference.py](../tools/edge_id_reference.py).
+[tools/edge_id_reference.py](https://github.com/Khoshkhah/duckosm-rust/blob/main/tools/edge_id_reference.py).
 
 ## 1. Goal and non-goals
 
