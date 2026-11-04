@@ -73,7 +73,7 @@ with sync_playwright() as p:
     assert "off" not in (page.get_attribute("#step9-card", "class") or ""), "the card is on after a build"
     if "folded" in (page.get_attribute("#step9-card", "class") or ""):
         page.click("#step9")
-    assert page.locator("#export-list [data-fmt]").count() == 6
+    assert page.locator("#export-list [data-fmt]").count() == 7
     assert page.evaluate("document.getElementById('export-zmax').compareDocumentPosition(document.getElementById('export-seg')) & Node.DOCUMENT_POSITION_FOLLOWING"), "the network control comes after the tile section (it is for the files)"
     assert page.locator("#export-list .expsec").count() == 4 and page.locator("#export-seg [data-m]").count() == 3 and page.get_attribute("#export-seg [data-m=driving]", "aria-checked") == "true"
     assert [t.strip() for t in page.eval_on_selector_all("#export-list .expsec h3", "(l) => l.map((x) => x.textContent)")] == ["Tiles", "Network", "Visualization", "Simulation"], "tiles, the network, visualization and simulation are four sections"
@@ -82,16 +82,17 @@ with sync_playwright() as p:
     n_nodes = rows(page, "SELECT count(*)::INTEGER AS n FROM driving.nodes")[0]["n"]
     ids = {str(r["edge_id"]) for r in rows(page, "SELECT edge_id::VARCHAR AS edge_id FROM driving.edges")}
 
-    # GeoJSON: two files, one feature for each edge and node, the ids as text (a BIGINT hash is more than 2^53)
-    z = zipfile.ZipFile(download(page, "geojson"))
-    names = z.namelist()
-    roads = json.loads(z.read("driving_roads.geojson"))
-    nodes = json.loads(z.read("driving_nodes.geojson"))
-    assert sorted(names) == ["driving_nodes.geojson", "driving_roads.geojson"], names
-    assert len(roads["features"]) == n_edges and len(nodes["features"]) == n_nodes
+    # GeoJSON: plain files (kepler.gl cannot open a .zip): one feature for each edge and for each node, the ids as text (a BIGINT hash is more than 2^53), no NaN
+    gj = download(page, "geojson")
+    assert gj.name.endswith("_roads.geojson") and not gj.name.endswith(".zip")
+    roads = json.loads(gj.read_text())
+    gn = download(page, "geojson_nodes")
+    nodes = json.loads(gn.read_text())
+    assert roads["type"] == "FeatureCollection" and len(roads["features"]) == n_edges and len(nodes["features"]) == n_nodes
     assert {f["properties"]["edge_id"] for f in roads["features"]} == ids, "the edge ids are the ids of the table, as text"
-    assert all(f["geometry"]["type"] == "LineString" for f in roads["features"][:50])
-    print(f"GeoJSON: {n_edges} roads and {n_nodes} nodes")
+    assert all(f["geometry"]["type"] == "LineString" for f in roads["features"][:50]) and all(f["geometry"]["type"] == "Point" for f in nodes["features"][:50])
+    assert "NaN" not in gj.read_text() and "Infinity" not in gj.read_text()
+    print(f"GeoJSON: {n_edges} roads and {n_nodes} nodes, plain files")
 
     # GeoPackage: a SQLite file with the GeoPackage tables, one row for each edge and node, and a geometry blob with the "GP" header and a WKB line
     import sqlite3
