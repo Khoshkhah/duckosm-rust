@@ -108,7 +108,7 @@ with sync_playwright() as p:
     unfold(page, "step6-card")
     shot(page, "11-visualization", "#step6-card")
     unfold(page, "step9-card")
-    page.set_viewport_size({"width": 1400, "height": 1250})      # the card is taller than the panel
+    page.set_viewport_size({"width": 1400, "height": 1800})      # the card is taller than the panel
     shot(page, "11b-export", "#step9-card")
     page.set_viewport_size({"width": 1400, "height": 900})
     shot(page, "12-map-after-build")

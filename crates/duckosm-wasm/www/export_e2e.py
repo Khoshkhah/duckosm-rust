@@ -39,6 +39,7 @@ def serve_range(route, body):
 
 
 def download(page, fmt):
+    page.evaluate("window.lastCheck = null")
     try:
         with page.expect_download(timeout=60_000) as d:
             page.click(f"#export-list [data-fmt={fmt}]")
@@ -47,6 +48,11 @@ def download(page, fmt):
         raise
     path = out / d.value.suggested_filename
     d.value.save_as(path)
+    page.wait_for_function("window.lastCheck !== null", timeout=120_000)
+    chk = page.evaluate("window.lastCheck")
+    assert chk["ok"], (fmt, "the page's own check found a problem", chk)
+    assert page.locator(f"#export-list [data-fmt={fmt}]").locator("xpath=ancestor::div[contains(@class,'exp')]").locator(".chk.ok").count() == 1, "the check line shows under the format"
+    print(f"  check {fmt}: {chk['text'][:150]}")
     return path
 
 
@@ -67,8 +73,10 @@ with sync_playwright() as p:
     assert "off" not in (page.get_attribute("#step9-card", "class") or ""), "the card is on after a build"
     if "folded" in (page.get_attribute("#step9-card", "class") or ""):
         page.click("#step9")
-    assert page.locator("#export-list [data-fmt]").count() == 6 and page.locator("#export-mode option").count() == 3
-    assert page.evaluate("document.getElementById('export-zmax').compareDocumentPosition(document.getElementById('export-mode-row')) & Node.DOCUMENT_POSITION_FOLLOWING"), "the network list comes after the tile section (it is for the files)"
+    assert page.locator("#export-list [data-fmt]").count() == 6
+    assert page.evaluate("document.getElementById('export-zmax').compareDocumentPosition(document.getElementById('export-seg')) & Node.DOCUMENT_POSITION_FOLLOWING"), "the network control comes after the tile section (it is for the files)"
+    assert page.locator("#export-list .expsec").count() == 4 and page.locator("#export-seg [data-m]").count() == 3 and page.get_attribute("#export-seg [data-m=driving]", "aria-checked") == "true"
+    assert [t.strip() for t in page.eval_on_selector_all("#export-list .expsec h3", "(l) => l.map((x) => x.textContent)")] == ["Tiles", "Network", "Visualization", "Simulation"], "tiles, the network, visualization and simulation are four sections"
     assert page.evaluate("getComputedStyle(document.querySelector('#export-full').closest('.optrow')).display") == "flex", "the Everything row has the card's option style"
     n_edges = rows(page, "SELECT count(*)::INTEGER AS n FROM driving.edges")[0]["n"]
     n_nodes = rows(page, "SELECT count(*)::INTEGER AS n FROM driving.nodes")[0]["n"]
@@ -99,6 +107,15 @@ with sync_playwright() as p:
     first = next(f for f in roads["features"] if f["properties"]["edge_id"] == eid)
     assert npts == len(first["geometry"]["coordinates"]) and abs(first["geometry"]["coordinates"][0][0] - x0) < 1e-9 and abs(first["geometry"]["coordinates"][0][1] - y0) < 1e-9
     print(f"GeoPackage: {n_edges} roads and {n_nodes} nodes")
+
+    # the segmented control picks the network of the files: Walking gives the walking edges
+    page.click("#export-seg [data-m=walking]")
+    assert page.get_attribute("#export-seg [data-m=walking]", "aria-checked") == "true" and page.input_value("#export-mode") == "walking"
+    walk = sqlite3.connect(download(page, "gpkg"))
+    n_walk = rows(page, "SELECT count(*)::INTEGER AS n FROM walking.edges")[0]["n"]
+    assert walk.execute("SELECT count(*) FROM roads").fetchone()[0] == n_walk and n_walk != n_edges, (n_walk, n_edges)
+    page.click("#export-seg [data-m=driving]")
+    print(f"Network control: Walking gives {n_walk} roads")
 
     # MATSim: the DTD line, one link for each edge, meters (not degrees), free speed and capacity above 0, every link between two nodes
     path = download(page, "matsim")
@@ -203,6 +220,9 @@ with sync_playwright() as p:
     }""")
     assert leaf == [6000, True, "tile 0 0", "tile 57 31", "tile 99 59", None], leaf
     print("PMTiles: 6,000 tiles with leaf directories are read back")
+    # a file that is wrong is reported: a MATSim file with no nodes and no links
+    bad = page.evaluate("""async () => { const ex = await import('./app/export.js'); return ex.verify('matsim', {blob: new Blob(['<network><nodes/><links/></network>'])}, {query: (sql) => window.duckApi.query(sql).then((r) => r.toArray().map((x) => x.toJSON())), mode: 'driving'}); }""")
+    assert bad["ok"] is False and "the file has 0" in bad["text"], bad
     assert "tiles" in page.inner_text("#export-status")
     page.screenshot(path=str(out / "export.png"))
     browser.close()

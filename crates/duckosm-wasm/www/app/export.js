@@ -35,7 +35,7 @@ export async function geojson(query, mode, area) {
   const nodes = await query(`SELECT node_id::VARCHAR AS node_id, ST_AsGeoJSON(geom) AS g FROM ${mode}.nodes ORDER BY node_id`);
   const fc = (rows, props) => JSON.stringify({ type: "FeatureCollection", features: rows.map((r) => ({ type: "Feature", properties: props(r), geometry: JSON.parse(r.g) })) });
   const keep = ({ g, ...p }) => Object.fromEntries(Object.entries(p).map(([k, v]) => [k, typeof v === "bigint" ? String(v) : v]));
-  return { name: `${SLUG(area)}_${mode}_geojson.zip`, blob: await zipOf({ [`${mode}_roads.geojson`]: fc(roads, keep), [`${mode}_nodes.geojson`]: fc(nodes, keep) }), files: 2, rows: roads.length };
+  return { name: `${SLUG(area)}_${mode}_geojson.zip`, blob: await zipOf({ [`${mode}_roads.geojson`]: fc(roads, keep), [`${mode}_nodes.geojson`]: fc(nodes, keep) }), files: 2, rows: roads.length, nodes: nodes.length };
 }
 
 /** A MATSim network (network_v2.dtd): the nodes, and one link for each edge. */
@@ -54,7 +54,7 @@ export async function matsim(query, mode, area) {
       `<attributes><attribute name="origid" class="java.lang.String">${e.osm_id}</attribute><attribute name="type" class="java.lang.String">${esc(e.highway)}</attribute></attributes></link>\n`);
   }
   out.push("</links>\n</network>\n");
-  return { name: `${SLUG(area)}_${mode}_matsim_network.xml`, blob: text(out.join("")), rows: edges.length };
+  return { name: `${SLUG(area)}_${mode}_matsim_network.xml`, blob: text(out.join("")), rows: edges.length, nodes: nodes.length };
 }
 
 /** SUMO plain XML: node, edge and connection files for `netconvert`, with a README that has the command. */
@@ -75,7 +75,7 @@ export async function sumo(query, mode, area) {
   const con = [`<?xml version="1.0" encoding="UTF-8"?>\n<connections>\n`, ...links.map((l) => `  <connection from="${l.a}" to="${l.b}"/>\n`), "</connections>\n"].join("");
   const readme = `SUMO plain XML of the ${mode} network of ${area}, from duckOSM-rust.\nCoordinates: meters in ${utm}. Run:\n\n  netconvert --node-files ${slug}.nod.xml --edge-files ${slug}.edg.xml --connection-files ${slug}.con.xml -o ${slug}.net.xml\n\n` +
     `The connections are the legal turns of the edge graph (turn restrictions applied). The edge ids are the edge_id values of the tables.\n`;
-  return { name: `${slug}_sumo.zip`, blob: await zipOf({ [`${slug}.nod.xml`]: nod, [`${slug}.edg.xml`]: edg, [`${slug}.con.xml`]: con, "README.txt": readme }), rows: edges.length, connections: links.length };
+  return { name: `${slug}_sumo.zip`, blob: await zipOf({ [`${slug}.nod.xml`]: nod, [`${slug}.edg.xml`]: edg, [`${slug}.con.xml`]: con, "README.txt": readme }), rows: edges.length, nodes: nodes.length, connections: links.length };
 }
 
 import { decodeTile, encodeTile, addProps, indexOf } from "./mvt.js";
@@ -247,7 +247,7 @@ async function tileFile(kind, ctx, area) {
   if (!tiles.length) throw new Error("no tile has anything in it: show the map first (step 6), or use other zooms");
   const info = { name: SLUG(area), bbox: ctx.bbox, minzoom: ctx.min, maxzoom: ctx.max, layers };
   const blob = await (kind === "pmtiles" ? pmtiles : mbtiles)(tiles, info);
-  return { name: `${SLUG(area)}_z${ctx.min}-${ctx.max}.${kind}`, blob, rows: tiles.length, tiles: tiles.length, layers };
+  return { name: `${SLUG(area)}_z${ctx.min}-${ctx.max}.${kind}`, blob, rows: tiles.length, tiles: tiles.length, layers, min: ctx.min, max: ctx.max, edgeTiles: ctx.extra ?? null };
 }
 export const pmtilesFile = (query, mode, area, ctx) => tileFile("pmtiles", ctx, area);
 export const mbtilesFile = (query, mode, area, ctx) => tileFile("mbtiles", ctx, area);
@@ -376,7 +376,121 @@ export async function geopackage(query, mode, area) {
   db.run("INSERT INTO gpkg_geometry_columns VALUES ('roads', 'geom', 'LINESTRING', 4326, 0, 0), ('nodes', 'geom', 'POINT', 4326, 0, 0)");
   const bytes = db.export();
   db.close();
-  return { name: `${SLUG(area)}_${mode}.gpkg`, blob: new Blob([bytes], { type: "application/geopackage+sqlite3" }), rows: edges.length };
+  return { name: `${SLUG(area)}_${mode}.gpkg`, blob: new Blob([bytes], { type: "application/geopackage+sqlite3" }), rows: edges.length, nodes: nodes.length };
+}
+
+// ---- the check of a file: the page reads the file that it made, and compares it with the tables. `verify` gives {ok, text}.
+const unzip = async (blob) => {
+  const { unzipSync } = await import("https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js");
+  return unzipSync(new Uint8Array(await blob.arrayBuffer()));
+};
+const count = async (query, sql) => Number((await query(sql))[0].n);
+const xml = (bytes) => {
+  const d = new DOMParser().parseFromString(new TextDecoder().decode(bytes), "application/xml");
+  if (d.querySelector("parsererror")) throw new Error("the XML does not parse");
+  return d;
+};
+const gunzip = async (bytes) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
+const fmt = (n) => Number(n).toLocaleString("en-US");
+
+/** Read the directories of a PMTiles file: [{id, offset, length}] of every tile, and the header numbers. */
+async function readPmtiles(bytes) {
+  const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), u64 = (o) => Number(v.getBigUint64(o, true));
+  if (new TextDecoder().decode(bytes.subarray(0, 7)) !== "PMTiles" || bytes[7] !== 3) throw new Error("the file is not PMTiles v3");
+  const h = { rootAt: u64(8), rootLen: u64(16), leafAt: u64(40), leafLen: u64(48), dataAt: u64(56), tiles: u64(72), min: bytes[100], max: bytes[101] };
+  const dir = async (at, len) => {
+    const b = await gunzip(bytes.subarray(at, at + len));
+    let i = 0;
+    const varint = () => { let x = 0, sh = 0; for (;;) { const c = b[i++]; x += (c & 127) * 2 ** sh; if (c < 128) return x; sh += 7; } };
+    const n = varint(), e = Array.from({ length: n }, () => ({}));
+    let id = 0;
+    for (const x of e) { id += varint(); x.id = id; }
+    for (const x of e) x.run = varint();
+    for (const x of e) x.length = varint();
+    e.forEach((x, k) => { const o = varint(); x.offset = o === 0 && k > 0 ? e[k - 1].offset + e[k - 1].length : o - 1; });
+    return e;
+  };
+  const tiles = [];
+  for (const e of await dir(h.rootAt, h.rootLen)) {
+    if (e.run > 0) tiles.push(e);
+    else for (const l of await dir(h.leafAt + e.offset, e.length)) tiles.push(l);
+  }
+  return { h, tiles, tileBytes: (e) => bytes.subarray(h.dataAt + e.offset, h.dataAt + e.offset + e.length) };
+}
+
+export async function verify(id, r, { query, mode, modes = [mode] }) {
+  const nEdges = id === "pmtiles" || id === "mbtiles" ? 0 : await count(query, `SELECT count(*) AS n FROM ${mode}.edges`);
+  const nNodes = id === "pmtiles" || id === "mbtiles" ? 0 : await count(query, `SELECT count(*) AS n FROM ${mode}.nodes`);
+  const same = (what, got, want) => { if (got !== want) throw new Error(`${what}: the file has ${fmt(got)}, the tables have ${fmt(want)}`); };
+  try {
+    if (id === "geojson") {
+      const z = await unzip(r.blob), td = new TextDecoder();
+      const roads = JSON.parse(td.decode(z[`${mode}_roads.geojson`])), nodes = JSON.parse(td.decode(z[`${mode}_nodes.geojson`]));
+      same("roads", roads.features.length, nEdges); same("nodes", nodes.features.length, nNodes);
+      return { ok: true, text: `${fmt(nEdges)} roads and ${fmt(nNodes)} nodes, the same as the tables` };
+    }
+    if (id === "gpkg") {
+      const db = new (await sqlite()).Database(new Uint8Array(await r.blob.arrayBuffer()));
+      const q = (sql) => db.exec(sql)[0].values[0][0];
+      same("roads", q("SELECT count(*) FROM roads"), nEdges); same("nodes", q("SELECT count(*) FROM nodes"), nNodes);
+      if (q("PRAGMA application_id") !== 1196444487) throw new Error("the application id is not GPKG");
+      const g = db.exec("SELECT geom FROM roads LIMIT 1")[0].values[0][0];
+      if (g[0] !== 0x47 || g[1] !== 0x50) throw new Error("the geometry has no GeoPackage header");
+      db.close();
+      return { ok: true, text: `${fmt(nEdges)} roads and ${fmt(nNodes)} nodes, the same as the tables; the header of the geometry is right` };
+    }
+    if (id === "matsim") {
+      const d = xml(new Uint8Array(await r.blob.arrayBuffer()));
+      const nodes = d.querySelectorAll("nodes > node"), links = d.querySelectorAll("links > link");
+      same("nodes", nodes.length, nNodes); same("links", links.length, nEdges);
+      const ids = new Set([...nodes].map((n) => n.getAttribute("id")));
+      for (const l of links) if (!ids.has(l.getAttribute("from")) || !ids.has(l.getAttribute("to"))) throw new Error(`link ${l.getAttribute("id")} has a node that is not in the file`);
+      return { ok: true, text: `${fmt(links.length)} links and ${fmt(nodes.length)} nodes, the same as the tables; every link joins two nodes of the file` };
+    }
+    if (id === "sumo") {
+      const z = await unzip(r.blob), name = Object.keys(z).find((n) => n.endsWith(".nod.xml")).slice(0, -8);
+      const nod = xml(z[`${name}.nod.xml`]), edg = xml(z[`${name}.edg.xml`]), con = xml(z[`${name}.con.xml`]);
+      same("nodes", nod.querySelectorAll("node").length, nNodes); same("edges", edg.querySelectorAll("edge").length, nEdges);
+      const want = await count(query, `SELECT count(*) AS n FROM ${mode}.edge_graph WHERE from_edge IN (SELECT edge_id FROM ${mode}.edges) AND to_edge IN (SELECT edge_id FROM ${mode}.edges)`);
+      same("connections", con.querySelectorAll("connection").length, want);
+      const ids = new Set([...nod.querySelectorAll("node")].map((n) => n.getAttribute("id")));
+      for (const e of edg.querySelectorAll("edge")) if (!ids.has(e.getAttribute("from")) || !ids.has(e.getAttribute("to"))) throw new Error(`edge ${e.getAttribute("id")} has a node that is not in the file`);
+      return { ok: true, text: `${fmt(nEdges)} edges, ${fmt(nNodes)} nodes and ${fmt(want)} connections, the same as the tables. Not run through netconvert here` };
+    }
+    if (id === "pmtiles") {
+      const p = await readPmtiles(new Uint8Array(await r.blob.arrayBuffer()));
+      same("tiles", p.tiles.length, r.tiles); same("tiles in the header", p.h.tiles, r.tiles);
+      if (p.h.min !== r.min || p.h.max !== r.max) throw new Error(`the zooms in the header are ${p.h.min} to ${p.h.max}, not ${r.min} to ${r.max}`);
+      const biggest = p.tiles.reduce((a, b) => (b.length > a.length ? b : a)), names = layerNames(await gunzip(p.tileBytes(biggest)));      // the biggest tile has the most layers
+      if (!names.length) throw new Error("a tile that I read back has no layers");
+      return { ok: true, text: `${fmt(p.tiles.length)} tiles, zoom ${p.h.min} to ${p.h.max}, directories read back; a tile has the layers ${names.slice(0, 4).join(", ")}${names.length > 4 ? "…" : ""}${r.edgeTiles ? await edgesCheck(r, query, modes) : ""}` };
+    }
+    if (id === "mbtiles") {
+      const db = new (await sqlite()).Database(new Uint8Array(await r.blob.arrayBuffer()));
+      same("tiles", db.exec("SELECT count(*) FROM tiles")[0].values[0][0], r.tiles);
+      const [lo, hi] = db.exec("SELECT min(zoom_level), max(zoom_level) FROM tiles")[0].values[0];
+      if (lo < r.min || hi > r.max) throw new Error(`the tiles have zooms ${lo} to ${hi}`);
+      const t = db.exec("SELECT tile_data FROM tiles LIMIT 1")[0].values[0][0];
+      if (t[0] !== 0x1f || t[1] !== 0x8b) throw new Error("a tile is not gzip");
+      db.close();
+      return { ok: true, text: `${fmt(r.tiles)} tiles, zoom ${lo} to ${hi}, gzip MVT in SQLite` };
+    }
+  } catch (e) {
+    return { ok: false, text: e.message };
+  }
+  return { ok: true, text: "" };
+}
+
+/** Every edge of every network is in the layer `edges` of the tiles of the highest zoom (the tiles that the export made). */
+async function edgesCheck(r, query, modes) {
+  const ids = new Set();
+  for (const [key, bytes] of r.edgeTiles) {
+    if (!key.startsWith(`${r.max}/`)) continue;
+    for (const l of decodeTile(bytes)) for (const f of l.features) for (let t = 0; t < f.tags.length; t += 2) if (l.keys[f.tags[t]] === "edge_id") ids.add(l.values[f.tags[t + 1]]);
+  }
+  const want = await count(query, "SELECT count(*) AS n FROM (" + modes.map((m) => `SELECT edge_id FROM ${m}.edges`).join(" UNION ") + ")");
+  if (ids.size !== want) throw new Error(`the tiles of zoom ${r.max} have ${fmt(ids.size)} edges, the tables have ${fmt(want)}`);
+  return `; all ${fmt(want)} edges of all networks are in the tiles of zoom ${r.max}`;
 }
 
 /** The formats of the card Export: id, title, what it is for, the group, the function, and the networks that it takes. */

@@ -213,11 +213,21 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
 
   /* steps 3 to 5: the data, the build, the result (docs/app.md) */
   #step7-card [hidden], #step8-card [hidden], #step9-card [hidden], #fix-panel [hidden] { display: none; }
+  #export-list .expsec { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px 4px; margin-top: 12px; background: var(--bg); }
+  #export-list .expsec h3 { margin: 0 0 2px; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--fg); }
+  #export-list .expsec > .small.muted { margin: 0 0 6px; }
+  #export-list .netsec { border-color: var(--accent); background: var(--accent-soft); }
   #export-list .exp { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
   #export-list .exp small { grid-column: 1; color: var(--mut); line-height: 1.35; }
-  #export-list .zoomrow { grid-template-columns: 1fr; padding-top: 8px; }
-  #export-list .zoomrow input { width: 58px; }
-  #export-list .grp { margin: 12px 0 0; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mut); }
+  #export-seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; margin: 4px 0 8px; }
+  #export-seg button { display: flex; align-items: center; justify-content: center; gap: 6px; height: 38px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--fg); font-weight: 600; cursor: pointer; }
+  #export-seg button svg { width: 16px; height: 16px; }
+  #export-seg button[aria-checked=true] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #export-list .zoomrow { padding: 4px 0 8px; display: grid; gap: 6px; }
+  #export-list .zoomrow input[type=number] { width: 58px; }
+  #export-list .chk { grid-column: 1 / -1; font-size: 12px; line-height: 1.35; }
+  #export-list .chk.ok { color: #15803d; }
+  #export-list .chk.bad { color: var(--error, #b91c1c); }
   /* the fixes' own panel (like the level editor's): the steps, the title and the footer go while it is open, and the road popup is off */
   #fix-panel { display: none; }
   body.editing-fixes #sb .sb-top, body.editing-fixes #sb .sb-body, body.editing-fixes #sb .sb-foot { display: none; }
@@ -618,7 +628,7 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
 
 <section id="step9-card" class="step" aria-labelledby="step9">
   <h2 id="step9"><span class="n">9</span>Export</h2>
-  <div class="grid2" id="export-mode-row"><label for="export-mode" class="small">Network of the files</label><select id="export-mode"></select></div>
+  <input id="export-mode" type="hidden" value="driving">
   <div id="export-list"></div>
   <p id="export-status" class="progress" aria-live="polite"></p>
 </section>
@@ -2411,19 +2421,28 @@ for (const old of [...document.querySelectorAll("section.step")]) {
 }
 // card 9, Export: the networks that the build made, and one row for each format
 const exportQuery = async (sql) => (await duck.query(sql)).toArray().map((r) => r.toJSON());
+const EXPORT_GROUPS = {
+  Tiles: ["Tiles", "The map as vector tiles, for web maps and tile servers."],
+  Visualization: ["Visualization", "Files for QGIS, ArcGIS and web maps. They use the network that you pick above."],
+  Simulation: ["Simulation", "Input for simulation software. It uses the network that you pick above."],
+};
 function paintExport() {
-  const modes = [...new Set(duck.tables.filter((t) => t.table === "edges").map((t) => t.mode))];
-  const sel = $("export-mode"), was = sel.value;
-  sel.innerHTML = modes.map((m) => `<option value="${m}">${m[0].toUpperCase() + m.slice(1)}</option>`).join("");
-  sel.value = modes.includes(was) ? was : modes[0] ?? "";       // (roadstyle's list shows the new value after this)
-  $("export-mode-row").hidden = modes.length < 2;
-  $("export-status").before($("export-mode-row"));                 // out of the list, which is made again
-  let last = "";
-  const zoomRow = '<div class="exp zoomrow"><label class="optrow"><input type="checkbox" id="export-full" checked><span class="t"><b>Everything</b><small>All zooms, all networks, all road attributes and all layers.</small></span></label><span class="small">Zoom from <input id="export-zmin" type="number" min="0" max="18" value="10" aria-label="The lowest zoom"> to <input id="export-zmax" type="number" min="0" max="18" value="14" aria-label="The highest zoom"></span><span id="export-tiles" class="small"></span></div>';
-  $("export-list").innerHTML = exporter.FORMATS.map((f) => `${f.group !== last ? `<p class="grp">${(last = f.group)}</p>${f.tiles ? zoomRow : ""}` : ""}<div class="exp"><b>${esc(f.title)}</b><button type="button" class="btn sm" data-fmt="${f.id}"${f.tiles ? " data-tiles" : ""}>Download</button><small>${esc(f.note)}</small></div>`).join("");
-  [...$("export-list").querySelectorAll(".grp")].find((g) => g.textContent !== "Tiles")?.before($("export-mode-row"));     // the network applies to the files below the tiles
+  const modes = exportModes(), was = $("export-mode").value;
+  $("export-mode").value = modes.includes(was) ? was : modes[0] ?? "";
+  const zoomRow = '<div class="zoomrow"><label class="optrow"><input type="checkbox" id="export-full" checked><span class="t"><b>Everything</b><small>All zooms, all networks, all road attributes and all layers.</small></span></label><span class="small">Zoom from <input id="export-zmin" type="number" min="0" max="18" value="10" aria-label="The lowest zoom"> to <input id="export-zmax" type="number" min="0" max="18" value="14" aria-label="The highest zoom"></span><span id="export-tiles" class="small"></span></div>';
+  const network = `<section class="expsec netsec"><h3>Network</h3><p class="small muted">The files below use one network.</p><div class="segmented" id="export-seg" role="radiogroup" aria-label="Network of the files">${modes.map((m) => `<button type="button" role="radio" data-m="${m}" aria-checked="${m === $("export-mode").value}">${icon(({ driving: "car", walking: "walk", cycling: "bike" })[m] ?? "arrow")}${m[0].toUpperCase() + m.slice(1)}</button>`).join("")}</div></section>`;
+  const row = (f) => `<div class="exp"><b>${esc(f.title)}</b><button type="button" class="btn sm" data-fmt="${f.id}"${f.tiles ? " data-tiles" : ""}>Download</button><small>${esc(f.note)}</small></div>`;
+  const section = (g) => `<section class="expsec"><h3>${EXPORT_GROUPS[g][0]}</h3><p class="small muted">${EXPORT_GROUPS[g][1]}</p>${g === "Tiles" ? zoomRow : ""}${exporter.FORMATS.filter((f) => f.group === g).map(row).join("")}</section>`;
+  $("export-list").innerHTML = section("Tiles") + (modes.length > 1 ? network : "") + section("Visualization") + section("Simulation");
   paintTileCount();
 }
+$("export-list").addEventListener("click", (e) => {
+  const b = e.target.closest("#export-seg [data-m]");
+  if (!b) return;
+  $("export-mode").value = b.dataset.m;
+  for (const x of $("export-seg").children) x.setAttribute("aria-checked", x === b);
+  exportBox = null; paintTileCount();
+});
 // the tiles of the map (card 6): the sources of the map's style, in MVT; the box is the extent of the network; the zooms are the two numbers of the card
 let exportBox = null;
 async function exportExtent() {
@@ -2477,6 +2496,10 @@ $("export-list").addEventListener("click", async (e) => {
     const a = Object.assign(document.createElement("a"), { download: r.name, href: URL.createObjectURL(r.blob) });
     a.click(); setTimeout(() => URL.revokeObjectURL(a.href));
     exported = true; refreshSteps();
+    const chk = await exporter.verify(f.id, r, { query: exportQuery, mode, modes: exportModes() });
+    b.closest(".exp").querySelector(".chk")?.remove();
+    b.closest(".exp").insertAdjacentHTML("beforeend", `<small class="chk ${chk.ok ? "ok" : "bad"}">${chk.ok ? "✓ Checked: " : "✗ Problem: "}${esc(chk.text)}</small>`);
+    window.lastCheck = chk;
     $("export-status").textContent = `${r.name}: ${num(r.rows)} ${f.tiles ? "tiles" : "edges"}, ${num(r.blob.size / 1024, 0)} KB, ${num((performance.now() - t0) / 1000, 1)} s.`;
     window.lastExport = { name: r.name, size: r.blob.size, rows: r.rows, connections: r.connections };       // for export_e2e.py
   } catch (err) {

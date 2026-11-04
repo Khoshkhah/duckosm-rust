@@ -291,7 +291,7 @@ Card 8 opens roadstyle's level editor for the roads that you built: change the l
 
 ![Card 9: the network and the export formats](img/dashboard/11b-export.png)
 
-Card 9 gives the network that you built to other software. It is off until a build ends. The files are made in your browser from the tables, and each **Download** button makes one file. The **Network of the files** list (below the tiles) sets the network for GeoPackage, GeoJSON, MATSim and SUMO. It shows when you built more than one network. The tiles do not use it.
+Card 9 gives the network that you built to other software. It is off until a build ends. The files are made in your browser from the tables, and each **Download** button makes one file. The card has four sections: **Tiles**, **Network**, **Visualization** and **Simulation**. In **Network**, pick Driving, Walking or Cycling with the buttons (the section shows when you built more than one network). The network sets the files of **Visualization** and **Simulation**. The tiles do not use it.
 
 | Format | File | What it has |
 |---|---|---|
@@ -317,6 +317,19 @@ What a tile has:
 | `ov0`, `ov1`, ... | The base-map layers of the build: water, land use, buildings (with `height`), railways and more. They need a build with **Layers** on. |
 
 The OpenFreeMap background of the page is not in the tiles: it is not ours.
+
+**The check.** After each download, the page reads the file that it made and compares it with the tables. A line under the format says what it found: a green "Checked" line (for example "2,765 roads and 1,719 nodes, the same as the tables"), or a red "Problem" line with the first difference. The checks:
+
+| Format | What the page checks |
+|---|---|
+| GeoJSON | The number of roads and nodes. |
+| GeoPackage | The number of roads and nodes, the application id and the header of a geometry. |
+| MATSim | The number of nodes and links, and that every link joins two nodes of the file. |
+| SUMO | The number of nodes, edges and connections, and that every edge joins two nodes of the file. The page does not run `netconvert`. |
+| PMTiles | The directories (root and leaf), the number of tiles, the zooms in the header and the layers of the biggest tile. With **Everything**, also that all edges of all networks are in the tiles of the highest zoom. |
+| MBTiles | The number of tiles, the zooms and that a tile is gzip. |
+
+A check is not a test with other software. To test with real tools, open the file in QGIS (GeoPackage, MBTiles, GeoJSON), in a PMTiles viewer or MapLibre (PMTiles), in MATSim, or with `netconvert` (SUMO). `export_e2e.py` runs all the checks on Monaco.
 
 Facts about the files:
 
