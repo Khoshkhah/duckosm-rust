@@ -133,6 +133,11 @@ with sync_playwright() as p:
     assert "#abcdef" in base, "the building color is in the style"
     print("layers: ok")
 
+    import io
+
+    import numpy as np
+    from PIL import Image
+
     # all the ready themes: each one loads, draws with no error and has its own road colors; the swatches show the ground, a road, its casing and the water
     page.click("#design-tab-theme")
     ids = page.eval_on_selector_all("#design-pane [data-look]", "(l) => l.map((x) => x.dataset.look)")
@@ -181,12 +186,44 @@ with sync_playwright() as p:
     assert alpha() == 1
     print("ground: ok")
 
+    # the preview under a transparent ground: the Blank base map shows a checkerboard by itself; "Preview on" is the base map of roadstyle (one state)
+    page.click("#design-tab-theme")
+    page.evaluate("window.__bm = []; document.addEventListener('rs:basemapchange', (e) => window.__bm.push(e.detail.basemap)); window.rsSetBasemap('blank')")
+    page.wait_for_timeout(1500)
+    page.evaluate("window.duckMap.jumpTo({center: [7.0, 43.95], zoom: 11})")            # a place with no roads: only the ground shows
+    page.click("#design-pane [data-look=overlay]")
+    settled(page)
+    checker = lambda: page.evaluate("document.getElementById('map').classList.contains('checker')")
+    def patch():
+        img = np.asarray(Image.open(io.BytesIO(page.screenshot(clip={"x": 500, "y": 200, "width": 300, "height": 300}))).convert("RGB")).astype(int)
+        grey = int((np.abs(img - [212, 212, 212]).sum(axis=2) < 6).sum()); white = int((np.abs(img - [255, 255, 255]).sum(axis=2) < 6).sum())
+        return grey, white
+    assert checker() and page.input_value("#design-preview") == "checkerboard", "a transparent ground on Blank shows the checkerboard by itself"
+    assert "ground is transparent: pick a base map in the base-map box to see it through" in page.text_content("#design-notice")
+    grey, white = patch()
+    assert grey > 5000 and white > 5000, ("the checkerboard has two colors under the ground", grey, white)
+    page.select_option("#design-preview", "blank")
+    page.wait_for_timeout(500)
+    grey, white = patch()
+    assert not checker() and page.input_value("#design-preview") == "blank" and grey + white < 3000, ("Blank has no checkerboard", grey, white)
+    page.select_option("#design-preview", "checkerboard")
+    assert checker() and page.evaluate("window.__bm[window.__bm.length - 1]") in ("blank", "blank_dark")
+    page.select_option("#design-preview", "satellite")
+    page.wait_for_timeout(1000)
+    assert page.evaluate("window.__bm[window.__bm.length - 1]") == "satellite" and not checker() and page.input_value("#design-preview") == "satellite"
+    page.evaluate("window.rsSetBasemap('ofm_positron')")                                   # roadstyle's own box: the control follows
+    page.wait_for_timeout(1000)
+    assert page.input_value("#design-preview") == "openfreemap"
+    assert "ground is transparent" not in page.text_content("#design-notice"), "no notice when a base map shows under the ground"
+    page.select_option("#design-preview", "checkerboard")
+    page.click("#design-pane [data-look=dark]")
+    settled(page)
+    assert page.text_content("#design-notice") == "", "an opaque ground has no notice"
+    page.select_option("#design-preview", "blank")
+    page.evaluate("window.duckMap.jumpTo({center: [7.4246, 43.7384], zoom: 16})")
+    print("preview: ok")
+
     # Show these layers: one state with roadstyle's switches; no new draw
-    import io
-
-    import numpy as np
-    from PIL import Image
-
     def shot():
         return np.asarray(Image.open(io.BytesIO(page.screenshot(clip={"x": 400, "y": 0, "width": 900, "height": 900}))).convert("RGB")).astype(int)       # the map, not the panel or the bar
     page.evaluate("window.duckMap.jumpTo({center: [7.4246, 43.7384], zoom: 16})")           # the buildings show from zoom 14
@@ -382,6 +419,97 @@ with sync_playwright() as p:
     assert "#00aa00" in style_text(page), "the first draw of the saved area has its design"
     assert bpaint()["color"] == "#00ffaa" and page.evaluate("window.designPanel.boundary().dash") == "dotted", "the saved area has its boundary"
     print("restore: ok")
+
+    # Your themes: edit a ready theme, save it under a name, ask before a replace, keep the tile profile, update, a file of all of them; after a reload apply, rename, delete
+    page.evaluate("document.getElementById('design-open').click()")
+    page.click("#design-tab-theme")
+    stored = lambda: json.loads(page.evaluate("localStorage.getItem('duckosm.themes')") or "[]")
+    assert "No saved theme yet" in page.text_content("#design-pane") and page.is_disabled("#mine-download")
+    page.click("#design-pane [data-look=print]")
+    page.click("#design-tab-roads")
+    set_input(page, "[data-p='roads.fill.primary']", "#123456")
+    page.click("#design-tab-theme")
+    assert "custom" in page.locator("#design-pane .fsec", has_text="Your themes").first.text_content()
+    page.fill("#mine-name", "")
+    page.click("#mine-save")
+    assert "Give the theme a name" in page.text_content("#mine-msg") and page.locator("#design-pane [data-mine]").count() == 0, "an empty name is refused"
+    page.fill("#mine-name", "My print")
+    page.click("#mine-save")
+    card = page.locator("#design-pane [data-mine=my-print]")
+    assert card.count() == 1 and "yours" in card.text_content() and card.locator(".sw5 i").count() == 4 and card.get_attribute("aria-current") == "true"
+    t = stored()
+    assert [x["name"] for x in t] == ["My print"] and t[0]["design"]["roads"]["fill"]["primary"] == "#123456" and "profile" not in t[0]["design"] and not t[0]["keepProfile"]
+    assert page.evaluate("window.designPanel.get().theme") == "mine:my-print" and page.text_content("#design-name") == "My print"
+    # the same name (any case): the page asks before it replaces
+    page.click("#design-tab-roads")
+    set_input(page, "[data-p='roads.fill.primary']", "#654321")
+    page.click("#design-tab-theme")
+    assert 'Update "My print"' in page.locator("#design-pane .fsec", has_text="Your themes").first.text_content()
+    page.fill("#mine-name", "my PRINT")
+    page.click("#mine-save")
+    assert "Replace it?" in page.text_content("#design-pane") and stored()[0]["design"]["roads"]["fill"]["primary"] == "#123456", "nothing is replaced before the answer"
+    page.click("[data-mine-do=keep-old]")
+    assert "Replace it?" not in page.text_content("#design-pane") and stored()[0]["design"]["roads"]["fill"]["primary"] == "#123456"
+    page.fill("#mine-name", "my PRINT")
+    page.click("#mine-save")
+    page.click("[data-mine-do=replace]")
+    t = stored()
+    assert len(t) == 1 and t[0]["id"] == "my-print" and t[0]["design"]["roads"]["fill"]["primary"] == "#654321"
+    # a second theme with the tile profile
+    page.click("#design-pane [data-look=night]")
+    page.fill("#mine-name", "Night + profile")
+    page.check("#mine-keep")
+    page.click("#mine-save")
+    t = stored()
+    assert [x["id"] for x in t] == ["my-print", "night-profile"] and t[1]["keepProfile"] and "profile" in t[1]["design"]
+    # update: apply a theme of yours, change it, and replace it with one click
+    page.click("[data-mine=my-print] [data-mine-do=apply]")
+    assert page.evaluate("window.designPanel.get().roads.fill.primary") == "#654321" and page.evaluate("window.designPanel.get().theme") == "mine:my-print"
+    page.click("#design-tab-text")
+    set_input(page, "[data-p='labels.color']", "#0a0b0c")
+    page.click("#design-tab-theme")
+    page.click("[data-mine-do=update]")
+    assert stored()[0]["design"]["labels"]["color"] == "#0a0b0c" and page.evaluate("window.designPanel.get().theme") == "mine:my-print"
+    # the file of all the themes
+    with page.expect_download() as d:
+        page.click("#mine-download")
+    f = out / d.value.suggested_filename
+    d.value.save_as(f)
+    doc = json.loads(f.read_text())
+    assert f.name == "duckosm-themes.json" and doc["format"] == "duckosm-themes" and [x["name"] for x in doc["themes"]] == ["my PRINT", "Night + profile"], (f.name, doc.get("format"), [x.get("name") for x in doc.get("themes", [])])
+    (out / "not-themes.json").write_text(json.dumps({"hello": 1}))
+    page.set_input_files("#mine-file", str(out / "not-themes.json"))
+    page.wait_for_function("/not loaded/.test(document.getElementById('mine-msg').textContent)")
+    assert "not a duckOSM themes file" in page.text_content("#mine-msg") and len(stored()) == 2
+    doc["themes"].append({**doc["themes"][0], "id": "x", "name": "From a file"})
+    doc["themes"][0]["name"] = "night + PROFILE"
+    (out / "more.json").write_text(json.dumps(doc))
+    page.set_input_files("#mine-file", str(out / "more.json"))
+    page.wait_for_function("/Loaded/.test(document.getElementById('mine-msg').textContent)")
+    assert [x["name"] for x in stored()] == ["my PRINT", "Night + profile", "From a file"], "the file replaced the theme with the same name and added the other"
+    print("your themes (save, ask, update, file): ok")
+
+    # a reload: the themes are still there; apply, rename, delete (a second click)
+    page.goto(url)
+    page.wait_for_function("window.mapReady && window.timings && window.timings.duckdbStart", timeout=120_000)
+    page.evaluate("document.getElementById('design-open').click()")
+    page.click("#design-tab-theme")
+    assert page.locator("#design-pane #mine-list [data-mine]").count() == 3
+    page.click("[data-mine=from-a-file] [data-mine-do=apply]")
+    assert page.evaluate("window.designPanel.get().name") == "From a file" and page.evaluate("window.designPanel.get().profile.preset") in ("analysis", "custom")
+    page.click("[data-mine=from-a-file] [data-mine-do=rename]")
+    page.fill("#mine-rename", "My print")
+    page.click("[data-mine-do=rename-ok]")
+    assert "exists" in page.text_content("#mine-msg") and page.locator("[data-mine=from-a-file]").count() == 1, "a rename to a name that exists is refused"
+    page.fill("#mine-rename", "Evening")                     # the card stays in the rename mode after a refusal
+    page.click("[data-mine-do=rename-ok]")
+    assert [x["name"] for x in stored()][2] == "Evening" and page.locator("[data-mine=from-a-file]").count() == 1
+    page.click("[data-mine=from-a-file] [data-mine-do=delete]")
+    assert page.locator("[data-mine=from-a-file]").count() == 1 and "Delete?" in page.locator("[data-mine=from-a-file]").text_content(), "the first click only asks"
+    page.click("[data-mine=from-a-file] [data-mine-do=delete]")
+    assert page.locator("[data-mine=from-a-file]").count() == 0 and len(stored()) == 2
+    assert page.evaluate("window.designPanel.get().theme") == "custom"
+    print("your themes (reload, apply, rename, delete): ok")
 
     assert not errors, errors
     browser.close()

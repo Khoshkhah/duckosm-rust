@@ -107,3 +107,32 @@ const two = new Uint8Array([...M.encodeTile([{ name: "simple", extent: 4096, ver
 assert.deepEqual(M.decodeTile(EX.keepLayers(two, (n) => n !== "water")).map((l) => l.name), ["simple"]);
 assert.deepEqual(M.decodeTile(EX.keepLayers(two, () => true)).map((l) => l.name), ["simple", "water"]);
 console.log("design_units: tile writers passed");
+
+// the themes that a person saves (app/user_themes.js): a fake storage, a list in it
+const UT = await import("./app/user_themes.js");
+const mem = () => { const m = new Map(); return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), m }; };
+const st = mem();
+assert.deepEqual(UT.readAll(st), []);
+let mine = UT.put([], "My print", D.THEMES.find((t) => t.id === "print").make(base));
+assert.equal(mine.length, 1); assert.equal(mine[0].id, "my-print"); assert.equal(mine[0].design.profile, undefined, "no tile profile unless asked"); assert.equal(mine[0].design.name, "My print");
+assert.ok(UT.writeAll(mine, st)); assert.deepEqual(UT.readAll(st), mine, "the list is read back");
+mine = UT.put(mine, "my PRINT", { ...base, roads: base.roads }, true);              // the same name (any case) replaces: one theme, the same id, the profile now kept
+assert.equal(mine.length, 1); assert.equal(mine[0].id, "my-print"); assert.equal(mine[0].keepProfile, true); assert.ok(mine[0].design.profile);
+mine = UT.put(mine, "Night 2", base);
+assert.deepEqual(mine.map((t) => t.id), ["my-print", "night-2"]);
+assert.equal(UT.put(mine, "Night!", base).find((t) => t.name === "Night!").id, "night", "an id is a slug of the name");
+assert.equal(UT.put(UT.put([], "A b", base), "A-b", base).map((t) => t.id).join(), "a-b,a-b-2", "two names with one slug have two ids");
+assert.throws(() => UT.put(mine, "  ", base), /Give the theme a name/); assert.throws(() => UT.put(mine, "x".repeat(41), base), /at most 40/);
+assert.equal(UT.rename(mine, "night-2", "Evening").find((t) => t.id === "night-2").design.name, "Evening");
+assert.throws(() => UT.rename(mine, "night-2", "my print"), /exists/); assert.doesNotThrow(() => UT.rename(mine, "night-2", "NIGHT 2"));
+assert.deepEqual(UT.remove(mine, "my-print").map((t) => t.id), ["night-2"]);
+assert.deepEqual(UT.readAll({ getItem: () => "{bad" }), []); assert.equal(UT.writeAll(mine, { setItem() { throw new Error("full"); } }), false);
+// the file
+const file = UT.toFile(mine);
+assert.deepEqual(UT.fromFile(file), mine);
+assert.throws(() => UT.fromFile("x"), /not JSON/); assert.throws(() => UT.fromFile("{}"), /not a duckOSM themes file/);
+assert.throws(() => UT.fromFile(JSON.stringify({ format: UT.FILE_FORMAT, version: 9, themes: [] })), /version 9/);
+assert.throws(() => UT.fromFile(JSON.stringify({ format: UT.FILE_FORMAT, version: 1, themes: [{ name: "x" }] })), /no theme in the file is complete/);
+const merged = UT.merge(UT.put([], "Night 2", base), mine);
+assert.deepEqual([merged.added, merged.replaced, merged.list.length], [1, 1, 2]);
+console.log("design_units: your themes passed");

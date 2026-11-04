@@ -2,11 +2,12 @@
 // (index.html, #design-panel): a header, five tabs and a bar. This file owns the design (app/design.js) and draws the tabs; the page gives it
 // the look (map/look.json), the way to draw the map again with a new look, and the places to keep the design.
 //
-//   initDesignPanel({ $, esc, look, redraw, onProfile, onBoundary, onGround, onVisible, has, onSave }) -> { open, close, isOpen, tab, get, text, set, patchProfile, profile, boundary, setVisible, load, setCount, flush, state }
+//   initDesignPanel({ $, esc, look, redraw, onProfile, onBoundary, onGround, onVisible, has, preview, onSave }) -> { open, close, isOpen, tab, get, text, set, patchProfile, profile, boundary, setVisible, refresh, load, setCount, flush, state }
 //
-// A change of the style draws the map again after 0.5 s of quiet (`redraw(lookObject, isDefault, draw)`: it gives the look to the map and, with `draw`, draws). A change of the profile calls `onProfile(profile)`, a change of the boundary calls `onBoundary(boundary)`, of the ground `onGround(ground)`, and of the layers `onVisible(visible)` (the page paints them at once: no new draw of the roads). `has(key)` tells whether the build has a layer (false: "not in this build");
+// A change of the style draws the map again after 0.5 s of quiet (`redraw(lookObject, isDefault, draw)`: it gives the look to the map and, with `draw`, draws). A change of the profile calls `onProfile(profile)`, a change of the boundary calls `onBoundary(boundary)`, of the ground `onGround(ground)`, and of the layers `onVisible(visible)` (the page paints them at once: no new draw of the roads). `has(key)` tells whether the build has a layer (false: "not in this build"); `preview` = {get(), set(v)} is the base map under the map (checkerboard, blank, openfreemap, satellite, other);
 // the Export card reads the profile through `profile()`.
 import * as D from "./design.js";
+import * as UT from "./user_themes.js";
 
 const TABS = ["theme", "roads", "text", "layers", "tiles"];
 const NAMES = { theme: "Theme", roads: "Roads", text: "Text", layers: "Layers", tiles: "Tiles" };
@@ -22,8 +23,9 @@ const setPath = (o, path, v) => {
   o[last] = v;
 };
 
-export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => {}, onBoundary = () => {}, onGround = () => {}, onVisible = () => {}, has = () => true, onSave = () => {} }) {
+export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => {}, onBoundary = () => {}, onGround = () => {}, onVisible = () => {}, has = () => true, preview = { get: () => "other", set: () => {} }, onSave = () => {} }) {
   const base = D.defaultsOf(look);
+  let mine = UT.readAll(), origin = null, ask = null, armed = null, renaming = null, nameDraft = "", keepDraft = false, mineMsg = "";       // the themes that the person saved (app/user_themes.js)
   let design = structuredClone(base), tab = "theme", lastKey = null, timer = null, busy = false, again = false, note = "", counts = { text: "", bad: false };
   const styleKey = (d) => JSON.stringify({ ...d, name: 0, theme: 0, profile: 0, boundary: 0, ground: 0, visible: 0 });       // the profile and the boundary are not in the look: they draw no new map
   const announce = () => { onProfile(design.profile); onBoundary(design.boundary); onGround(design.ground); onVisible(design.visible); };
@@ -40,10 +42,33 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
   // four cells: the ground, a road fill, its casing, the water; a transparent ground or a layer that is off shows as a checkerboard
   const swatches = (d) => [[d.base.background, d.ground.transparent && d.ground.opacity < 0.5], [d.roads.fill.primary], [d.roads.casing.primary], [d.base.water, d.visible.water === false]]
     .map(([c, none]) => `<i${none ? ' class="none"' : ` style="background:${c}"`}></i>`).join("");
-  const paneTheme = () => sec("Ready themes", `<div class="themes" role="radiogroup" aria-label="Ready themes">${D.THEMES.map((t) => {
-      const d = t.make(base);
-      return `<button type="button" class="theme" role="radio" data-look="${t.id}" aria-checked="${design.theme === t.id}"><span class="sw5">${swatches(d)}</span><b>${t.name}</b><small>${esc(t.note)}</small></button>`;
-    }).join("")}</div>`, "Pick a theme with one click, then change any value in the other tabs. A theme keeps your tile profile.")
+  const themeCard = (t) => { const d = t.make(base); return `<button type="button" class="theme" role="radio" data-look="${t.id}" aria-checked="${design.theme === t.id}"><span class="sw5">${swatches(d)}</span><b>${t.name}</b><small>${esc(t.note)}</small></button>`; };
+  const mineCard = (t) => {
+    const on = design.theme === `mine:${t.id}`;
+    if (renaming === t.id) return `<div class="theme mine" data-mine="${t.id}"><span class="sw5">${swatches(D.normalize(t.design, base))}</span><input type="text" id="mine-rename" maxlength="${UT.MAX_NAME}" value="${esc(t.name)}" aria-label="New name"><span class="acts"><button type="button" class="btn sm" data-mine-do="rename-ok">Save</button><button type="button" class="btn sm" data-mine-do="rename-no">Cancel</button></span></div>`;
+    return `<div class="theme mine" data-mine="${t.id}" aria-current="${on}"><span class="sw5">${swatches(D.normalize(t.design, base))}</span><b>${esc(t.name)} <span class="yours">yours</span></b>
+      <span class="acts"><button type="button" class="btn sm" data-mine-do="apply">Apply</button><button type="button" class="btn sm" data-mine-do="rename">Rename</button><button type="button" class="btn sm${armed === t.id ? " danger" : ""}" data-mine-do="delete">${armed === t.id ? "Delete?" : "Delete"}</button></span></div>`;
+  };
+  const paneMine = () => {
+    const from = origin && UT.find(mine, origin.name), custom = design.theme === "custom";
+    return sec("Your themes",
+      (custom ? `<p class="small">The design is <b>custom</b>${origin ? ` (it began as "${esc(origin.name)}")` : ""}. ${from ? `<button type="button" class="btn sm" data-mine-do="update">Update "${esc(from.name)}"</button>` : ""}</p>` : "")
+      + `<label class="drow2"><span>Name</span><input type="text" id="mine-name" maxlength="${UT.MAX_NAME}" value="${esc(nameDraft)}" placeholder="A name for this design" aria-label="Name of the theme"></label>
+        <label class="optrow"><input type="checkbox" id="mine-keep" ${keepDraft ? "checked" : ""}><span class="t"><b>Keep the tile profile in the theme</b><small>Off: the theme keeps the tile profile that the page has, as the ready themes do.</small></span></label>
+        <div class="row"><button type="button" class="btn" id="mine-save">Save as a theme</button></div>`
+      + (ask ? `<p class="small" role="alert">A theme named "${esc(ask.name)}" exists. Replace it? <button type="button" class="btn sm" data-mine-do="replace">Replace</button> <button type="button" class="btn sm" data-mine-do="keep-old">Cancel</button></p>` : "")
+      + `<p class="small" id="mine-msg" role="status">${esc(mineMsg)}</p>`
+      + (mine.length ? `<div class="themes" id="mine-list">${mine.map(mineCard).join("")}</div>` : '<p class="why">No saved theme yet. Pick a theme, change it, and save it here with a name.</p>')
+      + `<div class="row"><button type="button" class="btn" id="mine-download" ${mine.length ? "" : "disabled"}>Download all my themes</button><button type="button" class="btn" id="mine-load">Load themes from a file</button></div><input id="mine-file" type="file" accept=".json,application/json" hidden>`,
+      "Your themes are for all areas. A saved area keeps the design that it used. They stay in this browser: download them to use them on another computer.");
+  };
+  const panePreview = () => {
+    const v = preview.get();
+    return sec("Preview on", `<label class="drow2"><span>Base map</span><select id="design-preview" aria-label="Preview on">${[["checkerboard", "Checkerboard"], ["blank", "Blank"], ["openfreemap", "OpenFreeMap"], ["satellite", "Satellite"]].map(([k, n]) => `<option value="${k}" ${v === k ? "selected" : ""}>${n}</option>`).join("")}${v === "other" ? '<option value="other" selected disabled>Other (base-map box)</option>' : ""}</select></label>`,
+      "This changes only the map under the roads. It is the base map of the base-map box: one choice in two places. A transparent ground shows the checkerboard on the Blank map.");
+  };
+  const paneTheme = () => sec("Ready themes", `<div class="themes" role="radiogroup" aria-label="Ready themes">${D.THEMES.map(themeCard).join("")}</div>`, "Pick a theme with one click, then change any value in the other tabs. A theme keeps your tile profile.")
+    + panePreview() + paneMine()
     + sec("Your design", `<label class="drow2"><span>Name</span><input type="text" data-p="name" value="${esc(design.name)}" maxlength="60" aria-label="Name of the design"></label>
       <div class="row"><button type="button" class="btn" id="design-download">Download</button><button type="button" class="btn" id="design-load">Load a file</button><button type="button" class="btn" id="design-reset">Reset</button></div>
       <input id="design-file" type="file" accept=".json,application/json" hidden>
@@ -120,6 +145,8 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
     $("design-name").textContent = design.name;
     $("design-changes").textContent = D.changes({ ...design, profile: 0 }, { ...base, profile: 0 }).length ? "Style: changed" : "Style: default";
     $("design-state").textContent = note;
+    const clear = D.groundAlpha(design) < 0.5 && ["checkerboard", "blank"].includes(preview.get());
+    $("design-notice").textContent = clear ? "The ground is transparent: pick a base map in the base-map box to see it through." : "";
   }
   function tabTo(name) {
     tab = TABS.includes(name) ? name : "theme";
@@ -181,12 +208,17 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
     if (t) {
       const keep = design.profile;
       design = D.THEMES.find((x) => x.id === t.dataset.look).make(base);
-      design.profile = keep; changed(); return paint();
+      design.profile = keep; origin = null; changed(); return paint();
     }
     const pr = e.target.closest("[data-profile]");
     if (pr) { design.profile = D.normalizeProfile(D.PROFILES[pr.dataset.profile].make()); changed(); return paint(); }
     const cols = e.target.closest("[data-cols]");
     if (cols) { design.profile.columns = cols.dataset.cols === "all" ? [...D.EDGE_COLUMNS] : ["edge_id"]; design.profile.preset = "custom"; changed(); return paint(); }
+    const mb = e.target.closest("[data-mine-do]");
+    if (mb) return mineAction(mb.dataset.mineDo, mb.closest("[data-mine]")?.dataset.mine);
+    if (e.target.id === "mine-save") return mineSave();
+    if (e.target.id === "mine-download") return download("duckosm-themes.json", UT.toFile(mine));
+    if (e.target.id === "mine-load") return $("mine-file").click();
     if (e.target.id === "design-reset") { const keep = design.profile; design = structuredClone(base); design.profile = keep; changed(); return paint(); }
     if (e.target.id === "design-download") {
       const a = Object.assign(document.createElement("a"), { download: `${design.name.toLowerCase().replace(/[^a-z0-9_-]+/g, "_") || "design"}.design.json`, href: URL.createObjectURL(new Blob([D.toFile(design)], { type: "application/json" })) });
@@ -194,7 +226,73 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
     }
     if (e.target.id === "design-load") return $("design-file").click();
   });
+  function download(name, text) {
+    const a = Object.assign(document.createElement("a"), { download: name, href: URL.createObjectURL(new Blob([text], { type: "application/json" })) });
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href));
+  }
+  // ---- your themes: save, apply, rename, delete (a second click), update, and the file of all of them ----
+  const keepMine = () => { if (!UT.writeAll(mine)) mineMsg = "The browser cannot keep the themes. They stay on this page until you close it."; };
+  const say = (t) => { mineMsg = t; paint(); };
+  function mineSave(replace = false) {
+    mineMsg = "";
+    const name = $("mine-name").value;
+    const err = UT.nameError(name);
+    if (err) return say(err);
+    if (UT.find(mine, name) && !replace) { ask = { name: name.trim() }; return say(""); }
+    mine = UT.put(mine, name, design, keepDraft);
+    const t = UT.find(mine, name);
+    design.theme = `mine:${t.id}`; design.name = t.name; origin = { id: t.id, name: t.name }; ask = null; nameDraft = "";
+    keepMine(); save(); paintBar();
+    say(mineMsg || `Saved "${t.name}".`);
+  }
+  function mineAction(what, id) {
+    mineMsg = "";                                           // `keepMine` can set a message: a message that is left is from an earlier action
+    const t = mine.find((x) => x.id === id);
+    if (what === "replace") return mineSave(true);
+    if (what === "keep-old") { ask = null; return say(""); }
+    if (what === "update" && origin) {
+      const old = UT.find(mine, origin.name);
+      if (!old) return say("");
+      mine = UT.put(mine, old.name, design, old.keepProfile);
+      design.theme = `mine:${old.id}`; design.name = old.name; keepMine(); save(); paintBar();
+      return say(mineMsg || `Updated "${old.name}".`);
+    }
+    if (!t) return;
+    if (what === "apply") {
+      const keep = design.profile;
+      design = D.normalize(t.design, base);
+      design.profile = t.keepProfile && t.design.profile ? D.normalizeProfile(t.design.profile) : keep;
+      design.theme = `mine:${t.id}`; design.name = t.name; origin = { id: t.id, name: t.name }; mineMsg = "";
+      changed(); return paint();
+    }
+    if (what === "rename") { renaming = id; return say(""); }
+    if (what === "rename-no") { renaming = null; return say(""); }
+    if (what === "rename-ok") {
+      try { mine = UT.rename(mine, id, $("mine-rename").value); } catch (err) { return say(err.message); }
+      renaming = null; if (origin?.id === id) origin.name = UT.find(mine, $("mine-rename").value).name; keepMine(); return say(mineMsg || "Renamed.");
+    }
+    if (what === "delete") {
+      if (armed !== id) { armed = id; setTimeout(() => { if (armed === id) { armed = null; if (isOpen() && tab === "theme") paint(); } }, 4000); return paint(); }
+      armed = null; mine = UT.remove(mine, id); keepMine();
+      if (origin?.id === id) origin = null;
+      if (design.theme === `mine:${id}`) { design.theme = "custom"; save(); paintBar(); }
+      return say(mineMsg || `Deleted "${t.name}".`);
+    }
+  }
+  $("design-pane").addEventListener("input", (e) => {
+    if (e.target.id === "mine-name") nameDraft = e.target.value;
+    if (e.target.id === "mine-keep") keepDraft = e.target.checked;
+  });
+  $("design-pane").addEventListener("change", (e) => { if (e.target.id === "design-preview") { preview.set(e.target.value); paintBar(); } });
   $("design-pane").addEventListener("change", async (e) => {
+    if (e.target.id === "mine-file" && e.target.files[0]) {
+      try {
+        const r = UT.merge(mine, UT.fromFile(await e.target.files[0].text()));
+        mineMsg = "";
+        mine = r.list; keepMine(); mineMsg = mineMsg || `Loaded ${r.added + r.replaced} theme${r.added + r.replaced === 1 ? "" : "s"} (${r.replaced} replaced).`;
+      } catch (err) { mineMsg = "The file was not loaded: " + err.message + "."; }
+      e.target.value = ""; return paint();
+    }
     if (e.target.id !== "design-file" || !e.target.files[0]) return;
     try { set(D.fromFile(await e.target.files[0].text(), base)); $("design-where").textContent = `Loaded "${design.name}".`; }
     catch (err) { $("design-where").textContent = "The file was not loaded: " + err.message + "."; }
@@ -218,6 +316,12 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
     paint(); paintBar();
     return true;
   }
+  /** The page tells the panel that something outside changed (the base map): the Preview control and the notice follow it. */
+  function refresh() {
+    const sel = $("design-preview");
+    if (sel) sel.value = preview.get();
+    paintBar();
+  }
   /** A layer switched somewhere else (roadstyle's Layers box, the arrows switch): the design follows, and the page does nothing more. */
   function setVisible(key, on) {
     if (!(key in design.visible) || design.visible[key] === !!on) return;
@@ -228,7 +332,7 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
   function open() { document.body.classList.add("editing-design"); paint(); }
   function close() { document.body.classList.remove("editing-design"); }
   return {
-    open, close, isOpen, tab: tabTo, get: () => design, text: () => D.toFile(design), set, load, patchProfile, profile, boundary: () => design.boundary, setVisible, base: () => base,
+    open, close, isOpen, tab: tabTo, get: () => design, text: () => D.toFile(design), set, load, patchProfile, profile, boundary: () => design.boundary, setVisible, refresh, base: () => base,
     flush: async () => { clearTimeout(timer); await run(); while (busy) await new Promise((r) => setTimeout(r, 50)); },
     setCount: (text, bad) => { counts = { text, bad }; const el = $("design-count"); if (el) { el.textContent = text; el.classList.toggle("bad", !!bad); } },
     state: () => note,

@@ -46,6 +46,10 @@ with sync_playwright() as p:
         page.screenshot(path=str(out / f"phone-{tab}.png"))
         assert m["scrollW"] <= m["clientW"] + 1 and m["docW"] <= m["inner"] + 1 and not m["wide"] and m["tabsIn"] and m["barIn"] and m["tabTexts"], (tab, m)
         return m
+    page.evaluate("window.designPanel.tab('theme')")
+    page.fill("#mine-name", "Phone theme")
+    page.evaluate("document.getElementById('mine-save').click()")           # a saved theme: its card has three buttons that must fit
+    page.wait_for_selector("[data-mine=phone-theme]")
     for t in ("theme", "roads", "text", "layers", "tiles"):
         print(t, check(t))
     assert not errs, errs

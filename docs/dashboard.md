@@ -335,6 +335,26 @@ Each button shows four cells: the ground, a road fill, its casing and the water.
 
 There is no theme for the Satellite base map. A theme can hide a layer, but it cannot make the base-map fills partly transparent. Use **Roads overlay** over a satellite map.
 
+### Preview on
+
+The **Preview on** control is in the Theme tab. It changes only the map under the roads: **Checkerboard**, **Blank**, **OpenFreeMap** or **Satellite**. It is the same choice as the base-map box of the bar, and the two always agree: if you pick a base map in the box, the control shows it. A map with a transparent ground (the Roads overlay themes) has no color of its own, so on the Blank base map you see the color of the map container and the theme does not look transparent. For this reason the Blank base map shows a checkerboard under the ground by itself while the ground is transparent. Pick **Blank** to see the plain color, or a base map to see the roads on it. While the ground is transparent and the base map is Blank or the checkerboard, the bar of the panel says: "The ground is transparent: pick a base map in the base-map box to see it through."
+
+### Your themes
+
+![The Theme tab with Your themes](img/dashboard/34-design-your-themes.png)
+
+**Your themes** is below the ready themes. It keeps designs that you save with a name, so that you can use them again.
+
+1. Pick a ready theme and change it in the other tabs. The design then shows as **custom**.
+2. Type a name in **Your themes** (1 to 40 characters) and push **Save as a theme**. The theme saves the style, the boundary, the ground and the layer switches. The check box **Keep the tile profile in the theme** is off by default, because the ready themes keep the tile profile of the page. Turn it on if the theme must set the profile too.
+3. A saved theme has a card with the same four cells as a ready theme and the mark "yours". **Apply** uses the theme at once. **Rename** gives it another name. **Delete** asks for a second push (the button says "Delete?") and then removes the theme.
+4. If you change a theme of yours, the design shows as **custom** and the button **Update "Name"** puts the changes into that theme. **Save as a theme** with a new name makes another theme.
+5. A name that exists (in capital or small letters) asks "Replace it?". **Replace** keeps the theme and gives it the new design. **Cancel** changes nothing.
+
+**Download all my themes** saves one file, `duckosm-themes.json`, with the list. **Load themes from a file** adds the themes of such a file to your list; a theme with the name of one that you have is replaced. A file that is not a duckOSM themes file does not load, and the page says why. Use the two buttons to move your themes to another computer.
+
+Your themes stay in this browser, in the storage `localStorage` (key `duckosm.themes`). A design is about 4 KB, so a list of themes is small, and the page reads it at once. The themes are for all areas. A saved area keeps the design that it used (`design.json`), not the list.
+
 ### The roads overlay
 
 ![The Roads overlay theme on the satellite base map](img/dashboard/33-design-overlay.png)

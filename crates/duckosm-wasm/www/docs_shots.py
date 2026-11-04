@@ -207,10 +207,29 @@ with sync_playwright() as p:
     page.wait_for_timeout(5000)
     shot(page, "33-design-overlay")
     page.evaluate("window.rsSetBasemap('blank')")
+    page.evaluate("rsSetTheme('light')")                           # the satellite map turned the page dark
+    page.click("#design-pane [data-look=light]")
+    page.evaluate("window.designPanel.flush()")
+    page.wait_for_function("!window.mapDrawing && /shows this design/.test(window.designPanel.state())", timeout=180_000)
+    # Your themes: change a ready theme, save it under a name, and show the Theme tab with the card
+    page.click("#design-pane [data-look=print]")
+    page.click("#design-tab-text")
+    page.eval_on_selector("[data-p='labels.color']", "(el) => { el.value = '#7a1f1f'; el.dispatchEvent(new Event('input', { bubbles: true })); }")
+    page.click("#design-tab-theme")
+    page.fill("#mine-name", "My print")
+    page.click("#mine-save")
+    page.evaluate("window.designPanel.flush()")
+    page.wait_for_function("!window.mapDrawing && /shows this design/.test(window.designPanel.state())", timeout=180_000)
+    page.wait_for_timeout(1500)
+    page.set_viewport_size({"width": 1400, "height": 1750})
+    page.evaluate("document.querySelector('#design-pane .fix-group, #design-pane #mine-list').scrollIntoView()")
+    shot(page, "34-design-your-themes")
+    page.set_viewport_size({"width": 1400, "height": 900})
     page.click("#design-pane [data-look=light]")
     page.evaluate("window.designPanel.flush()")
     page.wait_for_function("!window.mapDrawing && /shows this design/.test(window.designPanel.state())", timeout=180_000)
     page.click("#design-back")
+    page.evaluate("localStorage.removeItem('duckosm.themes')")
     page.evaluate("localStorage.removeItem('duckosm.design')")        # the next visit (below) starts with the Light design
 
     # the card "Your areas": the built area is saved, a new visit lists it
