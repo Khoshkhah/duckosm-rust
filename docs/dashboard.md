@@ -299,9 +299,10 @@ Card 9 sets the look of the map and the profile of the tile files. It is on at a
 A change shows on the map after half a second. The page draws the map again with the new design, as it does when you change the network. The bar at the bottom of the panel says "Drawing the map…" and then "The map shows this design." If the map is not drawn yet, the design shows at the next draw (step 6).
 
 A change that keeps the map's tiles is faster: the page gives the map the new style and keeps its tiles (roadstyle's `LiveMap.setLook`). This is a
-change of colours, of the names and arrows, or of the base map's colors. The map draws no tile again, and the live colors on the roads stay. The note
-under the map then says "a new look on the same tiles" (Monaco: about 0.7 s, against about 2 s for a new map). A change of the road widths, the
-layers or the base-map theme changes the tiles, so the page draws the map again.
+change of colours, of the names and arrows, of the base map's colors, or of the road widths up to 1.35 times the widest road (the tiles have that much
+room around them). The map draws no tile again, and the live colors on the roads stay. The note under the map then says "a new look on the same tiles"
+(Monaco: about 0.7 s, against about 2 s for a new map). 32 of the 33 ready themes do this. A change of the layers, of the base-map theme, or roads
+wider than that (the theme Access) changes the tiles, so the page draws the map again.
 
 The panel has five tabs.
 

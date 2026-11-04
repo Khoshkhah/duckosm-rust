@@ -1,7 +1,8 @@
 """A theme on the same tiles (roadstyle's LiveMap.setLook, roadstyle's docs/design/restyle_without_retile.md) in headless Chromium (Playwright):
 after a build of Monaco's sample, roads get live colours (rsColor), and the Design panel's theme Amber (other colours only) keeps the map's tiles:
-no tile is asked for again, the road layer gets the new colours, and the live colours stay. The theme Hollow (other road widths: other tile
-buffers) draws a new map.
+no tile is asked for again, the road layer gets the new colours, and the live colours stay. The theme Hollow (roads 10% wider) keeps the tiles
+too: the page's look has a buffer headroom of 1.35 (make_look.mjs). The theme Access (some roads 1.7 times wider) needs more buffer than the
+tiles have, and draws a new map.
 
     python crates/duckosm-wasm/www/restyle_e2e.py
 """
@@ -65,9 +66,12 @@ with sync_playwright() as p:
     assert "same tiles" in (page.text_content("#mapnote") or "")
     print("a new look on the same tiles: ok,", len(rows), "live colours kept")
 
-    assert theme(page, "hollow") == "the look needs new tiles", "Hollow has other road widths (other tile buffers): a new map"
+    assert theme(page, "hollow") == "same tiles", "Hollow's wider roads fit in the tiles' buffer (headroom 1.35): the map keeps its tiles"
+    assert page.evaluate(state, rows) == ["#ff00ff"] * len(rows), "the live colours stay"
+    print("wider roads within the headroom keep the tiles: ok")
+    assert theme(page, "access") == "the look needs new tiles", "Access's roads need more buffer than the tiles have: a new map"
     assert "same tiles" not in (page.text_content("#mapnote") or "")
-    print("a look with other widths draws a new map: ok")
+    print("a look that needs more buffer draws a new map: ok")
     browser.close()
 
 assert not errors, errors

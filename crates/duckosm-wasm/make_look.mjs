@@ -20,4 +20,10 @@ const look = resolveLook(JSON.stringify({
   base_map: { mode: "all", theme: "liberty", paths: "google", place: "monaco" },
 }));
 // tiles.maxzoom 18 is the default; the page keeps it in the file too.
-writeFileSync(new URL("look.json", dir), look.toJson());
+// The tiles' buffer is the strokes' need times BUFFER_HEADROOM, so a design with roads up to this much wider keeps the map's tiles (roadstyle's
+// LiveMap.setLook, docs/design/restyle_without_retile.md in roadstyle). 1.35 covers 32 of the 33 themes of the Design panel (all but Access, x1.7);
+// the cost on a Burnaby sample: 4.3% more tile bytes.
+const BUFFER_HEADROOM = 1.35;
+const out = JSON.parse(look.toJson());
+out.tiles.buffer_headroom = BUFFER_HEADROOM;
+writeFileSync(new URL("look.json", dir), JSON.stringify(out));
