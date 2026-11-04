@@ -35,7 +35,7 @@ export async function geojson(query, mode, area) {
   const nodes = await query(`SELECT node_id::VARCHAR AS node_id, ST_AsGeoJSON(geom) AS g FROM ${mode}.nodes ORDER BY node_id`);
   const fc = (rows, props) => JSON.stringify({ type: "FeatureCollection", features: rows.map((r) => ({ type: "Feature", properties: props(r), geometry: JSON.parse(r.g) })) });
   const keep = ({ g, ...p }) => Object.fromEntries(Object.entries(p).map(([k, v]) => [k, typeof v === "bigint" ? String(v) : v]));
-  return { name: `${SLUG(area)}_${mode}_geojson.zip`, blob: await zipOf({ [`${mode}_roads.geojson`]: fc(roads, keep), [`${mode}_nodes.geojson`]: fc(nodes, keep) }), files: 2, rows: roads.length };
+  return { name: `${SLUG(area)}_${mode}_geojson.zip`, blob: await zipOf({ [`${mode}_roads.geojson`]: fc(roads, keep), [`${mode}_nodes.geojson`]: fc(nodes, keep) }), files: 2, rows: roads.length, nodes: nodes.length };
 }
 
 /** A MATSim network (network_v2.dtd): the nodes, and one link for each edge. */
@@ -54,7 +54,7 @@ export async function matsim(query, mode, area) {
       `<attributes><attribute name="origid" class="java.lang.String">${e.osm_id}</attribute><attribute name="type" class="java.lang.String">${esc(e.highway)}</attribute></attributes></link>\n`);
   }
   out.push("</links>\n</network>\n");
-  return { name: `${SLUG(area)}_${mode}_matsim_network.xml`, blob: text(out.join("")), rows: edges.length };
+  return { name: `${SLUG(area)}_${mode}_matsim_network.xml`, blob: text(out.join("")), rows: edges.length, nodes: nodes.length };
 }
 
 /** SUMO plain XML: node, edge and connection files for `netconvert`, with a README that has the command. */
@@ -75,8 +75,10 @@ export async function sumo(query, mode, area) {
   const con = [`<?xml version="1.0" encoding="UTF-8"?>\n<connections>\n`, ...links.map((l) => `  <connection from="${l.a}" to="${l.b}"/>\n`), "</connections>\n"].join("");
   const readme = `SUMO plain XML of the ${mode} network of ${area}, from duckOSM-rust.\nCoordinates: meters in ${utm}. Run:\n\n  netconvert --node-files ${slug}.nod.xml --edge-files ${slug}.edg.xml --connection-files ${slug}.con.xml -o ${slug}.net.xml\n\n` +
     `The connections are the legal turns of the edge graph (turn restrictions applied). The edge ids are the edge_id values of the tables.\n`;
-  return { name: `${slug}_sumo.zip`, blob: await zipOf({ [`${slug}.nod.xml`]: nod, [`${slug}.edg.xml`]: edg, [`${slug}.con.xml`]: con, "README.txt": readme }), rows: edges.length, connections: links.length };
+  return { name: `${slug}_sumo.zip`, blob: await zipOf({ [`${slug}.nod.xml`]: nod, [`${slug}.edg.xml`]: edg, [`${slug}.con.xml`]: con, "README.txt": readme }), rows: edges.length, nodes: nodes.length, connections: links.length };
 }
+
+import { decodeTile, encodeTile, addProps, indexOf } from "./mvt.js";
 
 // ---- tiles: the vector tiles of the map that is on screen (the roads and the base-map layers), made again by the map worker as MVT for a range of zooms,
 // and packed in one PMTiles v3 file or one MBTiles file. A tile is the layers of all the map's sources: MVT layers are repeated fields, so the bytes of two
@@ -124,7 +126,7 @@ function layerNames(b) {
  * Make the tiles. `src`: {urls: the address of a source with {z}, {x} and {y}, tile(url) -> ArrayBuffer}. Gives {tiles: [{z, x, y, data (gzip)}], layers}.
  * The tiles that have nothing are left out.
  */
-export async function collectTiles(src, bbox, min, max, progress = () => {}) {
+export async function collectTiles(src, bbox, min, max, progress = () => {}, extra = null) {
   const todo = [];
   for (let z = min; z <= max; z++) { const t = spanOf(bbox, z); for (let x = t.x0; x <= t.x1; x++) for (let y = t.y0; y <= t.y1; y++) todo.push([z, x, y]); }
   const tiles = [], layers = new Set();
@@ -132,6 +134,8 @@ export async function collectTiles(src, bbox, min, max, progress = () => {}) {
   const one = async ([z, x, y]) => {
     const parts = [];
     for (const u of src.urls) { const d = new Uint8Array(await src.tile(u.replace("{z}", z).replace("{x}", x).replace("{y}", y))); if (d.length) parts.push(d); }
+    const more = extra?.get(`${z}/${x}/${y}`);
+    if (more) parts.push(more);                          // the layer `edges` of the full export
     if (parts.length) {
       const all = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
       parts.reduce((o, p) => (all.set(p, o), o + p.length), 0);
@@ -239,14 +243,110 @@ export async function mbtiles(tiles, info) {
  * The tile exports. `ctx`: {src, bbox, min, max, progress}. They need the map (step 6): the tiles are the ones of the map.
  */
 async function tileFile(kind, ctx, area) {
-  const { tiles, layers } = await collectTiles(ctx.src, ctx.bbox, ctx.min, ctx.max, ctx.progress);
+  const { tiles, layers } = await collectTiles(ctx.src, ctx.bbox, ctx.min, ctx.max, ctx.progress, ctx.extra);
   if (!tiles.length) throw new Error("no tile has anything in it: show the map first (step 6), or use other zooms");
   const info = { name: SLUG(area), bbox: ctx.bbox, minzoom: ctx.min, maxzoom: ctx.max, layers };
   const blob = await (kind === "pmtiles" ? pmtiles : mbtiles)(tiles, info);
-  return { name: `${SLUG(area)}_z${ctx.min}-${ctx.max}.${kind}`, blob, rows: tiles.length, tiles: tiles.length, layers };
+  return { name: `${SLUG(area)}_z${ctx.min}-${ctx.max}.${kind}`, blob, rows: tiles.length, tiles: tiles.length, layers, min: ctx.min, max: ctx.max, edgeTiles: ctx.extra ?? null };
 }
 export const pmtilesFile = (query, mode, area, ctx) => tileFile("pmtiles", ctx, area);
 export const mbtilesFile = (query, mode, area, ctx) => tileFile("mbtiles", ctx, area);
+
+/** The zoom where a road class starts to show in the layer `edges` (a lower class is left out at a lower zoom, as in any tile set that has to stay small). */
+const CLASS_FROM_ZOOM = { motorway: 0, trunk: 0, primary: 0, secondary: 8, tertiary: 10, unclassified: 11, residential: 12, living_street: 12 };
+const fromZoom = (h) => CLASS_FROM_ZOOM[cls(h)] ?? 13;
+
+/** The roads of all the networks for the layer `edges`: one feature for each edge_id, with every column of the edge, and a flag for each network that has it. */
+export async function roadFeatures(query, modes) {
+  const byId = new Map();
+  for (const m of modes) {
+    for (const e of await query(`SELECT edge_id::VARCHAR AS edge_id, osm_id::VARCHAR AS osm_id, edge_ref, name, highway, oneway, lanes, surface, maxspeed_kmh, bridge, tunnel, junction, layer, service, access,
+        length_m, cost_s, source::VARCHAR AS source, target::VARCHAR AS target, ST_AsGeoJSON(geometry) AS g FROM ${m}.edges`)) {
+      let f = byId.get(e.edge_id);
+      if (!f) {
+        const { g, ...props } = e;
+        for (const n of modes) props[n] = false;
+        byId.set(e.edge_id, (f = { props, line: JSON.parse(g).coordinates }));
+      }
+      f.props[m] = true;
+    }
+  }
+  return [...byId.values()];
+}
+
+/**
+ * The layer `edges` of every tile of the zooms from `min` to `max`: a LineString for each road piece in the tile (clipped to the tile with a buffer of 64 units, 4096 units
+ * wide), with all the attributes. Gives a map from "z/x/y" to the bytes of an MVT tile with that one layer.
+ */
+export function edgeTiles(features, min, max) {
+  const EXT = 4096, BUF = 64, out = new Map();
+  for (let z = min; z <= max; z++) {
+    const scale = 2 ** z * EXT, tiles = new Map();
+    for (const f of features) {
+      if (z < fromZoom(f.props.highway)) continue;
+      const pts = f.line.map(([lon, lat]) => { const r = (lat * Math.PI) / 180; return [((lon + 180) / 360) * scale, ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * scale]; });
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+      const tx0 = Math.max(0, Math.floor((x0 - BUF) / EXT)), tx1 = Math.min(2 ** z - 1, Math.floor((x1 + BUF) / EXT)), ty0 = Math.max(0, Math.floor((y0 - BUF) / EXT)), ty1 = Math.min(2 ** z - 1, Math.floor((y1 + BUF) / EXT));
+      for (let tx = tx0; tx <= tx1; tx++) {
+        for (let ty = ty0; ty <= ty1; ty++) {
+          const runs = clipLine(pts.map(([x, y]) => [x - tx * EXT, y - ty * EXT]), -BUF, EXT + BUF);
+          if (!runs.length) continue;
+          const key = `${z}/${tx}/${ty}`;
+          if (!tiles.has(key)) tiles.set(key, []);
+          tiles.get(key).push({ props: f.props, runs });
+        }
+      }
+    }
+    for (const [key, list] of tiles) out.set(key, edgeTile(list));
+  }
+  return out;
+}
+
+/** The pieces of a polyline inside a square (lo to hi in both axes), as arrays of integer points; a piece of one point is dropped (Liang-Barsky on each segment). */
+function clipLine(pts, lo, hi) {
+  const runs = [];
+  let run = null;
+  const push = (x, y) => { x = Math.round(x); y = Math.round(y); if (!run) run = []; const l = run[run.length - 1]; if (!l || l[0] !== x || l[1] !== y) run.push([x, y]); };
+  const end = () => { if (run && run.length > 1) runs.push(run); run = null; };
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const [ax, ay] = pts[i], [bx, by] = pts[i + 1], dx = bx - ax, dy = by - ay;
+    let t0 = 0, t1 = 1;
+    for (const [p, q] of [[-dx, ax - lo], [dx, hi - ax], [-dy, ay - lo], [dy, hi - ay]]) {
+      if (p === 0) { if (q < 0) { t0 = 2; break; } continue; }
+      const r = q / p;
+      if (p < 0) { if (r > t1) { t0 = 2; break; } if (r > t0) t0 = r; } else { if (r < t0) { t0 = 2; break; } if (r < t1) t1 = r; }
+    }
+    if (t0 > t1) { end(); continue; }
+    if (t0 > 0) end();                                   // the line comes in from outside: a new piece
+    push(ax + dx * t0, ay + dy * t0);
+    push(ax + dx * t1, ay + dy * t1);
+    if (t1 < 1) end();                                   // and leaves
+  }
+  end();
+  return runs;
+}
+
+/** An MVT tile with the layer `edges`: each piece is a feature (MoveTo and LineTo commands, zigzag deltas). */
+function edgeTile(list) {
+  const layer = { name: "edges", extent: 4096, version: 2, keys: [], values: [], features: [] }, idx = indexOf(layer);
+  const zig = (v) => (v << 1) ^ (v >> 31);
+  for (const { props, runs } of list) {
+    const g = [];
+    let cx = 0, cy = 0;
+    const put = (v) => { v = zig(v) >>> 0; while (v >= 128) { g.push((v & 127) | 128); v >>>= 7; } g.push(v); };
+    for (const run of runs) {
+      put0(g, (1 & 7) | (1 << 3)); put(run[0][0] - cx); put(run[0][1] - cy); [cx, cy] = run[0];
+      put0(g, (2 & 7) | ((run.length - 1) << 3));
+      for (let i = 1; i < run.length; i++) { put(run[i][0] - cx); put(run[i][1] - cy); [cx, cy] = run[i]; }
+    }
+    const feat = { id: undefined, tags: [], type: 2, geometry: Uint8Array.from(g) };
+    addProps(layer, feat, props, idx);
+    layer.features.push(feat);
+  }
+  return encodeTile([layer]);
+}
+const put0 = (g, v) => { while (v >= 128) { g.push((v & 127) | 128); v >>>= 7; } g.push(v); };
 
 /** A GeoPackage (OGC GeoPackage 1.2, SQLite): the tables `roads` (LineString) and `nodes` (Point) in EPSG:4326, with no spatial index. */
 export async function geopackage(query, mode, area) {
@@ -276,7 +376,121 @@ export async function geopackage(query, mode, area) {
   db.run("INSERT INTO gpkg_geometry_columns VALUES ('roads', 'geom', 'LINESTRING', 4326, 0, 0), ('nodes', 'geom', 'POINT', 4326, 0, 0)");
   const bytes = db.export();
   db.close();
-  return { name: `${SLUG(area)}_${mode}.gpkg`, blob: new Blob([bytes], { type: "application/geopackage+sqlite3" }), rows: edges.length };
+  return { name: `${SLUG(area)}_${mode}.gpkg`, blob: new Blob([bytes], { type: "application/geopackage+sqlite3" }), rows: edges.length, nodes: nodes.length };
+}
+
+// ---- the check of a file: the page reads the file that it made, and compares it with the tables. `verify` gives {ok, text}.
+const unzip = async (blob) => {
+  const { unzipSync } = await import("https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js");
+  return unzipSync(new Uint8Array(await blob.arrayBuffer()));
+};
+const count = async (query, sql) => Number((await query(sql))[0].n);
+const xml = (bytes) => {
+  const d = new DOMParser().parseFromString(new TextDecoder().decode(bytes), "application/xml");
+  if (d.querySelector("parsererror")) throw new Error("the XML does not parse");
+  return d;
+};
+const gunzip = async (bytes) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
+const fmt = (n) => Number(n).toLocaleString("en-US");
+
+/** Read the directories of a PMTiles file: [{id, offset, length}] of every tile, and the header numbers. */
+async function readPmtiles(bytes) {
+  const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), u64 = (o) => Number(v.getBigUint64(o, true));
+  if (new TextDecoder().decode(bytes.subarray(0, 7)) !== "PMTiles" || bytes[7] !== 3) throw new Error("the file is not PMTiles v3");
+  const h = { rootAt: u64(8), rootLen: u64(16), leafAt: u64(40), leafLen: u64(48), dataAt: u64(56), tiles: u64(72), min: bytes[100], max: bytes[101] };
+  const dir = async (at, len) => {
+    const b = await gunzip(bytes.subarray(at, at + len));
+    let i = 0;
+    const varint = () => { let x = 0, sh = 0; for (;;) { const c = b[i++]; x += (c & 127) * 2 ** sh; if (c < 128) return x; sh += 7; } };
+    const n = varint(), e = Array.from({ length: n }, () => ({}));
+    let id = 0;
+    for (const x of e) { id += varint(); x.id = id; }
+    for (const x of e) x.run = varint();
+    for (const x of e) x.length = varint();
+    e.forEach((x, k) => { const o = varint(); x.offset = o === 0 && k > 0 ? e[k - 1].offset + e[k - 1].length : o - 1; });
+    return e;
+  };
+  const tiles = [];
+  for (const e of await dir(h.rootAt, h.rootLen)) {
+    if (e.run > 0) tiles.push(e);
+    else for (const l of await dir(h.leafAt + e.offset, e.length)) tiles.push(l);
+  }
+  return { h, tiles, tileBytes: (e) => bytes.subarray(h.dataAt + e.offset, h.dataAt + e.offset + e.length) };
+}
+
+export async function verify(id, r, { query, mode, modes = [mode] }) {
+  const nEdges = id === "pmtiles" || id === "mbtiles" ? 0 : await count(query, `SELECT count(*) AS n FROM ${mode}.edges`);
+  const nNodes = id === "pmtiles" || id === "mbtiles" ? 0 : await count(query, `SELECT count(*) AS n FROM ${mode}.nodes`);
+  const same = (what, got, want) => { if (got !== want) throw new Error(`${what}: the file has ${fmt(got)}, the tables have ${fmt(want)}`); };
+  try {
+    if (id === "geojson") {
+      const z = await unzip(r.blob), td = new TextDecoder();
+      const roads = JSON.parse(td.decode(z[`${mode}_roads.geojson`])), nodes = JSON.parse(td.decode(z[`${mode}_nodes.geojson`]));
+      same("roads", roads.features.length, nEdges); same("nodes", nodes.features.length, nNodes);
+      return { ok: true, text: `${fmt(nEdges)} roads and ${fmt(nNodes)} nodes, the same as the tables` };
+    }
+    if (id === "gpkg") {
+      const db = new (await sqlite()).Database(new Uint8Array(await r.blob.arrayBuffer()));
+      const q = (sql) => db.exec(sql)[0].values[0][0];
+      same("roads", q("SELECT count(*) FROM roads"), nEdges); same("nodes", q("SELECT count(*) FROM nodes"), nNodes);
+      if (q("PRAGMA application_id") !== 1196444487) throw new Error("the application id is not GPKG");
+      const g = db.exec("SELECT geom FROM roads LIMIT 1")[0].values[0][0];
+      if (g[0] !== 0x47 || g[1] !== 0x50) throw new Error("the geometry has no GeoPackage header");
+      db.close();
+      return { ok: true, text: `${fmt(nEdges)} roads and ${fmt(nNodes)} nodes, the same as the tables; the header of the geometry is right` };
+    }
+    if (id === "matsim") {
+      const d = xml(new Uint8Array(await r.blob.arrayBuffer()));
+      const nodes = d.querySelectorAll("nodes > node"), links = d.querySelectorAll("links > link");
+      same("nodes", nodes.length, nNodes); same("links", links.length, nEdges);
+      const ids = new Set([...nodes].map((n) => n.getAttribute("id")));
+      for (const l of links) if (!ids.has(l.getAttribute("from")) || !ids.has(l.getAttribute("to"))) throw new Error(`link ${l.getAttribute("id")} has a node that is not in the file`);
+      return { ok: true, text: `${fmt(links.length)} links and ${fmt(nodes.length)} nodes, the same as the tables; every link joins two nodes of the file` };
+    }
+    if (id === "sumo") {
+      const z = await unzip(r.blob), name = Object.keys(z).find((n) => n.endsWith(".nod.xml")).slice(0, -8);
+      const nod = xml(z[`${name}.nod.xml`]), edg = xml(z[`${name}.edg.xml`]), con = xml(z[`${name}.con.xml`]);
+      same("nodes", nod.querySelectorAll("node").length, nNodes); same("edges", edg.querySelectorAll("edge").length, nEdges);
+      const want = await count(query, `SELECT count(*) AS n FROM ${mode}.edge_graph WHERE from_edge IN (SELECT edge_id FROM ${mode}.edges) AND to_edge IN (SELECT edge_id FROM ${mode}.edges)`);
+      same("connections", con.querySelectorAll("connection").length, want);
+      const ids = new Set([...nod.querySelectorAll("node")].map((n) => n.getAttribute("id")));
+      for (const e of edg.querySelectorAll("edge")) if (!ids.has(e.getAttribute("from")) || !ids.has(e.getAttribute("to"))) throw new Error(`edge ${e.getAttribute("id")} has a node that is not in the file`);
+      return { ok: true, text: `${fmt(nEdges)} edges, ${fmt(nNodes)} nodes and ${fmt(want)} connections, the same as the tables. Not run through netconvert here` };
+    }
+    if (id === "pmtiles") {
+      const p = await readPmtiles(new Uint8Array(await r.blob.arrayBuffer()));
+      same("tiles", p.tiles.length, r.tiles); same("tiles in the header", p.h.tiles, r.tiles);
+      if (p.h.min !== r.min || p.h.max !== r.max) throw new Error(`the zooms in the header are ${p.h.min} to ${p.h.max}, not ${r.min} to ${r.max}`);
+      const biggest = p.tiles.reduce((a, b) => (b.length > a.length ? b : a)), names = layerNames(await gunzip(p.tileBytes(biggest)));      // the biggest tile has the most layers
+      if (!names.length) throw new Error("a tile that I read back has no layers");
+      return { ok: true, text: `${fmt(p.tiles.length)} tiles, zoom ${p.h.min} to ${p.h.max}, directories read back; a tile has the layers ${names.slice(0, 4).join(", ")}${names.length > 4 ? "…" : ""}${r.edgeTiles ? await edgesCheck(r, query, modes) : ""}` };
+    }
+    if (id === "mbtiles") {
+      const db = new (await sqlite()).Database(new Uint8Array(await r.blob.arrayBuffer()));
+      same("tiles", db.exec("SELECT count(*) FROM tiles")[0].values[0][0], r.tiles);
+      const [lo, hi] = db.exec("SELECT min(zoom_level), max(zoom_level) FROM tiles")[0].values[0];
+      if (lo < r.min || hi > r.max) throw new Error(`the tiles have zooms ${lo} to ${hi}`);
+      const t = db.exec("SELECT tile_data FROM tiles LIMIT 1")[0].values[0][0];
+      if (t[0] !== 0x1f || t[1] !== 0x8b) throw new Error("a tile is not gzip");
+      db.close();
+      return { ok: true, text: `${fmt(r.tiles)} tiles, zoom ${lo} to ${hi}, gzip MVT in SQLite` };
+    }
+  } catch (e) {
+    return { ok: false, text: e.message };
+  }
+  return { ok: true, text: "" };
+}
+
+/** Every edge of every network is in the layer `edges` of the tiles of the highest zoom (the tiles that the export made). */
+async function edgesCheck(r, query, modes) {
+  const ids = new Set();
+  for (const [key, bytes] of r.edgeTiles) {
+    if (!key.startsWith(`${r.max}/`)) continue;
+    for (const l of decodeTile(bytes)) for (const f of l.features) for (let t = 0; t < f.tags.length; t += 2) if (l.keys[f.tags[t]] === "edge_id") ids.add(l.values[f.tags[t + 1]]);
+  }
+  const want = await count(query, "SELECT count(*) AS n FROM (" + modes.map((m) => `SELECT edge_id FROM ${m}.edges`).join(" UNION ") + ")");
+  if (ids.size !== want) throw new Error(`the tiles of zoom ${r.max} have ${fmt(ids.size)} edges, the tables have ${fmt(want)}`);
+  return `; all ${fmt(want)} edges of all networks are in the tiles of zoom ${r.max}`;
 }
 
 /** The formats of the card Export: id, title, what it is for, the group, the function, and the networks that it takes. */
@@ -286,5 +500,5 @@ export const FORMATS = [
   { id: "gpkg", group: "Visualization", title: "GeoPackage", note: "Roads (lines) and nodes (points) in one .gpkg file, for QGIS and ArcGIS. EPSG:4326, no spatial index.", run: geopackage, modes: ["driving", "walking", "cycling"] },
   { id: "geojson", group: "Visualization", title: "GeoJSON", note: "Roads and nodes as two GeoJSON files (a .zip), for QGIS, kepler.gl and other web maps.", run: geojson, modes: ["driving", "walking", "cycling"] },
   { id: "matsim", group: "Simulation", title: "MATSim network", note: "network.xml: nodes, and a link for each edge with length, free speed, capacity and lanes. Meters in the UTM zone of the area.", run: matsim, modes: ["driving", "walking", "cycling"] },
-  { id: "sumo", group: "Simulation", title: "SUMO plain XML", note: "Node, edge and connection files (a .zip) and the netconvert command. The connections are the legal turns.", run: sumo, modes: ["driving", "walking", "cycling"] },
+  { id: "sumo", group: "Simulation", title: "SUMO plain XML", note: "Three XML files and a README (a .zip). Run the command of the README (netconvert, a SUMO tool) to make the SUMO network file.", run: sumo, modes: ["driving", "walking", "cycling"] },
 ];

@@ -81,6 +81,14 @@ with sync_playwright() as p:
     # a new visit shows the OpenFreeMap base map; a click on the row shows the boundary and zooms to it, a second click hides it, Open loads the area
     page.wait_for_function("'vbm-openmaptiles' in duckMap.getStyle().sources", timeout=30_000)   # OpenFreeMap's vector style, although the build before set the blank base map
     row = page.locator("#areas-card .saved-area")
+    # the row: the whole name, the date and size on one line, a pill that says that the map opens fast, two buttons of one size, and a tint under the pointer
+    assert page.evaluate("(() => { const n = document.querySelector('#areas-card .sa-name'); return n.scrollWidth <= n.clientWidth + 1 && getComputedStyle(n).textOverflow !== 'ellipsis'; })()"), "the name is not cut"
+    assert "Opens fast" in page.inner_text("#areas-card .sa-pill") and page.evaluate("(() => { const [a, b] = [...document.querySelectorAll('#areas-card .sa-actions .btn')].map((x) => x.getBoundingClientRect()); return Math.abs(a.width - b.width) < 1 && Math.abs(a.height - b.height) < 1; })()"), "Open and Delete have one size"
+    assert "sidewalk rule" not in page.inner_text("#areas-card") and page.locator("#areas-card .sa-chip").count() >= 1 and page.locator("#areas-card .sa-chip svg").count() == page.locator("#areas-card .sa-chip").count() and "roads" in page.get_attribute("#areas-card .sa-chip", "title"), "the chips list the networks with an icon, not the build log"
+    page.mouse.move(5, 5)
+    still = row.evaluate("(r) => getComputedStyle(r).backgroundColor")
+    row.hover()
+    assert row.evaluate("(r) => getComputedStyle(r).backgroundColor") != still, "the row has a tint under the pointer"
     row.locator("strong").click()
     page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['preview-line']}).length > 0 && !duckMap.isMoving()", timeout=30_000)
     assert "picked" in row.get_attribute("class") and page.evaluate("duckMap.getZoom()") > 8, "the boundary shows"
@@ -94,6 +102,11 @@ with sync_playwright() as p:
     status = page.inner_text("#buildstatus")
     print(status)
     assert status.startswith("Restored"), status
+    # the map is drawn once (the style of the first draw is generation 1; a second draw made generation 2 and the map loaded twice)
+    page.wait_for_function("/drawn/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=120_000)
+    page.wait_for_timeout(1500)
+    gen = page.evaluate("duckMap.getStyle().sources['rs-roads'].tiles[0].match(/rs:\\/\\/(\\d+)\\//)[1]")
+    assert gen == "1", ("the map was drawn more than once after Open", gen)
     after = " ".join(page.inner_text("#resultline").split())
     assert after == before, (before, after)
     page.screenshot(path=str(out / "saved-restored.png"))

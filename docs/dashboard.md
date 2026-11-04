@@ -76,6 +76,8 @@ A build sets the Blank base map for its first drawing so that the roads are easy
 
 The card shows only when the browser has a saved area. Each build is saved in the browser (OPFS), with its tables, its drawing cache and its cut file.
 
+Each row has the name (in full), the date and size of the save, and a chip for each network with its icon (car, walker, bike) and its number of roads (point at a chip for the name). The pill **Opens fast** shows when the drawing of the roads is saved too, so **Open** shows the map with no wait. Without the pill, **Open** loads the tables and the page draws the map when you press **Show on map**.
+
 - **Click a row** to see the boundary of the area on the map. The map zooms to it. A second click hides it.
 - **Open** loads the area into DuckDB and draws the map again with no build (Monaco: 1.6 s).
 - **Delete** asks a second click, in place.
@@ -291,7 +293,7 @@ Card 8 opens roadstyle's level editor for the roads that you built: change the l
 
 ![Card 9: the network and the export formats](img/dashboard/11b-export.png)
 
-Card 9 gives the network that you built to other software. It is off until a build ends. The files are made in your browser from the tables, and each **Download** button makes one file. The **Network** list shows the networks that you built (it shows when there is more than one).
+Card 9 gives the network that you built to other software. It is off until a build ends. The files are made in your browser from the tables, and each **Download** button makes one file. The card has four sections: **Tiles**, **Network**, **Visualization** and **Simulation**. In **Network**, pick Driving, Walking or Cycling with the buttons (the section shows when you built more than one network). The network sets the files of **Visualization** and **Simulation**. The tiles do not use it.
 
 | Format | File | What it has |
 |---|---|---|
@@ -302,17 +304,40 @@ Card 9 gives the network that you built to other software. It is off until a bui
 | **MATSim network** | `<area>_<network>_matsim_network.xml` | A `network_v2.dtd` file: a node for each node, and a link for each edge with length (m), free speed (m/s), capacity (vehicles per hour), lanes and mode (`car`, `walk` or `bike`). Coordinates are meters in the UTM zone of the area. |
 | **SUMO plain XML** | `<area>_<network>_sumo.zip` | `.nod.xml`, `.edg.xml` and `.con.xml` and a `README.txt` with the `netconvert` command. An edge has its shape, lanes, speed and priority. The connections are the legal turns of the edge graph (turn restrictions applied). |
 
-The tiles are the tiles of the map on the screen, made again by the map worker as MVT. Two fields set them:
+The tiles are the tiles of the map on the screen, made again by the map worker as MVT. The card has a check box and two fields for them:
 
-- **Zoom from ... to ...** The lowest and the highest zoom (0 to 18). The card shows the number of tiles for the extent of the network. The limit is 40,000 tiles: if the count is higher, the buttons are off, and you use fewer zooms.
+- **Everything** (on by default). The export has the whole map: zoom 0 up to the highest zoom that stays under the limit (for Monaco, 0 to 16), all the networks in one tile set, every attribute of every road, and all the layers of the build. If the map shows one network, the page switches it to **All** (card 6) and draws it again first. Monaco gives a 5.6 MB file.
+- **Zoom from ... to ...** The lowest and the highest zoom (0 to 18). These fields are off while **Everything** is on. With **Everything** off, the file has only the tiles of the map as they are (the layers of roadstyle's look, without the extra attributes), for the zooms that you set. The card shows the number of tiles for the extent of the network. The limit is 40,000 tiles: if the count is higher, the buttons are off, and you use fewer zooms.
 - The buttons for tiles are off until **Show on map** (step 6) has drawn the map. A tile that has nothing in it is left out.
-- A tile has all the layers of the map. In roadstyle's tiles, the layer `simple` has the roads and the layers `ov0`, `ov1` and so on have the base-map layers (water, land use, buildings). A tile joins the layers of all the sources of the map.
+
+What a tile has:
+
+| Layer | What it is |
+|---|---|
+| `edges` | Only with **Everything**. One LineString for each piece of a road in the tile, clipped to the tile with a small buffer. Each piece has all the columns of its edge: `edge_id`, `osm_id`, `edge_ref`, `source`, `target`, `name`, `highway`, `oneway`, `lanes`, `surface`, `maxspeed_kmh`, `bridge`, `tunnel`, `junction`, `layer`, `service`, `access`, `length_m` and `cost_s`, and a flag for each network that has the edge (`driving`, `walking`, `cycling`). The ids are text. A lower road class starts at a higher zoom: motorway, trunk and primary from zoom 0, secondary from 8, tertiary from 10, unclassified from 11, residential and living street from 12, all other classes from 13. At the highest zoom, every edge is in the tiles. |
+| `simple`, `slots` | roadstyle's layers for drawing the roads (shapes, classes, one-way marks, labels). The map style reads them. They do not carry the attributes of an edge. |
+| `ov0`, `ov1`, ... | The base-map layers of the build: water, land use, buildings (with `height`), railways and more. They need a build with **Layers** on. |
+
+The OpenFreeMap background of the page is not in the tiles: it is not ours.
+
+**The check.** After each download, the page reads the file that it made and compares it with the tables. A line under the format says what it found: a green "Checked" line (for example "2,765 roads and 1,719 nodes, the same as the tables"), or a red "Problem" line with the first difference. The checks:
+
+| Format | What the page checks |
+|---|---|
+| GeoJSON | The number of roads and nodes. |
+| GeoPackage | The number of roads and nodes, the application id and the header of a geometry. |
+| MATSim | The number of nodes and links, and that every link joins two nodes of the file. |
+| SUMO | The number of nodes, edges and connections, and that every edge joins two nodes of the file. The page does not run `netconvert`. |
+| PMTiles | The directories (root and leaf), the number of tiles, the zooms in the header and the layers of the biggest tile. With **Everything**, also that all edges of all networks are in the tiles of the highest zoom. |
+| MBTiles | The number of tiles, the zooms and that a tile is gzip. |
+
+A check is not a test with other software. To test with real tools, open the file in QGIS (GeoPackage, MBTiles, GeoJSON), in a PMTiles viewer or MapLibre (PMTiles), in MATSim, or with `netconvert` (SUMO). `export_e2e.py` runs all the checks on Monaco.
 
 Facts about the files:
 
 - The ids are the `edge_id` and `node_id` values of the tables, as text. They are 64-bit hashes, so a program that reads them as numbers can lose digits.
 - The speed is `maxspeed_kmh` when the edge has it. If not, the page uses a default for the class (for example 50 km/h for a secondary road). The lanes default to 1. The capacity is 2,000 vehicles per hour and lane for a motorway, and 800 for a small road.
-- To make a SUMO network, unpack the `.zip` and run the command of the README:
+- SUMO cannot read the three files directly. It needs one network file (`.net.xml`), and `netconvert` (a program that comes with SUMO) makes it from them. To make the network, unpack the `.zip` and run the command of the README in that folder:
 
 ```bash
 netconvert --node-files area_driving.nod.xml --edge-files area_driving.edg.xml --connection-files area_driving.con.xml -o area_driving.net.xml

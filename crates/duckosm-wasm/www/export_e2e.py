@@ -27,7 +27,19 @@ def rows(page, sql):
     return page.evaluate(f"window.duckApi.query({sql!r}).then((r) => r.toArray().map((x) => x.toJSON()))")
 
 
+def serve_range(route, body):
+    """answer a request of the pmtiles library for a range of the file"""
+    rng = route.request.headers.get("range")
+    if rng:
+        a_, b_ = rng.replace("bytes=", "").split("-")
+        part = body[int(a_): int(b_) + 1]
+        route.fulfill(status=206, body=part, headers={"Content-Range": f"bytes {a_}-{int(a_) + len(part) - 1}/{len(body)}", "Accept-Ranges": "bytes", "Content-Type": "application/octet-stream"})
+    else:
+        route.fulfill(status=200, body=body)
+
+
 def download(page, fmt):
+    page.evaluate("window.lastCheck = null")
     try:
         with page.expect_download(timeout=60_000) as d:
             page.click(f"#export-list [data-fmt={fmt}]")
@@ -36,6 +48,11 @@ def download(page, fmt):
         raise
     path = out / d.value.suggested_filename
     d.value.save_as(path)
+    page.wait_for_function("window.lastCheck !== null", timeout=120_000)
+    chk = page.evaluate("window.lastCheck")
+    assert chk["ok"], (fmt, "the page's own check found a problem", chk)
+    assert page.locator(f"#export-list [data-fmt={fmt}]").locator("xpath=ancestor::div[contains(@class,'exp')]").locator(".chk.ok").count() == 1, "the check line shows under the format"
+    print(f"  check {fmt}: {chk['text'][:150]}")
     return path
 
 
@@ -56,7 +73,11 @@ with sync_playwright() as p:
     assert "off" not in (page.get_attribute("#step9-card", "class") or ""), "the card is on after a build"
     if "folded" in (page.get_attribute("#step9-card", "class") or ""):
         page.click("#step9")
-    assert page.locator("#export-list [data-fmt]").count() == 6 and page.locator("#export-mode option").count() == 3
+    assert page.locator("#export-list [data-fmt]").count() == 6
+    assert page.evaluate("document.getElementById('export-zmax').compareDocumentPosition(document.getElementById('export-seg')) & Node.DOCUMENT_POSITION_FOLLOWING"), "the network control comes after the tile section (it is for the files)"
+    assert page.locator("#export-list .expsec").count() == 4 and page.locator("#export-seg [data-m]").count() == 3 and page.get_attribute("#export-seg [data-m=driving]", "aria-checked") == "true"
+    assert [t.strip() for t in page.eval_on_selector_all("#export-list .expsec h3", "(l) => l.map((x) => x.textContent)")] == ["Tiles", "Network", "Visualization", "Simulation"], "tiles, the network, visualization and simulation are four sections"
+    assert page.evaluate("getComputedStyle(document.querySelector('#export-full').closest('.optrow')).display") == "flex", "the Everything row has the card's option style"
     n_edges = rows(page, "SELECT count(*)::INTEGER AS n FROM driving.edges")[0]["n"]
     n_nodes = rows(page, "SELECT count(*)::INTEGER AS n FROM driving.nodes")[0]["n"]
     ids = {str(r["edge_id"]) for r in rows(page, "SELECT edge_id::VARCHAR AS edge_id FROM driving.edges")}
@@ -86,6 +107,15 @@ with sync_playwright() as p:
     first = next(f for f in roads["features"] if f["properties"]["edge_id"] == eid)
     assert npts == len(first["geometry"]["coordinates"]) and abs(first["geometry"]["coordinates"][0][0] - x0) < 1e-9 and abs(first["geometry"]["coordinates"][0][1] - y0) < 1e-9
     print(f"GeoPackage: {n_edges} roads and {n_nodes} nodes")
+
+    # the segmented control picks the network of the files: Walking gives the walking edges
+    page.click("#export-seg [data-m=walking]")
+    assert page.get_attribute("#export-seg [data-m=walking]", "aria-checked") == "true" and page.input_value("#export-mode") == "walking"
+    walk = sqlite3.connect(download(page, "gpkg"))
+    n_walk = rows(page, "SELECT count(*)::INTEGER AS n FROM walking.edges")[0]["n"]
+    assert walk.execute("SELECT count(*) FROM roads").fetchone()[0] == n_walk and n_walk != n_edges, (n_walk, n_edges)
+    page.click("#export-seg [data-m=driving]")
+    print(f"Network control: Walking gives {n_walk} roads")
 
     # MATSim: the DTD line, one link for each edge, meters (not degrees), free speed and capacity above 0, every link between two nodes
     path = download(page, "matsim")
@@ -118,6 +148,38 @@ with sync_playwright() as p:
     print(f"SUMO: {len(es)} edges, {len(cs)} connections")
     # tiles: the zooms of the card, a count; PMTiles that the pmtiles library reads (the header, the metadata, a tile that is MVT), and MBTiles (SQLite) with the same tiles
     assert page.locator("#export-list [data-tiles]").count() == 2 and page.evaluate("[...document.querySelectorAll('#export-list [data-tiles]')].every((b) => !b.disabled)"), "the tile buttons are on after the map is drawn"
+    # Everything (on by default): zoom 0 to the highest that fits, all networks, every road attribute in the tiles
+    assert page.is_checked("#export-full") and page.is_disabled("#export-zmin") and page.input_value("#export-zmin") == "0"
+    zmax = int(page.input_value("#export-zmax"))
+    assert zmax >= 14, zmax
+    page.wait_for_function("/\\d+ tiles\\./.test(document.getElementById('export-tiles').textContent)")
+    full_path = download(page, "pmtiles")
+    served = {"body": full_path.read_bytes()}
+    page.route("**/__dl/full.pmtiles", lambda route: serve_range(route, served["body"]))
+    page.add_script_tag(url="https://cdn.jsdelivr.net/npm/pmtiles@3.2.1/dist/pmtiles.js")
+    ev = page.evaluate("""async (zmax) => {
+        const mvt = await import('./app/mvt.js'), p = new pmtiles.PMTiles('/__dl/full.pmtiles'), h = await p.getHeader();
+        const n = 2 ** zmax, x0 = Math.floor((7.40 + 180) / 360 * n), x1 = Math.floor((7.45 + 180) / 360 * n);
+        const lat = (d) => { const r = d * Math.PI / 180; return Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n); };
+        const ids = new Set(); let sample = null, pieces = 0;
+        for (let x = x0; x <= x1; x++) for (let y = lat(43.76); y <= lat(43.72); y++) {
+            const t = await p.getZxy(zmax, x, y);
+            if (!t) continue;
+            const L = mvt.decodeTile(new Uint8Array(t.data)).find((l) => l.name === 'edges');
+            if (!L) continue;
+            for (const f of L.features) { const q = mvt.propsOf(L, f); ids.add(q.edge_id); sample ??= q; pieces++; }
+        }
+        const low = await p.getZxy(5, Math.floor((7.4246 + 180) / 360 * 32), Math.floor((1 - Math.log(Math.tan(43.7384 * Math.PI / 180) + 1 / Math.cos(43.7384 * Math.PI / 180)) / Math.PI) / 2 * 32));
+        const Ll = low ? mvt.decodeTile(new Uint8Array(low.data)).find((l) => l.name === 'edges') : null;
+        return {min: h.minZoom, max: h.maxZoom, ids: [...ids], pieces, sample, lowClasses: Ll ? [...new Set(Ll.features.map((f) => mvt.propsOf(Ll, f).highway))] : null};
+    }""", zmax)
+    assert ev["min"] == 0 and ev["max"] == zmax, ev
+    union = rows(page, "SELECT count(*)::INTEGER AS n FROM (SELECT edge_id FROM driving.edges UNION SELECT edge_id FROM walking.edges UNION SELECT edge_id FROM cycling.edges)")[0]["n"]
+    assert len(ev["ids"]) == union, ("every edge of every network is in the tiles of the highest zoom", len(ev["ids"]), union)
+    assert all(k in ev["sample"] for k in ("osm_id", "edge_id", "edge_ref", "highway", "driving", "walking", "cycling", "length_m", "source", "target")), ev["sample"]
+    assert ev["lowClasses"] is None or set(ev["lowClasses"]) <= {"motorway", "trunk", "primary", "primary_link", "motorway_link", "trunk_link"}, ev["lowClasses"]
+    print(f"Everything: zoom 0 to {zmax}, {len(ev['ids'])} edges of {union} in the tiles of zoom {zmax} ({ev['pieces']} pieces), low zoom classes {ev['lowClasses']}")
+    page.uncheck("#export-full")
     page.fill("#export-zmin", "12")
     page.fill("#export-zmax", "14")
     page.wait_for_function("/\\d+ tiles\\./.test(document.getElementById('export-tiles').textContent)")
@@ -125,19 +187,7 @@ with sync_playwright() as p:
     path = download(page, "pmtiles")
     data = path.read_bytes()
     assert data[:7] == b"PMTiles" and data[7] == 3
-    served = {"body": data}
-
-    def serve(route):
-        rng = route.request.headers.get("range")
-        body = served["body"]
-        if rng:
-            a_, b_ = rng.replace("bytes=", "").split("-")
-            part = body[int(a_): int(b_) + 1]
-            route.fulfill(status=206, body=part, headers={"Content-Range": f"bytes {a_}-{int(a_) + len(part) - 1}/{len(body)}", "Accept-Ranges": "bytes", "Content-Type": "application/octet-stream"})
-        else:
-            route.fulfill(status=200, body=body)
-    page.route("**/__dl/t.pmtiles", serve)
-    page.add_script_tag(url="https://cdn.jsdelivr.net/npm/pmtiles@3.2.1/dist/pmtiles.js")
+    page.route("**/__dl/t.pmtiles", lambda route: serve_range(route, data))
     got = page.evaluate("""async () => {
         const p = new pmtiles.PMTiles('/__dl/t.pmtiles'), h = await p.getHeader(), m = await p.getMetadata();
         const z = 14, n = 2 ** z, x = Math.floor((7.4246 + 180) / 360 * n), r = 43.7384 * Math.PI / 180, y = Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n);
@@ -170,6 +220,9 @@ with sync_playwright() as p:
     }""")
     assert leaf == [6000, True, "tile 0 0", "tile 57 31", "tile 99 59", None], leaf
     print("PMTiles: 6,000 tiles with leaf directories are read back")
+    # a file that is wrong is reported: a MATSim file with no nodes and no links
+    bad = page.evaluate("""async () => { const ex = await import('./app/export.js'); return ex.verify('matsim', {blob: new Blob(['<network><nodes/><links/></network>'])}, {query: (sql) => window.duckApi.query(sql).then((r) => r.toArray().map((x) => x.toJSON())), mode: 'driving'}); }""")
+    assert bad["ok"] is False and "the file has 0" in bad["text"], bad
     assert "tiles" in page.inner_text("#export-status")
     page.screenshot(path=str(out / "export.png"))
     browser.close()
