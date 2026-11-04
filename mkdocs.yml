@@ -73,3 +73,4 @@ nav:
       - The name: proposals/name.md
       - Hosting: proposals/hosting.md
       - Disk store for the result: proposals/disk-store.md
+      - Less memory in the build: proposals/build-memory.md

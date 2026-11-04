@@ -137,7 +137,7 @@ The page already writes plain GeoJSON, so kepler.gl can open a network that we b
 
 ## The build part comes next
 
-This note does not change the memory of the build. The options, from the discussion of 2026-11-04, for a separate note:
+This note does not change the memory of the build. [build-memory.md](build-memory.md) has the measurements and the plan. The options, from the discussion of 2026-11-04:
 
 1. Use less memory for each edge (now about 1 KiB), by measuring each step and packing the data.
 2. Build one network at a time, and free the memory between them.
