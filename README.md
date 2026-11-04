@@ -1,94 +1,58 @@
 # duckosm-rust
 
-Status: **version 0.3.0** ([CHANGELOG.md](CHANGELOG.md)). The network step is complete. The driving, walking and cycling networks of Monaco, Tartu and Estonia equal the output of duckOSM (every row of every table; only the direction labels of some connectors differ, which duckOSM does not fix). Estonia takes 19 s and 1.5 GB, against 1,545 s and 10 GB in duckOSM. It also builds the edge graph and the turn restrictions. Python duckOSM can use it with `options.engine: rust`. A WebAssembly build runs the same network step in a browser tab. See [docs/design.md](docs/design.md) and [docs/benchmark.md](docs/benchmark.md).
+**Turn an OpenStreetMap file into a routable road network.** Give an `.osm.pbf` file (a country, a region or a city). Get the driving, walking and cycling networks as GeoParquet files and one DuckDB file: edges, nodes, the edge graph and the turn restrictions. Every row is equal to the output of [duckOSM](https://github.com/Khoshkhah/duckOSM) 0.6.0, and so is every `edge_id`, the key that other projects join on.
 
-The repository is [Khoshkhah/duckosm-rust](https://github.com/Khoshkhah/duckosm-rust) (private).
+Use it in a browser page, from the command line, or from Python. All three run the same Rust code. Estonia takes 19 seconds and 1.5 GB (duckOSM in Python: 1,545 seconds and 10 GB).
 
-`duckosm-rust` is the Rust part of [duckOSM](https://github.com/Khoshkhah/duckOSM). It is a Cargo
-workspace. The first crate, `duckosm-core`, reads an `.osm.pbf` file and writes the road edges and
-nodes of duckOSM as GeoParquet files. Every `edge_id` is the same as the `edge_id` that duckOSM writes.
+![The browser page after a build: the roads of Monaco on the map](docs/img/dashboard/12-map-after-build.png)
 
-## Goal
+## Start
 
-Make the first step of duckOSM easy to install and easy to run:
+### In the browser
 
-- `pip install` a wheel. The wheel does not need DuckDB.
-- One CLI program, with no Python.
-- A WebAssembly build for the browser: an area (a boundary and a name) and a region PBF file in, duckOSM's
-  tables in DuckDB and GeoParquet files out, with no server. A separate boundary tool finds the boundary of a
-  place and the smallest Geofabrik extract that covers it.
-- A cut to a boundary in Rust (`--boundary`), with the result of osmium's `complete_ways`.
+Open <https://khoshkhah.github.io/duckosm-rust/>. Search for a place, press the download button of the region file that covers it, and press **Build**. The page runs on your computer, and no server receives your data. It also fixes OSM data, draws the roads with [roadstyle](https://github.com/Khoshkhah/roadstyle) and exports to PMTiles, GeoPackage, GeoJSON, MATSim and SUMO.
+Next: [Your first map](docs/manual.md#your-first-map-in-the-browser) and [the page guide](docs/dashboard.md).
 
-## How it fits with duckOSM
-
-The first scope is the network step: OSM ways in, edges and nodes out. The long-term goal is larger.
-Over time, each part of duckOSM that suits Rust moves to its own crate. Python duckOSM keeps its API
-and calls the Rust wheel part by part. The parts that use Python libraries or external tools stay in
-Python. Section 11 of the design rates every part.
-
-```text
-.osm.pbf --> duckosm-rust --> GeoParquet (edges, nodes) --> roadstyle, mapstyle, GeoPandas, DuckDB
-                                                         \-> duckOSM (later: the rest of the pipeline)
-```
-
-## Install
-
-Each version is on the [Releases](https://github.com/Khoshkhah/duckosm-rust/releases) page: one Python wheel and
-one CLI archive for each system (Linux x86_64 and aarch64, macOS x86_64 and arm64, Windows x64). The wheel is
-for Python 3.9 and newer. DuckDB 1.5.6 is in the wheel and in the program, so no installed DuckDB is necessary.
-The repository is private, so `gh` (signed in) downloads the files:
+### On the command line
 
 ```bash
-# the Python wheel (here: Linux x86_64)
-gh release download v0.3.0 --repo Khoshkhah/duckosm-rust --pattern '*manylinux_2_28_x86_64.whl'
-pip install duckosm_rust-0.3.0-*.whl
-# the CLI program (here: Linux x86_64; it needs glibc 2.35 or newer)
-gh release download v0.3.0 --repo Khoshkhah/duckosm-rust --pattern '*linux-x86_64.tar.gz'
-tar xzf duckosm-rust-0.3.0-linux-x86_64.tar.gz && ./duckosm-rust --version
+curl -LO https://github.com/Khoshkhah/duckosm-rust/releases/download/v0.3.0/duckosm-rust-0.3.0-linux-x86_64.tar.gz
+tar xzf duckosm-rust-0.3.0-linux-x86_64.tar.gz
+./duckosm-rust monaco.osm.pbf -o out --name monaco --modes driving,walking,cycling
 ```
 
-There is no PyPI package yet (design.md, open question 2).
+This writes `out/monaco.duckdb` and one `.parquet` file for each table. Archives for macOS, Windows and Linux aarch64 are on the [Releases](https://github.com/Khoshkhah/duckosm-rust/releases) page.
+Next: [the CLI guide](docs/cli.md).
 
-## Use it
+### In Python
 
 ```bash
-# the program (a CLI), or build it from the source
-cargo build --release          # target/release/duckosm-rust
-duckosm-rust area.osm.pbf -o out --name area --modes driving,walking,cycling   # out/area.duckdb and out/*.parquet
-duckosm-rust --config area.yaml --allow-skipped                                # a duckOSM config file
-duckosm-rust area.osm.pbf -o out --fixes osm_overrides.yaml                    # with the OSM fixes file of duckOSM
-
-# the Python wheel
-pip install maturin && maturin build --release -m crates/duckosm-py/Cargo.toml    # then pip install the wheel
+pip install https://github.com/Khoshkhah/duckosm-rust/releases/download/v0.3.0/duckosm_rust-0.3.0-cp39-abi3-manylinux_2_28_x86_64.whl
 ```
 
 ```python
 import duckosm_rust as dr
-res = dr.build("area.osm.pbf", "out/", modes=["driving", "walking"], name="area",
-               osm_overrides="osm_overrides.yaml")     # optional: the OSM fixes file of duckOSM
+res = dr.build("monaco.osm.pbf", "out/", modes=["driving", "walking"], name="monaco")
 res["modes"]["driving"]["edges"]
-res = dr.build_from_config("area.yaml", strict=False)   # res["skipped"]: duckOSM steps that are not here
-dr.edge_id_hash(osm_id, source, target)
 ```
 
-```bash
-# the browser page (WebAssembly): build it, then open http://localhost:8000. Choose an area on the map, select a
-# region PBF file that covers it, build, see the roads on the map, and run SQL
-# (docs/development.md, "WebAssembly": the module with threads needs nightly Rust and the headers of serve.py)
-./crates/duckosm-wasm/build.sh
-python3 crates/duckosm-wasm/www/serve.py 8000
-```
+The wheel has DuckDB inside and needs Python 3.9 or newer. There is no PyPI package yet.
+Next: [the Python guide](docs/python.md).
 
-The page is online at <https://khoshkhah.github.io/duckosm-rust/> (GitHub Pages, `.github/workflows/pages.yml`).
+## Documents
 
-In the browser, a city or a region fits: Estonia (121 MB PBF) uses 710 MiB, and Kentucky (148 MB)
-uses 2,053 MiB of the 4 GB limit. Section 7 of the design has the numbers.
+| For | Read |
+|---|---|
+| Users | [Manual](docs/manual.md), [page guide](docs/dashboard.md), [CLI](docs/cli.md), [Python](docs/python.md), [output tables](docs/output-tables.md) |
+| Developers | [Development](docs/development.md), [design](docs/design.md), [page code](docs/app.md), [benchmark](docs/benchmark.md), [to do](docs/todo.md) |
+| Decisions | [Name](docs/proposals/name.md), [hosting](docs/proposals/hosting.md) |
+| History | [Changelog](CHANGELOG.md) |
 
-## Read next
+## Status
 
-- [docs/design.md](docs/design.md): the design, the `edge_id` decision, the test plan and the milestones.
-- [docs/development.md](docs/development.md): the toolchain status, the install steps and the WebAssembly build.
-- [tools/edge_id_reference.py](tools/edge_id_reference.py): the `edge_id` hash in plain Python.
+Version 0.3.0. The network step is complete. The driving, walking and cycling networks of Monaco, Tartu and Estonia equal duckOSM row for row. Only the direction labels of some connectors differ, which duckOSM does not fix. Python duckOSM uses the wheel with `options.engine: rust`.
+
+Decided on 2026-11-04: the Rust engine moves into the duckOSM repository, as the Rust engine moved into roadstyle. This repository then keeps the browser page. The name is open: [name.md](docs/proposals/name.md).
 
 ## License
 
