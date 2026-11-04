@@ -337,7 +337,7 @@ Facts about the files:
 
 - The ids are the `edge_id` and `node_id` values of the tables, as text. They are 64-bit hashes, so a program that reads them as numbers can lose digits.
 - The speed is `maxspeed_kmh` when the edge has it. If not, the page uses a default for the class (for example 50 km/h for a secondary road). The lanes default to 1. The capacity is 2,000 vehicles per hour and lane for a motorway, and 800 for a small road.
-- To make a SUMO network, unpack the `.zip` and run the command of the README:
+- SUMO cannot read the three files directly. It needs one network file (`.net.xml`), and `netconvert` (a program that comes with SUMO) makes it from them. To make the network, unpack the `.zip` and run the command of the README in that folder:
 
 ```bash
 netconvert --node-files area_driving.nod.xml --edge-files area_driving.edg.xml --connection-files area_driving.con.xml -o area_driving.net.xml

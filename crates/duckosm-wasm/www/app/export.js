@@ -500,5 +500,5 @@ export const FORMATS = [
   { id: "gpkg", group: "Visualization", title: "GeoPackage", note: "Roads (lines) and nodes (points) in one .gpkg file, for QGIS and ArcGIS. EPSG:4326, no spatial index.", run: geopackage, modes: ["driving", "walking", "cycling"] },
   { id: "geojson", group: "Visualization", title: "GeoJSON", note: "Roads and nodes as two GeoJSON files (a .zip), for QGIS, kepler.gl and other web maps.", run: geojson, modes: ["driving", "walking", "cycling"] },
   { id: "matsim", group: "Simulation", title: "MATSim network", note: "network.xml: nodes, and a link for each edge with length, free speed, capacity and lanes. Meters in the UTM zone of the area.", run: matsim, modes: ["driving", "walking", "cycling"] },
-  { id: "sumo", group: "Simulation", title: "SUMO plain XML", note: "Node, edge and connection files (a .zip) and the netconvert command. The connections are the legal turns.", run: sumo, modes: ["driving", "walking", "cycling"] },
+  { id: "sumo", group: "Simulation", title: "SUMO plain XML", note: "Three XML files and a README (a .zip). Run the command of the README (netconvert, a SUMO tool) to make the SUMO network file.", run: sumo, modes: ["driving", "walking", "cycling"] },
 ];

@@ -2324,7 +2324,7 @@ const CARD_HELP = {
     ["GeoPackage", "Roads (lines) and nodes (points) in one .gpkg file, for QGIS and ArcGIS."],
     ["GeoJSON", "Roads and nodes as GeoJSON files, for QGIS and web maps."],
     ["MATSim network", "A network.xml with a link for each edge: length, free speed, capacity and lanes. Meters in the UTM zone of the area."],
-    ["SUMO plain XML", "Node, edge and connection files for netconvert. The connections are the legal turns of the build (turn restrictions applied)."],
+    ["SUMO plain XML", "Three XML files and a README. SUMO cannot read them directly: run the command of the README (netconvert, a tool of SUMO) to make the SUMO network file. The connections are the legal turns."],
     ["Network", "The network to export: driving, walking or cycling (the ones that you built)."]] },
   7: { title: "Fix OSM data", intro: "Correct known errors of OpenStreetMap, and add information, with rules. A rule changes the tags of one road, building or node, or one turn. The rules are a duckOSM fixes file.", terms: [
     ["Edit", "Click a road, a building or a node on the map (the buttons say which), or type its OSM ID. The panel shows its data. Change it with the fields (sidewalk, cycleway, surface, floors, roof shape, colors) or add a tag. Save the rule."],
