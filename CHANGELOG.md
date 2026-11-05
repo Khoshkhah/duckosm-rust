@@ -5,6 +5,10 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ## Not released
 
+### Changed
+
+- **Less memory in the build** (`duckosm-core`; second round, `docs/proposals/build-memory.md`). The hash maps of steps 3, 4 and 6 and the junction maps ended only at the end of the build; now each ends after its step. The turn restrictions keep only the ways and nodes that a rule names, and the edge graph finds the edges of a node in a sorted array. Peak of the Rust heap: Estonia walking 1,221 to 923 MiB, Estonia driving 757 to 568 MiB, Kentucky driving 3,205 to 1,882 MiB. The output is the same as release 0.3.0 (33 of 35 Parquet files byte equal; the 2 others hold the build time).
+
 ### Added
 
 - **A proposal for a build by tiles, with tile files for the browser** (`docs/proposals/tiled-build.md`): each tile has the edges that touch it, with a buffer; the result is the union of the tiles with an identity check; a light first pass gives the junction flags, the chains and the connected part; the tile files are the store that the browser reads. It has a table of what each step of the build needs, and a plan in 7 stages that keep the golden tests green.
