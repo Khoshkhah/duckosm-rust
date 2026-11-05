@@ -31,6 +31,7 @@ const REASONS = {
   entrance: ["entrance", "An entrance of OSM is on this wall."],
   address: ["address", "The wall faces the street of the addr:street tag of the building."],
   street: [null, "The wall faces a street that it can see."],
+  corner: [null, "A second front wall: it faces another street that is about as near as the main front street, or it is on the same facade."],
   inferred: ["guess", "No street can be seen from the building (other buildings are in the way). The wall faces the nearest street within 150 m. Check it."],
   opposite: [null, "The wall points away from the front wall."],
   shared: [null, "Two buildings share this wall."],

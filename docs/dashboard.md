@@ -235,7 +235,9 @@ How a wall gets its type, in order of strength:
 2. The street that the `addr:street` tag names is preferred (`address`).
 3. A wall faces a street that it can see: a line from one of three points of the wall reaches the street with no wall in the way. A street of a higher class wins (`street`).
 4. A building that sees no street gets the wall that faces the nearest street within 150 m (`inferred`, shown as "guess").
-5. A wall that points away from the front wall and faces no street is a back wall. A wall that two buildings share is a party wall.
+5. Walls that turn by less than 25 degrees are one run and have one type. A wall shorter than 3 m (a chamfer) has the type of its longer neighbour.
+6. A second wall is also a front wall (`corner`) when it faces another street, or the same facade, and the street is at most 20 m away, at most 8 m farther than the main front street, and not a much smaller class. A building has at most two of them.
+7. A wall that points away from the front wall and faces no street within 25 m is a back wall. A wall that two buildings share is a party wall.
 
 Check the walls that say "guess" or "no street seen". The method is in [osm-editing.md](osm-editing.md).
 
@@ -490,10 +492,11 @@ Card 10 gives the network that you built to other software. It is off until a bu
 
 | Format | File | What it has |
 |---|---|---|
+| **Web map** | `<area>_webmap.zip` | `tiles.pmtiles` (the tiles), `style.json` (the style of this page's map: roadstyle's layers with their global state), `index.html` (a MapLibre viewer), `serve.py` (a small web server with range requests) and a `README.txt`. Unpack it, run `python serve.py` in the folder, and open `http://localhost:8000/`: the map looks like this page. The viewer loads MapLibre and the pmtiles library from a CDN, so it needs internet. The icons of crossings and traffic signals, and the one-way arrows, are added by the page in the browser and are not in the package. |
 | **PMTiles** | `<area>_z<min>-<max>.pmtiles` | One PMTiles v3 file (gzip MVT tiles, Hilbert order, leaf directories for more than 4,000 tiles). For MapLibre, roadstyle and any static server. |
 | **MBTiles** | `<area>_z<min>-<max>.mbtiles` | The same tiles in a SQLite file (`metadata` and `tiles`, rows from the south). For QGIS and tile servers. |
-| **GeoPackage** | `<area>_<network>.gpkg` | The tables `roads` (LineString) and `nodes` (Point) in EPSG:4326, with no spatial index. For QGIS and ArcGIS. |
-| **GeoJSON roads** | `<area>_<network>_roads.geojson` | One plain `.geojson` file: a LineString for each edge, with `edge_id`, `osm_id`, `source`, `target`, name, class, one-way, lanes, speed and length. Longitude and latitude. kepler.gl, QGIS and web maps open it directly. |
+| **GeoPackage** | `<area>_<network>.gpkg` | The tables `roads` (LineString, one row for each edge, with `twoway`, `direction` and `edge_id_pair` as in GeoJSON; the check box **One feature for a two-way road** gives one row for it) and `nodes` (Point) in EPSG:4326, with no spatial index. For QGIS and ArcGIS. kepler.gl cannot open GeoPackage: use **GeoJSON roads** there. |
+| **GeoJSON roads** | `<area>_<network>_roads.geojson` | One plain `.geojson` file with a LineString for each edge, as on the page's map: a two-way road is two features, one for each direction, each with its own `edge_id` and its own geometry (the line in the direction of travel). Properties: `twoway`, `direction` (`forward` or `reverse`), `edge_id_pair` (the id of the other direction), `edge_id`, `osm_id`, `source`, `target`, name, class, one-way, lanes, speed, length, surface, `bridge`, `tunnel`, `layer` and `level`. The check box **One feature for a two-way road** gives one feature for it (the forward edge, with `edge_id_reverse`). kepler.gl, QGIS and web maps open the file directly. |
 | **GeoJSON nodes** | `<area>_<network>_nodes.geojson` | One plain `.geojson` file of points: the junctions and the ends of the roads, with `node_id`. |
 | **MATSim network** | `<area>_<network>_matsim_network.xml` | A `network_v2.dtd` file: a node for each node, and a link for each edge with length (m), free speed (m/s), capacity (vehicles per hour), lanes and mode (`car`, `walk` or `bike`). Coordinates are meters in the UTM zone of the area. |
 | **SUMO plain XML** | `<area>_<network>_sumo.zip` | `.nod.xml`, `.edg.xml` and `.con.xml` and a `README.txt` with the `netconvert` command. An edge has its shape, lanes, speed and priority. The connections are the legal turns of the edge graph (turn restrictions applied). |
@@ -516,14 +519,17 @@ What a tile has:
 
 The OpenFreeMap background of the page is not in the tiles: it is not ours.
 
+**Tiles have no style.** A tile file has the data of the map (shapes and properties), not its colors. A program that reads the tiles directly, for example QGIS, shows the layers with a default style: only thin lines. To see the map as this page draws it, use the **Web map** package: its `style.json` has the style, and MapLibre draws the tiles with it. You can also load `style.json` in any MapLibre-based tool (for example Maputnik) with the PMTiles file; a tool that cannot read MapLibre's `global-state` expressions will not draw all layers.
+
 **The check.** After each download, the page reads the file that it made and compares it with the tables. A line under the format says what it found: a green "Checked" line (for example "2,765 roads and 1,719 nodes, the same as the tables"), or a red "Problem" line with the first difference. The checks:
 
 | Format | What the page checks |
 |---|---|
-| GeoJSON roads and nodes | The number of features, that the file is a FeatureCollection, and that every feature is a LineString (roads) or a Point (nodes). |
+| GeoJSON roads and nodes | The number of features (one for each edge, or one for each two-way road with the check box), that the file is a FeatureCollection, that every feature is a LineString or a Point, that a two-way feature has its direction and the id of the other direction, and that the edge ids are all the edge ids of the table. |
 | GeoPackage | The number of roads and nodes, the application id and the header of a geometry. |
 | MATSim | The number of nodes and links, and that every link joins two nodes of the file. |
 | SUMO | The number of nodes, edges and connections, and that every edge joins two nodes of the file. The page does not run `netconvert`. |
+| Web map | The five files are in the .zip, every source of the style reads `tiles.pmtiles`, every global state that a layer reads is in the style, and the PMTiles directories read back. `export_e2e.py` also runs `serve.py`, opens the viewer in a browser and counts the road features that it draws. |
 | PMTiles | The directories (root and leaf), the number of tiles, the zooms in the header and the layers of the biggest tile. With **Layer edges**, also that all edges of all networks (of the classes that start at or below the highest zoom) are in the tiles of the highest zoom. |
 | MBTiles | The number of tiles, the zooms and that a tile is gzip. |
 

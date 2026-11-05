@@ -20,9 +20,22 @@ use rstar::{RTree, RTreeObject, AABB};
 pub const MAX_STREET_M: f64 = 60.0;
 /// A wall can be the front wall when the cosine of the angle between its outward normal and the way to the street is at least this (60 degrees).
 pub const FRONT_ALIGN: f64 = 0.5;
-/// Another wall is a front wall too (a corner) when it faces a street this much (about 50 degrees) and the street is not farther than `CORNER_DIST_M`.
+/// Another wall is a front wall too (a corner) when it faces a street this much (about 50 degrees) and passes the tests of `CORNER_*`.
 pub const CORNER_ALIGN: f64 = 0.65;
-pub const CORNER_DIST_M: f64 = 30.0;
+/// An extra front wall is not farther from its street than the main front wall is from its street plus this (meters), and not farther than `CORNER_DIST_M`.
+pub const CORNER_EXTRA_M: f64 = 8.0;
+pub const CORNER_DIST_M: f64 = 20.0;
+/// An extra front wall faces a street whose class weight is at least this part of the class weight of the street of the main front wall.
+pub const CORNER_CLASS: f64 = 0.6;
+/// A wall that faces the same street as the main front wall is on the same facade when its normal is this close to the normal of the main front wall (25 degrees).
+pub const FACADE_DOT: f64 = 0.906;
+/// A building has at most this many extra front runs (the best ones by street score). The other runs that pass the tests are side walls.
+pub const MAX_EXTRA_FRONTS: usize = 2;
+/// Two walls of one ring are one run when the cosine of the angle between their normals is at least this (25 degrees). A run shorter than `MIN_RUN_M` has the type of its longer neighbour.
+pub const RUN_DOT: f64 = 0.906;
+pub const MIN_RUN_M: f64 = 3.0;
+/// A wall that faces a street farther than this (meters) can still be a back wall.
+pub const BACK_FAR_M: f64 = 25.0;
 /// A wall is a back wall when its normal and the front wall's normal have at most this cosine (about 114 degrees apart) and it faces no street (cosine at most `BACK_ALIGN`).
 pub const BACK_DOT: f64 = -0.4;
 pub const BACK_ALIGN: f64 = 0.1;
@@ -211,6 +224,8 @@ struct Match {
     score: f64,
     /// The street has the name of the `addr:street` tag of the building.
     by_address: bool,
+    /// The class weight of the street.
+    weight: f64,
 }
 
 fn closest_on(a: P, b: P, p: P) -> (P, f64) {
@@ -287,6 +302,116 @@ fn assemble(parts: Vec<Vec<i64>>) -> Vec<Vec<i64>> {
         }
     }
     rings
+}
+
+/// A run is a chain of consecutive walls of one ring that a person sees as one wall: no party wall, and the normals differ by at most 25 degrees.
+fn joins(a: &Wall, b: &Wall) -> bool {
+    !a.party && !b.party && a.normal.0 * b.normal.0 + a.normal.1 * b.normal.1 >= RUN_DOT
+}
+
+/// Is the street of `a` the street of `b`? Two streets with names are the same when the names are the same (a street can be many ways); else the way decides.
+fn same_street(a: &Match, b: &Match) -> bool {
+    match (&a.name, &b.name) {
+        (Some(x), Some(y)) => x == y,
+        _ => a.osm_id == b.osm_id,
+    }
+}
+
+/// The type and the reason of each wall of the outer ring of one building (docs/wall-types.md). `front` is the main front wall.
+fn wall_types(walls: &[Wall], front: Option<usize>, front_reason: &'static str) -> Vec<(FaceType, &'static str)> {
+    let m = walls.len();
+    // 1. the runs
+    let mut run_of = vec![0usize; m];
+    let mut runs = 0;
+    for k in 0..m {
+        if k > 0 && joins(&walls[k - 1], &walls[k]) {
+            run_of[k] = run_of[k - 1];
+        } else {
+            run_of[k] = runs;
+            runs += 1;
+        }
+    }
+    if m > 1 && run_of[m - 1] != run_of[0] && joins(&walls[m - 1], &walls[0]) {
+        let (last, first) = (run_of[m - 1], run_of[0]);
+        for r in run_of.iter_mut().filter(|r| **r == last) {
+            *r = first;
+        }
+    }
+    let mut rep = vec![usize::MAX; runs];       // the longest wall of the run
+    let mut total = vec![0.0f64; runs];
+    let mut entrance = vec![false; runs];
+    for (k, w) in walls.iter().enumerate() {
+        let r = run_of[k];
+        total[r] += w.length;
+        entrance[r] |= w.entrance;
+        if rep[r] == usize::MAX || w.length > walls[rep[r]].length {
+            rep[r] = k;
+        }
+    }
+    // 2. party walls, the main front run and the runs with an entrance
+    let mut ty: Vec<Option<(FaceType, &'static str)>> = vec![None; runs];
+    let mut fixed = vec![false; runs];          // a type that no later rule changes
+    for r in (0..runs).filter(|&r| rep[r] != usize::MAX) {
+        let w = &walls[rep[r]];
+        if w.party {
+            ty[r] = Some((FaceType::Party, "shared"));
+        } else if front.is_some_and(|f| run_of[f] == r) {
+            ty[r] = Some((FaceType::Front, front_reason));
+        } else if entrance[r] {
+            ty[r] = Some((FaceType::Front, "entrance"));
+        } else {
+            continue;
+        }
+        fixed[r] = true;
+    }
+    // 3. the extra front runs: as much a front as the main front run is
+    if let Some(f) = front {
+        let fw = &walls[f];
+        let main = fw.street.as_ref();
+        let mut extra: Vec<(f64, usize)> = Vec::new();
+        for r in (0..runs).filter(|&r| rep[r] != usize::MAX && ty[r].is_none()) {
+            let w = &walls[rep[r]];
+            let Some(s) = w.street.as_ref() else { continue };
+            let facade = w.normal.0 * fw.normal.0 + w.normal.1 * fw.normal.1 >= FACADE_DOT;
+            let other_street = main.map_or(true, |ms| !same_street(ms, s));
+            let near = s.dist <= CORNER_DIST_M && main.map_or(true, |ms| s.dist <= ms.dist + CORNER_EXTRA_M);
+            let class = main.map_or(true, |ms| s.weight >= CORNER_CLASS * ms.weight);
+            if s.align >= CORNER_ALIGN && near && class && (other_street || facade) {
+                extra.push((s.score, r));
+            }
+        }
+        extra.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
+        for (i, &(_, r)) in extra.iter().enumerate() {
+            ty[r] = Some(if i < MAX_EXTRA_FRONTS { (FaceType::Front, "corner") } else { (FaceType::Side, "other") });
+        }
+    }
+    // 4. the back runs, and the side runs
+    let fnorm = front.map(|f| walls[f].normal);
+    let open: Vec<usize> = (0..runs).filter(|&r| rep[r] != usize::MAX && ty[r].is_none()).collect();
+    for r in open {
+        let w = &walls[rep[r]];
+        let (align, dist) = w.street.as_ref().map_or((0.0, f64::INFINITY), |s| (s.align, s.dist));
+        ty[r] = Some(if fnorm.is_some_and(|f| w.normal.0 * f.0 + w.normal.1 * f.1 <= BACK_DOT) && (align <= BACK_ALIGN || dist > BACK_FAR_M) {
+            (FaceType::Back, "opposite")
+        } else {
+            (FaceType::Side, if front.is_some() { "other" } else { "none" })
+        });
+    }
+    // 5. a run that is too short (a chamfer, a step) has the type of its longer neighbour
+    let first = ty.clone();
+    for r in (0..runs).filter(|&r| rep[r] != usize::MAX && !fixed[r] && total[r] < MIN_RUN_M) {
+        let ks: Vec<usize> = (0..m).filter(|&k| run_of[k] == r).collect();
+        let (lo, hi) = (*ks.first().unwrap(), *ks.last().unwrap());
+        let near = [run_of[(lo + m - 1) % m], run_of[(hi + 1) % m]];
+        let best = near
+            .iter()
+            .filter(|&&n| n != r && rep[n] != usize::MAX && first[n].is_some_and(|t| t.0 != FaceType::Party))
+            .max_by(|&&a, &&b| total[a].total_cmp(&total[b]).then(b.cmp(&a)));
+        if let Some(&n) = best {
+            ty[r] = first[n];
+        }
+    }
+    (0..m).map(|k| ty[run_of[k]].unwrap_or((FaceType::Side, "other"))).collect()
 }
 
 /// The faces of every building way in `ways`, with the street segments `streets` and the rules `edits`. `ways` and `nodes` are sorted by id, as
@@ -579,6 +704,7 @@ pub fn building_faces(
                     align,
                     score,
                     by_address,
+                    weight: s.weight,
                 });
             }
             // the best score that the wall can see; a tie goes to the lower edge id, so that the result does not depend on the order of the tree.
@@ -684,6 +810,7 @@ pub fn building_faces(
                                 align,
                                 score,
                                 by_address: false,
+                                weight: s.weight,
                             },
                         ));
                     }
@@ -695,28 +822,9 @@ pub fn building_faces(
                 front_reason = "inferred";
             }
         }
-        let front_normal = front.map(|f| walls[f].normal);
+        let types = wall_types(&walls, front, front_reason);
         for (k, w) in walls.iter().enumerate() {
-            let align = w.street.as_ref().map_or(0.0, |s| s.align);
-            let dist = w.street.as_ref().map_or(f64::INFINITY, |s| s.dist);
-            let (computed, reason) = if w.party {
-                (FaceType::Party, "shared")
-            } else if front == Some(k) {
-                (FaceType::Front, front_reason)
-            } else if w.entrance {
-                (FaceType::Front, "entrance")
-            } else if front.is_some() && align >= CORNER_ALIGN && dist <= CORNER_DIST_M {
-                (FaceType::Front, "street")
-            } else if front_normal.is_some_and(|f| w.normal.0 * f.0 + w.normal.1 * f.1 <= BACK_DOT)
-                && align <= BACK_ALIGN
-            {
-                (FaceType::Back, "opposite")
-            } else {
-                (
-                    FaceType::Side,
-                    if front.is_some() { "other" } else { "none" },
-                )
-            };
+            let (computed, reason) = types[k];
             let (ruled, door) = match rules.get(&(id, w.from.min(w.to), w.from.max(w.to))) {
                 Some(&(t, d)) => (Some(t), d),
                 None => (None, None),
@@ -895,6 +1003,47 @@ mod tests {
             "south and east fronts, north back, west side"
         );
         assert_eq!((f[0].street_osm_id, f[1].street_osm_id), (Some(7), Some(8)));
+    }
+
+    #[test]
+    fn a_street_that_is_far_gives_no_second_front() {
+        let ways = [building(100, &[1, 2, 3, 4, 1])];
+        let streets = [
+            street(7, (-30.0, -6.0), (50.0, -6.0)),
+            street(8, (45.0, -30.0), (45.0, 40.0)),     // 25 m from the east wall: more than `CORNER_DIST_M`
+        ];
+        let f = building_faces(&ways, &block(), &streets, &[]);
+        assert_eq!(types(&f), ["front", "side", "back", "side"]);
+        let streets = [
+            street(7, (-30.0, -6.0), (50.0, -6.0)),
+            street(8, (35.0, -30.0), (35.0, 40.0)),     // 15 m from the east wall, but 9 m farther than the main front: more than `CORNER_EXTRA_M`
+        ];
+        let f = building_faces(&ways, &block(), &streets, &[]);
+        assert_eq!(types(&f), ["front", "side", "back", "side"]);
+    }
+
+    #[test]
+    fn a_lane_next_to_a_main_road_gives_no_second_front() {
+        let ways = [building(100, &[1, 2, 3, 4, 1])];
+        let mut main = street(7, (-30.0, -6.0), (50.0, -6.0));
+        main.highway = "primary".into();
+        let mut lane = street(8, (26.0, -30.0), (26.0, 40.0));
+        lane.highway = "service".into();
+        let f = building_faces(&ways, &block(), &[main.clone(), lane], &[]);
+        assert_eq!(types(&f), ["front", "side", "back", "side"], "0.7 is less than 0.6 of 1.3");
+        let road = street(8, (26.0, -30.0), (26.0, 40.0));      // a residential street of the same distance is a second front
+        let f = building_faces(&ways, &block(), &[main, road], &[]);
+        assert_eq!(types(&f), ["front", "front", "back", "side"]);
+    }
+
+    #[test]
+    fn a_chamfer_has_the_type_of_its_longer_neighbour() {
+        // a south wall of 20 m, a chamfer of 2.8 m at 45 degrees, an east wall of 8 m
+        let nodes = vec![node(1, 0.0, 0.0), node(2, 20.0, 0.0), node(3, 22.0, 2.0), node(4, 22.0, 10.0), node(5, 0.0, 10.0)];
+        let ways = [building(100, &[1, 2, 3, 4, 5, 1])];
+        let f = building_faces(&ways, &nodes, &[street(7, (-30.0, -8.0), (50.0, -8.0))], &[]);
+        assert_eq!(types(&f), ["front", "front", "side", "back", "side"]);
+        assert_eq!(f[1].type_reason, "street", "the chamfer has the reason of the south wall");
     }
 
     #[test]
