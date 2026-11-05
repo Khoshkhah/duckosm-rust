@@ -18,7 +18,22 @@ duckosm-build = { path = "../duckOSM/rust/duckosm-build" }
 ```
 
 To use a new engine in the page, merge the engine change in duckOSM. Then set the new commit as `rev` in
-`crates/duckosm-wasm/Cargo.toml` and run `cargo update -p duckosm-core`.
+`crates/duckosm-wasm/Cargo.toml` and run `cargo update -p duckosm-core -p duckosm-build`.
+
+## Where the editors come from
+
+The page has no copy of its two editors. Each editor is in the repository of its owner, and `build.sh` copies it at one pin. Git ignores
+the copies.
+
+| Card | Editor | Owner and folder | Pin | Copy in the page |
+|---|---|---|---|---|
+| 7 Edit OSM data | the fixes editor | duckOSM, `web/fixes_editor/` | the `rev` of the duckOSM dependency in `crates/duckosm-wasm/Cargo.toml` (the engine's rev) | `www/duckosm/fixes_editor/` |
+| 9 Edit design | the design panel | roadstyle, `rust/roadstyle-assets/files/static/dashboard/design/` | `ROADSTYLE_COMMIT` in `crates/duckosm-wasm/build.sh` | `www/map/roadstyle/dashboard/design/` |
+
+`build.sh` reads the duckOSM rev from `Cargo.toml`, so one rev gives the engine and the fixes editor. It stops if `Cargo.toml` has more
+than one duckOSM rev. `e2e.py` checks that the served files of both editors are equal to the files at their pins. To change an editor,
+change it in its owner's repository, merge it there, and then move the pin here. The unit tests of the fixes editor are in duckOSM
+(`node web/fixes_editor/fixes_units.mjs`).
 
 ## Toolchain status (2026-10-21)
 
@@ -225,13 +240,13 @@ and the Google key, the windows; and the phone form at 390 × 844). The test nee
 python crates/duckosm-wasm/www/dashboard_e2e.py out-dashboard
 ```
 
-Check the Design card (step 9) and the tile profile. `design_units.mjs` runs in Node and needs no browser: the default design changes nothing in the
-look, each theme loads in roadstyle's `Look.fromJson`, the tile writers follow the profile. `design_e2e.py` builds Monaco and changes the style in each tab, then
+Check the Design card (step 9) and the tile profile. `profile_units.mjs` runs in Node and needs no browser: the default design changes nothing in the
+page's look, each theme loads in roadstyle's `Look.fromJson`, the profile repairs wrong values, the tile writers follow the profile. `design_e2e.py` builds Monaco and changes the style in each tab, then
 reads the live map, the Export card, the PMTiles files and the stored design. `phone_design_e2e.py` opens each tab at 390 × 844
 ([app.md](app.md), "Step 9: design"):
 
 ```bash
-node crates/duckosm-wasm/www/design_units.mjs
+node crates/duckosm-wasm/www/profile_units.mjs
 python crates/duckosm-wasm/www/design_e2e.py out-design
 python crates/duckosm-wasm/www/phone_design_e2e.py out-phone-design
 ```

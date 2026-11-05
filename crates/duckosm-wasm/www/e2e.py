@@ -72,6 +72,14 @@ with sync_playwright() as p:
         got = re.sub(rb"\?v=[\w.-]+", b"", got)      # a copy with versions (--www): the file without them
         assert got == want, f"map/roadstyle/{served} is not roadstyle's {source} at {pin}: run build.sh"
     print(f"roadstyle's files: the same as roadstyle {pin}")
+    # the same for duckOSM's fixes editor: its files at the rev of the engine (the duckOSM git dependency in Cargo.toml)
+    rev = re.search(r'duckOSM\.git", rev = "(\w+)"', (WWW.parent / "Cargo.toml").read_text()).group(1)
+    clone = WWW.parents[2] / "target" / f"duckosm-{rev}"
+    for source in subprocess.run(["git", "-C", str(clone), "ls-tree", "-r", "--name-only", rev, "web/fixes_editor/"], capture_output=True, text=True, check=True).stdout.split():
+        want = subprocess.run(["git", "-C", str(clone), "show", f"{rev}:{source}"], capture_output=True, check=True).stdout
+        got = re.sub(rb"\?v=[\w.-]+", b"", page.request.get(url.split("index.html")[0] + "duckosm/" + source.removeprefix("web/")).body())
+        assert got == want, f"duckosm/{source.removeprefix('web/')} is not duckOSM's {source} at {rev}: run build.sh"
+    print(f"duckOSM's fixes editor: the same as duckOSM {rev}")
     if args.boundary:
         page.set_input_files("#file", args.boundary)   # the File tab of step 1
         page.wait_for_function("window.areas >= 1", timeout=60_000)

@@ -32,9 +32,6 @@ NAMES |= {"sql-wasm.js"}
 # so they get no version, also inside fetch( )
 NAMES |= {"style.json", "index.html"}
 
-# app/design_panel.js gives this name to the file of your themes that the browser downloads: not a file of the page
-NAMES |= {"duckosm-themes.json"}
-
 
 def version(text, v):
     tag = lambda path: f"{path}?v={v}"  # noqa: E731

@@ -50,7 +50,7 @@ The new keys go under one top-level key, `extra`. Then a file with only duckOSM 
 
 One editor serves every object. This is the iD editor model: preset fields on top, the raw tag list below.
 
-- **Preset fields.** A JSON file (`www/app/presets.json`) lists, for each kind of object, the fields: key, label, type (choice, text, whole number, color) and the values.
+- **Preset fields.** A JSON file (`presets.json`, now in duckOSM `web/fixes_editor/`) lists, for each kind of object, the fields: key, label, type (choice, text, whole number, color) and the values.
   A new field is a new line in the file. No code changes.
 - **Raw tags.** Under the preset fields, a table shows every tag of the object. The user can change a value, add a tag, or delete a tag.
 - **The form starts with the data.** When the user selects an object, each field shows the value that the data has now. Edited fields show a mark and a **Revert** button.
@@ -120,7 +120,7 @@ Six tabs in two rows: **Road**, **Building**, **Node**, **Turn**, **New road** a
 
 - **Road, Building and Node.** One editor, and each tab has its own picked object, form and draft. A switch of tab shows the state of that tab, and the first visit shows an empty tab with one line of help.
   A map click picks the kind of the active tab. A tab has these sections: **Pick** (a click, or an OSM ID and **Load**), **Selected** (the name, the ids, the data of the networks, all tags), then the fields in sections
-  (`group` in `app/presets.json`), **Other tags**, and for a road **Modes** (not in a mode, remove the road) and for a building **Walls**.
+  (`group` in `presets.json`), **Other tags**, and for a road **Modes** (not in a mode, remove the road) and for a building **Walls**.
   The Node tab says what a node is: one point of OSM, here a traffic signal or a crossing. Its changes show in `features.traffic`, not in the road edges.
   The Node tab draws the nodes that a click can pick, as dots in view (zoom 14 or more): red for a traffic signal, teal for a crossing, gray for the others. A legend and the count in view are in the tab. The picked node has a blue ring. A hover on a dot shows a ring, the pointer cursor and a tooltip with the kind, the node id and the name.
 - **Delete.** The Road, Building and Node tabs have a red **Delete** section. **Delete this road** (or **this building**) stages the rule `remove` of duckOSM: after the next build the way is in no network and in no layer (`features.buildings`, `main.building_info`, `main.building_faces`). A building that is a relation loses its `building` tag, and a signal or a crossing loses its tags. The delete is part of the draft until **Add to changes**, and **Undo the delete** takes it back before that. A deleted object is red on the map and has a red mark in the Changes list ("deleted from the data"). To take back a delete that is in the changes, use **Remove from changes**. (Before 2026-11-04 the Road tab had only a check box "Remove the road", at the end of the Modes section.)

@@ -9,10 +9,19 @@
 #                     of roadstyle's engine (roadstyle repository, rust/) at the commit ROADSTYLE_COMMIT, cloned into
 #                     target/roadstyle-<commit> (or ROADSTYLE_REPO, a local copy). duckosm-build takes the levels from an older commit
 #                     (aba5884, crates/duckosm-build/Cargo.toml): at this commit they are the crate roadstyle-levels.
+#   www/duckosm/      duckOSM's fixes editor (web/fixes_editor/, card 7) at the rev of the engine: the rev of the duckOSM git
+#                     dependency in crates/duckosm-wasm/Cargo.toml, cloned into target/duckosm-<rev> (or DUCKOSM_REPO, a local copy).
+#                     One rev gives the engine and the editor.
 set -e
 NIGHTLY=nightly-2026-10-15
-ROADSTYLE_COMMIT=34459a38c9b722a0c6fece2462ef6ec0671404e9   # the full SHA: a fetch by SHA needs it
+ROADSTYLE_COMMIT=863707720e48b01b01eb6453f661be49843ecd50   # the full SHA: a fetch by SHA needs it
 ROADSTYLE_REPO=${ROADSTYLE_REPO:-https://github.com/Khoshkhah/roadstyle.git}
+DUCKOSM_REV=$(sed -n 's/.*duckOSM\.git", rev = "\([0-9a-f]*\)".*/\1/p' crates/duckosm-wasm/Cargo.toml | sort -u)
+DUCKOSM_REPO=${DUCKOSM_REPO:-https://github.com/Khoshkhah/duckOSM.git}
+if [ "$(echo "$DUCKOSM_REV" | wc -w)" != 1 ] || [ ${#DUCKOSM_REV} != 40 ]; then
+  echo "build.sh: crates/duckosm-wasm/Cargo.toml must give one full duckOSM rev, not: $DUCKOSM_REV" >&2
+  exit 1
+fi
 cargo build --release --target wasm32-unknown-unknown -p duckosm-wasm
 wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/pkg target/wasm32-unknown-unknown/release/duckosm_wasm.wasm
 # the linker flags of wasm-bindgen's threads example: this nightly does not add them for +atomics
@@ -50,3 +59,14 @@ rm -rf crates/duckosm-wasm/www/map/roadstyle/dashboard crates/duckosm-wasm/www/m
 cp -r $R/rust/roadstyle-assets/files/static/dashboard crates/duckosm-wasm/www/map/roadstyle/
 wasm-bindgen --target web --out-dir crates/duckosm-wasm/www/map/pkg \
   $R/rust/target/wasm32-unknown-unknown/release/roadstyle_wasm.wasm
+# duckOSM's fixes editor, as it is at DUCKOSM_REV (no copy in git; e2e.py checks that the served files equal them). The same fetch as for roadstyle.
+D=target/duckosm-$DUCKOSM_REV
+if [ "$(git -C $D rev-parse -q --verify HEAD 2>/dev/null)" != $DUCKOSM_REV ] || ! git -C $D diff --quiet HEAD; then
+  rm -rf $D
+  git init -q $D
+  git -C $D fetch -q --depth 1 "$DUCKOSM_REPO" $DUCKOSM_REV
+  git -C $D checkout -q --force FETCH_HEAD
+fi
+rm -rf crates/duckosm-wasm/www/duckosm
+mkdir -p crates/duckosm-wasm/www/duckosm
+cp -r $D/web/fixes_editor crates/duckosm-wasm/www/duckosm/

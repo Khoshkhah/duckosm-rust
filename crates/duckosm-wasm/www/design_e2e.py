@@ -67,9 +67,10 @@ with sync_playwright() as p:
         page.click("#step9")
     assert page.is_visible("#step9") and not page.is_visible("#design-panel")
     page.click("#step9")
-    assert page.evaluate("document.body.classList.contains('editing-design')") and page.is_visible("#design-panel") and not page.is_visible("#fix-panel") and not page.is_visible("#step1-card")
-    assert page.locator("#design-panel [role=tab]").count() == 5 and page.text_content("#design-panel h2") == "Edit design"
-    assert page.is_visible("#design-back") and page.is_visible("#design-hide") and page.is_visible("#design-changes")
+    # roadstyle's design panel (map/roadstyle/dashboard/design/): its title goes into the page's title row, before the page's hide button
+    assert page.is_visible("#design-panel") and not page.is_visible("#fix-panel") and not page.is_visible("#step1-card")
+    assert page.locator("#design-panel [role=tab]").count() == 5 and page.text_content("#sb .rs-dz-title .t") == "Edit design"
+    assert page.is_visible("#design-back") and page.is_visible("#sb-hide") and page.is_visible("#design-changes")
     page.click("#design-back")
     assert not page.is_visible("#design-panel") and page.is_visible("#step9-card"), "Steps comes back to the steps"
     print("card and panel: ok")
@@ -299,7 +300,7 @@ with sync_playwright() as p:
     page.evaluate("window.duckMap.jumpTo({center: [7.0, 43.95], zoom: 11})")            # a place with no roads: only the ground shows
     page.click("#design-pane [data-look=overlay]")
     settled(page)
-    checker = lambda: page.evaluate("document.getElementById('map').classList.contains('checker')")
+    checker = lambda: page.evaluate("document.getElementById('map').classList.contains('rs-checker')")
     def patch():
         img = np.asarray(Image.open(io.BytesIO(page.screenshot(clip={"x": 500, "y": 200, "width": 300, "height": 300}))).convert("RGB")).astype(int)
         grey = int((np.abs(img - [212, 212, 212]).sum(axis=2) < 6).sum()); white = int((np.abs(img - [255, 255, 255]).sum(axis=2) < 6).sum())
@@ -428,7 +429,7 @@ with sync_playwright() as p:
     # Tiles: a ready profile fills the fields, the Export card shows them, and the files follow them
     page.click("#design-tab-tiles")
     page.click("#design-pane [data-profile=web]")
-    prof = page.evaluate("window.designPanel.profile()")
+    prof = page.evaluate("window.designPanel.get().profile")
     assert prof["preset"] == "web" and not prof["layers"]["edges"] and not prof["auto"] and prof["maxzoom"] == 14
     assert page.get_attribute("#design-pane [data-profile=web]", "aria-checked") == "true"
     assert page.is_disabled("#design-pane [data-col=name]") and page.is_disabled("#design-pane [data-p='profile.classFrom.motorway']"), "the columns and the class zooms are for the layer edges"
@@ -444,19 +445,19 @@ with sync_playwright() as p:
     assert "edges" not in layers and {"simple", "slots", "ov0"} <= set(layers) and page.evaluate("window.lastExport.max") == 14
     # a field of the Export card is a field of the profile
     set_input(page, "#export-zmax", 12)
-    assert page.evaluate("window.designPanel.profile().maxzoom") == 12 and page.evaluate("window.designPanel.profile().preset") == "custom"
+    assert page.evaluate("window.designPanel.get().profile.maxzoom") == 12 and page.evaluate("window.designPanel.get().profile.preset") == "custom"
     page.check("#export-full")
-    assert page.evaluate("window.designPanel.profile().layers.edges")
+    assert page.evaluate("window.designPanel.get().profile.layers.edges")
     # the Analysis profile with fewer columns, a bigger extent and no base-map layers
     page.click("#step9"); page.click("#design-tab-tiles")
     page.click("#design-pane [data-profile=analysis]")
-    assert page.evaluate("window.designPanel.profile().auto") and page.is_disabled("#design-pane [data-p='profile.maxzoom']")
+    assert page.evaluate("window.designPanel.get().profile.auto") and page.is_disabled("#design-pane [data-p='profile.maxzoom']")
     page.click("#design-pane [data-cols=few]")
     page.check("#design-pane [data-col=highway]"); page.check("#design-pane [data-col=lanes]")
     set_input(page, "[data-p='profile.classFrom.residential']", 14)
     page.select_option("[data-p='profile.extent']", "2048")
     page.uncheck("#design-pane [data-p='profile.layers.base']")
-    prof = page.evaluate("window.designPanel.profile()")
+    prof = page.evaluate("window.designPanel.get().profile")
     assert prof["columns"] == ["edge_id", "highway", "lanes"] and prof["extent"] == 2048 and not prof["layers"]["base"] and prof["classFrom"]["residential"] == 14
     settled(page)
     assert re.search(r'"extent":\s*2048', "") or True
@@ -466,7 +467,7 @@ with sync_playwright() as p:
     print("  analysis profile layers:", layers, "|", chk["text"][:160])
     assert set(layers) == {"edges", "simple", "slots"}, ("the roads and the layer edges, no base-map layer", layers)
     info = page.evaluate("""async () => {
-      const ex = await import('/app/export.js'), m = await import('/app/mvt.js'), p = window.designPanel.profile();
+      const ex = await import('/app/export.js'), m = await import('/app/mvt.js'), p = window.designPanel.get().profile;
       const feats = await ex.roadFeatures((sql) => window.duckApi.query(sql).then((r) => r.toArray().map((x) => x.toJSON())), ['driving']);
       const t = ex.edgeTiles(feats.slice(0, 200), 14, 14, { extent: p.extent, buffer: p.buffer, columns: p.columns, modes: ['driving'], classFrom: p.classFrom });
       const l = m.decodeTile([...t.values()][0])[0];
@@ -484,7 +485,7 @@ with sync_playwright() as p:
     file = out / d.value.suggested_filename
     d.value.save_as(file)
     saved = json.loads(file.read_text())
-    assert file.name == "my_roads.design.json" and saved["format"] == "duckosm-design" and saved["version"] == 1 and saved["name"] == "My roads"
+    assert file.name == "my_roads.design.json" and saved["format"] == "roadstyle-design" and saved["version"] == 1 and saved["name"] == "My roads"
     assert saved["profile"]["extent"] == 2048 and saved["theme"] == "custom" and saved["roads"]["fill"]["primary"] == "#ffeeaa", "the file has the design as it is now (the Light theme, then the boundary)"
     assert saved["boundary"]["color"] == "#ff00ff" and saved["boundary"]["dash"] == "dotted" and saved["boundary"]["show"] is True, saved["boundary"]
     saved["name"] = "Loaded one"; saved["roads"]["fill"]["primary"] = "#00aa00"; saved["boundary"]["color"] = "#00ffaa"
@@ -584,7 +585,7 @@ with sync_playwright() as p:
     f = out / d.value.suggested_filename
     d.value.save_as(f)
     doc = json.loads(f.read_text())
-    assert f.name == "duckosm-themes.json" and doc["format"] == "duckosm-themes" and [x["name"] for x in doc["themes"]] == ["my PRINT", "Night + profile"], (f.name, doc.get("format"), [x.get("name") for x in doc.get("themes", [])])
+    assert f.name == "duckosm-themes.json" and doc["format"] == "roadstyle-themes" and [x["name"] for x in doc["themes"]] == ["my PRINT", "Night + profile"], (f.name, doc.get("format"), [x.get("name") for x in doc.get("themes", [])])
     (out / "not-themes.json").write_text(json.dumps({"hello": 1}))
     page.set_input_files("#mine-file", str(out / "not-themes.json"))
     page.wait_for_function("/not loaded/.test(document.getElementById('mine-msg').textContent)")

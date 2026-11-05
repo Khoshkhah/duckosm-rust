@@ -354,7 +354,7 @@ export async function zipAll(areaName, boundary) {
 // map asks for (tile()), until the next style (a worker that ends gives its memory back). keep: the road properties in the tiles, with the
 // ones the style reads. The road table (the fields of each road, for roadstyle's dashboard: the popup) comes with the style.
 let look = null, mapWorker = null, generation = 0, tileId = 0;
-// The look of the next draw: the text of map/look.json with the design written into it (app/design.js). None: the page's look (pageLookText).
+// The look of the next draw: the text of map/look.json with the design written into it (roadstyle's design panel, map/roadstyle/dashboard/design/). None: the page's look (pageLookText).
 let lookText = null;
 let pageLook = null;
 /** The text of map/look.json, read once. Every part of the page (the draw, a new look, the Design panel, the level editor) uses this one text: a

@@ -59,7 +59,7 @@ onmessage = async ({ data }) => {
     return;
   }
   try {
-    const [, look] = await Promise.all([init(data.wasmModule && { module_or_path: data.wasmModule }), data.look ?? fetch(new URL("./look.json", import.meta.url)).then((r) => r.text())]);       // data.look: the page's design written into the look (app/design.js)
+    const [, look] = await Promise.all([init(data.wasmModule && { module_or_path: data.wasmModule }), data.look ?? fetch(new URL("./look.json", import.meta.url)).then((r) => r.text())]);       // data.look: the page's design written into the look (roadstyle's design panel)
     const t = performance.now();
     // levels: "tags", or the stored levels' {edge_hash, n_edges}, which the engine checks
     levels = data.levels;
