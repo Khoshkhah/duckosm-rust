@@ -2,21 +2,7 @@
 
 You choose an area, build its road network, find the errors in the OpenStreetMap (OSM) data, fix them, build again, and export. The page has one card for each step. This page shows the whole cycle on one picture.
 
-```mermaid
-flowchart TD
-    A["1 Choose an area<br/>search, draw, file or H3"] --> B["2 Name the area<br/>add a buffer"]
-    B --> C["3 Give the OSM data<br/>region file, Overpass or cut file"]
-    C --> D["4 Build"]
-    D --> E["5 and 6 Read the result<br/>SQL, tables and the map"]
-    E --> G{"Is the data right?"}
-    G -- "No" --> H["7 Edit OSM data<br/>road, building, node, turn, new road"]
-    H --> I[("The list of changes<br/>fixes.yaml")]
-    I -- "Build again" --> D
-    G -- "Yes" --> J["8 Edit levels<br/>bridges and tunnels"]
-    J --> K["9 Edit design<br/>colors, text, tile profile"]
-    K --> L["10 Export<br/>tiles, GeoPackage, GeoJSON, MATSim, SUMO"]
-    E -.-> M[("Download<br/>.zip, .duckdb, .osm.pbf, .yaml")]
-```
+![The cycle: choose an area, get the OSM data, build, check the map and the tables, edit the OSM data and build again, edit levels and design, export](../img/cycle.svg)
 
 ![The ten cards of the page, from Choose an area to Export](../img/dashboard/01-start.png)
 

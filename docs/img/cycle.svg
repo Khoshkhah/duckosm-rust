@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 210" width="960" height="210" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15">
+  <title>The editing cycle of duckOSM Studio</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#475569"/>
+    </marker>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#b45309"/>
+    </marker>
+  </defs>
+  <rect width="960" height="210" rx="14" fill="#ffffff"/>
+  <g stroke="#94a3b8" stroke-width="1.5" fill="#f1f5f9">
+    <rect x="16" y="120" width="134" height="64" rx="10"/>
+    <rect x="174" y="120" width="134" height="64" rx="10"/>
+    <rect x="490" y="120" width="134" height="64" rx="10"/>
+    <rect x="648" y="120" width="134" height="64" rx="10"/>
+    <rect x="806" y="120" width="134" height="64" rx="10"/>
+  </g>
+  <rect x="332" y="120" width="134" height="64" rx="10" fill="#0d9488"/>
+  <rect x="399" y="16" width="158" height="52" rx="10" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+  <g text-anchor="middle" fill="#0f172a">
+    <text x="83" y="148">Choose</text><text x="83" y="167">an area</text>
+    <text x="241" y="148">Get the</text><text x="241" y="167">OSM data</text>
+    <text x="399" y="158" fill="#ffffff" font-weight="700" font-size="17">Build</text>
+    <text x="557" y="148">Check the map</text><text x="557" y="167">and the tables</text>
+    <text x="715" y="148">Edit levels</text><text x="715" y="167">and design</text>
+    <text x="873" y="158" font-weight="700">Export</text>
+    <text x="478" y="47" fill="#92400e" font-weight="700">Edit OSM data</text>
+  </g>
+  <g stroke="#475569" stroke-width="2" fill="none" marker-end="url(#a)">
+    <path d="M150 152H172"/>
+    <path d="M308 152H330"/>
+    <path d="M466 152H488"/>
+    <path d="M624 152H646"/>
+    <path d="M782 152H804"/>
+  </g>
+  <g stroke="#b45309" stroke-width="2" fill="none" marker-end="url(#b)">
+    <path d="M590 118V42H559"/>
+    <path d="M399 42H372V118"/>
+  </g>
+  <text x="598" y="92" fill="#92400e" font-size="13">a fault in the data</text>
+  <text x="364" y="92" fill="#92400e" font-size="13" text-anchor="end">build again</text>
+</svg>
