@@ -6,29 +6,11 @@ After a build, step 5 gives you the tables, and step 6 draws the roads on the ma
 
 ![Card 5: the result table, the downloads and the list of tables](../img/dashboard/10-result.png)
 
-Card 5 has four parts:
+Card 5 has three parts:
 
 - **The result table.** The number of roads and junctions of each network.
-- **SQL.** Ask a question to the tables.
 - **The downloads.** Four buttons.
 - **Each table.** The list of the tables, with a link to their columns.
-
-### SQL
-
-![The SQL box with the roads of Monaco by class](../img/dashboard/37-sql.png)
-
-Open **SQL**. The box has an example: the roads of the driving network, by class. Press **Run** to see the answer. The page uses DuckDB with the spatial extension, in your browser. Write the name of a table with its network, for example `driving.edges`.
-
-Some examples:
-
-```sql
--- the length of the roads of each class, in km
-SELECT highway, count(*) AS edges, round(sum(length_m) / 1000, 1) AS km
-FROM driving.edges GROUP BY highway ORDER BY edges DESC;
-
--- the streets with a speed limit of 30 km/h or less
-SELECT DISTINCT name FROM driving.edges WHERE maxspeed_kmh <= 30 AND name IS NOT NULL;
-```
 
 ### The downloads
 
@@ -38,6 +20,19 @@ SELECT DISTINCT name FROM driving.edges WHERE maxspeed_kmh <= 30 AND name IS NOT
 | **.duckdb** | One DuckDB database | Open it with the DuckDB CLI or Python. |
 | **.osm.pbf** | The OSM data of the area, cut from the region file | Build again with no big file. Shows only when the build cut the data. |
 | **.yaml** | The fixes of this build | Use it in the next build. Shows only when the build had fixes. |
+
+### Query the tables
+
+Download the **.duckdb** file and open it with DuckDB (the CLI or Python). Write the name of a table with its network, for example `driving.edges`. Some examples:
+
+```sql
+-- the length of the roads of each class, in km
+SELECT highway, count(*) AS edges, round(sum(length_m) / 1000, 1) AS km
+FROM driving.edges GROUP BY highway ORDER BY edges DESC;
+
+-- the streets with a speed limit of 30 km/h or less
+SELECT DISTINCT name FROM driving.edges WHERE maxspeed_kmh <= 30 AND name IS NOT NULL;
+```
 
 ### Each table
 

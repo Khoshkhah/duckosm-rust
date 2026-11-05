@@ -33,7 +33,6 @@ You choose an area on a map. The portal builds the driving, walking and cycling 
 | Three networks in one build | Driving, walking and cycling, with the edge graph and the turn restrictions. |
 | Fix the data | Change a road, a building, a node or a turn rule. Draw a new road. Build again. |
 | A clear map | The roads have the style of roadstyle: outlines, bridges and tunnels. 33 ready themes. |
-| SQL in the page | Ask questions to the tables with DuckDB. |
 | Export to your tools | PMTiles, MBTiles, GeoPackage, GeoJSON, kepler.gl, MATSim and SUMO. |
 | Your work stays | The page saves each build in your browser. **Open** loads it with no new build. |
 

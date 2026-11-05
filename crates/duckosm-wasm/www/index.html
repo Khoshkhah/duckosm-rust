@@ -104,14 +104,13 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   .step-body { display: flex; flex-direction: column; gap: 10px; }
   .step-body > * { margin-top: 0 !important; margin-bottom: 0 !important; }
   .step .n { width: 20px; height: 20px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 11px; flex: none; }
-  /* card 5: one line of the build, the folded SQL and table downloads, the two downloads on one row */
+  /* card 5: one line of the build, the downloads on one row and the folded table downloads */
   .step .line { margin: 0; }
   .step h3 { display: inline; margin: 0; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
   .step details > summary:has(h3) { color: var(--muted); }
   .dl { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; margin-top: 10px; }
   .dl [hidden] { display: none; }
   .dl .btn { padding: 0 8px; font-size: 12.5px; white-space: nowrap; }
-  #sql-box .row { margin-top: 6px; }
   /* the panel's icons; not the map's, the bar's and the floating windows' own SVGs (roadstyle's) */
   :is(#sb, #mapbusy) svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
   #sb .field input[type=search] { padding-left: 36px; }
@@ -462,9 +461,6 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   select, textarea { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 9px; }
   select { height: 34px; padding: 0 8px; }
   textarea { width: 100%; padding: 8px 10px; font: 12.5px/1.4 ui-monospace, monospace; resize: vertical; }
-  #result { overflow-x: auto; margin-top: 8px; }
-  #result table { border-collapse: collapse; font-size: 12px; }
-  #result th, #result td { border: 1px solid var(--line); padding: 3px 6px; text-align: left; white-space: nowrap; }
   /* one block for each table: its name, what it holds, and a link for each mode */
   #files .tb { padding: 8px 0; border-top: 1px solid var(--line); font-size: 12.5px; }
   #files .tb b { font-family: ui-monospace, monospace; font-size: 12px; }
@@ -670,13 +666,6 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
 <section id="step5-card" class="step" aria-labelledby="step5">
   <h2 id="step5"><span class="n">5</span>The result</h2>
   <div id="resultline"></div>
-  <details id="sql-box"><summary><h3>SQL</h3></summary>
-    <textarea id="sql" rows="4" aria-label="SQL">SELECT highway, count(*) AS edges, round(sum(length_m) / 1000, 1) AS km
-FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
-    <div class="row"><button id="query" class="btn">Run</button></div>
-    <p id="query-why" class="why"></p>
-    <div id="result" class="pg-scroll"></div>
-  </details>
   <div class="dl"><button id="zip" class="btn" aria-label="Download all the tables as a zip"><svg><use href="#i-download"/></svg>.zip</button><button id="duckdb" class="btn" aria-label="Download the .duckdb database"><svg><use href="#i-download"/></svg>.duckdb</button><button id="cutpbf" class="btn" hidden aria-label="Download the cut area as an .osm.pbf file"><svg><use href="#i-download"/></svg>.osm.pbf</button><button id="fixesyaml" class="btn" hidden aria-label="Download the fixes file (.yaml) that this build used"><svg><use href="#i-download"/></svg>.yaml</button></div>
   <details id="files-box"><summary><h3>Each table</h3></summary>
     <p class="small muted"><a id="reference" target="_blank" rel="noopener">The columns of each table</a></p>
@@ -2174,7 +2163,7 @@ const roadLimit = () => Math.min(window.mapMaxRoads, ENGINE_MAX_ROADS);
 const smaller = () => {
   const fit = duck.MODES.filter((m) => roadCount[m] != null && roadCount[m] <= roadLimit());
   return (fit.length ? `Choose one network: ${fit.map((m) => `${m[0].toUpperCase() + m.slice(1)} ${num(roadCount[m])} roads`).join(", ")}. Or use` : "Use")
-    + (SMALL_DEVICE ? " a desktop browser or" : "") + " a smaller area. SQL and the downloads work.";
+    + (SMALL_DEVICE ? " a desktop browser or" : "") + " a smaller area. The downloads work.";
 };
 const tooLarge = (n) => `This map has ${num(n)} roads. ${SMALL_DEVICE ? "This device" : "A browser page"} draws at most ${num(roadLimit())} roads (its memory). ` + smaller();
 async function addRoadStyle(style) {
@@ -2425,7 +2414,7 @@ const HELP = {
     ["2 The area", "Check the name and the size of the area."],
     ["3 The data", "Select the OpenStreetMap data: a region file, the Overpass API or a cut file."],
     ["4 Build", "Select the networks and press Build. The page makes the tables."],
-    ["5 The result", "Run SQL on the tables. Download the tables as a zip or as a .duckdb file."],
+    ["5 The result", "Download the tables as a zip or as a .duckdb file."],
     ["6 Visualization", "Show the roads on the map."],
     ["7 Edit OSM data", "Correct errors of OpenStreetMap and add information (sidewalk, floors, roof, colors, turn rules) with rules, and build the networks again."],
     ["8 Edit levels", "Change the drawing order of the roads by hand."],
@@ -2459,7 +2448,6 @@ const CARD_HELP = {
     note: `${link(DOCS.features, "The features tables")} · ${link(DOCS.fixes, "The format of the fixes file")}` },
   5: { title: "The result", intro: "The tables that the build made.", terms: [
     ["Networks", "Roads are the edges of a network and junctions are its nodes."],
-    ["SQL", "Run a query on the tables in this browser."],
     ["Download all", "The tables as GeoParquet files, with make_duckdb.sql, the boundary and a README, in one zip."],
     [".duckdb", "A duckOSM database with all tables."],
     [".yaml", "The fixes file that this build used (the rules of card 7). It shows only when the build used fixes."],
@@ -3089,26 +3077,6 @@ async function leaveEditor() {
     editNote("Apply failed: " + e.message);       // the editor stays open
   }
 }
-
-// SQL on the tables
-const cell = (v) => (v === null || v === undefined ? "NULL" : v instanceof Uint8Array ? `(${v.length} bytes)` : typeof v === "object"
-  ? JSON.stringify(v, (k, x) => (typeof x === "bigint" ? x.toString() : x)) : String(v));
-// Run is on when there is a query
-const queryReady = () => { const why = $("sql").value.trim() ? "" : "Type a query first."; $("query").disabled = !!why; $("query-why").textContent = why; };
-$("sql").oninput = queryReady;
-queryReady();
-$("query").onclick = async () => {
-  try {
-    const t = performance.now(), res = await duck.query($("sql").value);
-    const cols = res.schema.fields.map((f) => f.name), rows = res.toArray().slice(0, 200);
-    const head = `<tr>${cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr>`;
-    const body = rows.map((r) => `<tr>${cols.map((c) => `<td>${esc(cell(r[c]))}</td>`).join("")}</tr>`).join("");
-    $("result").innerHTML = `<p class="small muted">${num(res.numRows)} rows in ${num((performance.now() - t) / 1000, 3)} s` +
-      `${res.numRows > 200 ? " (the first 200)" : ""}</p><table>${head}${body}</table>`;
-  } catch (e) {
-    $("result").innerHTML = `<p class="small error">${esc(e.message)}</p>`;
-  }
-};
 
 // the downloads: all files in one zip (with make_duckdb.sql), and each table: a row for each table (with what it holds), a column for each mode
 const size = (b) => (b < 2 ** 20 ? `${num(Math.max(1, b / 1024))} KB` : `${mb(b)} MB`);

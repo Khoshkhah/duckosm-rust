@@ -13,7 +13,7 @@ Build a routable road network from OpenStreetMap in your browser. Fix the OSM da
 1. Choose an area: search a place, draw a shape, load a file or pick H3 cells.
 2. Get the OSM data: a region file, the Overpass API or a cut file.
 3. Build the driving, walking and cycling networks.
-4. Check the roads on the map, and the tables with SQL.
+4. Check the roads on the map.
 5. If the data has a fault, edit it (a road, a building, a node, a turn or a new road) and build again.
 6. Edit the drawing order of bridges and tunnels, and the design of the map.
 7. Export to your tools.

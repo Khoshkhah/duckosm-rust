@@ -123,13 +123,8 @@ with sync_playwright() as p:
     shot(page, "09-build-done", "#step4-card")
     unfold(page, "step5-card")
     shot(page, "10-result", "#step5-card")
-    page.click("#sql-box summary")
-    page.click("#query")
-    page.wait_for_function("document.getElementById('result').textContent.length > 20", timeout=60_000)
     page.add_style_tag(content=".pg-scroll { max-height: none !important; }")       # the lists show in full in the pictures
     page.set_viewport_size({"width": 1400, "height": 2600})
-    shot(page, "37-sql", "#sql-box")
-    page.click("#sql-box summary")
     page.click("#files-box summary")
     shot(page, "38-each-table", "#files-box")
     page.click("#files-box summary")

@@ -7,7 +7,7 @@ This procedure makes a map of Monaco in the browser. It takes about five minutes
 3. In step 3, under **Region file**, press **Get** for the Geofabrik file that covers the area. The page keeps the file in your browser. You can also select an `.osm.pbf` file that you have. ([Steps 3 and 4](manual/build.md))
 4. In step 4, keep **Driving** on. Press **Build**.
 5. In step 6, press **Show on map**. The roads of Monaco show on the map. ([Steps 5 and 6](manual/result.md))
-6. In step 5, press **.zip** to download the tables, or run an SQL query on them.
+6. In step 5, press **.zip** to download the tables.
 
 The page saves the build in your browser. When you come back, **Your areas** lists it. **Open** loads it with no new build. ([The page](dashboard.md#your-areas))
 

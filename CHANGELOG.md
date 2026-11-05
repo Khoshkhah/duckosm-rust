@@ -5,6 +5,10 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ## Not released
 
+### Removed
+
+- **The SQL box of card 5.** A test on the live page showed two faults: card 5 folds by itself about 3 s after a build (card 6 opens for the map), so the box went away while a person typed in it, and the result was a 257 px wide box with scroll bars in both directions. Kaveh: a useful SQL tool needs its own panel, which is later work. To query the tables, download the `.duckdb` file (the manual, "Query the tables"). The tests that read the box (`e2e.py`, `editor_e2e.py`) ask the page's DuckDB directly.
+
 ### Changed
 
 - **The app is named duckOSM Studio** (the repository becomes `Khoshkhah/duckosm-studio`, the page `https://khoshkhah.github.io/duckosm-studio/`). The page title and header, the README in the table download, the generator name in the export files, and the docs link use the new name. The engine and the command line are duckOSM's.

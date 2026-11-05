@@ -27,7 +27,7 @@ with sync_playwright() as p:
     page.wait_for_function("!document.getElementById('run').hasAttribute('aria-busy') && !document.getElementById('step7-card').classList.contains('off')", timeout=600_000)
     page.wait_for_function("document.getElementById('mapnote').textContent.includes('draws at most')", timeout=120_000)
     note = page.inner_text("#mapnote")
-    assert "draws at most 5,000 roads" in note and "∞" not in note and "Choose one network" in note and "SQL and the downloads work" in note, note
+    assert "draws at most 5,000 roads" in note and "∞" not in note and "Choose one network" in note and "The downloads work" in note, note
     print("the limit says what it is:", note)
     # a page with no parameter: a desktop page has the limit of the engine
     assert page.evaluate("window.mapMaxRoads") == 5000

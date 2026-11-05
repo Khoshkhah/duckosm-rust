@@ -95,13 +95,6 @@ def run(browser, name, dark=False, **context):
     page.wait_for_function("!document.getElementById('step5-card').classList.contains('off')", timeout=900_000)
     page.wait_for_function("!document.getElementById('run').disabled", timeout=300_000)       # the build ends after the tables are in the cards
     on("run", "buildhint")
-    # the query box: Run is off when it is empty
-    page.evaluate("document.getElementById('sql-box').open = true")
-    on("query", "query-why")
-    page.fill("#sql", "")
-    off("query", "query-why", "Type a query first")
-    page.fill("#sql", "SELECT 1")
-    on("query", "query-why")
     # the map: Show on map is off while the draw runs (the roads draw after the build), Edit levels waits for it
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=600_000)
     on("show", "show-why")
@@ -114,7 +107,7 @@ def run(browser, name, dark=False, **context):
     on("show", "show-why")
     on("step8", "step8-why")
     page.context.close()
-    print(f"buttons ({name}): GeoJSON, Build, Run, Show on map and Edit levels are off with a reason until their inputs are ready, and on after")
+    print(f"buttons ({name}): GeoJSON, Build, Show on map and Edit levels are off with a reason until their inputs are ready, and on after")
 
 
 with sync_playwright() as p:

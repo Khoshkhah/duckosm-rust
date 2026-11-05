@@ -32,16 +32,8 @@ url = f"http://127.0.0.1:{server.server_address[1]}/index.html"
 
 
 def sql(page, text):
-    """The rows of a query in the page's DuckDB, through the SQL box of card 5 (the first column of each row)."""
-    page.evaluate("document.getElementById('sql-box').open = true")   # the SQL box of card 5 is folded
-    page.fill("#sql", text)
-    page.click("#query")
-    page.wait_for_function("document.querySelector('#result table, #result .error')", timeout=60_000)
-    if page.query_selector("#result .error"):
-        raise SystemExit("SQL: " + page.inner_text("#result .error"))
-    got = page.eval_on_selector_all("#result table tr td:first-child", "tds => tds.map((t) => t.textContent)")
-    page.evaluate("document.getElementById('result').innerHTML = ''")
-    return got
+    """The rows of a query in the page's DuckDB (the first column of each row, as text)."""
+    return page.evaluate("""(q) => window.duckApi.query(q).then((r) => r.toArray().map((x) => String(Object.values(x.toJSON())[0])))""", text)
 
 
 BOX = "(id) => { const r = document.getElementById(id).getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; }"
