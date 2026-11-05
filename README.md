@@ -32,6 +32,14 @@ Build a routable road network from OpenStreetMap in your browser. Fix the OSM da
 - [Development](docs/development.md): build and test the page.
 - [Changelog](CHANGELOG.md)
 
+## Built on
+
+- **[roadstyle](https://github.com/Khoshkhah/roadstyle)** draws the roads: the casings and fills, bridges over and tunnels under the other roads, the street names, the one-way arrows and the themes. It also gives the page its dashboard: the panel, the map bar, Street View, Google 3D, the level editor and the design panel (Edit design).
+- **[MapLibre GL JS](https://maplibre.org/)** shows the map in the browser and draws the vector tiles.
+- **[duckOSM](https://github.com/Khoshkhah/duckOSM)** is the engine that builds the networks, and it has the fixes editor (Edit OSM data).
+- **[DuckDB](https://duckdb.org/)** (duckdb-wasm) holds the tables in the browser.
+- **[OpenStreetMap](https://www.openstreetmap.org/copyright)** gives the data (© OpenStreetMap contributors, ODbL). **[OpenFreeMap](https://openfreemap.org/)** gives the base map.
+
 ## License
 
 MIT

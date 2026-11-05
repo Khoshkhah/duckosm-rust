@@ -57,3 +57,14 @@ You choose an area on a map. The portal builds the driving, walking and cycling 
 For a script, a server or Python code, use [duckOSM](cli.md). It uses the same Rust engine as the page.
 
 [Concepts](concepts.md) explains the words: area, network, edge and `edge_id`. [Columns of the tables](output-tables.md) lists every column.
+
+## Built on
+
+| Project | What it does in duckOSM Studio |
+|---|---|
+| [roadstyle](https://github.com/Khoshkhah/roadstyle) | Draws the roads (casings, bridges and tunnels, names, one-way arrows, themes) and gives the dashboard: the panel, the map bar, Street View, Google 3D, the level editor and Edit design. |
+| [MapLibre GL JS](https://maplibre.org/) | Shows the map in the browser and draws the vector tiles. |
+| [duckOSM](https://github.com/Khoshkhah/duckOSM) | The engine that builds the networks, and the fixes editor (Edit OSM data). |
+| [DuckDB](https://duckdb.org/) | duckdb-wasm holds the tables in the browser. |
+| [OpenStreetMap](https://www.openstreetmap.org/copyright) | The data, © OpenStreetMap contributors (ODbL). |
+| [OpenFreeMap](https://openfreemap.org/) | The base map. |
