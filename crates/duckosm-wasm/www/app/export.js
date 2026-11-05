@@ -370,7 +370,7 @@ export async function pmtiles(tiles, info) {
     leaves = new Uint8Array(off); parts.reduce((o, p) => (leaves.set(p, o), o + p.length), 0);
     root = await gzip(directory(rootEntries));
   }
-  const meta = await gzip(new TextEncoder().encode(JSON.stringify({ name: info.name, type: "overlay", format: "pbf", vector_layers: info.layers.map((id) => ({ id, fields: {} })), generator: "duckosm-rust", minzoom: info.minzoom, maxzoom: info.maxzoom })));
+  const meta = await gzip(new TextEncoder().encode(JSON.stringify({ name: info.name, type: "overlay", format: "pbf", vector_layers: info.layers.map((id) => ({ id, fields: {} })), generator: "duckosm-studio", minzoom: info.minzoom, maxzoom: info.maxzoom })));
   const data = new Uint8Array(at); sorted.reduce((o, t) => (data.set(t.data, o), o + t.data.length), 0);
   const head = new DataView(new ArrayBuffer(127));
   [..."PMTiles"].forEach((c, i) => head.setUint8(i, c.charCodeAt(0)));

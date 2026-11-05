@@ -1,4 +1,4 @@
-// The build of duckosm-rust in a Web Worker, so the page stays responsive during a long build.
+// The build of duckOSM Studio in a Web Worker, so the page stays responsive during a long build.
 // In: {pbf: ArrayBuffer} (a file cut to the area), {region: File, boundary: GeoJSON text, raw: true or false} (a
 // region file, cut while it is read, piece by piece; raw: also duckOSM's raw.* files, docs/features.md) or {json:
 // ArrayBuffer, boundary, raw} (OSM JSON from the Overpass API; raw: also raw.*, from the objects of the layers), with {modes: "driving,walking", fixes: text or null}.

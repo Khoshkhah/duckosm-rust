@@ -315,7 +315,7 @@ export async function duckdbFile(areaName) {
 // make_duckdb.sql: it makes a .duckdb file from the Parquet files, for a browser where duckdbFile fails
 export function loadSql(areaName) {
   const file = slug(areaName);
-  const lines = [`-- duckOSM tables of ${areaName.replace(/\n/g, " ")}, from the Parquet files of duckosm-rust in the browser.`,
+  const lines = [`-- duckOSM tables of ${areaName.replace(/\n/g, " ")}, from the Parquet files of duckOSM Studio in the browser.`,
     `-- In the folder of the files: duckdb ${file}.duckdb < make_duckdb.sql`];
   for (const m of new Set(tables.map((t) => t.mode))) lines.push(`CREATE SCHEMA IF NOT EXISTS ${m};`);
   for (const t of tables) lines.push(`CREATE TABLE ${t.mode}.${t.table} AS ${select(t.table)} FROM read_parquet('${t.name}');`);
@@ -333,7 +333,7 @@ export async function zipAll(areaName, boundary) {
   const layers = tables.filter((t) => t.mode !== "features" && (t.table === "edges" || t.table === "nodes"))
     .map((t) => ({ file: t.name, kind: t.table, mode: t.mode, count: t.rows }))
     .concat(tables.filter((t) => t.mode === "features").map((t) => ({ file: t.name, kind: "features", table: t.table, count: t.rows })));
-  const readme = [`duckOSM tables of ${areaName}, built by duckosm-rust in the browser.`, "",
+  const readme = [`duckOSM tables of ${areaName}, built by duckOSM Studio in the browser.`, "",
     "<table>_<mode>.parquet: GeoParquet files, one for each table and mode:",
     ...Object.entries(TABLES).map(([t, d]) => `  ${t}: ${d}`), "",
     ...(tables.some((t) => t.mode === "features") ? [`features_<table>.parquet: ${FEATURES_TEXT}`, `  The layers and their columns: ${FEATURES_REFERENCE}`, ""] : []),
@@ -665,10 +665,10 @@ export async function saveLevels(levelsCsv, inputs, area) {
 }
 
 // the data of an area from the Overpass API: the highway ways and ferry lines in the bounding box of each outer ring, with all their
-// nodes, and the type=restriction relations of these ways. duckosm-rust then keeps the ways with a node inside the boundary, as in
+// nodes, and the type=restriction relations of these ways. the build then keeps the ways with a node inside the boundary, as in
 // the cut of a region file. With `layers`, also the objects that duckOSM's SQL of the base-map layers reads (features.sql): the nodes,
 // ways and multipolygons with one of LAYER_KEYS, the nodes with a highway tag (bus stops, signals, crossings), the type=boundary
-// relations with a leisure tag (nature reserves), and all their members and nodes; duckosm-rust cuts them as osmium's smart cut of a
+// relations with a leisure tag (nature reserves), and all their members and nodes; the build cuts them as osmium's smart cut of a
 // region file. Not the other type=boundary relations: features.sql reads none of them, and their members are large (Monaco,
 // 2026-11-05: the Alps and the Côte d'Azur made the answer 20.9 MB). A public server can be busy, so the next one is tried.
 const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter",

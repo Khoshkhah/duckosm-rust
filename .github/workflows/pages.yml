@@ -1,4 +1,4 @@
-# The browser page on GitHub Pages: https://khoshkhah.github.io/duckosm-rust/ (README.md, "the browser page").
+# The browser page on GitHub Pages: https://khoshkhah.github.io/duckosm-studio/ (README.md, "the browser page").
 # The job builds the WebAssembly modules with crates/duckosm-wasm/build.sh (the module with threads needs nightly
 # Rust, as in ci.yml), puts the Google Maps key of the repository secret GOOGLE_MAPS_KEY into the deployed copy of
 # the page, builds the manual (mkdocs.yml, docs/) into the folder manual/ of the site, and deploys crates/duckosm-wasm/www/.
