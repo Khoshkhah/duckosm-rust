@@ -23,4 +23,4 @@ The page saves the build in your browser. When you come back, **Your areas** lis
 | Change the colors and the width of the roads | [Step 9](manual/edit-design.md) |
 | Give the network to QGIS, MATSim, SUMO or a tile server | [Step 10](manual/export.md) |
 | Know what each table holds | [The tables](manual/tables.md) |
-| Build the same area from a script | [The CLI](cli.md), [the Python wheel](python.md) |
+| Build the same area from a script | [Command line and Python](cli.md) |

@@ -120,7 +120,7 @@ These tables need a build with **Layers** on.
 | `features.traffic` | Traffic signals and crossings. |
 | `features.place_labels` | Place names. |
 
-The map and the tiles read these tables. You can also load them in QGIS. The CLI and the Python wheel also write `raw.nodes`, `raw.ways` and `raw.relations` (the OSM data of the area, as read from the file) when you give a boundary. The page does not keep them in its database.
+The map and the tiles read these tables. You can also load them in QGIS. duckOSM also writes `raw.nodes`, `raw.ways` and `raw.relations` (the OSM data of the area, as read from the file) when you give a boundary. The page does not keep them in its database.
 
 ## Next
 

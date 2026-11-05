@@ -52,7 +52,7 @@ The changes stay in your browser. You can download them as a `.yaml` file and us
 
 | File | From | Use |
 |---|---|---|
-| `boundary.geojson` | Step 2 | The shape of the area. The CLI reads it with `--boundary`. |
+| `boundary.geojson` | Step 2 | The shape of the area. duckOSM reads it with `--boundary`. |
 | `<name>.zip` | Step 5 | All tables as Parquet files. |
 | `<name>.duckdb` | Step 5 | All tables in one DuckDB file. |
 | `<name>.osm.pbf` | Step 5 | The OSM data of the area, cut from the region file. |

@@ -1,5 +1,5 @@
 site_name: duckosm-rust
-site_description: An OpenStreetMap file to a routable road network (GeoParquet and DuckDB), equal to duckOSM 0.6.0. A CLI, a Python wheel and a browser page.
+site_description: An OpenStreetMap file to a routable road network (GeoParquet and DuckDB), equal to duckOSM 0.6.0. A browser page. duckOSM has the command line and Python.
 repo_url: https://github.com/Khoshkhah/duckosm-rust
 repo_name: Khoshkhah/duckosm-rust
 
@@ -60,9 +60,8 @@ nav:
   - Get started:
       - Your first map: first_map.md
       - Concepts: concepts.md
-  - Other ways to build:
-      - The CLI: cli.md
-      - The Python wheel: python.md
+  - Command line and Python:
+      - Use duckOSM: cli.md
   - Reference:
       - Columns of the tables: output-tables.md
       - When the page does not work: troubleshooting.md

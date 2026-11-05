@@ -21,7 +21,7 @@ Open the portal: <https://khoshkhah.github.io/duckosm-rust/>. Read the manual: [
 |---|---|
 | Nothing to install | Open a page. The build runs in your browser. Your area and your data stay on your computer. |
 | Fast | Estonia takes 19 seconds and 1.5 GB. duckOSM in Python takes 1,545 seconds and 10 GB. |
-| One result everywhere | The page, the command line and Python run the same Rust code. They give the same tables. |
+| One result everywhere | The page and [duckOSM](https://github.com/Khoshkhah/duckOSM) (command line and Python) use the same Rust engine. They give the same tables. |
 | Three networks in one build | Driving, walking and cycling, with the edge graph and the turn restrictions. |
 | Fix the data | Change a road, a building, a node or a turn rule. Draw a new road. Build again. |
 | A clear map | The roads have the style of [roadstyle](https://github.com/Khoshkhah/roadstyle): outlines, bridges and tunnels. 33 ready themes. |
@@ -64,35 +64,22 @@ For each network, a build writes the tables `edges`, `nodes`, `edge_graph`, the 
 
 [Your first map](docs/first_map.md) has the details.
 
-### On the command line
+### On the command line and in Python
+
+For a script, a server or Python code, use [duckOSM](https://github.com/Khoshkhah/duckOSM). The duckosm-rust page and duckOSM use the same Rust engine, and they give the same tables.
 
 ```bash
-curl -LO https://github.com/Khoshkhah/duckosm-rust/releases/download/v0.3.0/duckosm-rust-0.3.0-linux-x86_64.tar.gz
-tar xzf duckosm-rust-0.3.0-linux-x86_64.tar.gz
-./duckosm-rust monaco.osm.pbf -o out --name monaco --modes driving,walking,cycling
+pip install duckosm
+duckosm build --pbf monaco.osm.pbf --output monaco.duckdb --modes driving
 ```
 
-This writes `out/monaco.duckdb` and one `.parquet` file for each table. Archives for macOS, Windows and Linux aarch64 are on the [Releases](https://github.com/Khoshkhah/duckosm-rust/releases) page. [The CLI guide](docs/cli.md) has the options.
-
-### In Python
-
-```bash
-pip install https://github.com/Khoshkhah/duckosm-rust/releases/download/v0.3.0/duckosm_rust-0.3.0-cp39-abi3-manylinux_2_28_x86_64.whl
-```
-
-```python
-import duckosm_rust as dr
-res = dr.build("monaco.osm.pbf", "out/", modes=["driving", "walking"], name="monaco")
-res["modes"]["driving"]["edges"]
-```
-
-The wheel has DuckDB inside. It needs Python 3.9 or newer. There is no PyPI package yet. [The Python guide](docs/python.md) has the details.
+The Rust engine comes with the next duckOSM release. The version on PyPI today (0.6.1) is from before the engine moved into duckOSM. [Command line and Python](docs/cli.md) has the details.
 
 ## Documents
 
 | For | Read |
 |---|---|
-| Users | [The manual](docs/manual/cycle.md), [first map](docs/first_map.md), [concepts](docs/concepts.md), [the tables](docs/manual/tables.md), [columns of the tables](docs/output-tables.md), [CLI](docs/cli.md), [Python](docs/python.md), [troubleshooting](docs/troubleshooting.md) |
+| Users | [The manual](docs/manual/cycle.md), [first map](docs/first_map.md), [concepts](docs/concepts.md), [the tables](docs/manual/tables.md), [columns of the tables](docs/output-tables.md), [command line and Python](docs/cli.md), [troubleshooting](docs/troubleshooting.md) |
 | Developers | [Development](docs/development.md), [design](docs/design.md), [page code](docs/app.md), [benchmark](docs/benchmark.md), [to do](docs/todo.md) |
 | Decisions | [Name](docs/proposals/name.md), [hosting](docs/proposals/hosting.md), [disk store for the result](docs/proposals/disk-store.md), [less memory in the build](docs/proposals/build-memory.md), [a build by tiles](docs/proposals/tiled-build.md) |
 | History | [Changelog](CHANGELOG.md) |

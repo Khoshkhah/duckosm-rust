@@ -53,7 +53,7 @@ When the build ends, the card shows the time and the memory:
 - **Build details** lists what each step made.
 - **Time and memory of each step** is a table with one row for each step.
 
-The page uses threads when the browser allows it. Estonia takes 19 seconds with the CLI. The page is slower, and a large area can fail on a small device. [The limits](../troubleshooting.md) have the numbers.
+The page uses threads when the browser allows it. Estonia takes 19 seconds with the Rust engine on the command line. The page is slower, and a large area can fail on a small device. [The limits](../troubleshooting.md) have the numbers.
 
 ## What the build does
 

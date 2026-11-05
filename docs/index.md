@@ -52,11 +52,8 @@ You choose an area on a map. The portal builds the driving, walking and cycling 
 | [Step 10: Export](manual/export.md) | The formats and the files. |
 | [The tables](manual/tables.md) | What each table is for. |
 
-## Other ways to build
+## Command line and Python
 
-| You want to | Use | Guide |
-|---|---|---|
-| Build an area from a file, in a script or on a server | The CLI program | [The CLI](cli.md) |
-| Build an area inside Python code | The Python wheel | [The Python wheel](python.md) |
+For a script, a server or Python code, use [duckOSM](cli.md). It uses the same Rust engine as the page.
 
 [Concepts](concepts.md) explains the words: area, network, edge and `edge_id`. [Columns of the tables](output-tables.md) lists every column.

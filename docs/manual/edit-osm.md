@@ -151,7 +151,7 @@ A choice in one field can close another field, or shorten its list. The reason s
 - The page keeps the rules in your browser, for the area.
 - The tab **Changes** and the button **.yaml** of [step 5](result.md) download them as a fixes file.
 - The next build applies the rules to the OSM data, before it makes the networks. So the tables, the map and the exports have your fixes.
-- The fixes file is also the input of the CLI and the Python wheel. [osm-editing.md](../osm-editing.md) has the design.
+- The fixes file is also the input of duckOSM. [osm-editing.md](../osm-editing.md) has the design.
 
 ## Next
 

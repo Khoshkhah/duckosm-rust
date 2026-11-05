@@ -61,7 +61,7 @@ If the view has too many hexagons, the grid goes off. Zoom in to see it again. T
 | **Name** | The name of your files and of the saved area. For hexagons, the page suggests the ID of the first cell. A name that you type stays. |
 | **Buffer around the area (m)** | Grows the area on all sides, from 0 to 50,000 m. The cut and the downloads use the grown area. |
 | The three numbers | The size in km², the number of polygons and the number of vertices. |
-| **Boundary** | Downloads the area, with its buffer, as `boundary.geojson`. The CLI reads it with `--boundary`. |
+| **Boundary** | Downloads the area, with its buffer, as `boundary.geojson`. duckOSM reads it with `--boundary`. |
 | **Unselect** | Removes the area, so that you can choose another one. |
 | The magnifier | Moves the map to the area. |
 
