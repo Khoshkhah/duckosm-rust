@@ -98,10 +98,7 @@ with sync_playwright() as p:
     print(status)
     # the build details of card 4 (folded): one table row each
     print("build details:", " | ".join(page.eval_on_selector_all("#builddetails tr", "rs => rs.map((r) => [...r.cells].map((c) => c.textContent).join(' ').trim())")))
-    page.evaluate("document.getElementById('sql-box').open = true")   # the SQL box of card 5 is folded
-    page.click("#query")
-    page.wait_for_selector("#result table, #result .error", timeout=60_000)
-    print("query:", page.inner_text("#result p"))
+    print("query:", page.evaluate("window.duckApi.query('SELECT count(*) AS n FROM driving.edges').then((r) => String(r.toArray()[0].n))"), "driving edges")
     # the zip: a folder with the Parquet files, layers.json, make_duckdb.sql, the boundary and a README
     with page.expect_download(timeout=120_000) as d:
         page.click("#zip")

@@ -119,7 +119,6 @@ bar, `rs.sheet()` and `rs.freeArea()`, each box (it must be inside the screen), 
 | (5) THE RESULT             |   after the build only
 |     Roads of [all modes v] |   the roads on the map
 |     Base map [OpenFreeMap v]
-|     SQL [............] [Run]
 |     Downloads: load.sql, the Parquet files
 |----------------------------|
 | [GeoJSON]       [Build  >] |
@@ -328,7 +327,6 @@ Kaveh's layout of 2026-10-23: the data in card 5, the map in card 6. Since 2026-
 with the edges and nodes of each mode and the time of the build (card 4 keeps the full text), then two folded sections
 and the two download buttons between them. With three modes, the line takes three lines of the panel.
 
-- **SQL** (folded at first): a text box, **Run**, and the result as a table (the first 200 rows) in the card.
 - **Download all (.zip)** and **Download .duckdb** show on one row at all times.
 - **Downloads: each table** (folded at first): two sentences on the two files, the link to the columns of each table,
   and one block for each table.

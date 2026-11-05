@@ -14,7 +14,7 @@ You choose an area, build its road network, find the errors in the OpenStreetMap
 | 2 The area | Type a name. Add a buffer if you want one. | The name of all your files. |
 | 3 The data | Select a region file, ask Overpass, or select a cut file. | The OSM data of the area. |
 | 4 Build | Choose the networks and press **Build**. | The tables of the networks. |
-| 5 The result | Run SQL. Download the tables. | Answers, and the files of the tables. |
+| 5 The result | Download the tables. | The files of the tables. |
 | 6 Visualization | Press **Show on map**. | The roads on the map. |
 | 7 Edit OSM data | Click a road, a building or a node. Change it. | A list of changes. |
 | 8 Edit levels | Pick two roads. Say which one is on top. | The right drawing order for bridges and tunnels. |
