@@ -28,6 +28,10 @@ NAMES |= {"index.min.css"}
 # app/export.js adds these names to the address of the sql.js CDN (`base + "sql-wasm.js"`): not a file of the page
 NAMES |= {"sql-wasm.js"}
 
+# app/export.js has the files of the web map package as text (its viewer page fetches "style.json", the .zip has an "index.html"): names in the package, not files of the page,
+# so they get no version, also inside fetch( )
+NAMES |= {"style.json", "index.html"}
+
 # app/design_panel.js gives this name to the file of your themes that the browser downloads: not a file of the page
 NAMES |= {"duckosm-themes.json"}
 
@@ -35,7 +39,7 @@ NAMES |= {"duckosm-themes.json"}
 def version(text, v):
     tag = lambda path: f"{path}?v={v}"  # noqa: E731
     text = STATIC.sub(lambda m: f"{m[1]}{m[2]}{tag(m[3])}{m[2]}", text)
-    text = CALL.sub(lambda m: m[1] + LITERAL.sub(lambda s: f"{s[1]}{tag(s[2])}{s[1]}", m[2]) + ")", text)
+    text = CALL.sub(lambda m: m[1] + LITERAL.sub(lambda s: s[0] if s[2] in NAMES else f"{s[1]}{tag(s[2])}{s[1]}", m[2]) + ")", text)
     return ATTR.sub(lambda m: f"{m[1]}{m[2]}{tag(m[3])}{m[2]}", text)
 
 

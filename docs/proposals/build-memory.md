@@ -8,7 +8,7 @@ The build runs in one WebAssembly module. A 32-bit module can use at most 4 GB, 
 
 The old numbers (2026-10-21 and 2026-10-22) said that Kentucky (2,114,699 driving edges) uses 2,053 MiB, and that Iran fails at 3,816 MiB. **I measured again on 2026-11-04 with the build of 2026-10-29, and the build now needs much more memory:** Kentucky driving alone uses **3,422 MiB**, which is 84% of the limit, and Estonia with three networks uses 2,305 MiB (it was 710 MiB for driving). The newer steps (the edge graph, the restrictions, the lane profile, the area tables) cost memory. Kentucky with three networks will not fit: walking alone adds more than 1 GB in Estonia (my estimate for Kentucky, not measured).
 
-**A first round of savings is done and measured** (below, "A first round of savings"): the peak of Estonia walking fell by 20% with no change of the output.
+**Two rounds of savings are done and measured** (below, "A first round of savings" and "A second round of savings"). The peak of the build fell by 38% in Estonia walking (1,532 to 923 MiB) and by 41% in Kentucky driving (3,205 to 1,882 MiB), with no change of the output.
 
 The proposal has three levels, from cheap to large:
 
@@ -109,10 +109,41 @@ Estonia walking peak is **20% lower**. The output is the same: the tests of `duc
 **What remains** (from the same profile, my estimates for the gain):
 
 - The top peak is now in step 10 (the component filter, 1,221 MiB), then the graph step and the connect step (+200 MiB of temporary maps).
-- Steps 2b, 3 and 4 each add about 225 MiB for a moment. I did not find the cause. The code builds hash maps with one vector for each key, so that is the first thing to check. A sorted list of indexes needs much less.
+- Steps 2b, 3 and 4 each add about 225 MiB for a moment. The second round found the cause (below).
 - The edge graph is 159 MiB in Estonia walking. Writing the rows in sorted order as they are made removes them from memory.
 - An `Edge` has 160 bytes. Fields that are rarely set can move to a smaller part.
 - The tables `ways` and `way_nodes` hold 79 MiB. They are off with `--no-ways-tables`.
+
+## A second round of savings (2026-11-05)
+
+The first round left two questions: why the live memory at the start of step 10 (1,084 MiB) was 270 MiB more than the finished network (813 MiB), and where the 225 MiB jumps of steps 2b, 3 and 4 come from. Both have the same cause, and a third one is in the turn restrictions.
+
+| Change | File | What it removes |
+|---|---|---|
+| The maps `groups` (step 3) and `by_key` (step 4) and the set `seen` (step 6) end in a block or with `drop`. | `network.rs` | They stayed alive to the end of the build. Each map has one vector for each key, so they held about 190 MiB in Estonia walking for the whole build. |
+| `gj`, `lj`, `raw_refs` and `used` are dropped after their last use. | `network.rs` | About 80 MiB in Estonia walking. |
+| `keep_largest` returns the ids that it dropped. | `network.rs` | Two sets of all edge ids (step 10). |
+| `WayEnds` keeps only the ways that a restriction relation names. The two edge maps keep only the via nodes of the rules. | `graph.rs` | The temporary data of the turn restrictions. Each question of the code asks only about those ways and nodes. +180 MiB in Estonia driving, and about +1.2 GB in Kentucky driving. |
+| `edge_graph` finds the edges of a node in a sorted array (16 bytes for each edge), not in a hash map with one vector for each node (about 100 bytes). | `graph.rs` | About 20 MiB in Estonia driving. |
+
+Peak of the Rust heap, one thread, the same probe (`mem_probe`), MiB. The column "Before" is `main` after the first round.
+
+| Area and network | Before | After | Change |
+|---|---|---|---|
+| Estonia walking | 1,221 | 923 | −24% (−38% from the first measure, 1,532) |
+| Estonia driving | 757 | 568 | −25% |
+| Kentucky driving | 3,205 | 1,882 | −41% |
+
+The output is equal: the tests of `duckosm-core` pass, and the CLI of release 0.3.0 and this build write the same bytes in 33 of 35 files for Tartu and Estonia with three networks, and in 15 of 17 files for Kentucky driving. The 2 other files hold the build time.
+
+**What this does not show.** These are numbers of the Rust heap in a native process. The WebAssembly memory in the page is not measured again. In the page, Kentucky driving needed 3,422 MiB when the heap probe gives 3,205 MiB, so the page adds about 220 MiB (the file bytes and the module). My estimate for Kentucky driving in the page is about 2.1 GB. It is an estimate, not a measure.
+
+**What remains.** The top of the profile is flat now. In Estonia walking, three places are close to each other: the split of arcs in step 3 (828 MiB), the connect step (868 MiB, temporary maps of +200 MiB) and the edge graph (923 MiB). A gain of the peak needs a change in all three.
+
+- Step 3 and 4: `split_arcs` builds a new list of all edges while the old one lives (+236 MiB). An in-place version that keeps the order is possible, and the order must stay the same.
+- The connect step (`connect_paths`): three hash maps over all segments and nodes.
+- The edge graph: the rows are 159 MiB in Estonia walking and 250 MiB in Kentucky driving. They are the result. Writing them to the file in sorted blocks as they are made removes them from memory.
+- An `Edge` has 160 bytes, and the edges are 437 MiB in Estonia walking. This is the largest part that stays.
 
 ## Where the memory goes
 

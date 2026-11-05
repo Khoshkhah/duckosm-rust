@@ -345,6 +345,7 @@ pub fn build_network_with(
         }
     }
 
+    drop(lj); // the junction maps are as large as the nodes of the area, and the later steps do not read them
     crate::util::step("start of step 2b: Merge the chains of edges that are one r");
     // 2b. Merge the chains of edges that are one road.
     let mut edge_id_map: Vec<MapRow> = Vec::new();
@@ -356,63 +357,71 @@ pub fn build_network_with(
         stats.merged_pieces = n_pieces;
     }
 
+    drop(gj);
     crate::util::step("start of step 3: Split same-direction parallel arcs (all");
     // 3. Split same-direction parallel arcs (all but the shortest of each group).
-    let mut groups: FxHashMap<(i64, i64, i64), Vec<usize>> = FxHashMap::default();
-    for (i, f) in fwd.iter().enumerate() {
-        if f.e.source != f.e.target {
-            groups
-                .entry((f.e.osm_id, f.e.source, f.e.target))
-                .or_default()
-                .push(i);
-        }
-    }
-    let mut sel = FxHashSet::default();
-    for idx in groups.values().filter(|v| v.len() > 1) {
-        // The index is the last tie-break: a way that walks one segment twice makes two arcs with the same
-        // length and the same refs, and duckOSM keeps both (it stops with an error). Here the first stays whole.
-        let key = |i: usize| (fwd[i].e.length_m, refs_key(&fwd[i].e), i);
-        let min = idx
-            .iter()
-            .map(|&i| key(i))
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
-            .unwrap();
-        for &i in idx {
-            if key(i).partial_cmp(&min) == Some(std::cmp::Ordering::Greater) {
-                sel.insert(i);
+    // The map lives in a block: with one vector for each key it is as large as the edges, and it is not needed after the split.
+    let sel = {
+        let mut groups: FxHashMap<(i64, i64, i64), Vec<usize>> = FxHashMap::default();
+        for (i, f) in fwd.iter().enumerate() {
+            if f.e.source != f.e.target {
+                groups
+                    .entry((f.e.osm_id, f.e.source, f.e.target))
+                    .or_default()
+                    .push(i);
             }
         }
-    }
+        let mut sel = FxHashSet::default();
+        for idx in groups.values().filter(|v| v.len() > 1) {
+            // The index is the last tie-break: a way that walks one segment twice makes two arcs with the same
+            // length and the same refs, and duckOSM keeps both (it stops with an error). Here the first stays whole.
+            let key = |i: usize| (fwd[i].e.length_m, refs_key(&fwd[i].e), i);
+            let min = idx
+                .iter()
+                .map(|&i| key(i))
+                .min_by(|a, b| a.partial_cmp(b).unwrap())
+                .unwrap();
+            for &i in idx {
+                if key(i).partial_cmp(&min) == Some(std::cmp::Ordering::Greater) {
+                    sel.insert(i);
+                }
+            }
+        }
+        sel
+    };
     stats.parallel_split = sel.len();
     fwd = split_arcs(fwd, &sel, &mut virtual_nodes);
 
     crate::util::step("start of step 4: Split two-way antiparallel pairs (the lo");
     // 4. Split two-way antiparallel pairs (the longer arc of each pair).
-    let mut by_key: FxHashMap<(i64, i64, i64), Vec<usize>> = FxHashMap::default();
-    for (i, f) in fwd.iter().enumerate() {
-        by_key
-            .entry((f.e.osm_id, f.e.source, f.e.target))
-            .or_default()
-            .push(i);
-    }
-    let mut sel = FxHashSet::default();
-    for (i, f) in fwd.iter().enumerate() {
-        if f.e.oneway || f.e.source == f.e.target {
-            continue;
+    let sel = {
+        let mut by_key: FxHashMap<(i64, i64, i64), Vec<usize>> = FxHashMap::default();
+        for (i, f) in fwd.iter().enumerate() {
+            by_key
+                .entry((f.e.osm_id, f.e.source, f.e.target))
+                .or_default()
+                .push(i);
         }
-        if let Some(others) = by_key.get(&(f.e.osm_id, f.e.target, f.e.source)) {
-            let mine = (f.e.length_m, refs_key(&f.e));
-            for &j in others {
-                if fwd[j].e.oneway {
-                    continue;
-                }
-                let theirs = (fwd[j].e.length_m, refs_key(&fwd[j].e));
-                if mine.partial_cmp(&theirs) == Some(std::cmp::Ordering::Greater) {
-                    sel.insert(i);
+        let mut sel = FxHashSet::default();
+        for (i, f) in fwd.iter().enumerate() {
+            if f.e.oneway || f.e.source == f.e.target {
+                continue;
+            }
+            if let Some(others) = by_key.get(&(f.e.osm_id, f.e.target, f.e.source)) {
+                let mine = (f.e.length_m, refs_key(&f.e));
+                for &j in others {
+                    if fwd[j].e.oneway {
+                        continue;
+                    }
+                    let theirs = (fwd[j].e.length_m, refs_key(&fwd[j].e));
+                    if mine.partial_cmp(&theirs) == Some(std::cmp::Ordering::Greater) {
+                        sel.insert(i);
+                    }
                 }
             }
         }
-    }
+        sel
+    };
     stats.antiparallel_split = sel.len();
     fwd = split_arcs(fwd, &sel, &mut virtual_nodes);
 
@@ -458,8 +467,10 @@ pub fn build_network_with(
             ));
         }
     }
+    drop(seen);
     let raw_refs: FxHashMap<i64, &Vec<i64>> = all_ways.iter().map(|w| (w.id, &w.refs)).collect();
     set_refs_and_ids(&mut edges, &raw_refs);
+    drop(raw_refs);
 
     crate::util::step("start of step 7: Correct the length of the edges whose ha");
     // 7. Correct the length of the edges whose halves were wrong by more than 0.1 %.
@@ -485,6 +496,7 @@ pub fn build_network_with(
             }
         }
     }
+    drop(used);
     nodes.extend(virtual_nodes);
 
     crate::util::step("start of step 8b: Connect the dangling path ends to the ne");
@@ -547,6 +559,7 @@ pub fn build_network_with(
         graph.turn_restrictions = Some(tr);
         graph.turn_path_restrictions = Some(paths);
     }
+    crate::util::step("start of step 9b2: The edge graph and the turn permissions");
     if opts.build_graph {
         let (rows, permission) = crate::graph::edge_graph(
             mode,
@@ -562,13 +575,11 @@ pub fn build_network_with(
     // 10. Keep the largest connected part. It also removes the graph rows of the dropped edges.
     if opts.keep_largest_component && !edges.is_empty() {
         let before = edges.len();
-        let ids: FxHashSet<i64> = edges.iter().map(|e| e.edge_id).collect();
-        keep_largest(&mut edges);
+        let dropped = keep_largest(&mut edges);
         stats.dropped_by_component_filter = before - edges.len();
         if before != edges.len() {
             prune_nodes(&mut nodes, &edges);
-            let kept: FxHashSet<i64> = edges.iter().map(|e| e.edge_id).collect();
-            graph.prune(&ids.difference(&kept).copied().collect());
+            graph.prune(&dropped);
         }
     }
 
@@ -694,7 +705,8 @@ fn prune_nodes(nodes: &mut Vec<Node>, edges: &[Edge]) {
 }
 
 /// Keep the largest weakly connected component (union-find over the edge ends).
-fn keep_largest(edges: &mut Vec<Edge>) {
+/// Returns the `edge_id` of each edge that it dropped.
+fn keep_largest(edges: &mut Vec<Edge>) -> FxHashSet<i64> {
     let mut id: FxHashMap<i64, usize> = FxHashMap::default();
     let mut parent: Vec<usize> = Vec::new();
     fn find(p: &mut [usize], mut x: usize) -> usize {
@@ -730,12 +742,17 @@ fn keep_largest(edges: &mut Vec<Edge>) {
         .max_by_key(|(r, n)| (**n, std::cmp::Reverse(**r)))
         .unwrap()
         .0;
+    let mut dropped = FxHashSet::default();
     let mut i = 0;
-    edges.retain(|_| {
+    edges.retain(|e| {
         let keep = roots[i] == largest;
+        if !keep {
+            dropped.insert(e.edge_id);
+        }
         i += 1;
         keep
     });
+    dropped
 }
 
 /// Do two edges agree on every attribute that the merge compares?
