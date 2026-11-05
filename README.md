@@ -54,8 +54,6 @@ For each network, a build writes the tables `edges`, `nodes`, `edge_graph`, the 
 
 ## Start
 
-### In the browser
-
 1. Open <https://khoshkhah.github.io/duckosm-studio/>.
 2. In step 1, search for a place and click a match.
 3. In step 3, press **Get** for a region file that covers the area.
@@ -64,22 +62,13 @@ For each network, a build writes the tables `edges`, `nodes`, `edge_graph`, the 
 
 [Your first map](https://khoshkhah.github.io/duckosm-studio/manual/first_map/) has the details.
 
-### On the command line and in Python
-
-For a script, a server or Python code, use [duckOSM](https://github.com/Khoshkhah/duckOSM). The duckOSM Studio page and duckOSM use the same Rust engine, and they give the same tables.
-
-```bash
-pip install duckosm
-duckosm build --pbf monaco.osm.pbf --output monaco.duckdb --modes driving
-```
-
-The Rust engine comes with the next duckOSM release. The version on PyPI today (0.6.1) is from before the engine moved into duckOSM. [Command line and Python](https://khoshkhah.github.io/duckosm-studio/manual/cli/) has the details.
+duckOSM Studio uses the engine of [duckOSM](https://github.com/Khoshkhah/duckOSM), so both give the same tables.
 
 ## Documents
 
 | For | Read |
 |---|---|
-| Users | [The manual](https://khoshkhah.github.io/duckosm-studio/manual/manual/cycle/), [first map](https://khoshkhah.github.io/duckosm-studio/manual/first_map/), [concepts](https://khoshkhah.github.io/duckosm-studio/manual/concepts/), [the tables](https://khoshkhah.github.io/duckosm-studio/manual/manual/tables/), [columns of the tables](https://khoshkhah.github.io/duckosm-studio/manual/output-tables/), [command line and Python](https://khoshkhah.github.io/duckosm-studio/manual/cli/), [troubleshooting](https://khoshkhah.github.io/duckosm-studio/manual/troubleshooting/) |
+| Users | [The manual](https://khoshkhah.github.io/duckosm-studio/manual/manual/cycle/), [first map](https://khoshkhah.github.io/duckosm-studio/manual/first_map/), [concepts](https://khoshkhah.github.io/duckosm-studio/manual/concepts/), [the tables](https://khoshkhah.github.io/duckosm-studio/manual/manual/tables/), [columns of the tables](https://khoshkhah.github.io/duckosm-studio/manual/output-tables/), [troubleshooting](https://khoshkhah.github.io/duckosm-studio/manual/troubleshooting/) |
 | Developers | [Development](https://khoshkhah.github.io/duckosm-studio/manual/development/), [design](https://khoshkhah.github.io/duckosm-studio/manual/design/), [page code](https://khoshkhah.github.io/duckosm-studio/manual/app/), [benchmark](https://khoshkhah.github.io/duckosm-studio/manual/benchmark/), [to do](https://khoshkhah.github.io/duckosm-studio/manual/todo/) |
 | Decisions | [Name](https://khoshkhah.github.io/duckosm-studio/manual/proposals/name/), [hosting](https://khoshkhah.github.io/duckosm-studio/manual/proposals/hosting/), [disk store for the result](https://khoshkhah.github.io/duckosm-studio/manual/proposals/disk-store/), [less memory in the build](https://khoshkhah.github.io/duckosm-studio/manual/proposals/build-memory/), [a build by tiles](https://khoshkhah.github.io/duckosm-studio/manual/proposals/tiled-build/) |
 | History | [Changelog](CHANGELOG.md) |
