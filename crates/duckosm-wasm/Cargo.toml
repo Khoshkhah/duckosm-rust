@@ -9,10 +9,10 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # The engine is in the duckOSM repository (rust/). One rev for all its crates; docs/development.md, "Where the engine lives".
-duckosm-core = { git = "https://github.com/Khoshkhah/duckOSM.git", rev = "e1a25199e26c405ace450c2dff6d783d65468a55" }
+duckosm-core = { git = "https://github.com/Khoshkhah/duckOSM.git", rev = "a37901b6932238c4dcb762f8420334488b6c83f5" }
 # write_tables and the fixes reader, without DuckDB. zstd is a C library: snap (pure Rust) is the
 # compression in WebAssembly.
-duckosm-build = { git = "https://github.com/Khoshkhah/duckOSM.git", rev = "e1a25199e26c405ace450c2dff6d783d65468a55", default-features = false, features = ["snap"] }
+duckosm-build = { git = "https://github.com/Khoshkhah/duckOSM.git", rev = "a37901b6932238c4dcb762f8420334488b6c83f5", default-features = false, features = ["snap"] }
 wasm-bindgen = "0.2"
 js-sys = "0.3"
 # read a region file piece by piece from the browser (Blob.slice and FileReaderSync, in the build worker)
@@ -28,4 +28,4 @@ threads = ["dep:wasm-bindgen-rayon"]
 # the tests read the page's time zone table
 serde_json = "1"
 # the native build of the tests finds the time zone with tzf-rs (the browser module does not have it)
-duckosm-build = { git = "https://github.com/Khoshkhah/duckOSM.git", rev = "e1a25199e26c405ace450c2dff6d783d65468a55", default-features = false, features = ["snap", "tzf"] }
+duckosm-build = { git = "https://github.com/Khoshkhah/duckOSM.git", rev = "a37901b6932238c4dcb762f8420334488b6c83f5", default-features = false, features = ["snap", "tzf"] }

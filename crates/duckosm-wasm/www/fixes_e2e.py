@@ -353,9 +353,15 @@ with sync_playwright() as p:
     opts = page.eval_on_selector_all("#fix-out .turn select", "(l) => l.map((x) => [...x.options].map((o) => o.value))")
     assert opts and all(len(o) == 3 and o[0] == "" and o[1].startswith("no_") and o[2].startswith("only_") and o[1][3:] == o[2][5:] for o in opts), opts
     assert page.evaluate("[...document.querySelectorAll('#fix-out .turn .sw')].length") == len(opts)
-    # the junctions are a list like the walls: the junction that the tab picked first has the mark, no row is wider than the panel, a row under the pointer has a tint
-    assert page.locator("#fix-via-list .junrow.sel").count() == 1 and page.eval_on_selector("#fix-via", "(s) => s.type") == "hidden" and page.locator("#fix-via-row .rs-sel").count() == 0, "no dropdown in the junction row"
-    assert page.evaluate("[...document.querySelectorAll('#fix-via-list .junrow, #fix-out .turn')].every((r) => r.getBoundingClientRect().right <= document.getElementById('fix-panel').getBoundingClientRect().right + 1)"), "a row is wider than the panel"
+    # the junctions are a dropdown list (Kaveh, 2026-11-05): one option for each junction, the first is the junction that the tab picked; nothing is wider than the panel
+    via = page.eval_on_selector("#fix-via", "(s) => [s.tagName, s.options.length, s.value, s.options[0]?.value]")
+    assert via[0] == "SELECT" and via[1] >= 1 and via[2] == via[3], via
+    assert page.evaluate("[...document.querySelectorAll('#fix-via-row > *, #fix-out .turn')].filter((r) => r.offsetParent).every((r) => r.getBoundingClientRect().right <= document.getElementById('fix-panel').getBoundingClientRect().right + 1)"), "a part is wider than the panel"
+    # the bar sticks to the bottom edge of the panel: no list row shows under it (a sticky box stops at the padding of its scroll box)
+    gap = page.evaluate("""(() => { const bar = [...document.querySelectorAll('#fix-panel .fix-bar')].find((b) => b.offsetParent), body = bar.closest('.fix-body');
+      if (body.scrollHeight <= body.clientHeight + 1) return null; body.scrollTop = 0; return Math.round(body.getBoundingClientRect().bottom - bar.getBoundingClientRect().bottom); })()""")
+    assert gap is None or abs(gap) <= 1, f"a gap of {gap} px under the bar"
+    print("the junctions are a dropdown list" + ("" if gap is None else ", and the bar leaves no gap under it"))
     page.mouse.move(5, 5)
     still = page.eval_on_selector("#fix-out .turn", "(r) => getComputedStyle(r).backgroundColor")
     page.hover("#fix-out .turn")
@@ -376,7 +382,7 @@ with sync_playwright() as p:
     page.click("#fix-out .turn .small")
     page.evaluate("rsSetTheme('light')")
     # the junction list says how many roads leave each junction, and the roads that arrive can be the start road
-    assert "leave" in page.inner_text("#fix-via-list .junrow.sel"), "the junction list has the number of roads that leave"
+    assert "leave" in page.eval_on_selector("#fix-via", "(s) => s.selectedOptions[0].textContent"), "the junction list has the number of roads that leave"
     arr = page.get_attribute("#fix-out [data-from]", "data-from")
     page.click("#fix-out [data-from]")
     page.wait_for_function(f"document.getElementById('fix-from').value === '{arr}'", timeout=10_000)

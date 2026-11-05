@@ -5,6 +5,10 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ## Not released
 
+### Fixed
+
+- **Edit OSM data: no list row under the bar, and the junctions of the Turn tab are a dropdown list** (Kaveh's screenshots). The page takes duckOSM `a37901b` (duckOSM #11): the bar of each tab sticks to the bottom edge of the panel, and the junctions at the end of a road are one dropdown list. The engine code is the same as at `e1a2519`. Tests: `fixes_e2e.py` (the dropdown list and no gap under the bar) and `phone_fixes_e2e.py`.
+
 ### Removed
 
 - **The SQL box of card 5.** A test on the live page showed two faults: card 5 folds by itself about 3 s after a build (card 6 opens for the map), so the box went away while a person typed in it, and the result was a 257 px wide box with scroll bars in both directions. Kaveh: a useful SQL tool needs its own panel, which is later work. To query the tables, download the `.duckdb` file (the manual, "Query the tables"). The tests that read the box (`e2e.py`, `editor_e2e.py`) ask the page's DuckDB directly.
