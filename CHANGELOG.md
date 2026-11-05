@@ -123,6 +123,7 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ### Fixed
 
+- **A way that walks one segment twice in the same direction no longer stops the build** (Kentucky walking: `duplicate (osm_id, source, target) after the splits: 1214406652 ...`). The split of same-direction parallel arcs had no tie-break for two identical arcs, so none was split. The index of the arc in the way is now the last part of the key. duckOSM 0.6.0 stops on such a way too; no area that built before changes. Details: `docs/design.md`, section 5, "A way that walks a segment twice".
 - **The download of a big region started after 30 s, and could end with 502 or 503 from the relay.** Geofabrik answers `<region>-latest.osm.pbf` of a big region after about 30 s, each time. The page now asks for the dated files of the last 5 days and takes the newest that answers within 1.5 s (`app/regions.js`, docs/relay.md). First bytes of `southcoast-admreg`: 2.7 s, not 30 s.
 - The button that shows the hidden panel had a filled black square in place of its icon: its SVG had none of the attributes (`fill="none"`, `stroke`) that roadstyle's template gives it, and the page's own rule for SVGs does not reach a button outside the panel. The page now has the markup of the template's two buttons (`#sb-hide`, `#sb-show`) and no rule of its own for their SVGs. `dashboard_e2e.py` checks the icon, its size and its place. No other SVG of the page has this fault: the filled ones are roadstyle's own tool icons.
 
