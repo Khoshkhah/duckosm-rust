@@ -26,9 +26,10 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
 <!-- roadstyle's dashboard and popup look (src/roadstyle/static/, copied by build.sh from roadstyle at ROADSTYLE_COMMIT) -->
 <link rel="stylesheet" href="map/roadstyle/dashboard/dashboard.css">
 <link rel="stylesheet" href="map/roadstyle/popup.css">
+<link rel="stylesheet" href="duckosm/fixes_editor/fixes_panel.css">   <!-- duckOSM's fixes editor, card 7 (copied by build.sh at the engine's rev) -->
 <link rel="preload" href="map/roadstyle/host_options.json" as="fetch" crossorigin>
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js" crossorigin></script>
-<script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js" crossorigin></script>   <!-- the OSM fixes of card 7 (app/fixes.js) -->
+<script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js" crossorigin></script>   <!-- the OSM fixes of card 7 (duckOSM's fixes editor) -->
 <script src="coi-serviceworker.js"></script>   <!-- the COOP and COEP headers on GitHub Pages, for threads -->
 <script type="importmap">
 { "imports": {
@@ -220,7 +221,7 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   .area-acts .btn { justify-content: center; }
 
   /* steps 3 to 5: the data, the build, the result (docs/app.md) */
-  #step7-card [hidden], #step8-card [hidden], #step9-card [hidden], #step10-card [hidden], #fix-panel [hidden], #design-panel [hidden] { display: none; }
+  #step7-card [hidden], #step8-card [hidden], #step9-card [hidden], #step10-card [hidden], #fix-panel [hidden] { display: none; }
   #export-list .expsec { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px 4px; margin-top: 12px; background: var(--bg); }
   #export-list .expsec h3 { margin: 0 0 2px; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--fg); }
   #export-list .expsec > .small.muted { margin: 0 0 6px; }
@@ -243,170 +244,13 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   body.editing-fixes #sb .sb-top, body.editing-fixes #sb .sb-body { display: none; }
   body.editing-fixes #fix-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
   body.editing-fixes #sb #rs-fold-all { display: none; }
-  /* the design's own panel: the same shell (header, tabs, body, bar); the road popup stays, so a click on a road still shows it */
-  #design-panel { display: none; }
-  body.editing-design #sb .sb-top, body.editing-design #sb .sb-body { display: none; }
-  body.editing-design #design-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-  body.editing-design #sb #rs-fold-all { display: none; }
-  div#design-panel .fix-tabs { grid-template-columns: repeat(5, 1fr); gap: 2px; margin-inline: 10px; }
-  div#design-panel .fix-tabs [role=tab] { padding: 0 2px; font-size: 13px; }
-  #design-panel .fix-hd .dname { font-size: 12px; color: var(--muted); margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 38%; }
-  #design-panel #design-hide { margin-left: 0; width: 32px; padding: 0; justify-content: center; }
-  #design-panel .drow2 { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 13px; }
-  #design-panel .drow2 > span:first-child { min-width: 0; overflow-wrap: anywhere; }
-  #design-panel .drow2.cls { grid-template-columns: 1fr 52px 52px; }
-  #design-panel .drow2.two { grid-template-columns: 1fr 70px 70px; }
-  #design-panel .drow2.rng { grid-template-columns: 1fr minmax(90px, 140px) 3.6em; }
-  #design-panel .drow2.rng output { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
-  #design-panel .rhead { display: grid; grid-template-columns: 1fr 52px 52px; gap: 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 4px; }
-  #design-panel .rhead span { text-align: center; }
-  #design-panel input[type=color] { width: 100%; min-width: 44px; height: 30px; padding: 1px 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); cursor: pointer; }
-  #design-panel input[type=number], #design-panel select { height: 32px; min-width: 0; width: 100%; }
-  #design-panel .drow2 > select { width: auto; max-width: 11em; }
-  #design-panel input[type=text] { width: 100%; height: 32px; min-width: 0; }
-  #design-panel .drow2:has(input[type=text]) { grid-template-columns: 4em 1fr; }
-  #design-panel .optrow { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); cursor: pointer; margin-bottom: 6px; }
-  #design-panel .optrow:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
-  #design-panel .optrow input { margin: 2px 0 0; accent-color: var(--accent); flex: none; }
-  #design-panel .optrow .t { display: flex; flex-direction: column; gap: 2px; }
-  #design-panel .optrow small { color: var(--muted); font-size: 12px; line-height: 1.35; }
-  #design-panel .themes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  #design-panel .theme { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px; text-align: left; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--fg); font: inherit; cursor: pointer; }
-  #design-panel .theme:hover { border-color: var(--accent); }
-  #design-panel .themes .kind { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
-  #design-panel .themes .kind:first-child { margin-top: 0; }
-  #design-panel .themes .kind small { color: var(--muted); font-size: 12px; line-height: 1.35; }
-  #design-panel .theme[aria-checked=true] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
-  #design-panel .theme small { color: var(--muted); font-size: 12px; line-height: 1.35; }
-  #design-panel .sw5 { display: flex; width: 100%; height: 14px; border-radius: 4px; overflow: hidden; border: 1px solid var(--line); }
-  #design-panel .sw5 i { flex: 1; }
-  #design-panel .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; font-size: 12.5px; }
-  #design-panel .cols .col { display: flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
-  #design-panel .cols.two .col { justify-content: space-between; }
-  #design-panel .cols.two input[type=number] { width: 56px; }
-  #design-panel #design-count.bad { color: var(--error, #b91c1c); }
-  #design-panel .fix-group { margin: 12px 0 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
-  #design-panel .fix-group:first-child { margin-top: 0; }
-  #design-panel .sw5 i.none { background: repeating-conic-gradient(#c8c8c8 0 25%, #ffffff 0 50%) 0 0 / 8px 8px; }
-  #design-panel .col small { font-size: 11px; }
-  #design-panel .design-bar { font-size: 12.5px; }
-  #design-panel .design-bar .line { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-  #design-panel .design-bar b { font-weight: 600; }
-  #design-panel .design-bar .st { margin: 2px 0 0; min-height: 1.3em; color: var(--muted); line-height: 1.3; }
-  #design-panel .design-bar #design-notice { min-height: 0; color: var(--fg); }
-  #design-panel .design-bar #design-notice:empty { display: none; }
-  #design-panel .theme.mine { cursor: default; }
-  #design-panel #theme-search { width: 100%; height: 34px; margin-bottom: 6px; }
-  #design-panel .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
-  #design-panel .chip { height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); color: var(--fg); font: inherit; font-size: 12.5px; cursor: pointer; }
-  #design-panel .chip[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: #fff; }
-  #design-panel .theme.mine[aria-current=true] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
-  #design-panel .theme.mine .acts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
-  #design-panel .theme.mine input[type=text] { width: 100%; height: 30px; }
-  #design-panel .yours { font-size: 10.5px; font-weight: 600; padding: 0 6px; border-radius: 999px; border: 1px solid var(--accent); color: var(--accent); background: var(--accent-soft); vertical-align: 1px; }
-  #design-panel .btn.sm { height: 28px; padding: 0 9px; font-size: 12px; }
-  #design-panel .btn.danger { border-color: #dc2626; color: #b91c1c; }
-  #design-panel #mine-list { margin: 8px 0; }
-  /* the preview under a transparent ground: roadstyle gives the map container the color of the base map (inline), the checkerboard goes over that color */
-  #map.checker { background-image: repeating-conic-gradient(#d4d4d4 0 25%, #ffffff 0 50%); background-size: 24px 24px; }
   body.editing-fixes .maplibregl-popup:not(.rs-tip) { display: none !important; }
-  :is(#fix-panel, #design-panel) .fix-hd { flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 15px; border-bottom: 1px solid var(--line); }
-  :is(#fix-panel, #design-panel) .fix-hd h2 { margin: 0; font-size: 16px; text-transform: none; color: var(--fg); }
-  :is(#fix-panel, #design-panel) .fix-hd .btn svg { width: 14px; height: 14px; }
-  :is(#fix-panel, #design-panel) :is(#fix-hide, #design-hide) { margin-left: auto; width: 32px; padding: 0; justify-content: center; }
+  #fix-panel .fix-hd { flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 15px; border-bottom: 1px solid var(--line); }
+  #fix-panel .fix-hd h2 { margin: 0; font-size: 16px; text-transform: none; color: var(--fg); }
+  #fix-panel .fix-hd .btn svg { width: 14px; height: 14px; }
+  #fix-panel #fix-hide { margin-left: auto; width: 32px; padding: 0; justify-content: center; }
   html.rs-phone #fix-hide { display: none; }       /* a phone has the sheet's grip */
-  :is(#fix-panel, #design-panel) .fix-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 15px; overscroll-behavior: contain; }
-  :is(#fix-panel, #design-panel) .fix-tabs { flex: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 10px 15px 0; padding: 3px; background: var(--surface); border-radius: 10px; }
-  :is(#fix-panel, #design-panel) .fix-tabs [role=tab] { position: relative; height: 34px; border: 0; border-radius: 8px; background: none; color: var(--muted); font: inherit; font-weight: 500; cursor: pointer; }
-  :is(#fix-panel, #design-panel) .fix-tabs [role=tab][aria-selected=true] { background: var(--bg); color: var(--fg); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
-  :is(#fix-panel, #design-panel) .fix-tabs .dot { position: absolute; top: 6px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; }
-  :is(#fix-panel, #design-panel) .fsec { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin: 0 0 10px; }
-  #fix-panel .walls-all:not([hidden]) { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
-  :is(#fix-panel, #design-panel) .fsec-hd { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
-  :is(#fix-panel, #design-panel) .fsec-hd h3 { margin: 0; }
-  :is(#fix-panel, #design-panel) .fsec h3 { margin: 0 0 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
-  :is(#fix-panel, #design-panel) .fsec.danger { border-color: #dc2626; }
-  :is(#fix-panel, #design-panel) .fsec.danger h3 { color: #b91c1c; }
-  #fix-panel #fix-delete { border-color: #dc2626; color: #b91c1c; }
-  #fix-panel .chg.del { border-left-color: #dc2626; }
-  :is(#fix-panel, #design-panel) .fsec .fixgrid { margin-top: 0; grid-template-columns: 8.5em 1fr; }
-  :is(#fix-panel, #design-panel) .fsec > .row:first-of-type, :is(#fix-panel, #design-panel) .fsec > p.why + .row { margin-top: 0; }
-  :is(#fix-panel, #design-panel) .fix-bar { position: sticky; bottom: 0; margin: 0 -15px -12px; padding: 10px 15px 12px; background: var(--bg); border-top: 1px solid var(--line); }
-  :is(#fix-panel, #design-panel) .fix-bar .row { margin-top: 0; }
-  :is(#fix-panel, #design-panel) .fix-bar p { margin: 6px 0 0; }
-  #fix-panel #fix-apply { width: 100%; }
-  :is(#fix-panel, #design-panel) .barline { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; }
-  :is(#fix-panel, #design-panel) .barline .link { white-space: nowrap; }
-  @media (max-width: 700px) {
-    #fix-panel #fix-actions .row { flex-wrap: nowrap; }
-    #fix-panel #fix-actions .row .btn.primary { flex: 2 1 0; }
-    #fix-panel #fix-actions .row .btn { padding: 0 8px; }
-    #fix-panel .long { display: none; }
-  }
-  @media (min-width: 701px) { #fix-panel .short { display: none; } }
-  :is(#fix-panel, #design-panel) .fix-bar .row { flex-wrap: wrap; }
-  :is(#fix-panel, #design-panel) .fix-bar .row .btn { flex: 1 1 0; white-space: nowrap; }
-  :is(#fix-panel, #design-panel) .fix-bar .row .btn.primary { flex: 1 1 100%; }
-  #fix-panel .fix-pending { border: 1px solid #f59e0b; border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; background: rgba(245, 158, 11, 0.1); }
-  #fix-panel .fix-pending b { display: block; margin-bottom: 4px; }
-  #fix-panel .fix-group { margin: 12px 0 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
-  #fix-panel .bits { margin: 4px 0 0; padding: 0; list-style: none; font-size: 12.5px; }
-  #fix-panel .bits li { display: flex; gap: 6px; }
-  #fix-panel .bits .k { color: var(--muted); min-width: 6.5em; }
-  #fix-panel .bits .was { color: var(--muted); text-decoration: line-through; }
-  :is(#fix-panel, #design-panel) .fix-pane { margin-top: 2px; }
-  :is(#fix-panel, #design-panel) .fix-pane .grid2 { grid-template-columns: 7.5em 1fr; }
-  #fix-panel .fixgrid { margin-top: 10px; }
-  #fix-panel .turn { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; margin-top: 6px; }
-  #fix-panel .turn select { max-width: 11em; }
-  :is(#fix-panel, #design-panel) .badge { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 99px; background: #f59e0b; color: #1f1300; font-size: 11px; line-height: 18px; font-weight: 600; }
-  :is(#fix-panel, #design-panel) .badge:empty { display: none; }
-  #fix-panel .fix-obj { margin-top: 10px; }
-  #fix-panel .objhead { font-weight: 600; }
-  #fix-panel .alltags { margin-top: 6px; font-size: 12px; }
-  #fix-panel .alltags table { border-collapse: collapse; margin-top: 4px; width: 100%; }
-  #fix-panel .alltags td { padding: 1px 6px 1px 0; vertical-align: top; word-break: break-word; }
-  #fix-panel .alltags td:first-child { color: var(--muted); white-space: nowrap; }
-  #fix-panel label.edited { color: #b45309; font-weight: 600; }
-  #fix-panel label.edited::before { content: "● "; color: #f59e0b; }
-  :is(#fix-panel, #design-panel) .link { border: 0; background: none; color: var(--accent, #2563eb); cursor: pointer; padding: 0 2px; font: inherit; }
-  #fix-panel .colorrow { display: grid; grid-template-columns: 1fr 38px; gap: 6px; }
-  #fix-panel .colorrow input[type=color] { width: 38px; height: 36px; padding: 2px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); }
-  #fix-panel .other { display: flex; flex-direction: column; gap: 6px; }
-  #fix-panel .otherrow { display: grid; grid-template-columns: 7.5em 1fr auto; gap: 6px; align-items: center; }
-  #fix-panel .otherrow.add { grid-template-columns: 1fr 1fr auto; }
-  #fix-panel .otherrow .k { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #fix-panel .otherrow.edited .k { color: #b45309; font-weight: 600; }
-  #fix-panel .btn.sm { height: 30px; padding: 0 10px; font-size: 12.5px; }
-  #fix-panel .fix-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
-  #fix-panel .chg { border: 1px solid var(--line); border-left: 4px solid #f59e0b; border-radius: 10px; padding: 6px 10px; cursor: pointer; background: var(--bg); }
-  #fix-panel .chg:hover, #fix-panel .chg:focus-visible { background: var(--surface); }
-  #fix-panel .walls { display: flex; flex-direction: column; gap: 4px; }
-  #fix-panel .wallrow { display: grid; grid-template-columns: 2.4em 1fr 1fr; gap: 4px 6px; align-items: center; padding: 6px 6px; border-left: 3px solid transparent; }
-  #fix-panel .wallrow > .small:not(.dlabel) { grid-column: 2 / 4; }
-  #fix-panel .wallrow > select[data-wall] { grid-column: 2 / 4; }
-  #fix-panel .doors { display: flex; flex-direction: column; gap: 4px; }
-  #fix-panel .doorrow { display: grid; grid-template-columns: 2.4em 1fr auto; gap: 6px; align-items: center; padding: 2px 4px; border-left: 3px solid transparent; border-radius: 6px; cursor: pointer; }
-  #fix-panel .doorrow.edited { border-left-color: #f59e0b; background: rgba(245, 158, 11, 0.12); }
-  #fix-panel .doorrow select { max-width: 11.5em; }
-  #fix-panel .wallbar { display: flex; gap: 6px; flex-wrap: wrap; }
-  #fix-panel .wallrow { cursor: pointer; border-radius: 6px; }
-  #fix-panel .wallrow.edited { border-left-color: #f59e0b; background: rgba(245, 158, 11, 0.12); }
-  /* the rows that are a pick on the map (walls, doors, junctions, turn roads): the row under the pointer has a tint, the picked row a stronger one and an outline (the panel's accent: it shows in the dark theme too) */
-  #fix-panel .junrow { display: grid; grid-template-columns: 1.6em 1fr; gap: 6px; align-items: center; padding: 6px 8px; border-left: 3px solid transparent; border-radius: 6px; cursor: pointer; overflow-wrap: anywhere; }
-  #fix-panel .turn { padding: 4px 6px; border-radius: 6px; border-left: 3px solid transparent; cursor: pointer; }
-  #fix-panel :is(.wallrow, .doorrow, .junrow, .turn):hover { background: color-mix(in srgb, var(--accent) 14%, var(--bg)); }
-  #fix-panel :is(.wallrow, .doorrow, .junrow, .turn).sel { background: color-mix(in srgb, var(--accent) 26%, var(--bg)); outline: 2px solid var(--accent); outline-offset: -1px; }
-  #fix-panel :is(.wallrow, .doorrow, .junrow, .turn):focus-visible { outline: 2px solid var(--accent); }
-  #fix-panel .wallrow select { width: 100%; max-width: none; }
-  #fix-panel .wallrow .dlabel { grid-column: 2; color: var(--mut); }
-  #fix-panel .gwhy { grid-column: 1 / -1; margin: -2px 0 4px; }
-  #fix-panel select:disabled, #fix-panel input:disabled { opacity: 0.55; cursor: not-allowed; }
-  #fix-panel .sw { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }   /* the color of the item on the map */
-  #fix-panel .wallrow { grid-template-columns: 3.6em 1fr 1fr; }
-  #fix-panel .legend { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; font-size: 11.5px; color: var(--muted); }
-  #fix-panel .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
-  #fix-panel .chgtop { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  /* the rest of the fixes panel's look is duckOSM's (duckosm/fixes_editor/fixes_panel.css) */
   .grid2 [hidden] { display: none; }
   .pick { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 10px; cursor: pointer; margin-bottom: 10px; }
   .pick:hover { border-color: var(--accent); color: var(--accent); }
@@ -712,84 +556,6 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
 
 <div id="fix-panel" aria-label="Edit OSM data">
   <div class="fix-hd"><button id="fix-back" class="btn" type="button"><svg><use href="#i-chevron"/></svg>Steps</button><h2>Edit OSM data</h2><button id="fix-hide" class="btn" type="button" title="Hide panel" aria-label="Hide panel" aria-controls="sb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/><path d="m8.5 9.5 2.5 2.5-2.5 2.5"/></svg></button></div>
-  <div class="fix-tabs" role="tablist" aria-label="What to fix">
-    <button role="tab" id="fix-tab-road" data-tab="road" aria-controls="fix-edit" aria-selected="true" type="button">Road<i class="dot" hidden title="Not added to the changes yet"></i></button>
-    <button role="tab" id="fix-tab-building" data-tab="building" aria-controls="fix-edit" aria-selected="false" type="button">Building<i class="dot" hidden title="Not added to the changes yet"></i></button>
-    <button role="tab" id="fix-tab-node" data-tab="node" aria-controls="fix-edit" aria-selected="false" type="button">Node<i class="dot" hidden title="Not added to the changes yet"></i></button>
-    <button role="tab" id="fix-tab-turns" data-tab="turns" aria-controls="fix-turns" aria-selected="false" type="button">Turn<i class="dot" hidden title="Not added to the changes yet"></i></button>
-    <button role="tab" id="fix-tab-new" data-tab="new" aria-controls="fix-new" aria-selected="false" type="button">New road<i class="dot" hidden title="Not added to the changes yet"></i></button>
-    <button role="tab" id="fix-tab-changes" data-tab="changes" aria-controls="fix-changes" aria-selected="false" type="button">Changes <span id="fix-n" class="badge"></span></button>
-  </div>
-  <div class="fix-body">
-    <div id="fix-edit" class="fix-pane" role="tabpanel">
-      <p id="fix-intro" class="why"></p>
-      <section class="fsec"><h3>Pick</h3>
-        <p id="fix-pickhint" class="why"></p>
-        <p id="fix-doors-legend" class="small" hidden><span class="legend" style="margin-left:0"><i style="background:#92400e;border-radius:50%"></i>Door (an entrance node)</span><br><span id="fix-doors-info" class="muted"></span></p>
-        <p id="fix-nodes-legend" class="small" hidden><span class="legend" style="margin-left:0"><i style="background:#e11d48"></i>Traffic signal</span><span class="legend"><i style="background:#0d9488"></i>Crossing</span><span class="legend"><i style="background:#6b7280"></i>Other</span><span class="legend"><i style="background:#9ca3af"></i>Junction</span><br><span id="fix-nodes-info" class="muted"></span></p>
-        <div class="row"><input id="fix-id" type="text" inputmode="numeric" placeholder="OSM ID" aria-label="OSM ID" style="flex:1"><button id="fix-load" class="btn" type="button">Load</button></div>
-        <label id="fix-walls-row" class="small walls-all" hidden><input type="checkbox" id="fix-walls-all">Show the walls of all buildings in view (zoom 16 or more)</label>
-      </section>
-      <section class="fsec" id="fix-objsec"><div class="fsec-hd"><h3>Selected</h3><button id="fix-unselect" class="btn sm" type="button" hidden>Unselect</button></div><div id="fix-obj" class="fix-obj"></div></section>
-      <div id="fix-form"></div>
-      <div class="fix-bar" id="fix-actions" hidden>
-        <div class="barline"><span id="fix-state" class="small" role="status"></span><button type="button" class="link" data-review>Review changes →</button></div>
-        <div class="row"><button id="fix-save" class="btn primary" type="button">Add to changes</button><button id="fix-revert" class="btn" type="button"><span class="long">Reset form</span><span class="short">Reset</span></button><button id="fix-del" class="btn" type="button"><span class="long">Remove from changes</span><span class="short">Remove</span></button></div>
-      </div>
-    </div>
-    <div id="fix-turns" class="fix-pane" role="tabpanel" hidden>
-      <p class="why">A turn rule says that a driver cannot make a turn (or must make it) at a junction. The rules are for the driving network.</p>
-      <section class="fsec"><h3>Pick the road</h3>
-        <p class="why">Click the road that the turn starts on, or type its way ID.</p>
-        <div class="row"><input id="fix-from" type="text" inputmode="numeric" placeholder="From way ID" aria-label="From way ID" style="flex:1"><button id="fix-turn-find" class="btn" type="button">Find turns</button><button id="fix-turn-clear" class="btn" type="button" hidden>Unselect</button></div>
-        <p id="fix-turn-legend" class="small" hidden><span class="legend" style="margin-left:0"><i style="background:#2563eb"></i>The road the turn starts on</span><span class="legend"><i style="background:#16a34a"></i>Roads that leave the junction</span><span class="legend"><i style="border:3px solid #2563eb;border-radius:50%;background:rgba(37,99,235,.25)"></i>The junction</span><br><span class="muted">Point at a road in the list to outline it on the map.</span></p>
-        <div id="fix-via-row" hidden><p class="small" style="margin:10px 0 4px"><b>Junctions at the end of the road.</b> Click one to see the roads that leave it.</p><input id="fix-via" type="hidden"><div id="fix-via-list" class="walls" role="listbox" aria-label="Junction"></div></div>
-      </section>
-      <section class="fsec" id="fix-turnsec" hidden><h3>Rule for each road that leaves the junction</h3><div id="fix-out"></div></section>
-      <div class="fix-bar" id="fix-turn-bar" hidden>
-        <p id="fix-turn-note" class="small" role="status"></p>
-        <div class="row"><button id="fix-turn-add" class="btn primary" type="button">Add to changes</button></div>
-        <p class="small"><button type="button" class="link" data-review>Review the changes →</button></p>
-      </div>
-    </div>
-    <div id="fix-new" class="fix-pane" role="tabpanel" hidden>
-      <p class="why">Draw a road that OSM does not have. A click near a junction joins the road to it. The road is in the networks after you build again.</p>
-      <div class="row" style="margin-top:0"><button id="fix-draw" class="btn primary" type="button">Draw a new road</button></div>
-      <div id="fix-drawbox" hidden>
-        <section class="fsec"><h3>Points</h3>
-          <p class="why" id="fix-draw-help">Click the points of the road on the map. <b>Enter</b> finishes, <b>Esc</b> cancels.</p><p class="small" id="fix-draw-n"></p>
-          <div class="row"><button id="fix-draw-undo" class="btn" type="button">Undo point</button><button id="fix-draw-cancel" class="btn" type="button">Cancel</button></div>
-        </section>
-        <section class="fsec"><h3>The road</h3><div id="fix-newform"></div></section>
-        <div class="fix-bar">
-          <div class="row"><button id="fix-draw-done" class="btn primary" type="button">Add to changes</button><button id="fix-new-del" class="btn" type="button" hidden>Remove from changes</button></div>
-          <p class="small"><button type="button" class="link" data-review>Review the changes →</button></p>
-        </div>
-      </div>
-    </div>
-    <div id="fix-changes" class="fix-pane" role="tabpanel" hidden>
-      <div id="fix-pending" class="fix-pending" hidden></div>
-      <div class="row" style="margin-top:0"><button id="fix-undo" class="btn" type="button">Undo</button><button id="fix-redo" class="btn" type="button">Redo</button><button id="fix-download" class="btn" type="button">Download</button><button id="fix-clear" class="btn" type="button">Clear all</button></div>
-      <div id="fix-list" class="fix-list"></div>
-      <p class="why">A change shows in amber on the map. Click a change to see it and its data. Download saves the rules as a file for step 4. To load a file, use <b>Fixes</b> in step 4. The page keeps the changes in this browser for the area.</p>
-      <div class="fix-bar">
-        <button id="fix-apply" class="btn primary" type="button">Build again<span id="fix-apply-n"></span></button>
-        <p id="fix-apply-why" class="why" role="status"></p>
-      </div>
-    </div>
-  </div>
-</div>
-<div id="design-panel" aria-label="Edit design">
-  <div class="fix-hd"><button id="design-back" class="btn" type="button"><svg><use href="#i-chevron"/></svg>Steps</button><h2>Edit design</h2><span class="dname" id="design-name"></span><button id="design-hide" class="btn" type="button" title="Hide panel" aria-label="Hide panel" aria-controls="sb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/><path d="m8.5 9.5 2.5 2.5-2.5 2.5"/></svg></button></div>
-  <div class="fix-tabs" role="tablist" aria-label="What to design">
-    <button role="tab" id="design-tab-theme" data-tab="theme" aria-controls="design-pane" aria-selected="true" type="button">Theme</button>
-    <button role="tab" id="design-tab-roads" data-tab="roads" aria-controls="design-pane" aria-selected="false" type="button">Roads</button>
-    <button role="tab" id="design-tab-text" data-tab="text" aria-controls="design-pane" aria-selected="false" type="button">Text</button>
-    <button role="tab" id="design-tab-layers" data-tab="layers" aria-controls="design-pane" aria-selected="false" type="button">Layers</button>
-    <button role="tab" id="design-tab-tiles" data-tab="tiles" aria-controls="design-pane" aria-selected="false" type="button">Tiles</button>
-  </div>
-  <div class="fix-body"><div id="design-pane" class="fix-pane" role="tabpanel"></div></div>
-  <div class="fix-bar design-bar" style="margin: 0; padding: 8px 15px 10px"><div class="line"><b id="design-changes">Style: default</b><button id="design-export" class="link" type="button">Export →</button></div><p class="st" id="design-state" role="status" aria-live="polite"></p><p class="st" id="design-notice" role="status"></p></div>
 </div>
 </div>
 </div>
@@ -803,11 +569,11 @@ import * as duck from "./app/duck.js";
 window.duckApi = duck;   // for the tests (drawLaps, tileStats)
 import * as regions from "./app/regions.js";
 import * as areaStore from "./app/area_store.js";
-import { initFixesPanel } from "./app/fixes_panel.js";
+import { initFixesPanel } from "./duckosm/fixes_editor/fixes_panel.js";   // duckOSM's fixes editor (copied by build.sh at the engine's rev)
 import * as exporter from "./app/export.js";
-import * as designLib from "./app/design.js";
-import { initDesignPanel } from "./app/design_panel.js";
-import { rsSetArrows, rsHasArrows } from "./map/roadstyle/dashboard/arrows.js";       // the one-way arrows switch of roadstyle: the design reads and sets the same state
+import * as designLib from "./map/roadstyle/dashboard/design/design.js";      // roadstyle's design model: the boundary defaults and the changes of a design
+import { designPanel as rsDesignPanel } from "./map/roadstyle/dashboard/design/design_panel.js";   // roadstyle's design panel (card 9, roadstyle docs/guides/design-panel.md)
+import * as tileProfile from "./app/profile.js";
 import { rsDashboard } from "./map/roadstyle/dashboard/index.js";   // roadstyle's map dashboard (copied by build.sh at ROADSTYLE_COMMIT)
 import { rsFirstPaint } from "./map/roadstyle/dashboard/template.js";   // the classes of <html> before the first paint
 
@@ -929,8 +695,7 @@ const setData = (src, data) => loaded.then(() => map.getSource(src).setData(data
 const blue = "#2563eb";
 // the boundary of the area on the map: the layers area-fill, area-casing and area-line take the values of the design (card 9, designLib.defaultBoundary: the blue line of
 // the page before the card). The fill of the page hides while the roads show, because it would change their colors; the design can turn it on over the roads.
-let boundaryNow = designLib.defaultBoundary(), groundNow = designLib.defaultGround(), visibleNow = null, roadsNow = null;
-const roadOrig = new Map();                  // the original paint of the road layers (see paintRoads)
+let boundaryNow = designLib.defaultBoundary();
 function paintBoundary(onRoads = roadsShown) {
   if (!map.getLayer("area-line")) return;
   const b = boundaryNow, vis = (on) => (on ? "visible" : "none");
@@ -1056,7 +821,7 @@ function showPanel(on, remember = true) {
 }
 if (kept("duckosm.panel") === "collapsed" && !phone.matches) showPanel(false);
 phone.addEventListener("change", () => { if (phone.matches) showPanel(true, false); });
-$("sb-hide").onclick = $("fix-hide").onclick = $("design-hide").onclick = () => showPanel(false);      // the other two are in the headers of the Edit OSM data panel and the Design panel, which have no top row
+$("sb-hide").onclick = $("fix-hide").onclick = () => showPanel(false);      // the second is in the header of the Edit OSM data panel, which has no top row
 $("sb-show").onclick = () => { showPanel(true); $("sb-hide").focus(); };
 // the sheet and the panel move in a transition (0.15 s): each frame of it gives the padding, and its end gives the last one, also when the main
 // thread is busy
@@ -2102,7 +1867,6 @@ let roadsShown = false;
 function removeRoads() {
   if (!map.getStyle()) return;
   roadsShown = false;
-  roadOrig.clear();
   for (const l of map.getStyle().layers) if (l.id.startsWith("rs-")) map.removeLayer(l.id);
   for (const id of Object.keys(map.getStyle().sources)) if (id.startsWith("rs-")) map.removeSource(id);
   paintBoundary(false);
@@ -2198,46 +1962,13 @@ function addOverview(style) {
     if (opaque) map.addLayer({ ...l, id: "rs-low-" + l.id, source: "rs-low" }, "rs-" + first.id);
   }
 }
-// A new look over the same tiles (roadstyle's LiveMap.setLook, docs/design/restyle_without_retile.md): each road layer, and its overview copy, gets the
-// new style's paint, layout and filter, and the images come again; the source, its tiles and the roads' feature state (the live colours) stay. Then
-// the dashboard reads the new style and the design's own paint comes on top, as after a draw. false: the new style has other layers (draw again).
-async function restyleRoads(style, paint = () => {}) {
-  const own = style.metadata?.["roadstyle:images"] || {};
-  const now = new Map(map.getStyle().layers.filter((l) => l.id.startsWith("rs-")).map((l) => [l.id, l]));
-  const roadIds = [...now.keys()].filter((id) => !id.startsWith("rs-low-"));
-  if (roadIds.length !== style.layers.length || style.layers.some((l) => !now.has("rs-" + l.id))) return false;
-  for (const n of Object.keys(own)) if (map.hasImage("rs-" + n)) map.removeImage("rs-" + n);
-  await addImages(Object.fromEntries(Object.entries(own).map(([n, v]) => ["rs-" + n, v])));
-  roadOrig.clear();                                 // paintRoads takes the new paint as the original
-  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-  for (const l of style.layers) {
-    let json = JSON.stringify(l);
-    for (const n of Object.keys(own)) json = json.replaceAll(`"${n}"`, `"rs-${n}"`);   // the image names in the layout
-    const layer = JSON.parse(json);
-    for (const id of ["rs-" + l.id, "rs-low-" + l.id].filter((id) => now.has(id))) {
-      const was = now.get(id);
-      for (const k of new Set([...Object.keys(was.paint || {}), ...Object.keys(layer.paint || {})])) {
-        if (!same(was.paint?.[k], layer.paint?.[k])) map.setPaintProperty(id, k, layer.paint?.[k]);
-      }
-      for (const k of new Set([...Object.keys(was.layout || {}), ...Object.keys(layer.layout || {})])) {
-        if (!same(was.layout?.[k], layer.layout?.[k])) map.setLayoutProperty(id, k, layer.layout?.[k]);
-      }
-      if (!same(was.filter, layer.filter)) map.setFilter(id, layer.filter ?? null);
-    }
-  }
-  paint();                // the design's ground, layers and opacity: in this frame, and before the dashboard reads the style and tells its layers
-  rs.setStyle(style);     // the dashboard reads the new style (its controls, its legend and its state)
-  applyDesignLayers();
-  return true;
-}
 // A new style for the roads that show (the editor's redraw, a change of the tile format): the old layers and sources go, the new ones come
 async function useStyle(style) {
   removeRoads();
   await addRoadStyle(style);
   roadsShown = true;
-    document.dispatchEvent(new Event("duckosm:drawn"));
-  rs.setStyle(style);
-  applyDesignLayers();
+  document.dispatchEvent(new Event("duckosm:drawn"));
+  rs.setStyle(style);     // roadstyle's design panel paints the design's ground, layers and opacity again (rs:stylechange)
 }
 async function drawRoads() {
   const run = ++roadsRun, isFresh = fresh;
@@ -2259,9 +1990,8 @@ async function drawRoads() {
     await addRoadStyle(r.style);
     // RS_SIDE, the road table, comes after the first tiles
     //   // the road fields (the popup); the level editor puts its own here while it is open
-    rs.setStyle(r.style);   // the dashboard reads the new roads style (its layers and metadata)
+    rs.setStyle(r.style);   // the dashboard reads the new roads style (its layers and metadata); the design panel paints the design on it (rs:stylechange)
     roadsShown = true;
-    applyDesignLayers();                            // the ground and the layers of the design (roadstyle read the new style just now)
     document.dispatchEvent(new Event("duckosm:drawn"));
     // the first tiles: the map is drawn when it is idle (at most 60 s)
     await Promise.race([new Promise((ok) => map.once("idle", ok)), new Promise((ok) => setTimeout(ok, 60000))]);
@@ -2354,7 +2084,7 @@ $("tilefmt").value = duck.tileFormat;
 $("tilefmt").onchange = async () => {
   const f = $("tilefmt").value;
   keep("duckosm.tileformat", f);
-  designPanel?.patchProfile({ format: f });
+  patchProfile({ format: f });
   if (!roadsShown) return duck.setTileFormat(f);   // the next draw has it
   try {
     await useStyle(await duck.styleIn(f));
@@ -2522,7 +2252,7 @@ const STEP = {
   10: { ready: () => (netBuilt ? "" : "after step 4"), done: () => exported, optional: true },
 };
 let exported = false;
-let designPanel = null, designEdited = false;      // card 9 (app/design_panel.js)
+let designPanel = null, designEdited = false;      // card 9 (roadstyle's design panel)
 let current = null;                                // the step that the page opened last
 let areasAutoFolded = false;                       // the card "Your areas" folded by itself once
 function refreshSteps() {
@@ -2555,10 +2285,11 @@ document.querySelector("#sb .sb-body").addEventListener("click", (e) => {
   if (n === 1) h3Mode(true);
   else if (n >= 3) h3Mode(false);
 }, true);
-document.addEventListener("rs:sectionchange", (e) => { if (!auto && e.detail.id === "step1" && e.detail.state === "fold") h3Mode(false); });
-// a card that the person opened or folded (a click on its title, or the button of all): the next step does not fold the others
+document.addEventListener("rs:sectionchange", (e) => { if (!auto && e.detail?.id === "step1" && e.detail.state === "fold") h3Mode(false); });
+// a card that the person opened or folded (a click on its title, or the button of all): the next step does not fold the others. The event without
+// detail (roadstyle's design panel sends it for its select lists) is about no card.
 document.addEventListener("rs:sectionchange", (e) => {
-  const c = cards.find((x) => x.dataset.rsSection === e.detail.id);
+  const c = e.detail && cards.find((x) => x.dataset.rsSection === e.detail.id);
   if (!c || auto || (e.detail.state !== "fold" && e.detail.state !== "unfold")) return;
   if (c.classList.contains("off") && e.detail.state === "unfold") return autoFold(c, true);    // "Expand all" does not open a card that is not ready
   touched = true;
@@ -2635,7 +2366,11 @@ const exportSource = () => ({
 const ROAD_LAYER = /^(simple|slots)$/;
 const layerKeep = (p) => (name) => name === "edges" || (ROAD_LAYER.test(name) ? p.layers.roads : p.layers.base);
 const exportModes = () => [...new Set(duck.tables.filter((t) => t.table === "edges").map((t) => t.mode))];
-const profile = () => designPanel?.profile() ?? designLib.defaultProfile();
+// the tile profile (app/profile.js) is a host value of the design panel (card 9, the Tiles tab): design.profile
+let tileCount = { text: "", bad: false };           // the tile count of the profile (paintTileCount), also in the Tiles tab
+const profile = () => designPanel?.get().profile ?? tileProfile.defaultProfile();
+// a change of the tile profile from outside the panel (the Export card, the tile format select)
+const patchProfile = (part) => designPanel?.setHost("profile", { ...profile(), preset: "custom", ...part });
 const fullMaxZoom = (box, lo, limit) => { let z = lo; for (let k = lo; k <= 16; k++) { if (exporter.tileCount(box, lo, k) > limit) break; z = k; } return z; };
 // the zooms of the profile: the highest one is the highest that keeps the tiles under the limit when the profile says auto
 const profileZooms = (box, p = profile()) => [p.minzoom, p.auto ? fullMaxZoom(box, p.minzoom, p.maxTiles) : p.maxzoom];
@@ -2643,7 +2378,7 @@ async function paintTileCount() {
   const out = $("export-tiles");
   if (!out) return;
   const p = profile();
-  $("export-profile").textContent = `Tile profile: ${designLib.PROFILES[p.preset]?.name ?? "Your own"}. Limit: ${num(p.maxTiles)} tiles.`;
+  $("export-profile").textContent = `Tile profile: ${tileProfile.PROFILES[p.preset]?.name ?? "Your own"}. Limit: ${num(p.maxTiles)} tiles.`;
   $("export-full").checked = p.layers.edges; $("export-auto").checked = p.auto;
   let box;
   try { box = await exportExtent(); } catch (e) { out.textContent = `The extent of the network is not known: ${e.message}`; return; }
@@ -2652,17 +2387,19 @@ async function paintTileCount() {
   $("export-zmax").disabled = p.auto;
   const n = exporter.tileCount(box, lo, hi), bad = n > p.maxTiles;
   out.textContent = bad ? `${num(n)} tiles: too many (at most ${num(p.maxTiles)}). Use fewer zooms or raise the limit in step 9.` : `${num(n)} tiles.`;
-  designPanel?.setCount(out.textContent, bad);
+  tileCount = { text: out.textContent, bad };
+  const dc = $("design-count");                    // the Tiles tab, when it shows
+  if (dc) { dc.textContent = tileCount.text; dc.classList.toggle("bad", bad); }
   for (const b of document.querySelectorAll("#export-list [data-tiles]")) b.disabled = bad || !roadsShown;
 }
 // the card's own fields are the profile's fields: a change goes to the profile (step 9), which keeps it and tells the card
 $("export-list").addEventListener("input", (e) => {
   const p = profile();
-  if (e.target.id === "export-zmin" || e.target.id === "export-zmax") designPanel?.patchProfile({ minzoom: +$("export-zmin").value || 0, maxzoom: +$("export-zmax").value || 0 });
-  if (e.target.id === "export-full") designPanel?.patchProfile({ layers: { ...p.layers, edges: e.target.checked } });
-  if (e.target.id === "export-auto") designPanel?.patchProfile({ auto: e.target.checked });
+  if (e.target.id === "export-zmin" || e.target.id === "export-zmax") patchProfile({ minzoom: +$("export-zmin").value || 0, maxzoom: +$("export-zmax").value || 0 });
+  if (e.target.id === "export-full") patchProfile({ layers: { ...p.layers, edges: e.target.checked } });
+  if (e.target.id === "export-auto") patchProfile({ auto: e.target.checked });
 });
-$("export-list").addEventListener("click", (e) => { if (e.target.id === "export-design") { designPanel?.open(); designPanel?.tab("tiles"); } });
+$("export-list").addEventListener("click", (e) => { if (e.target.id === "export-design") designPanel?.open("tiles"); });
 document.addEventListener("duckosm:built", () => { exportBox = null; });
 document.addEventListener("duckosm:drawn", () => { paintTileCount(); });
 $("export-list").addEventListener("click", async (e) => {
@@ -2706,8 +2443,8 @@ stepsReady = true;
 rs.help.set(HELP);
 refreshSteps();
 
-// ---- card 7: the OSM fixes (docs/app.md, docs/osm-editing.md). The panel is app/fixes_panel.js: it owns the rules (app/fixes.js, as data) and writes
-// the YAML from them. The file of step 4 loads into it, and a build gets its text. The build reads it with duckosm-build's parser, as it is. ----
+// ---- card 7: the OSM fixes (docs/app.md, docs/osm-editing.md). The panel is duckOSM's fixes editor (duckosm/fixes_editor/, web/fixes_editor/ of duckOSM at
+// the engine's rev): it makes its tabs and body in #fix-panel, under the page's header, owns the rules (fixes.js, as data) and writes the YAML from them. The file of step 4 loads into it, and a build gets its text. The build reads it with duckosm-build's parser, as it is. ----
 let fixesPanel = null;
 const fixesText = () => fixesPanel?.text() ?? null;
 const loadFixesText = (text) => fixesPanel?.load(text);
@@ -2717,138 +2454,52 @@ const osmIdOf = (row) => { const p = window.RS_SIDE?.props?.[row]; return Array.
 const fixNoteNow = { sum: "No fixes.", why: "" };
 function fixNote(part) { Object.assign(fixNoteNow, part); $("fix-sum").textContent = [fixNoteNow.sum, fixNoteNow.why].filter(Boolean).join(" "); }
 try {
-  fixesPanel = await initFixesPanel({ $, duck, map, status, esc, yaml: jsyaml, roadIdOfRow: osmIdOf, areaKey: () => $("name").value.trim(), onChange: (text) => fixNote({ sum: text }) });
+  fixesPanel = await initFixesPanel($("fix-panel"), { duck, map, status, yaml: jsyaml, roadIdOfRow: osmIdOf, areaKey: () => $("name").value.trim(), onChange: (text) => fixNote({ sum: text }),
+    onBuild, changesNote: "To load a file, use <b>Fixes</b> in step 4." });
   fixesPanel.restore();                           // the changes of this area name from the last visit (the panel keeps them in this browser)
   $("name").addEventListener("change", () => fixesPanel?.restore());
 } catch (e) { openWhy[7] = "The fixes panel did not start: " + e.message; refreshSteps(); }
 window.fixesPanel = fixesPanel;                   // for the tests (fixes_e2e.py)
 function closeFixes() { fixesPanel?.close(); padMap(); map.resize(); }
 $("fix-back").onclick = closeFixes;
-$("fix-apply").onclick = () => {
+// "Build again" in the Changes tab: the build reads the panel's text (fixesText)
+function onBuild() {
   if ($("run").disabled) return status("The build cannot start yet: check step 3 and step 4.");
   closeFixes();
   fixNote({ why: "Building the networks again with the fixes…" });
   $("run").click();
-};
+}
 
-// ---- the preview under the map (card 9, Design): "Preview on" is the base map of roadstyle's base-map box: one choice in two places (roadstyle's event rs:basemapchange tells the
-// panel). The checkerboard is the Blank base map with a checkerboard under the ground; it shows by itself while the ground is transparent and the base map is Blank, until the
-// person picks Blank (previewChecker false) or the checkerboard (true). ----
-let baseKey = null, previewChecker;                          // the base map now (roadstyle's key); previewChecker: undefined (automatic), true or false
-const isBlankKey = (k) => /^blank/.test(k ?? "");
-const checkerOn = () => previewChecker ?? designLib.groundAlpha({ ground: groundNow }) < 0.5;
-function previewValue() {
-  if (isBlankKey(baseKey)) return checkerOn() ? "checkerboard" : "blank";
-  return /^ofm_/.test(baseKey ?? "") ? "openfreemap" : baseKey === "satellite" ? "satellite" : "other";
-}
-function paintPreview() {
-  $("map").classList.toggle("checker", isBlankKey(baseKey) && checkerOn());
-  designPanel?.refresh();
-}
-function setPreview(v) {
-  previewChecker = v === "checkerboard" ? true : v === "blank" ? false : undefined;
-  window.rsSetBasemap(v === "checkerboard" || v === "blank" ? "blank" : v === "openfreemap" ? "ofm_positron" : "satellite");
-  paintPreview();
-}
-document.addEventListener("rs:basemapchange", (e) => { baseKey = e.detail.basemap; paintPreview(); });
-loaded.then(() => { baseKey ??= kept("duckosm.basemap") ?? "ofm_positron"; paintPreview(); });
-
-// ---- the ground and the layers of the design (card 9): the ground is roadstyle's layer `bg`; the layers are roadstyle's own switches (rsSetOverlay for the base-map layers,
-// rsSetClasses for the road groups, rsSetBridges, rsSetTunnels, rsSetArrows, rsSetBuildings3D), so the design and roadstyle's Layers box show one state. The page
-// reads roadstyle's events and tells the design; `applying` keeps the page's own calls from coming back as changes. ----
-let applyingLayers = false;
-const hasLayer = (k) => {                                  // true, false, or undefined (the map is not drawn: not known)
-  if (!roadsShown) return undefined;
-  const ovs = window.RS_OVERLAYS ?? [];
-  if (designLib.OVERLAY_KEYS.includes(k)) return ovs.some((o) => o.label === k);
-  if (k === "buildings3d") return ovs.some((o) => o.label === "buildings" && o.extrude);
-  if (designLib.ROAD_GROUPS[k]) return (window.RS_CLASSES ?? []).some((c) => designLib.classGroup(c) === k);
-  if (k === "arrows") return rsHasArrows();
-  if (k === "names") return !!map.getLayer("rs-roads-labels");
-  return true;
-};
-function paintGround() {
-  if (map.getLayer("bg")) map.setPaintProperty("bg", "background-opacity", designLib.groundAlpha({ ground: groundNow }));
-  paintPreview();
-}
-function applyVisible() {
-  const v = visibleNow;
-  if (!v || !roadsShown) return;
-  applyingLayers = true;
-  try {
-    if (window.RS_CLASSES?.length) window.rsSetClasses(window.RS_CLASSES.filter((c) => v[designLib.classGroup(c)] !== false));
-    window.rsSetBridges(v.bridges); window.rsSetTunnels(v.tunnels);
-    if (rsHasArrows()) rsSetArrows(v.arrows);
-    const ovs = window.RS_OVERLAYS ?? [];
-    for (const k of designLib.OVERLAY_KEYS) if (ovs.some((o) => o.label === k) && ovs.find((o) => o.label === k).visible !== v[k]) window.rsSetOverlay(k, v[k]);
-    if (ovs.some((o) => o.label === "buildings" && o.extrude) && window.rsGetBuildings3D() !== v.buildings3d) window.rsSetBuildings3D(v.buildings3d);
-    if (map.getLayer("rs-roads-labels")) map.setLayoutProperty("rs-roads-labels", "visibility", v.names ? "visible" : "none");
-  } finally { applyingLayers = false; }
-}
-// the opacity of the roads (card 9): roadstyle's road layers have one `line-opacity` and one `line-width` for the casing and the fill; the page writes the design's opacity into them
-// (designLib.roadOpacity), and, with "Casing as an outline", a casing that has a gap of the fill width (designLib.roadOutline), so a transparent fill shows the map under it.
-// The originals are kept when a layer is first seen, and come back for the default values.
-function paintRoads() {
-  const d = roadsNow;
-  if (!d || !roadsShown) return;
-  const o = d.roads.opacity;
-  for (const l of map.getStyle().layers) {
-    if (l.type !== "line" || !/^rs-roads-simple/.test(l.id)) continue;
-    let orig = roadOrig.get(l.id);
-    if (!orig) roadOrig.set(l.id, (orig = { op: l.paint?.["line-opacity"], w: l.paint?.["line-width"] }));
-    map.setPaintProperty(l.id, "line-opacity", o.fill === 1 && o.casing === 1 ? orig.op : designLib.roadOpacity(orig.op, o.fill, o.casing));
-    const hole = o.outline ? designLib.roadOutline(orig.w) : null;
-    map.setPaintProperty(l.id, "line-width", hole ? hole.width : orig.w);
-    map.setPaintProperty(l.id, "line-gap-width", hole ? hole.gap : 0);
-  }
-  if (map.getLayer("rs-roads-labels") && d.labels.halo_opacity !== 1) map.setPaintProperty("rs-roads-labels", "text-halo-color", designLib.withAlpha(d.labels.halo_color, d.labels.halo_opacity));
-  if (map.getLayer("rs-roads-arrows") && d.arrows.opacity !== 0.7) map.setPaintProperty("rs-roads-arrows", "icon-opacity", d.arrows.opacity);
-}
-const applyDesignLayers = () => { paintGround(); applyVisible(); paintRoads(); };
-for (const [ev, key] of [["rs:arrowschange", "arrows"], ["rs:buildings3dchange", "buildings3d"]]) document.addEventListener(ev, (e) => { if (!applyingLayers) designPanel?.setVisible(key, e.detail.on); });
-document.addEventListener("rs:overlaychange", (e) => { if (!applyingLayers) designPanel?.setVisible(e.detail.overlay, e.detail.visible); });
-document.addEventListener("rs:filterchange", (e) => {
-  const d = e.detail;
-  if (applyingLayers || !designPanel) return;
-  if ("bridges" in d) designPanel.setVisible("bridges", d.bridges);
-  if ("tunnels" in d) designPanel.setVisible("tunnels", d.tunnels);
-  if (Array.isArray(d.visible)) for (const g of Object.keys(designLib.ROAD_GROUPS)) {
-    const cs = (window.RS_CLASSES ?? []).filter((c) => designLib.classGroup(c) === g);
-    if (cs.length) designPanel.setVisible(g, cs.some((c) => d.visible.includes(c)));
-  }
-});
-document.addEventListener("rs:basemapchange", paintGround);       // a base map changes the layer bg: the ground keeps its opacity
-
-// ---- card 9: the design (docs/dashboard.md). The panel is app/design_panel.js. A design is the style of the map (written into roadstyle's look and drawn
-// again by the map worker) and the profile of the tiles (the Export card reads it). It is kept in this browser (localStorage) and with the saved area
-// (design.json in its folder, app/area_store.js). ----
-let designSave = null;
+// ---- card 9: the design (docs/app.md, "Step 9: design"). The panel is roadstyle's design panel (map/roadstyle/dashboard/design/, roadstyle
+// docs/guides/design-panel.md): it draws into the page's panel (#sb), owns the design and paints the ground, the layers and the opacity of the roads.
+// The page gives it what only the page has: the look of the map (setLook: the same tiles; redraw: a new map), the area boundary (boundary), the tile
+// profile (the host tab "Tiles", app/profile.js) and the place to keep the design with the saved area (design.json, app/area_store.js). ----
+let designSave = null, restyleT0 = null;            // restyleT0: the time of a new look on the same tiles that waits for roadstyle's restyle (rs:stylechange)
 const designSlug = () => areaStore.sanitizeSlug(areaName || $("name").value);
-async function redrawDesign(lookObj, isDefault, draw, paint = () => {}) {
-  duck.setLookText(isDefault ? null : JSON.stringify(lookObj));       // the next draw reads this look
+// a new look on the same tiles (roadstyle's LiveMap.setLook in the map worker): the style, or undefined when the map must be drawn again (redraw)
+async function setDesignLook(text) {
+  duck.setLookText(text);
+  if (editor || !roadsShown || drawing) return undefined;
+  restyleT0 = performance.now();
+  try {
+    const style = await duck.setLook();
+    window.lastRestyle = style ? "same tiles" : "the look needs new tiles";      // for the tests: why the map is drawn again
+    return style ?? undefined;
+  } catch (e) { window.lastRestyle = "failed: " + e.message; throw e; }
+}
+document.addEventListener("rs:stylechange", () => {
+  if (restyleT0 == null) return;
+  $("mapnote").textContent = `${num(roadCount[$("mapmode").value] ?? 0)} roads, drawn in ${num((performance.now() - restyleT0) / 1000, 2)} s (a new look on the same tiles)`;
+  restyleT0 = null;
+});
+async function redrawDesign(text, draw) {
+  duck.setLookText(text);                            // the next draw reads this look (null: the page's look)
+  if (restyleT0 != null && window.lastRestyle === "same tiles") window.lastRestyle = "other layers";
+  restyleT0 = null;
   if (!draw) return "";
   if (editor) return "The level editor is open. The map shows this design after you close it and draw again.";
   if (!roadsShown) return "The map is not drawn yet. The design shows when you draw it (step 6).";
-  // a look that keeps the tiles (roadstyle's LiveMap.setLook, docs/design/restyle_without_retile.md): the new style over the same map, with no new
-  // worker and no tile cut again, and the roads keep their live colours. Else (or while a draw runs) the map is drawn again.
-  if (!drawing) {
-    try {
-      const t0 = performance.now();
-      const style = await duck.setLook();
-      window.lastRestyle = !style ? "the look needs new tiles" : "other layers";      // for the tests: why the map is drawn again
-      if (style && await restyleRoads(style, paint)) {
-        window.lastRestyle = "same tiles";
-        const s = num((performance.now() - t0) / 1000, 2);
-        $("mapnote").textContent = `${num(roadCount[$("mapmode").value] ?? 0)} roads, drawn in ${s} s (a new look on the same tiles)`;
-        return `The map shows this design: a new look on the same tiles, in ${s} s.`;
-      }
-    } catch (e) {
-      window.lastRestyle = "failed: " + e.message;
-      console.warn("a new look on the same tiles failed, the map is drawn again:", e);
-    }
-  }
   const t1 = performance.now();
-  paint();                                           // a new map: the old one shows the design's ground and layers while the new one is drawn
   await showRoads();
   const note = $("mapnote").textContent;
   if (/^The map failed|needs more memory|draws at most/.test(note)) throw new Error(note);       // drawRoads writes its failure in the note and keeps the old map
@@ -2861,28 +2512,76 @@ function designChanged(p) {
 function designSaved(text) {
   const d = JSON.parse(text);
   designEdited = designLib.changes({ ...d, profile: 0 }, { ...designPanel.base(), profile: 0 }).length > 0;       // the boundary counts as style
-  $("design-sum").textContent = `${d.name}${designEdited ? " (changed)" : ""}. Tile profile: ${designLib.PROFILES[d.profile.preset]?.name ?? "your own"}.`;
+  $("design-sum").textContent = `${d.name}${designEdited ? " (changed)" : ""}. Tile profile: ${tileProfile.PROFILES[d.profile.preset]?.name ?? "your own"}.`;
   refreshSteps();
   clearTimeout(designSave);
   designSave = setTimeout(() => { if (netBuilt) areaStore.saveDesign(designSlug(), text).catch(() => {}); }, 800);       // with the saved area
 }
+// the Tiles tab (a host tab of the design panel): the controls of the panel's other tabs, and the page reads its own events
+const CLASS_LABEL = { motorway: "Motorway", trunk: "Trunk", primary: "Primary", secondary: "Secondary", tertiary: "Tertiary", unclassified: "Unclassified", residential: "Residential", living_street: "Living street" };
+const COLUMN_NOTE = { source: "start node", target: "end node" };
+function drawTiles(el, p, put, c) {
+  const { sec, check, number } = c, tp = tileProfile;
+  el.innerHTML = sec("Ready profiles", `<div class="themes" role="radiogroup" aria-label="Ready profiles">${Object.entries(tp.PROFILES).map(([id, x]) =>
+      `<button type="button" class="theme" role="radio" data-profile="${id}" aria-checked="${p.preset === id}"><b>${x.name}</b><small>${c.esc(x.note)}</small></button>`).join("")}</div>`,
+    "The Export card and the map use this profile.")
+    + sec("Zoom", `<div class="drow2 two"><span>From zoom to zoom</span><input type="number" data-p="profile.minzoom" min="0" max="18" value="${p.minzoom}" aria-label="The lowest zoom"><input type="number" data-p="profile.maxzoom" min="0" max="18" value="${p.maxzoom}" aria-label="The highest zoom" ${p.auto ? "disabled" : ""}></div>`
+      + check("The highest zoom that fits the limit", "profile.auto", p.auto, "The page counts the tiles of the area and picks the highest zoom under the limit.")
+      + `<p class="small${tileCount.bad ? " bad" : ""}" id="design-count" role="status">${c.esc(tileCount.text)}</p>`)
+    + sec("Layers in the files", check("Roads", "profile.layers.roads", p.layers.roads, "Roadstyle's road layers: the same roads as the map.")
+      + check("Base map", "profile.layers.base", p.layers.base, "Water, land use, buildings, railways. They need the base-map layers of step 4.")
+      + check("Layer edges", "profile.layers.edges", p.layers.edges, "Every road of every network, with the columns below."))
+    + sec("Columns of the layer edges", `<div class="cols">${tp.EDGE_COLUMNS.map((k) => `<label class="col"><input type="checkbox" data-col="${k}" ${p.columns.includes(k) ? "checked" : ""} ${k === "edge_id" || !p.layers.edges ? "disabled" : ""}>${COLUMN_NOTE[k] ? `${k} (${COLUMN_NOTE[k]})` : k}</label>`).join("")}</div>
+      <p class="small"><button type="button" class="link" data-cols="all">All</button> · <button type="button" class="link" data-cols="few">Only edge_id</button> The networks are always in the layer, one flag for each.</p>`)
+    + sec("Road class start zoom", `<div class="cols two">${Object.keys(tp.CLASS_FROM).map((k) => `<label class="col"><span>${CLASS_LABEL[k]}</span><input type="number" data-p="profile.classFrom.${k}" min="0" max="18" value="${p.classFrom[k]}" ${p.layers.edges ? "" : "disabled"} aria-label="${CLASS_LABEL[k]} starts at zoom"></label>`).join("")}</div>`,
+      `A road class is in the layer edges from its zoom. Other classes start at zoom ${tp.OTHER_FROM}.`)
+    + sec("Tiles", `<label class="drow2"><span>Format of the map</span><select data-p="profile.format"><option value="mlt" ${p.format === "mlt" ? "selected" : ""}>MLT (smaller)</option><option value="mvt" ${p.format === "mvt" ? "selected" : ""}>MVT</option></select></label>
+      <label class="drow2"><span>Extent (layer edges)</span><select data-p="profile.extent">${[1024, 2048, 4096, 8192].map((e) => `<option ${p.extent === e ? "selected" : ""}>${e}</option>`).join("")}</select></label>`
+      + number("Buffer (units, layer edges)", "profile.buffer", p.buffer, 0, 256, 8) + number("Tile limit", "profile.maxTiles", p.maxTiles, 1000, 200000, 1000),
+      "The files hold MVT tiles. The MLT format is smaller on the page. Extent and buffer are in tile units and are for the layer edges: the tiles of the map have 4096 units. More tiles take more time and memory.");
+  // a change: the new profile goes to the panel (put); a switch or a list draws the tab again, because it opens or closes other fields
+  const set = (q, again) => { put(q); if (again) drawTiles(el, profile(), put, c); };
+  el.oninput = (e) => {
+    const t = e.target, q = structuredClone(profile());
+    q.preset = "custom";
+    if (t.dataset.col) {
+      const cols = new Set(q.columns);
+      t.checked ? cols.add(t.dataset.col) : cols.delete(t.dataset.col);
+      q.columns = tp.EDGE_COLUMNS.filter((k) => cols.has(k));
+      return set(q, false);
+    }
+    if (!t.dataset.p) return;
+    const v = t.type === "checkbox" ? t.checked : t.tagName === "SELECT" ? (t.dataset.p === "profile.extent" ? +t.value : t.value) : t.value === "" ? NaN : +t.value;
+    if (Number.isNaN(v)) return;
+    const keys = t.dataset.p.split(".").slice(1), last = keys.pop();      // data-p: "profile.<path>", as in the panel's own tabs
+    keys.reduce((o, k) => o[k], q)[last] = v;
+    set(q, t.type === "checkbox" || t.tagName === "SELECT");
+  };
+  el.onclick = (e) => {
+    const pr = e.target.closest("[data-profile]"), cols = e.target.closest("[data-cols]");
+    if (pr) set(tp.PROFILES[pr.dataset.profile].make(), true);
+    else if (cols) set({ ...profile(), preset: "custom", columns: cols.dataset.cols === "all" ? [...tp.EDGE_COLUMNS] : ["edge_id"] }, true);
+  };
+}
+const closeDesign = () => { designPanel?.close(); padMap(); map.resize(); };
 try {
-  const look = JSON.parse(await duck.pageLookText());
-  designPanel = await initDesignPanel({ $, esc, look, redraw: redrawDesign, onProfile: designChanged, onBoundary: (b) => { boundaryNow = b; paintBoundary(); },
-    onGround: (g) => { groundNow = g; paintGround(); }, onVisible: (v) => { visibleNow = v; applyVisible(); }, onRoads: (d) => { roadsNow = d; paintRoads(); }, has: hasLayer, preview: { get: previewValue, set: setPreview }, onSave: designSaved });
-  let stored = null;
-  try { stored = localStorage.getItem("duckosm.design"); } catch (_) { /* no storage: the default design */ }
-  if (!(stored && await designPanel.load(stored, { draw: false }))) designPanel.patchProfile({ format: duck.tileFormat, preset: "analysis" });     // no design yet: the tile format that the person chose before
+  designPanel = await rsDesignPanel({
+    panel: $("sb"), dashboard: rs, map, look: JSON.parse(await duck.pageLookText()), storageKey: "duckosm",      // localStorage: duckosm.design and duckosm.themes
+    setLook: setDesignLook, redraw: redrawDesign, restyle: { also: ["rs-low-"], imagePrefix: "rs-" },             // rs-low-: the overview copies of the fill layers (addOverview)
+    boundary: (b) => { boundaryNow = b; paintBoundary(); },
+    link: { label: "Export →", onClick: () => {
+      closeDesign();
+      const c = cards.find((x) => x.id === "step10-card");
+      if (c && !c.classList.contains("off")) { autoFold(c, false); c.scrollIntoView({ block: "nearest" }); }
+    } },
+    tabs: [{ id: "tiles", name: "Tiles", key: "profile", make: tileProfile.defaultProfile, normalize: tileProfile.normalizeProfile, draw: drawTiles, keep: "Keep the tile profile in the theme" }],
+  });
+  designPanel.addEventListener("change", (e) => { designSaved(e.detail.text); designChanged(e.detail.design.profile); });
+  designPanel.addEventListener("back", closeDesign);
+  if (!designPanel.restored) designPanel.setHost("profile", { ...tileProfile.defaultProfile(), format: duck.tileFormat });     // no design yet: the tile format that the person chose before
   designSaved(designPanel.text());
 } catch (e) { openWhy[9] = "The design panel did not start: " + e.message; refreshSteps(); }
 window.designPanel = designPanel;                 // for the tests (design_e2e.py)
-const closeDesign = () => { designPanel?.close(); padMap(); map.resize(); };
-$("design-back").onclick = closeDesign;
-$("design-export").onclick = () => {
-  closeDesign();
-  const c = cards.find((x) => x.id === "step10-card");
-  if (c && !c.classList.contains("off")) { autoFold(c, false); c.scrollIntoView({ block: "nearest" }); }
-};
 
 // ---- card 8: roadstyle's level editor on the page's map (docs/app.md). The page makes the level area from the tables (makeArea) and keeps
 // it in this browser (browserStore, one for each area name). The editor uses the page's dashboard, map and roads (host mode): the page's roads

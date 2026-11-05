@@ -222,6 +222,27 @@ with sync_playwright() as p:
     assert page.evaluate("document.querySelectorAll('#fix-form .wallrow .sw').length === document.querySelectorAll('#fix-form .wallrow').length"), "each wall row has the color of its type"
     page.wait_for_function("duckMap.querySourceFeatures('fix-faces').filter((f) => f.properties.n).length >= 3", timeout=20_000)     # the numbers of the walls on the map, as in the list (#1, #2, ...)
     assert page.evaluate("duckMap.getLayer('fix-faces-label').layout.get ? true : !!duckMap.getLayer('fix-faces-label')")
+    # the numbers of the walls (Kaveh, 2026-11-05: "Number only on hover"): none on the map by default; the wall under the pointer, in the list
+    # or on the map, is lit and shows its one number (the number of its row); a click on a wall on the map selects its row
+    labels = "duckMap.queryRenderedFeatures({layers: ['fix-faces-label']}).map((f) => f.properties.n)"
+    lit = "duckMap.queryRenderedFeatures({layers: ['fix-faces-hover']}).map((f) => f.properties.k)"
+    page.wait_for_timeout(800)
+    assert page.evaluate(labels) == [] and page.evaluate(lit) == [], "no wall number and no lit wall by default"
+    row = page.locator("#fix-form .wallrow").nth(1)
+    row.hover()
+    page.wait_for_function(f"{labels}.length === 1", timeout=10_000)
+    n, key = page.evaluate(labels)[0], row.get_attribute("data-key")
+    assert f"#{n}" in row.inner_text() and set(page.evaluate(lit)) == {key}, (n, key, row.inner_text(), page.evaluate(lit))
+    page.hover("#fix-intro")
+    page.wait_for_function(f"{labels}.length === 0 && {lit}.length === 0", timeout=10_000)
+    other = page.locator("#fix-form .wallrow").nth(2).get_attribute("data-key")
+    mid = page.evaluate(f"""(() => {{ const f = duckMap.querySourceFeatures('fix-faces').find((x) => x.properties.k === {other!r} && x.geometry.type === 'LineString');
+        const c = f.geometry.coordinates; return [(c[0][0] + c[1][0]) / 2, (c[0][1] + c[1][1]) / 2]; }})()""")
+    page.mouse.move(*at(page, *mid))
+    page.wait_for_function(f"document.querySelector('#fix-form .wallrow[data-key=\"{other}\"]').classList.contains('hover') && {labels}.length === 1", timeout=10_000)
+    page.mouse.click(*at(page, *mid))
+    page.wait_for_function(f"document.querySelector('#fix-form .wallrow[data-key=\"{other}\"]').classList.contains('sel')", timeout=10_000)
+    print(f"wall numbers: none by default; row {key} under the pointer shows #{n}; the wall {other} on the map lights its row, and a click selects it")
     wall = page.evaluate("(() => { const r = document.querySelector('#fix-form .wallrow'); return [r.dataset.a, r.dataset.b, r.dataset.computed]; })()")
     new_type = "party" if wall[2] != "party" else "side"
     page.select_option("#fix-form .wallrow select", new_type)
@@ -600,6 +621,7 @@ with sync_playwright() as p:
     page.click("#fix-delete"); page.click("#fix-save")
     assert f"osm_id: {orr}" in text(page)
     page.click("#fix-tab-changes")
+    page.wait_for_function("document.querySelectorAll('#fix-list .chg.del').length === 2", timeout=20_000)      # the list is drawn after its SQL (the kind of each way)
     lst2 = page.inner_text("#fix-list")
     assert "deleted from the data" in lst2 and page.locator("#fix-list .chg.del").count() == 2, lst2
     print(f"Delete: a building ({ob}) and a road ({orr}) are in the changes as deleted, red on the map")

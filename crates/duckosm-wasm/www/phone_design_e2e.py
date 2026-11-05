@@ -1,4 +1,4 @@
-"""A phone-size check of the Design panel: every tab at 390 x 844 has no horizontal overflow, the tabs and the bar are in view, and the card opens the panel (docs/dashboard.md)."""
+"""A phone-size check of the Design panel: every tab at 390 x 844 has no horizontal overflow, the tabs and the bar are in view, and the card opens the panel (roadstyle's design panel, docs/app.md)."""
 import pathlib
 import sys
 
@@ -31,15 +31,15 @@ with sync_playwright() as p:
         page.evaluate("document.getElementById('step9').click()")
     page.evaluate("document.getElementById('step9').click()")
     page.wait_for_timeout(800)
-    assert page.evaluate("document.body.classList.contains('editing-design')")
+    assert page.evaluate("window.designPanel.isOpen()")
 
     def check(tab):
         page.evaluate(f"window.designPanel.tab('{tab}')")
         page.wait_for_timeout(500)
         m = page.evaluate("""() => {
-            const b = document.querySelector('#design-panel .fix-body'), r = document.getElementById('design-panel').getBoundingClientRect();
+            const b = document.querySelector('#design-panel .rs-dz-body'), r = document.getElementById('design-panel').getBoundingClientRect();
             const wide = [...document.querySelectorAll('#design-panel *')].filter((e) => e.offsetParent && e.getBoundingClientRect().right > r.right + 1).map((e) => e.id || e.className || e.tagName).slice(0, 4);
-            const tabs = document.querySelector('#design-panel .fix-tabs').getBoundingClientRect(), bar = document.querySelector('#design-panel .design-bar').getBoundingClientRect();
+            const tabs = document.querySelector('#design-tabs').getBoundingClientRect(), bar = document.querySelector('#design-panel .rs-dz-bar').getBoundingClientRect();
             return {scrollW: b.scrollWidth, clientW: b.clientWidth, docW: document.documentElement.scrollWidth, inner: innerWidth, wide,
                     tabsIn: tabs.left >= 0 && tabs.right <= innerWidth, barIn: bar.bottom <= innerHeight + 1 && bar.height > 0, tabTexts: [...document.querySelectorAll('#design-panel [role=tab]')].every((t) => t.scrollWidth <= t.clientWidth + 1)};
         }""")

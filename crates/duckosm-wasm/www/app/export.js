@@ -244,7 +244,7 @@ export async function sumo(query, mode, area) {
 import { decodeTile, encodeTile, addProps, indexOf } from "./mvt.js";
 import { qgisStyles, roadsQml, paletteOf, mapSvg, keplerMap, lookFeatures, lookZoom, landColorsFrom } from "./export_style.js";
 
-import { CLASS_FROM, OTHER_FROM } from "./design.js";
+import { CLASS_FROM, OTHER_FROM } from "./profile.js";
 // ---- tiles: the vector tiles of the map that is on screen (the roads and the base-map layers), made again by the map worker as MVT for a range of zooms,
 // and packed in one PMTiles v3 file or one MBTiles file. A tile is the layers of all the map's sources: MVT layers are repeated fields, so the bytes of two
 // tiles of one address can be joined.
@@ -261,7 +261,7 @@ export function tileCount(bbox, min, max) {
   for (let z = min; z <= max; z++) { const t = spanOf(bbox, z); n += (t.x1 - t.x0 + 1) * (t.y1 - t.y0 + 1); }
   return n;
 }
-export const MAX_TILES = 40000;                          // the default of the profile (app/design.js)
+export const MAX_TILES = 40000;                          // the default of the profile (app/profile.js)
 
 /** Walk the layers of an MVT tile (a scan of the protobuf: field 3 of the tile is a layer, and field 1 of a layer is its name): `fn(name, from, to)` gets the bytes of each layer, with its tag. */
 function eachLayer(b, fn) {
@@ -430,7 +430,7 @@ async function tileFile(kind, ctx, area) {
 export const pmtilesFile = (query, mode, area, ctx) => tileFile("pmtiles", ctx, area);
 export const mbtilesFile = (query, mode, area, ctx) => tileFile("mbtiles", ctx, area);
 
-/** The zoom where a road class starts to show in the layer `edges` (a lower class is left out at a lower zoom, as in any tile set that has to stay small). The profile (app/design.js) gives the zooms. */
+/** The zoom where a road class starts to show in the layer `edges` (a lower class is left out at a lower zoom, as in any tile set that has to stay small). The profile (app/profile.js) gives the zooms. */
 const fromZoom = (h, classFrom = CLASS_FROM) => classFrom[cls(h)] ?? OTHER_FROM;
 
 /** The roads of all the networks for the layer `edges`: one feature for each edge_id, with every column of the edge, and a flag for each network that has it. */

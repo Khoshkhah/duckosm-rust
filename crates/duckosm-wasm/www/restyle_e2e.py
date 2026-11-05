@@ -52,7 +52,8 @@ with sync_playwright() as p:
     changed["now"] = True
     page.click("#step9")
     page.click("#design-tab-theme")
-    assert theme(page, "light") == "same tiles", "the default look over the default map keeps the tiles, also when map/look.json changed"
+    # the design is Light, the look of the map: roadstyle's panel draws nothing for it. Amber (below) comes after the change of map/look.json, so it
+    # checks that a theme keeps the tiles also when the file changed
 
     # live colours on some roads, as rs.setData and rsColor write them (the feature state rs_c on each road's row)
     page.evaluate("window.duckMap.jumpTo({center: [7.4246, 43.7384], zoom: 15})")

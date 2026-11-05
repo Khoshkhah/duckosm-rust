@@ -2,9 +2,10 @@
 // The args are those of the Monaco map the page began with; the base map (roads' colours too) is the theme "liberty", paths "google".
 import { readFileSync, writeFileSync } from "node:fs";
 import init, { resolveLook } from "./www/map/pkg/roadstyle_wasm.js";
-import { THEME_DATA } from "./www/app/design.js";
 
 const dir = new URL("./www/map/", import.meta.url);
+// the ready themes of roadstyle's design panel (build.sh copies them from roadstyle at ROADSTYLE_COMMIT)
+const THEME_DATA = JSON.parse(readFileSync(new URL("roadstyle/dashboard/design/themes.json", dir), "utf8")).themes;
 await init({ module_or_path: readFileSync(new URL("pkg/roadstyle_wasm_bg.wasm", dir)) });
 const args = {
   name: "monaco (all, google)", tooltip: ["edge_id", "osm_id", "highway", "name", "access"], copy_field: "edge_id", basemap: "blank",
