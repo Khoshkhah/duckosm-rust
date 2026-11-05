@@ -87,3 +87,4 @@ nav:
       - Disk store for the result: proposals/disk-store.md
       - Less memory in the build: proposals/build-memory.md
       - A build by tiles: proposals/tiled-build.md
+      - The look of the exports: proposals/export-look.md
