@@ -298,8 +298,9 @@ The page keeps the selected file only in memory. After a reload, the user select
   (duckOSM `osm_overrides`), with one sentence that tells what it is (Kaveh found the first label unclear).
 - **Drawing order**: the build always uses "Optimized" (roadstyle's solver; the page has no choice since 2026-11-04,
   [levels.md](levels.md)). Monaco: the build takes about 0.5 s more with the solver.
-- **Base map layers** (a check box, on): with a region file, the build also makes duckOSM's base-map layers
-  (`features.*`), see [features.md](features.md).
+- **Base map layers** (a check box, on): with a region file or the Overpass API, the build also makes duckOSM's base-map
+  layers (`features.*`), see [features.md](features.md). With Overpass, the query then also asks for the objects of the
+  layers, so the answer is larger.
 - **Build** (in the footer) starts the build in the Web Worker (`build_worker.js`, with threads when the page
   is cross-origin isolated). The card shows the progress, then one line: "Built in 2.3 s · 8 threads · 52 MiB" (the
   time from the click on Build until the tables are in DuckDB, the threads, the memory of the build module; with

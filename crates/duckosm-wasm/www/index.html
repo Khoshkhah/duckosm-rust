@@ -650,7 +650,7 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   </div>
   <div class="bgroup">
     <div class="bhead">Base map</div>
-    <label class="optrow"><input type="checkbox" id="features" checked><span class="t"><b>Layers</b><small>Water, land use, buildings, railways and more. They need a region file.</small></span></label>
+    <label class="optrow"><input type="checkbox" id="features" checked><span class="t"><b>Layers</b><small>Water, land use, buildings, railways and more. Not with a cut file.</small></span></label>
   </div>
   <details class="drow"><summary>Fixes</summary>
     <label class="pick"><svg><use href="#i-upload"/></svg><span id="fixes-name">Select a fixes file (.yaml)</span><input id="fixes" type="file" accept=".yaml,.yml"></label>
@@ -2007,7 +2007,7 @@ $("run").onclick = async () => {
     const threads = Number(new URLSearchParams(location.search).get("threads")) || undefined;  // ?threads=N: the size of the pool
     const levels = "solve";   // visualization.edge_levels: always roadstyle's solver (docs/levels.md); the page has no choice (Kaveh, 2026-11-04)
     let msg, download = null;
-    const feats = $("features").checked && source === "region";   // the base-map layers need the raw.* of a region file
+    const feats = $("features").checked && source !== "cut";   // the base-map layers need raw.*: of a region file or of Overpass
     // DuckDB loads its spatial extension during the build (the build worker does not use DuckDB); the tables wait for it
     const spatial = feats ? duck.loadSpatial() : null;
     if (source === "region") {
@@ -2016,9 +2016,9 @@ $("run").onclick = async () => {
       msg = { pbf: await $("pbf").files[0].arrayBuffer(), boundary: area ? text() : null, modes, fixes, levels, threads };
     } else {
       const d0 = performance.now();
-      const got = await duck.overpass(area.polys, (t) => progress(t + "…"));
+      const got = await duck.overpass(area.polys, (t) => progress(t + "…"), feats);
       download = { seconds: (performance.now() - d0) / 1000, bytes: got.bytes.byteLength, server: got.server };
-      msg = { json: got.bytes, boundary: text(), modes, fixes, levels, threads };
+      msg = { json: got.bytes, boundary: text(), modes, fixes, levels, threads, raw: feats };
     }
     // the time zone of main.visualization_metadata: the entry of the area's smallest Geofabrik region in the time zone
     // table (www/timezones.json, loaded one time, then from the cache of the browser)
@@ -2454,7 +2454,7 @@ const CARD_HELP = {
     ["Cut file", "A .osm.pbf file that is already cut to the area. The page uses all of the file. The area gives only the name."]] },
   4: { title: "Build", intro: "The page makes the road networks and the tables in your browser.", terms: [
     ["Networks", "Driving, walking and cycling. Each one makes its own tables."],
-    ["Base map layers", "Water, land use, buildings, railways and more. They need a region file. The first build downloads 4.5 MB."],
+    ["Base map layers", "Water, land use, buildings, railways and more, with a region file or the Overpass API (a larger Overpass answer). The first build downloads 4.5 MB."],
     ["Fixes", "A file with your fixes for OpenStreetMap errors, for example a one-way street. Turn rules are not used."]],
     note: `${link(DOCS.features, "The features tables")} · ${link(DOCS.fixes, "The format of the fixes file")}` },
   5: { title: "The result", intro: "The tables that the build made.", terms: [

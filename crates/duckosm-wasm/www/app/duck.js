@@ -656,25 +656,41 @@ export async function saveLevels(levelsCsv, inputs, area) {
 
 // the data of an area from the Overpass API: the highway ways and ferry lines in the bounding box of each outer ring, with all their
 // nodes, and the type=restriction relations of these ways. duckosm-rust then keeps the ways with a node inside the boundary, as in
-// the cut of a region file. A public server can be busy, so the next one is tried.
+// the cut of a region file. With `layers`, also the objects that duckOSM's SQL of the base-map layers reads (features.sql): the nodes,
+// ways and multipolygons with one of LAYER_KEYS, the nodes with a highway tag (bus stops, signals, crossings), the type=boundary
+// relations with a leisure tag (nature reserves), and all their members and nodes; duckosm-rust cuts them as osmium's smart cut of a
+// region file. Not the other type=boundary relations: features.sql reads none of them, and their members are large (Monaco,
+// 2026-11-05: the Alps and the Côte d'Azur made the answer 20.9 MB). A public server can be busy, so the next one is tried.
 const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
                   "https://overpass.private.coffee/api/interpreter"];
+const LAYER_KEYS = "building|landuse|natural|leisure|waterway|water|amenity|man_made|railway|aeroway|tourism|place|area:highway|" +
+                   "public_transport|military|shop|office|aerialway";
 
-export async function overpass(polys, onStep) {
+/** The Overpass QL of `overpass`, for the bounding boxes `boxes` ("(s,w,n,e)") of `km2` square kilometres. */
+export function overpassQuery(boxes, layers, km2) {
+  const ways = boxes.map((b) => `way["highway"]${b};way["route"="ferry"]${b};`).join("");
+  const k = `[~"^(${LAYER_KEYS})$"~"."]`;
+  const feats = boxes.map((b) => `node${k}${b};node["highway"]${b};way${k}${b};rel${k}["type"="multipolygon"]${b};rel["type"="boundary"]["leisure"]${b};`).join("");
+  const body = `(${ways})->.w;rel(bw.w)["type"="restriction"]->.r;` + (layers ? `(${feats})->.f;(.w;.w >;.r;.f;.f >;);` : "(.w;.w >;.r;);");
+  // the answer with the layers is about 3 times larger (Monaco, 2026-11-05: 9.5 MB), so it asks as for an area 3 times as large
+  const size = km2 * (layers ? 3 : 1);
+  const timeout = Math.round(Math.min(600, Math.max(90, 60 + size / 2)));                 // 90 s for a small area, 600 s from about 1,100 km²
+  const maxsize = Math.round(Math.min(2 ** 31, Math.max(2 ** 28, size * 2 ** 21)));      // 256 MB for a small area, 2 GB from about 1,000 km²
+  return `[out:json][timeout:${timeout}][maxsize:${maxsize}];${body}out body qt;`;
+}
+
+export async function overpass(polys, onStep, layers = false) {
   const boxes = polys.map((p) => {
     const xs = p[0].map((c) => c[0]), ys = p[0].map((c) => c[1]);
     return `(${Math.min(...ys)},${Math.min(...xs)},${Math.max(...ys)},${Math.max(...xs)})`;
   });
-  const ways = boxes.map((b) => `way["highway"]${b};way["route"="ferry"]${b};`).join("");
   // A server admits a query by the time and memory that it asks for: 600 s and 2 GB for every area made a busy server answer 504 even for an
   // H3 cell (2026-11-05, maps.mail.ru: 504 after 50 s; with 120 s and 256 MB: 200 in 21 s). So the query asks in step with the boxes' area.
   const km2 = polys.reduce((sum, p) => {
     const xs = p[0].map((c) => c[0]), ys = p[0].map((c) => c[1]), lat = (Math.min(...ys) + Math.max(...ys)) / 2;
     return sum + (Math.max(...ys) - Math.min(...ys)) * 111.32 * (Math.max(...xs) - Math.min(...xs)) * 111.32 * Math.cos(lat * Math.PI / 180);
   }, 0);
-  const timeout = Math.round(Math.min(600, Math.max(90, 60 + km2 / 2)));                 // 90 s for a small area, 600 s from about 1,100 km²
-  const maxsize = Math.round(Math.min(2 ** 31, Math.max(2 ** 28, km2 * 2 ** 21)));      // 256 MB for a small area, 2 GB from about 1,000 km²
-  const data = `[out:json][timeout:${timeout}][maxsize:${maxsize}];(${ways})->.w;rel(bw.w)["type"="restriction"]->.r;(.w;.w >;.r;);out body qt;`;
+  const data = overpassQuery(boxes, layers, km2);
   const failed = [];
   // two rounds: a public server that is full (504) often answers a few seconds later (Monaco, 2026-11-05: 504, then 200 in 17 s)
   for (const url of [...OVERPASS, ...OVERPASS]) {
