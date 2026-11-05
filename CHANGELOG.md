@@ -7,6 +7,7 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ### Changed
 
+- **The Rust engine is in the duckOSM repository.** `duckosm-core`, `duckosm-parquet`, `duckosm-duckdb`, `duckosm-build`, `duckosm-cli` and `duckosm-py` moved to `rust/` of [Khoshkhah/duckOSM](https://github.com/Khoshkhah/duckOSM), with the golden files, the engine tools (`compare_*`, `make_golden*`, `edge_id_reference.py`), the benchmark, the wheels and the release workflow. `duckosm-wasm` takes `duckosm-core` and `duckosm-build` from there with a Git dependency (`rev`). The output is the same: the browser build still writes the files of the native build, byte for byte (`cargo test -p duckosm-wasm`). `ci.yml` has no wheel, CLI, sdist or release jobs now. See `docs/development.md`, "Where the engine lives".
 - **Less memory in the build** (`duckosm-core`; second round, `docs/proposals/build-memory.md`). The hash maps of steps 3, 4 and 6 and the junction maps ended only at the end of the build; now each ends after its step. The turn restrictions keep only the ways and nodes that a rule names, and the edge graph finds the edges of a node in a sorted array. Peak of the Rust heap: Estonia walking 1,221 to 923 MiB, Estonia driving 757 to 568 MiB, Kentucky driving 3,205 to 1,882 MiB. The output is the same as release 0.3.0 (33 of 35 Parquet files byte equal; the 2 others hold the build time).
 
 ### Added
