@@ -29,7 +29,7 @@ Build a routable road network from OpenStreetMap in your browser. Fix the OSM da
 ## Documents
 
 - [The manual](https://khoshkhah.github.io/duckosm-studio/manual/): every step, every editor, every export and every table.
-- [Development](https://khoshkhah.github.io/duckosm-studio/manual/development/): build and test the page.
+- [Development](docs/development.md): build and test the page.
 - [Changelog](CHANGELOG.md)
 
 ## License

@@ -13,7 +13,7 @@
 ## Problems
 
 - **A large area fails.** Choose a smaller area, or use [duckOSM](cli.md) on a computer with more memory.
-- **The page loads twice at the first visit.** The page needs headers that make the browser use threads. The host cannot send them, so a small script in the page adds them and loads the page again. In a test with a fast link, the second load starts after about half a second. A hard reload (Shift + reload) skips the script, and the page then builds with one thread. [Hosting](proposals/hosting.md) has the reason.
+- **The page loads twice at the first visit.** The page needs headers that make the browser use threads. The host cannot send them, so a small script in the page adds them and loads the page again. In a test with a fast link, the second load starts after about half a second. A hard reload (Shift + reload) skips the script, and the page then builds with one thread. [Hosting](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/proposals/hosting.md) has the reason.
 - **A red bar says "the browser may have an old file".** Press Ctrl+Shift+R one time.
 - **Street View or Google 3D shows nothing.** These tools need a key. Press the gear in the bar of tools. Save your Google key or your Mapillary token there. The deployed page has its own Google key.
 - **Your areas is empty.** The browser keeps saved areas for one address only. If you clear the site data, or open the page at another address, the areas go.
@@ -21,4 +21,4 @@
 
 ## Keys for a test on your computer
 
-Put the keys in `crates/duckosm-wasm/www/local_keys.json`, as `{"google": "...", "mapillary": "..."}`. Git ignores this file. Only a page on `localhost` reads it. [Development](development.md) has the details.
+Put the keys in `crates/duckosm-wasm/www/local_keys.json`, as `{"google": "...", "mapillary": "..."}`. Git ignores this file. Only a page on `localhost` reads it. [Development](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/development.md) has the details.

@@ -28,7 +28,7 @@ You choose an area on a map. The portal builds the driving, walking and cycling 
 | Advantage | What it means for you |
 |---|---|
 | Nothing to install | Open a page. The build runs in your browser. Your area and your data stay on your computer. |
-| Fast | Estonia takes 19 seconds and 1.5 GB ([benchmark](benchmark.md)). duckOSM in Python takes 1,545 seconds and 10 GB. |
+| Fast | Estonia takes 19 seconds and 1.5 GB ([benchmark](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/benchmark.md)). duckOSM in Python takes 1,545 seconds and 10 GB. |
 | One result everywhere | The page, the command line and Python run the same Rust code. They give the same tables. |
 | Three networks in one build | Driving, walking and cycling, with the edge graph and the turn restrictions. |
 | Fix the data | Change a road, a building, a node or a turn rule. Draw a new road. Build again. |

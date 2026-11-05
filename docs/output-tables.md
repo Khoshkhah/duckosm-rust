@@ -4,8 +4,8 @@ A build writes one table for each part of the road network. This page lists the 
 
 - To learn what each table is for, read [The tables](manual/tables.md).
 - To make the tables, read [Your first map](first_map.md).
-- To see how the tables are made and tested against duckOSM, read [design.md](design.md).
-- To see the tables that are not made yet, read [tables.md](tables.md).
+- To see how the tables are made and tested against duckOSM, read [design.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/design.md).
+- To see the tables that are not made yet, read [tables.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/tables.md).
 - duckOSM has the same reference for its own tables: [database.md](https://github.com/Khoshkhah/duckOSM/blob/main/docs/reference/database.md).
 
 ## Where the tables are
@@ -135,7 +135,7 @@ The columns `node_id` and `geometry`. The table is always empty, as in duckOSM: 
 
 ### `lane_profile` (driving only)
 
-One row for each lane of each driving edge, from left to right. 3,510 rows. The method is in [lane_profile.md](lane_profile.md).
+One row for each lane of each driving edge, from left to right. 3,510 rows. The method is in [lane_profile.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/lane_profile.md).
 
 | Column | Type | Meaning |
 |---|---|---|
@@ -154,7 +154,7 @@ One row for each lane of each driving edge, from left to right. 3,510 rows. The 
 | `main.visualization_metadata` | `visualization_metadata_main.parquet` | 1 | `boundary_geojson`, `center_lat`, `center_lon`, `initial_zoom`, `timezone`, `built_at`, `duckosm_version`. |
 | `mm.transfers` | `transfers_mm.parquet` | 12,352 | `node_id`, `from_mode`, `to_mode`, `cost_s`, `kind`. The changes of network at a node (`park`, `retrieve`, `bike_park`, `bike_unpark`). |
 | `mm.edges` | In the `.duckdb` file only | A view | All edges of all networks, with their network. |
-| `visualization.edge_levels` | `edge_levels_visualization.parquet` | 13,953 | The drawing order of the roads (a bridge over a road): `edge_id`, `casing_start`, `casing_level`, `casing_end`, `fill_level`, `head_start_m`, `head_end_m`, `cap_start`, `cap_end`. The method is in [levels.md](levels.md). |
+| `visualization.edge_levels` | `edge_levels_visualization.parquet` | 13,953 | The drawing order of the roads (a bridge over a road): `edge_id`, `casing_start`, `casing_level`, `casing_end`, `fill_level`, `head_start_m`, `head_end_m`, `cap_start`, `cap_end`. The method is in [levels.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/levels.md). |
 | `visualization.edge_levels_meta` | `edge_levels_meta_visualization.parquet` | 1 | How the levels were made (`source`: `tags` or `solve`). |
 
 ## Tables that need more input
@@ -163,7 +163,7 @@ These tables exist only when you give the build more than an `.osm.pbf` file.
 
 | Tables | You need | Where to read |
 |---|---|---|
-| `raw.nodes`, `raw.ways`, `raw.relations` and the base-map layers `features.*` | A boundary (`--boundary` in duckOSM, an area in the page) | [features.md](features.md) |
-| `main.building_faces`, `main.building_info`, `main.building_entrances` | The base-map layers (the page makes them) | [osm-editing.md](osm-editing.md) |
-| `bus.routes`, `bus.route_edges` | A boundary, and the driving network | [bus.md](bus.md) |
+| `raw.nodes`, `raw.ways`, `raw.relations` and the base-map layers `features.*` | A boundary (`--boundary` in duckOSM, an area in the page) | [features.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/features.md) |
+| `main.building_faces`, `main.building_info`, `main.building_entrances` | The base-map layers (the page makes them) | [osm-editing.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/osm-editing.md) |
+| `bus.routes`, `bus.route_edges` | A boundary, and the driving network | [bus.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/bus.md) |
 | `nodes.ele`, `edges.z_from`, `z_to`, `z_vertices` | A DEM file (`--dem`) | [CHANGELOG.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/CHANGELOG.md) |

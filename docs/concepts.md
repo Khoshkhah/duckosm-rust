@@ -8,6 +8,6 @@
 
 **Edge.** One directed piece of road between two junctions. A two-way street gives two edges.
 
-**`edge_id`.** A number (BIGINT) that the program computes from the OSM way, the source node and the target node. The same road gives the same `edge_id` in every build. The program never numbers edges in order. Other projects (sensor-matching, SonoFlow, fetching-sweden-data) join on it. Keep it a BIGINT in every join: a program that reads it as a floating-point number loses digits. The decision and the tests are in [the design](design.md#5-the-edge_id-problem).
+**`edge_id`.** A number (BIGINT) that the program computes from the OSM way, the source node and the target node. The same road gives the same `edge_id` in every build. The program never numbers edges in order. Other projects (sensor-matching, SonoFlow, fetching-sweden-data) join on it. Keep it a BIGINT in every join: a program that reads it as a floating-point number loses digits. The decision and the tests are in [the design](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/design.md#5-the-edge_id-problem).
 
 **Equal to duckOSM.** Every row of every table equals the output of duckOSM 0.6.0. Only the direction labels of some connectors differ, which duckOSM does not fix.

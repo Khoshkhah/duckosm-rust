@@ -9,7 +9,7 @@ Card 8 opens roadstyle's level editor for the roads that you built. Use it when 
 
 Each edge has two numbers: one for its outline (the casing) and one for its road (the fill). Zero is the ground. A bridge has a higher number than the road under it. The map draws the numbers in order, lowest first. At each number, the page draws all outlines first and then all roads. So two roads that meet merge with no ring between them.
 
-A solver finds the numbers when you build. The default method uses the tags `bridge`, `tunnel`, `layer` and the road class. The solver finds the right order in most places. Use the editor for the other places. [levels.md](../levels.md) has the method of the solver.
+A solver finds the numbers when you build. The default method uses the tags `bridge`, `tunnel`, `layer` and the road class. The solver finds the right order in most places. Use the editor for the other places. [levels.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/levels.md) has the method of the solver.
 
 ## Pick two roads
 
