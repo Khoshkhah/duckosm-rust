@@ -46,6 +46,7 @@ You choose an area on a map. The portal builds the driving, walking and cycling 
 | [Steps 3 and 4](manual/build.md) | Give the data. Build. |
 | [Steps 5 and 6](manual/result.md) | Read the result. Show the map. |
 | [Step 7: Edit OSM data](manual/edit-osm.md) | Fix roads, buildings, nodes and turns. |
+| [The fixes file (YAML)](manual/fixes-file.md) | Every key of the YAML file of your fixes, the order in which the build applies them, and a full example. |
 | [Step 8: Edit levels](manual/edit-levels.md) | Fix bridges and tunnels. |
 | [Step 9: Edit design](manual/edit-design.md) | Set the look of the map and the tiles. |
 | [Step 10: Export](manual/export.md) | The formats and the files. |

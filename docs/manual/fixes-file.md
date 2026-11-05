@@ -1,4 +1,4 @@
-# The fixes file
+# The fixes file (YAML)
 
 The fixes file is a YAML file of rules. Each rule corrects one error in the OSM data of your area. The build applies the rules to the OSM data before it makes the tables. The OSM data itself does not change.
 

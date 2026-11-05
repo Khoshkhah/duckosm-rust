@@ -100,7 +100,7 @@ netconvert --node-files area_driving.nod.xml --edge-files area_driving.edg.xml -
 |---|---|---|
 | 2 The area | **Boundary** | `boundary.geojson` |
 | 3 The data | The arrow in a row of the region list | An `.osm.pbf` region file |
-| 5 The result | **.zip**, **.duckdb**, **.osm.pbf**, **.yaml** | The tables, the database, the cut area and the fixes |
+| 5 The result | **.zip**, **.duckdb**, **.osm.pbf**, **.yaml** | The tables, the database, the cut area and the fixes ([the fixes file](fixes-file.md)) |
 | 7 Edit OSM data | **Download** (tab **Changes**) | The fixes file |
 | 8 Edit levels | **Download edits.csv** | Your level rules |
 | 9 Edit design | **Download**, **Download all my themes** | `.design.json`, `duckosm-themes.json` |
