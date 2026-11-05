@@ -78,7 +78,6 @@ def run(browser, name, dark=False, phone=False):
     page.wait_for_timeout(1000)
     for key, tag in (("step4", "4b-built"), ("step5", "5-result"), ("step6", "6-visualization"), ("step7", "7-fix"), ("step8", "8-edit")):
         card(page, name, key, tag)
-    page.locator("footer.sb-foot").screenshot(path=str(out / f"{label}-{name}-8-footer.png"))
     page.context.close()
     print(f"{label} {name}: done")
 

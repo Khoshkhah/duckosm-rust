@@ -54,8 +54,8 @@ def run(browser, name, dark=False, **context):
 
     # before any input
     assert page.query_selector("#search-go") is None and page.query_selector("#search-why") is None, "the search has one field and no button"
-    g0, b0 = off("save", "buildhint", "area"), off("run", "buildhint", "area")
-    assert g0["bg"] == b0["bg"], ("one disabled look for every button", g0, b0)
+    off("run", "buildhint", "area")
+    assert page.is_disabled("#save") and "off" in (page.get_attribute("#step2-card", "class") or ""), "the boundary waits for an area: card 2 is off ('after step 1')"
     page.screenshot(path=str(out / f"{name}-1-nothing.png"))
     # an area: GeoJSON is on, Build waits for the data file
     page.set_input_files("#file", str(ROOT / "tests/data/monaco.geojson"))

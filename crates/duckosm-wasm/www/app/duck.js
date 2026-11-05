@@ -666,11 +666,20 @@ export async function overpass(polys, onStep) {
     return `(${Math.min(...ys)},${Math.min(...xs)},${Math.max(...ys)},${Math.max(...xs)})`;
   });
   const ways = boxes.map((b) => `way["highway"]${b};way["route"="ferry"]${b};`).join("");
-  const data = `[out:json][timeout:600][maxsize:2147483648];(${ways})->.w;rel(bw.w)["type"="restriction"]->.r;(.w;.w >;.r;);out body qt;`;
+  // A server admits a query by the time and memory that it asks for: 600 s and 2 GB for every area made a busy server answer 504 even for an
+  // H3 cell (2026-11-05, maps.mail.ru: 504 after 50 s; with 120 s and 256 MB: 200 in 21 s). So the query asks in step with the boxes' area.
+  const km2 = polys.reduce((sum, p) => {
+    const xs = p[0].map((c) => c[0]), ys = p[0].map((c) => c[1]), lat = (Math.min(...ys) + Math.max(...ys)) / 2;
+    return sum + (Math.max(...ys) - Math.min(...ys)) * 111.32 * (Math.max(...xs) - Math.min(...xs)) * 111.32 * Math.cos(lat * Math.PI / 180);
+  }, 0);
+  const timeout = Math.round(Math.min(600, Math.max(90, 60 + km2 / 2)));                 // 90 s for a small area, 600 s from about 1,100 km²
+  const maxsize = Math.round(Math.min(2 ** 31, Math.max(2 ** 28, km2 * 2 ** 21)));      // 256 MB for a small area, 2 GB from about 1,000 km²
+  const data = `[out:json][timeout:${timeout}][maxsize:${maxsize}];(${ways})->.w;rel(bw.w)["type"="restriction"]->.r;(.w;.w >;.r;);out body qt;`;
   const failed = [];
-  for (const url of OVERPASS) {
+  // two rounds: a public server that is full (504) often answers a few seconds later (Monaco, 2026-11-05: 504, then 200 in 17 s)
+  for (const url of [...OVERPASS, ...OVERPASS]) {
     const host = new URL(url).host;
-    onStep(`getting the OpenStreetMap data from ${host}`);
+    onStep(`getting the OpenStreetMap data from ${host}${failed.length >= OVERPASS.length ? " (second try)" : ""}`);
     try {
       const r = await fetch(url, { method: "POST", body: new URLSearchParams({ data }) });
       if (r.ok) return { bytes: await r.arrayBuffer(), server: host };

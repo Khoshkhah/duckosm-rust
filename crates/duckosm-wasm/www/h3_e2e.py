@@ -135,9 +135,9 @@ def run(browser, phone):
     sb = page.evaluate("(() => { const r = document.getElementById('sb').getBoundingClientRect(); return [r.left, r.right]; })()")
     assert len(tabs) == 4 and all(t[0] >= sb[0] and t[1] <= sb[1] + 1 and t[2] > 50 for t in tabs), (tabs, sb)
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "sideways scroll"
-    # Clear is off at the start: the normal cursor, no tooltip, the reason is the text under it
-    look = page.evaluate("(() => { const b = document.getElementById('h3-clear'), c = getComputedStyle(b), h = document.getElementById('h3-hint').getBoundingClientRect(); return {disabled: b.disabled, cursor: c.cursor, title: b.title, opacity: c.opacity, under: h.top >= b.getBoundingClientRect().bottom - 1}; })()")
-    assert look == {"disabled": True, "cursor": "default", "title": "", "opacity": "1", "under": True}, look
+    # Unselect is off at the start: the normal cursor, no tooltip (one button for the cells and the area: Unselect)
+    look = page.evaluate("(() => { const b = document.querySelector('#step1-card .area-clear'), c = getComputedStyle(b), h = document.getElementById('h3-hint').getBoundingClientRect(); return {disabled: b.disabled, cursor: c.cursor, title: b.title, opacity: c.opacity}; })()")
+    assert look == {"disabled": True, "cursor": "default", "title": "", "opacity": "1"}, look
     assert "Click a hexagon" in text()
     level(9)
     show(page, *MONACO, 13.5 if phone else 14.5)    # on a phone, six cells around one fit in the 390 px
@@ -148,7 +148,7 @@ def run(browser, phone):
     for c in ring:
         pick(c)
     cells(6)
-    assert page.evaluate("document.body.classList.contains('h3')") and not page.evaluate("document.getElementById('h3-clear').disabled")
+    assert page.evaluate("document.body.classList.contains('h3')") and not page.evaluate("document.querySelector('#step1-card .area-clear').disabled")
     f = saved()
     g = f["geometry"]
     assert g["type"] == "Polygon" and len(g["coordinates"]) == 2, ("one polygon with a hole", g["type"], len(g["coordinates"]))
@@ -168,10 +168,10 @@ def run(browser, phone):
     assert f["geometry"]["type"] == "Polygon" and len(f["geometry"]["coordinates"]) == 1 and inside((cx, cy), f["geometry"]), "no hole"
     pick(centre)
     cells(6)
-    # Clear
-    click("#h3-clear")
+    # Unselect removes the cells and the area
+    click("#step1-card .area-clear")
     cells(0)
-    assert page.inner_text("#summary") == "" and page.evaluate("document.getElementById('h3-clear').disabled && document.getElementById('save').disabled")
+    assert page.inner_text("#summary") == "" and page.evaluate("document.querySelector('#step1-card .area-clear').disabled && document.getElementById('save').disabled")
     # the Search tab takes H3 IDs: one cell, then seven; the name is the ID (the first cell and "-plus-6"); a wrong ID says so
     def search_ids(text_):
         click("#tab-find")
@@ -193,7 +193,7 @@ def run(browser, phone):
     search_ids("123456789abcdef")
     page.wait_for_function("document.getElementById('found').textContent.includes('not an H3 cell ID')", timeout=10_000)
     click("#tab-h3")
-    click("#h3-clear")
+    click("#step1-card .area-clear")
     cells(0)
     # two cells that do not touch are two polygons
     far = h3(page, "return h3.gridDiskDistances(args[0], 2)[2][0];", centre)
@@ -202,7 +202,7 @@ def run(browser, phone):
     cells(2)
     assert page.inner_text("#summary .stats .stat:nth-child(2) b") == "2"
     page.screenshot(path=str(out / f"{name}-2-two.png"))
-    click("#h3-clear")
+    click("#step1-card .area-clear")
     cells(0)
 
     if phone:
@@ -231,7 +231,7 @@ def run(browser, phone):
     cells(2)
     level(8)
     page.wait_for_function("window.h3Cells.size === 0")
-    assert "The cells are removed" in text() and page.evaluate("document.getElementById('h3-clear').disabled"), text()
+    assert "The cells are removed" in text() and page.evaluate("document.querySelector('#step1-card .area-clear').disabled"), text()
     assert page.inner_text("#summary") == "", "the area goes with the cells"
     # the cap: level 5 (253 km2 each) allows 19 cells in 5,000 km2
     level(5)
@@ -245,9 +245,9 @@ def run(browser, phone):
     page.wait_for_function("document.getElementById('h3-hint').textContent.includes('most km')", timeout=10_000)
     cells_now = page.evaluate("window.h3Cells.size")
     assert cells_now == 19, cells_now
-    assert page.evaluate("document.getElementById('h3-clear').disabled") is False
+    assert page.evaluate("document.querySelector('#step1-card .area-clear').disabled") is False
     page.screenshot(path=str(out / "desk-3-cap.png"))
-    click("#h3-clear")
+    click("#step1-card .area-clear")
     cells(0)
 
     # a build of Monaco from the cells
