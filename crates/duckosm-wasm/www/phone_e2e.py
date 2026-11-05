@@ -126,7 +126,7 @@ with sync_playwright() as p:
     # the level editor: one panel at a time. It draws into the page's own sheet (#sb): the page's steps and footer are hidden, "← Steps" is at
     # the top of the sheet, and the editor's apply bar is fixed at its bottom. The map stays full width under the bar and above the sheet.
     def open_editor():
-        page.tap("#edit-open")
+        page.tap("#step8")
         page.wait_for_function("window.levelEditorOpen || /failed/.test(document.getElementById('editnote').textContent)", timeout=300_000)
         assert page.evaluate("!!window.levelEditorOpen"), page.inner_text("#editnote")
         page.wait_for_function("window.duckMap.loaded()", timeout=120_000)

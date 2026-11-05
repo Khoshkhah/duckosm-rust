@@ -1,4 +1,4 @@
-// The Design panel (docs/dashboard.md, card 9): the style of the map and the profile of the tiles. It is built like the Fix OSM data panel
+// The Design panel (docs/dashboard.md, card 9): the style of the map and the profile of the tiles. It is built like the Edit OSM data panel
 // (index.html, #design-panel): a header, five tabs and a bar. This file owns the design (app/design.js) and draws the tabs; the page gives it
 // the look (map/look.json), the way to draw the map again with a new look, and the places to keep the design.
 //

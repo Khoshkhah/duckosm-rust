@@ -127,10 +127,10 @@ with sync_playwright() as p:
     shot(page, "15-dark")
     page.evaluate("rsSetTheme('light')")
 
-    # card 7: the Fix OSM data panel, one picture for each tab
+    # card 7: the Edit OSM data panel, one picture for each tab
     unfold(page, "step7-card")
     shot(page, "16-fix-card", "#step7-card")
-    page.click("#fix-open")
+    page.click("#step7")
     page.wait_for_selector("#fix-panel", state="visible")
     point = page.evaluate("""() => { const m = window.duckMap, c = m.getCanvas().getBoundingClientRect(), L = %s;
         for (const f of m.queryRenderedFeatures({layers: L})) { const g = f.geometry.type === 'LineString' ? f.geometry.coordinates : f.geometry.coordinates[0];
@@ -180,7 +180,7 @@ with sync_playwright() as p:
     # card 9: the Design panel, one picture for each tab, and the map in the Dark theme
     unfold(page, "step9-card")
     shot(page, "26-design-card", "#step9-card")
-    page.click("#design-open")
+    page.click("#step9")
     page.wait_for_selector("#design-panel", state="visible")
     page.set_viewport_size({"width": 1400, "height": 3600})       # the Theme tab has 33 themes: a tall window shows them all
     shot(page, "27-design-theme")

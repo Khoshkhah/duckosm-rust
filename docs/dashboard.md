@@ -35,9 +35,9 @@ After a build the page looks like this:
 4. Build (step 4). Choose the networks and press **Build**.
 5. Read the result (step 5). Query the tables and download them.
 6. Show the map (step 6). Draw the roads on the map.
-7. Fix OSM data (step 7). Change roads, buildings, nodes and turns, and build again.
+7. Edit OSM data (step 7). Change roads, buildings, nodes and turns, and build again.
 8. Edit levels (step 8). Open the level editor.
-9. Design (step 9). Change the colors, widths and text of the map, and set the profile of the tiles. This step is on at all times.
+9. Edit design (step 9). Change the colors, widths and text of the map, and set the profile of the tiles. This step is on at all times.
 10. Export (step 10). Give the network or its tiles to other software: PMTiles, MBTiles, GeoPackage, GeoJSON, MATSim and SUMO.
 
 ## The bar of tools
@@ -198,11 +198,11 @@ When the build ends, the card shows the time and the memory:
 - **Show on map.** Draws the roads. A small area (up to 20,000 roads) draws by itself after a build; for a larger area, press the button. The map has a limit: 200,000 roads on a computer and 40,000 on a small device. If the area is larger, the page lists the networks that fit. You can use `?maxroads=N` in the address to change the limit.
 - **The note under the button** says how many roads were drawn and how long it took.
 
-## Step 7: Fix OSM data
+## Step 7: Edit OSM data
 
-![Card 7: the number of fixes and the button Edit fixes](img/dashboard/16-fix-card.png)
+![Card 7: Edit OSM data, with the number of fixes under its title](img/dashboard/16-fix-card.png)
 
-Card 7 shows the number of fixes and has the button **Edit fixes**. It opens the fixes panel. The card is off until a build has made the tables that the panel needs. Build with **Layers** on to get walls and doors. A fix is a rule that you add to a list. A rule changes nothing in the data until you build again. The rules are kept in the browser for the area, and the **.yaml** button of card 5 downloads them.
+Card 7, **Edit OSM data**, shows the number of fixes under its title. Click the card to open the fixes panel. The card is off until a build has made the tables that the panel needs. Build with **Layers** on to get walls and doors. A fix is a rule that you add to a list. A rule changes nothing in the data until you build again. The rules are kept in the browser for the area, and the **.yaml** button of card 5 downloads them.
 
 ![The fixes panel with the Road tab](img/dashboard/17-fix-road.png)
 
@@ -293,11 +293,11 @@ A choice in one list closes a field, or narrows the list of a field, for another
 
 Card 8 opens roadstyle's level editor for the roads that you built: change the level of a road, and see the effect on bridges, tunnels and crossings. The level editor is described in [levels.md](levels.md).
 
-## Step 9: Design
+## Step 9: Edit design
 
 ![Card 9: the design and the tile profile](img/dashboard/26-design-card.png)
 
-Card 9 sets the look of the map and the profile of the tile files. It is on at all times and does not wait for a build. Push **Edit design**. The panel of the design takes the place of the steps. **Steps** goes back to the steps. **Hide panel** hides the panel on a computer.
+Card 9 sets the look of the map and the profile of the tile files. It is on at all times and does not wait for a build. Click the card **Edit design**: the panel of the design takes the place of the steps. The line under its title is the name of the design and the tile profile. **Steps** goes back to the steps. **Hide panel** hides the panel on a computer.
 
 A change shows on the map after half a second. The page draws the map again with the new design, as it does when you change the network. The bar at the bottom of the panel says "Drawing the map…" and then "The map shows this design." If the map is not drawn yet, the design shows at the next draw (step 6).
 
@@ -501,7 +501,7 @@ Card 10 gives the network that you built to other software. It is off until a bu
 | **MATSim network** | `<area>_<network>_matsim_network.xml` | A `network_v2.dtd` file: a node for each node, and a link for each edge with length (m), free speed (m/s), capacity (vehicles per hour), lanes and mode (`car`, `walk` or `bike`). Coordinates are meters in the UTM zone of the area. |
 | **SUMO plain XML** | `<area>_<network>_sumo.zip` | `.nod.xml`, `.edg.xml` and `.con.xml` and a `README.txt` with the `netconvert` command. An edge has its shape, lanes, speed and priority. The connections are the legal turns of the edge graph (turn restrictions applied). |
 
-The tiles are the tiles of the map on the screen, made again by the map worker as MVT. The tile profile of [step 9](#step-9-design) sets what they hold. The card shows the name of the profile and has these fields:
+The tiles are the tiles of the map on the screen, made again by the map worker as MVT. The tile profile of [step 9](#step-9-edit-design) sets what they hold. The card shows the name of the profile and has these fields:
 
 - **Layer edges** (on in the Analysis profile, which is the profile at the first visit). The export has the layer `edges` with every road of every network and the columns of the profile. If the map shows one network, the page switches it to **All** (card 6) and draws it again first. Monaco gives a file of about 5.6 MB with the Analysis profile.
 - **Zoom from ... to ...** The lowest and the highest zoom (0 to 18). **The highest zoom that fits the limit** sets the highest zoom to the highest one that keeps the tiles under the limit (zoom 16 at the most). The card shows the number of tiles for the extent of the network. The limit is 40,000 tiles unless you change it in step 10. If the count is higher, the buttons are off. Use fewer zooms or raise the limit.

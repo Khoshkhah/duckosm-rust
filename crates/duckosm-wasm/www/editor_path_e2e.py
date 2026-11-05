@@ -46,7 +46,7 @@ def run(browser, name, dark=False, **context):
     assert page.evaluate("[...document.querySelectorAll('.bm-menu input[name=rs-bm]')].map((r) => r.value)") == BASEMAPS, "the seven base maps"
     page.keyboard.press("Escape")
     # the editor takes the page's one panel
-    tap("#edit-open")
+    tap("#step8")
     page.wait_for_function("window.levelEditorOpen || /failed/.test(document.getElementById('editnote').textContent)", timeout=300_000)
     assert page.evaluate("!!window.levelEditorOpen"), page.inner_text("#editnote")
     page.wait_for_timeout(1000)

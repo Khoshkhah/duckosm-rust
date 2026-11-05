@@ -73,11 +73,11 @@ with sync_playwright() as p:
     assert "No fixes" in page.inner_text("#fix-sum")
 
     # the panel is the page's one panel; ← Steps brings the steps back
-    page.click("#fix-open")
+    page.click("#step7")
     assert page.is_visible("#fix-panel") and not page.is_visible("#sb .sb-body") and not page.is_visible("#sb .sb-foot")
     page.click("#fix-back")
     assert not page.is_visible("#fix-panel") and page.is_visible("#sb .sb-body")
-    page.click("#fix-open")
+    page.click("#step7")
     assert all(page.is_visible(f"#fix-tab-{t}") for t in ("road", "building", "node", "turns", "new", "changes")), "the six tabs"
     assert page.get_attribute("#fix-tab-road", "aria-selected") == "true", "the panel opens on the Road tab"
     # the panel hides (the map takes its place) and the button at the corner shows it again, with the tab and the picks as they were
@@ -174,7 +174,7 @@ with sync_playwright() as p:
     assert page.evaluate("window.__desel") >= 1, "closing the panel clears roadstyle's selection"
     page.wait_for_function("window.fixesPanel.drawn().sel === 0 && window.fixesPanel.drawn().faces === 0 && window.fixesPanel.drawn().nodes === 0", timeout=10_000)
     page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['fix-sel-line', 'fix-sel-fill', 'fix-sel-pt']}).length === 0", timeout=10_000)      # the map draws again after the data goes
-    page.click("#fix-open")
+    page.click("#step7")
     page.wait_for_function("window.fixesPanel.drawn().sel > 0", timeout=20_000)
     print("← Steps unselects everything on the map, and the panel shows the picked road again when it opens")
 
@@ -481,7 +481,7 @@ with sync_playwright() as p:
     page.click("#fix-apply")
     page.wait_for_function("document.getElementById('run').hasAttribute('aria-busy')", timeout=30_000)
     built(page)
-    page.wait_for_function("document.getElementById('fix-why').textContent.includes('Built with these fixes')", timeout=60_000)
+    page.wait_for_function("document.getElementById('fix-sum').textContent.includes('Built with these fixes')", timeout=60_000)
     assert not page.is_visible("#fix-panel") and "6 changes" in page.inner_text("#fix-sum"), page.inner_text("#fix-sum")
     lanes = rows(page, f"SELECT DISTINCT lanes::INTEGER AS lanes FROM driving.edges WHERE osm_id = {ROAD}")
     assert [r["lanes"] for r in lanes] == [7], lanes
@@ -512,7 +512,7 @@ with sync_playwright() as p:
     # out and back: the changes and the picked road are still there after the build
     if "folded" in (page.get_attribute("#step7-card", "class") or ""):
         page.click("#step7")
-    page.click("#fix-open")
+    page.click("#step7")
     assert page.inner_text("#fix-n") == "6"
     page.click("#fix-tab-road")
     page.wait_for_function(f"document.querySelector('#fix-obj .objhead')?.textContent.includes('way {ROAD}') && document.querySelector('#fixf-lanes')", timeout=20_000)
@@ -608,7 +608,7 @@ with sync_playwright() as p:
     page.click("#fix-apply")
     page.wait_for_function("document.getElementById('run').hasAttribute('aria-busy')", timeout=30_000)
     built(page)
-    page.wait_for_function("document.getElementById('fix-why').textContent.includes('Built with these fixes')", timeout=60_000)
+    page.wait_for_function("document.getElementById('fix-sum').textContent.includes('Built with these fixes')", timeout=60_000)
     assert rows(page, f"SELECT count(*)::INTEGER AS n FROM features.buildings WHERE osm_id = {ob} AND osm_type = 'way'")[0]["n"] == 0, "the deleted building is not in features.buildings"
     assert rows(page, f"SELECT count(*)::INTEGER AS n FROM driving.edges WHERE osm_id = {orr}")[0]["n"] == 0, "the deleted road is not in driving.edges"
     dk = rows(page, f"SELECT kind FROM main.building_entrances WHERE osm_id = {door['osm_id']}")
