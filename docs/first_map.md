@@ -2,7 +2,7 @@
 
 This procedure makes a map of Monaco in the browser. It takes about five minutes. Each step names the page of the manual that has the details.
 
-1. Open <https://khoshkhah.github.io/duckosm-rust/>. If the page loads a second time, wait. This is normal (see [When the page does not work](troubleshooting.md)).
+1. Open <https://khoshkhah.github.io/duckosm-studio/>. If the page loads a second time, wait. This is normal (see [When the page does not work](troubleshooting.md)).
 2. In step 1, type `Monaco` in **Search**. Click the match for Monaco. The map shows the boundary. ([Steps 1 and 2](manual/area.md))
 3. In step 3, under **Region file**, press **Get** for the Geofabrik file that covers the area. The page keeps the file in your browser. You can also select an `.osm.pbf` file that you have. ([Steps 3 and 4](manual/build.md))
 4. In step 4, keep **Driving** on. Press **Build**.

@@ -166,4 +166,4 @@ These tables exist only when you give the build more than an `.osm.pbf` file.
 | `raw.nodes`, `raw.ways`, `raw.relations` and the base-map layers `features.*` | A boundary (`--boundary` in duckOSM, an area in the page) | [features.md](features.md) |
 | `main.building_faces`, `main.building_info`, `main.building_entrances` | The base-map layers (the page makes them) | [osm-editing.md](osm-editing.md) |
 | `bus.routes`, `bus.route_edges` | A boundary, and the driving network | [bus.md](bus.md) |
-| `nodes.ele`, `edges.z_from`, `z_to`, `z_vertices` | A DEM file (`--dem`) | [CHANGELOG.md](https://github.com/Khoshkhah/duckosm-rust/blob/main/CHANGELOG.md) |
+| `nodes.ele`, `edges.z_from`, `z_to`, `z_vertices` | A DEM file (`--dem`) | [CHANGELOG.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/CHANGELOG.md) |

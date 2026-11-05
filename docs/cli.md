@@ -1,6 +1,6 @@
 # Command line and Python
 
-The browser page is the main way to use this project. For a script, a server or Python code, use [duckOSM](https://github.com/Khoshkhah/duckOSM). The duckosm-rust page and duckOSM use the same Rust engine, and they give the same tables.
+The browser page is the main way to use this project. For a script, a server or Python code, use [duckOSM](https://github.com/Khoshkhah/duckOSM). The duckOSM Studio page and duckOSM use the same Rust engine, and they give the same tables.
 
 The Rust engine comes with the next duckOSM release. The version on PyPI today (0.6.1) is from before the engine moved into duckOSM.
 

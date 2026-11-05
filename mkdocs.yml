@@ -1,7 +1,7 @@
-site_name: duckosm-rust
+site_name: duckOSM Studio
 site_description: An OpenStreetMap file to a routable road network (GeoParquet and DuckDB), equal to duckOSM 0.6.0. A browser page. duckOSM has the command line and Python.
-repo_url: https://github.com/Khoshkhah/duckosm-rust
-repo_name: Khoshkhah/duckosm-rust
+repo_url: https://github.com/Khoshkhah/duckosm-studio
+repo_name: Khoshkhah/duckosm-studio
 
 theme:
   name: material

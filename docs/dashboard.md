@@ -1,6 +1,6 @@
 # The page
 
-The page is the portal. It runs in your browser, and no server receives your area or your data. This page names the parts of the window. The other pages of the manual tell you how to use each card.
+The page is duckOSM Studio, the portal. It runs in your browser, and no server receives your area or your data. This page names the parts of the window. The other pages of the manual tell you how to use each card.
 
 ![The page at the start: the base map and the panel with the ten steps](img/dashboard/01-start.png)
 

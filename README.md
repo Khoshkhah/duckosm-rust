@@ -1,4 +1,4 @@
-# duckosm-rust
+# duckOSM Studio
 
 **A portal that turns OpenStreetMap data into a routable road network, in your browser.**
 
@@ -6,7 +6,7 @@ You choose an area on a map. The portal builds the driving, walking and cycling 
 
 ![The portal after a build: the roads of Monaco on the map](docs/img/dashboard/12-map-after-build.png)
 
-Open the portal: <https://khoshkhah.github.io/duckosm-rust/>. Read the manual: [The editing cycle](docs/manual/cycle.md).
+Open duckOSM Studio: <https://khoshkhah.github.io/duckosm-studio/>. Read the manual: [The editing cycle](docs/manual/cycle.md).
 
 ## What is important in it
 
@@ -56,7 +56,7 @@ For each network, a build writes the tables `edges`, `nodes`, `edge_graph`, the 
 
 ### In the browser
 
-1. Open <https://khoshkhah.github.io/duckosm-rust/>.
+1. Open <https://khoshkhah.github.io/duckosm-studio/>.
 2. In step 1, search for a place and click a match.
 3. In step 3, press **Get** for a region file that covers the area.
 4. In step 4, press **Build**.
@@ -66,7 +66,7 @@ For each network, a build writes the tables `edges`, `nodes`, `edge_graph`, the 
 
 ### On the command line and in Python
 
-For a script, a server or Python code, use [duckOSM](https://github.com/Khoshkhah/duckOSM). The duckosm-rust page and duckOSM use the same Rust engine, and they give the same tables.
+For a script, a server or Python code, use [duckOSM](https://github.com/Khoshkhah/duckOSM). The duckOSM Studio page and duckOSM use the same Rust engine, and they give the same tables.
 
 ```bash
 pip install duckosm
@@ -88,9 +88,9 @@ The user documents are also a [mkdocs](https://www.mkdocs.org) site. To read it 
 
 ## Status
 
-Version 0.3.0. The driving, walking and cycling networks of Monaco, Tartu and Estonia equal duckOSM row for row. Only the direction labels of some connectors differ, which duckOSM does not fix.
+The driving, walking and cycling networks of Monaco, Tartu and Estonia equal duckOSM row for row. Only the direction labels of some connectors differ, which duckOSM does not fix.
 
-The Rust engine moved into the [duckOSM](https://github.com/Khoshkhah/duckOSM) repository (`rust/`) on 2026-11-04. Python duckOSM uses it by default. This repository keeps the browser page (`crates/duckosm-wasm`) and the docs. New releases of the CLI and the Python module come from duckOSM. The name of this repository is open: [name.md](docs/proposals/name.md).
+The Rust engine moved into the [duckOSM](https://github.com/Khoshkhah/duckOSM) repository (`rust/`) on 2026-11-04. This repository keeps the browser page (`crates/duckosm-wasm`) and the docs. The app is called duckOSM Studio. The repository is `duckosm-studio` (it was `duckosm-rust`).
 
 ## License
 

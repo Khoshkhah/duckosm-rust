@@ -4,7 +4,7 @@ hide:
   - toc
 ---
 
-# duckosm-rust
+# duckOSM Studio
 
 **A portal that turns OpenStreetMap data into a routable road network, in your browser.**
 
@@ -12,9 +12,9 @@ You choose an area on a map. The portal builds the driving, walking and cycling 
 
 ![The portal after a build: the roads of Monaco on the map](img/dashboard/12-map-after-build.png)
 
-[Open the portal](https://khoshkhah.github.io/duckosm-rust/){ .md-button .md-button--primary }
+[Open duckOSM Studio](https://khoshkhah.github.io/duckosm-studio/){ .md-button .md-button--primary }
 [Make your first map](first_map.md){ .md-button }
-[View on GitHub](https://github.com/Khoshkhah/duckosm-rust){ .md-button }
+[View on GitHub](https://github.com/Khoshkhah/duckosm-studio){ .md-button }
 
 ## What is important in it
 
