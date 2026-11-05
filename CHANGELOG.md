@@ -5,6 +5,10 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ## Not released
 
+### Changed
+
+- **Less memory in the build** (`duckosm-core`; second round, `docs/proposals/build-memory.md`). The hash maps of steps 3, 4 and 6 and the junction maps ended only at the end of the build; now each ends after its step. The turn restrictions keep only the ways and nodes that a rule names, and the edge graph finds the edges of a node in a sorted array. Peak of the Rust heap: Estonia walking 1,221 to 923 MiB, Estonia driving 757 to 568 MiB, Kentucky driving 3,205 to 1,882 MiB. The output is the same as release 0.3.0 (33 of 35 Parquet files byte equal; the 2 others hold the build time).
+
 ### Added
 
 - **A proposal for less memory in the browser build** (`docs/proposals/build-memory.md`): the memory of each step on Nacka (read from the page's step log), measured again on 2026-11-04 for Tartu, Estonia and Kentucky (Kentucky driving needs 3,422 MiB, not 2,053), where the memory goes, nine options with a cost and a risk, and a plan in 5 steps that starts with a probe and a clear error. Kentucky walking stops with a `duplicate (osm_id, source, target)` error, in the browser build and in the CLI. A first round of savings is measured in the note (branch `claude/mem-probe`): Estonia walking peak 1,532 to 1,221 MiB with the same output.
