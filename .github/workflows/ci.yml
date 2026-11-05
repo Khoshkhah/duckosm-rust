@@ -1,4 +1,4 @@
-# CI for duckosm-rust (github.com/Khoshkhah/duckosm-rust): the browser page. The engine (duckosm-core, -parquet,
+# CI for duckOSM Studio (github.com/Khoshkhah/duckosm-studio): the browser page. The engine (duckosm-core, -parquet,
 # -duckdb, -build, the CLI and the Python module) lives in the duckOSM repository (rust/), with its own tests,
 # wheels and release (duckOSM .github/workflows/). This repository takes duckosm-core and duckosm-build from
 # there with a Git dependency (crates/duckosm-wasm/Cargo.toml).

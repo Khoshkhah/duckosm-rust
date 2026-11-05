@@ -99,7 +99,7 @@ def run(browser, name, dark=False, **context):
     # ---- the help windows: the panel's "?", the overview, the links; a card's "?" and the overview again after it
     tap("#rs-help-btn")
     page.wait_for_selector("#rs-help .rs-help-box", state="visible")
-    assert "duckOSM in the browser" in page.inner_text("#rs-help") and "stays in this browser" in page.inner_text("#rs-help")
+    assert "duckOSM Studio" in page.inner_text("#rs-help") and "stays in this browser" in page.inner_text("#rs-help")
     assert len(page.query_selector_all("#rs-help a")) == 5 and all(t in page.inner_text("#rs-help") for t in ("Choose an area", "Edit levels", "Google key"))
     page.screenshot(path=str(out / f"{name}-2-help.png"))
     check_links(page, "overview")
@@ -108,7 +108,7 @@ def run(browser, name, dark=False, **context):
     for n in (1, 3, 4, 5, 6, 7):
         page.evaluate(f"document.querySelector('#{CARDS[n - 1]} .rs-help-btn').click()")
         page.wait_for_selector("#rs-help .rs-help-box", state="visible")
-        assert page.inner_text("#rs-help .rs-help-ttl") != "duckOSM in the browser", n
+        assert page.inner_text("#rs-help .rs-help-ttl") != "duckOSM Studio", n
         check_links(page, n)
         if n == 4:
             page.screenshot(path=str(out / f"{name}-3-card-help.png"))
@@ -116,7 +116,7 @@ def run(browser, name, dark=False, **context):
         page.wait_for_selector("#rs-help", state="hidden")
     tap("#rs-help-btn")
     page.wait_for_selector("#rs-help .rs-help-box", state="visible")
-    assert page.inner_text("#rs-help .rs-help-ttl") == "duckOSM in the browser", "the panel's \"?\" has the overview again"
+    assert page.inner_text("#rs-help .rs-help-ttl") == "duckOSM Studio", "the panel's \"?\" has the overview again"
     page.keyboard.press("Escape")
     # ---- collapse all / expand all: roadstyle's button in the title row; it acts on the cards that are shown, and the page folds a card that is not ready again
     tap("#rs-fold-all")

@@ -1,4 +1,4 @@
-//! duckOSM in the browser (docs/browser.md): the bytes of a `.osm.pbf` file in, duckOSM's tables of the
+//! duckOSM Studio, the browser app (docs/browser.md): the bytes of a `.osm.pbf` file in, duckOSM's tables of the
 //! chosen modes out, as GeoParquet bytes. The steps are `duckosm_build::run`, as in the native build.
 
 use duckosm_build::{
