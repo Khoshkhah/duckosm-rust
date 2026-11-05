@@ -274,6 +274,7 @@ pub fn build_network_with(
     stats.ways_kept = mw.len();
     let lj = local_junctions(&mw);
 
+    crate::util::step("start of step 1: Cut every way into forward edges. Step 2");
     // 1. Cut every way into forward edges. Step 2 runs on each edge as it is made, so the forward
     // edges are not copied to a second list.
     let mut fwd: Vec<Fwd> = Vec::new();
@@ -344,6 +345,7 @@ pub fn build_network_with(
         }
     }
 
+    crate::util::step("start of step 2b: Merge the chains of edges that are one r");
     // 2b. Merge the chains of edges that are one road.
     let mut edge_id_map: Vec<MapRow> = Vec::new();
     if opts.merge_segments {
@@ -354,6 +356,7 @@ pub fn build_network_with(
         stats.merged_pieces = n_pieces;
     }
 
+    crate::util::step("start of step 3: Split same-direction parallel arcs (all");
     // 3. Split same-direction parallel arcs (all but the shortest of each group).
     let mut groups: FxHashMap<(i64, i64, i64), Vec<usize>> = FxHashMap::default();
     for (i, f) in fwd.iter().enumerate() {
@@ -383,6 +386,7 @@ pub fn build_network_with(
     stats.parallel_split = sel.len();
     fwd = split_arcs(fwd, &sel, &mut virtual_nodes);
 
+    crate::util::step("start of step 4: Split two-way antiparallel pairs (the lo");
     // 4. Split two-way antiparallel pairs (the longer arc of each pair).
     let mut by_key: FxHashMap<(i64, i64, i64), Vec<usize>> = FxHashMap::default();
     for (i, f) in fwd.iter().enumerate() {
@@ -412,9 +416,13 @@ pub fn build_network_with(
     stats.antiparallel_split = sel.len();
     fwd = split_arcs(fwd, &sel, &mut virtual_nodes);
 
+    crate::util::step("start of step 5: Add the reverse edge of each two-way way");
     // 5. Add the reverse edge of each two-way way (and of a one-way way with a bus lane).
+    // The reverse edges are made straight into the vector of all edges, so there is no third block (`rev`) next to `fwd` and `edges`;
+    // then the forward edges follow, and `rotate_right` puts them first, as before.
     let has_rev = |f: &Fwd| !f.e.oneway || mw[f.way].bus_back;
-    let mut rev: Vec<Edge> = Vec::with_capacity(fwd.iter().filter(|f| has_rev(f)).count());
+    let n_rev = fwd.iter().filter(|f| has_rev(f)).count();
+    let mut edges: Vec<Edge> = Vec::with_capacity(fwd.len() + n_rev);
     for f in &fwd {
         let w = &mw[f.way];
         if has_rev(f) {
@@ -433,13 +441,13 @@ pub fn build_network_with(
             } else {
                 None
             };
-            rev.push(r);
+            edges.push(r);
         }
     }
-    let mut edges: Vec<Edge> = Vec::with_capacity(fwd.len() + rev.len());
     edges.extend(fwd.into_iter().map(|f| f.e));
-    edges.extend(rev);
+    edges.rotate_right(n_rev);
 
+    crate::util::step("start of step 6: The stable edge_id, edge_ref, and the ch");
     // 6. The stable edge_id, edge_ref, and the check that (osm_id, source, target) is unique.
     let mut seen: FxHashSet<(i64, i64, i64)> = FxHashSet::default();
     for e in &edges {
@@ -453,6 +461,7 @@ pub fn build_network_with(
     let raw_refs: FxHashMap<i64, &Vec<i64>> = all_ways.iter().map(|w| (w.id, &w.refs)).collect();
     set_refs_and_ids(&mut edges, &raw_refs);
 
+    crate::util::step("start of step 7: Correct the length of the edges whose ha");
     // 7. Correct the length of the edges whose halves were wrong by more than 0.1 %.
     for e in &mut edges {
         let m = geom::line_length_m(&e.geometry);
@@ -461,6 +470,7 @@ pub fn build_network_with(
         }
     }
 
+    crate::util::step("start of step 8: The nodes");
     // 8. The nodes.
     let used: FxHashSet<i64> = edges.iter().flat_map(|e| [e.source, e.target]).collect();
     let mut nodes: Vec<Node> = Vec::new();
@@ -477,6 +487,7 @@ pub fn build_network_with(
     }
     nodes.extend(virtual_nodes);
 
+    crate::util::step("start of step 8b: Connect the dangling path ends to the ne");
     // 8b. Connect the dangling path ends to the network (walking and cycling).
     if opts.connect_paths && mode != Mode::Driving {
         stats.connectors = connect_paths(
@@ -492,6 +503,7 @@ pub fn build_network_with(
         );
     }
 
+    crate::util::step("start of step 8b2: Edges that are walked get the cycle_type");
     // 8b2. Edges that are walked get the cycle_type 'dismount'.
     if opts.functional_types && mode == Mode::Cycling {
         for e in edges.iter_mut().filter(|e| e.dismount == Some(true)) {
@@ -499,6 +511,7 @@ pub fn build_network_with(
         }
     }
 
+    crate::util::step("start of step 8c: Speeds and travel times");
     // 8c. Speeds and travel times.
     if opts.calculate_costs && !opts.process_speeds {
         return Err("calculate_costs needs process_speeds".to_string());
@@ -507,18 +520,25 @@ pub fn build_network_with(
         crate::speeds::apply(&mut edges, mode, opts.calculate_costs);
     }
 
+    crate::util::step("start of step 9: Move private roads, bus-only roads and p");
     // 9. Move private roads, bus-only roads and pedestrian streets to private_edges.
     let moved = |e: &Edge| {
         matches!(e.access.as_deref(), Some("private") | Some("bus"))
             || (mode == Mode::Driving && e.attrs.highway == "pedestrian")
     };
     // extract_if keeps the order, and it does not make a second copy of all edges like partition
-    let private_edges: Vec<Edge> = edges.extract_if(.., |e| moved(e)).collect();
+    let mut private_edges: Vec<Edge> = edges.extract_if(.., |e| moved(e)).collect();
     stats.private_edges = private_edges.len();
     if !private_edges.is_empty() {
         prune_nodes(&mut nodes, &edges);
     }
+    // The vectors grew by pushes (the connectors, the collect above), so each has up to half of its capacity unused: an Edge has
+    // 160 bytes, so 60,000 unused places are 9.6 MiB (Tartu, walking). Give the memory back before the edge graph needs its own.
+    edges.shrink_to_fit();
+    private_edges.shrink_to_fit();
+    nodes.shrink_to_fit();
 
+    crate::util::step("start of step 9b: Turn restrictions (driving) and the edge");
     // 9b. Turn restrictions (driving) and the edge graph, before the component filter as in duckOSM.
     let mut graph = Graph::default();
     if opts.extract_restrictions && mode == Mode::Driving {
@@ -538,6 +558,7 @@ pub fn build_network_with(
         graph.turn_permission = Some(permission);
     }
 
+    crate::util::step("start of step 10: Keep the largest connected part. It also");
     // 10. Keep the largest connected part. It also removes the graph rows of the dropped edges.
     if opts.keep_largest_component && !edges.is_empty() {
         let before = edges.len();
@@ -1020,6 +1041,9 @@ fn connect_paths(
         v.dedup();
     }
     let first_new = edges.len();
+    // Two edges for each pair. Without this, the first push into the full vector doubles its capacity: at the size of Estonia
+    // walking (1.4 million edges of 160 bytes) it holds the old and the new block at one time (+400 MiB at the peak).
+    edges.reserve_exact(pairs.len() * 2);
     for (a, b, hw, dist, osm_id) in &pairs {
         let seq = rank[osm_id].binary_search(&(*a.min(b), *a.max(b))).unwrap() + 1;
         let attrs = Arc::new(Attrs {

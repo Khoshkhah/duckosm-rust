@@ -1,4 +1,4 @@
-// Export of a built network for other software (docs/dashboard.md, "Step 9: Export"): GeoJSON, MATSim and SUMO. Each function reads the tables of one
+// Export of a built network for other software (docs/dashboard.md, "Step 10: Export"): GeoJSON, MATSim and SUMO. Each function reads the tables of one
 // network in DuckDB (`query(sql)` gives the rows as objects) and gives `{ name, blob }` for a download. Nothing here changes a table.
 //
 // Ids: `edge_id` and `node_id` are BIGINT hashes, so they go to the files as text (a JavaScript number loses the low digits).
@@ -92,6 +92,7 @@ export async function sumo(query, mode, area) {
 
 import { decodeTile, encodeTile, addProps, indexOf } from "./mvt.js";
 
+import { CLASS_FROM, OTHER_FROM } from "./design.js";
 // ---- tiles: the vector tiles of the map that is on screen (the roads and the base-map layers), made again by the map worker as MVT for a range of zooms,
 // and packed in one PMTiles v3 file or one MBTiles file. A tile is the layers of all the map's sources: MVT layers are repeated fields, so the bytes of two
 // tiles of one address can be joined.
@@ -108,44 +109,57 @@ export function tileCount(bbox, min, max) {
   for (let z = min; z <= max; z++) { const t = spanOf(bbox, z); n += (t.x1 - t.x0 + 1) * (t.y1 - t.y0 + 1); }
   return n;
 }
-export const MAX_TILES = 40000;
+export const MAX_TILES = 40000;                          // the default of the profile (app/design.js)
 
-/** The names of the layers of an MVT tile (a scan of the protobuf: field 3 of the tile is a layer, and field 1 of a layer is its name). */
-function layerNames(b) {
-  const names = [];
+/** Walk the layers of an MVT tile (a scan of the protobuf: field 3 of the tile is a layer, and field 1 of a layer is its name): `fn(name, from, to)` gets the bytes of each layer, with its tag. */
+function eachLayer(b, fn) {
   let i = 0;
   const varint = () => { let v = 0, sh = 0; for (;;) { const c = b[i++]; v += (c & 127) * 2 ** sh; if (c < 128) return v; sh += 7; } };
   while (i < b.length) {
-    const tag = varint(), wire = tag & 7, field = tag >> 3;
+    const from = i, tag = varint(), wire = tag & 7, field = tag >> 3;
     if (wire === 2) {
       const len = varint(), end = i + len;
       if (field === 3) {
-        let j = i;
+        let j = i, name = "";
         while (j < end) {
           let t = 0, sh = 0; for (;;) { const c = b[j++]; t += (c & 127) * 2 ** sh; if (c < 128) break; sh += 7; }
-          if ((t & 7) === 2) { let l = 0; sh = 0; for (;;) { const c = b[j++]; l += (c & 127) * 2 ** sh; if (c < 128) break; sh += 7; } if (t >> 3 === 1) { names.push(new TextDecoder().decode(b.subarray(j, j + l))); break; } j += l; }
+          if ((t & 7) === 2) { let l = 0; sh = 0; for (;;) { const c = b[j++]; l += (c & 127) * 2 ** sh; if (c < 128) break; sh += 7; } if (t >> 3 === 1) { name = new TextDecoder().decode(b.subarray(j, j + l)); break; } j += l; }
           else if ((t & 7) === 0) { for (;;) if (b[j++] < 128) break; }
           else if ((t & 7) === 5) j += 4; else if ((t & 7) === 1) j += 8; else break;
         }
+        fn(name, from, end);
       }
       i = end;
     } else if (wire === 0) varint(); else if (wire === 5) i += 4; else if (wire === 1) i += 8; else break;
   }
-  return names;
+}
+const layerNames = (b) => { const names = []; eachLayer(b, (n) => names.push(n)); return names; };
+/** The tile without the layers for which `keep(name)` is false (the layers are repeated fields, so the rest of the bytes stay as they are). */
+export function keepLayers(b, keep) {
+  const cut = [];
+  eachLayer(b, (n, from, to) => { if (!keep(n)) cut.push([from, to]); });
+  if (!cut.length) return b;
+  const out = [];
+  let at = 0;
+  for (const [from, to] of cut) { out.push(b.subarray(at, from)); at = to; }
+  out.push(b.subarray(at));
+  const all = new Uint8Array(out.reduce((n, p) => n + p.length, 0));
+  out.reduce((o, p) => (all.set(p, o), o + p.length), 0);
+  return all;
 }
 
 /**
  * Make the tiles. `src`: {urls: the address of a source with {z}, {x} and {y}, tile(url) -> ArrayBuffer}. Gives {tiles: [{z, x, y, data (gzip)}], layers}.
- * The tiles that have nothing are left out.
+ * The tiles that have nothing are left out. `keep(layer name)`: false drops a layer of the map's tiles (the profile's layers).
  */
-export async function collectTiles(src, bbox, min, max, progress = () => {}, extra = null) {
+export async function collectTiles(src, bbox, min, max, progress = () => {}, extra = null, keep = null) {
   const todo = [];
   for (let z = min; z <= max; z++) { const t = spanOf(bbox, z); for (let x = t.x0; x <= t.x1; x++) for (let y = t.y0; y <= t.y1; y++) todo.push([z, x, y]); }
   const tiles = [], layers = new Set();
   let done = 0;
   const one = async ([z, x, y]) => {
     const parts = [];
-    for (const u of src.urls) { const d = new Uint8Array(await src.tile(u.replace("{z}", z).replace("{x}", x).replace("{y}", y))); if (d.length) parts.push(d); }
+    for (const u of src.urls) { let d = new Uint8Array(await src.tile(u.replace("{z}", z).replace("{x}", x).replace("{y}", y))); if (keep && d.length) d = keepLayers(d, keep); if (d.length) parts.push(d); }
     const more = extra?.get(`${z}/${x}/${y}`);
     if (more) parts.push(more);                          // the layer `edges` of the full export
     if (parts.length) {
@@ -255,18 +269,17 @@ export async function mbtiles(tiles, info) {
  * The tile exports. `ctx`: {src, bbox, min, max, progress}. They need the map (step 6): the tiles are the ones of the map.
  */
 async function tileFile(kind, ctx, area) {
-  const { tiles, layers } = await collectTiles(ctx.src, ctx.bbox, ctx.min, ctx.max, ctx.progress, ctx.extra);
+  const { tiles, layers } = await collectTiles(ctx.src, ctx.bbox, ctx.min, ctx.max, ctx.progress, ctx.extra, ctx.keep);
   if (!tiles.length) throw new Error("no tile has anything in it: show the map first (step 6), or use other zooms");
   const info = { name: SLUG(area), bbox: ctx.bbox, minzoom: ctx.min, maxzoom: ctx.max, layers };
   const blob = await (kind === "pmtiles" ? pmtiles : mbtiles)(tiles, info);
-  return { name: `${SLUG(area)}_z${ctx.min}-${ctx.max}.${kind}`, blob, rows: tiles.length, tiles: tiles.length, layers, min: ctx.min, max: ctx.max, edgeTiles: ctx.extra ?? null };
+  return { name: `${SLUG(area)}_z${ctx.min}-${ctx.max}.${kind}`, blob, rows: tiles.length, tiles: tiles.length, layers, min: ctx.min, max: ctx.max, edgeTiles: ctx.extra ?? null, classFrom: ctx.classFrom };
 }
 export const pmtilesFile = (query, mode, area, ctx) => tileFile("pmtiles", ctx, area);
 export const mbtilesFile = (query, mode, area, ctx) => tileFile("mbtiles", ctx, area);
 
-/** The zoom where a road class starts to show in the layer `edges` (a lower class is left out at a lower zoom, as in any tile set that has to stay small). */
-const CLASS_FROM_ZOOM = { motorway: 0, trunk: 0, primary: 0, secondary: 8, tertiary: 10, unclassified: 11, residential: 12, living_street: 12 };
-const fromZoom = (h) => CLASS_FROM_ZOOM[cls(h)] ?? 13;
+/** The zoom where a road class starts to show in the layer `edges` (a lower class is left out at a lower zoom, as in any tile set that has to stay small). The profile (app/design.js) gives the zooms. */
+const fromZoom = (h, classFrom = CLASS_FROM) => classFrom[cls(h)] ?? OTHER_FROM;
 
 /** The roads of all the networks for the layer `edges`: one feature for each edge_id, with every column of the edge, and a flag for each network that has it. */
 export async function roadFeatures(query, modes) {
@@ -288,14 +301,14 @@ export async function roadFeatures(query, modes) {
 
 /**
  * The layer `edges` of every tile of the zooms from `min` to `max`: a LineString for each road piece in the tile (clipped to the tile with a buffer of 64 units, 4096 units
- * wide), with all the attributes. Gives a map from "z/x/y" to the bytes of an MVT tile with that one layer.
+ * wide), with all the attributes. `o`: the profile, {extent, buffer, columns (the attributes; none: all), modes (the network flags, always kept), classFrom}. Gives a map from "z/x/y" to the bytes of an MVT tile with that one layer.
  */
-export function edgeTiles(features, min, max) {
-  const EXT = 4096, BUF = 64, out = new Map();
+export function edgeTiles(features, min, max, o = {}) {
+  const EXT = o.extent ?? 4096, BUF = o.buffer ?? 64, out = new Map(), keep = o.columns ? new Set([...o.columns, ...(o.modes ?? [])]) : null;
   for (let z = min; z <= max; z++) {
     const scale = 2 ** z * EXT, tiles = new Map();
     for (const f of features) {
-      if (z < fromZoom(f.props.highway)) continue;
+      if (z < fromZoom(f.props.highway, o.classFrom)) continue;
       const pts = f.line.map(([lon, lat]) => { const r = (lat * Math.PI) / 180; return [((lon + 180) / 360) * scale, ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * scale]; });
       let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
       for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
@@ -306,11 +319,11 @@ export function edgeTiles(features, min, max) {
           if (!runs.length) continue;
           const key = `${z}/${tx}/${ty}`;
           if (!tiles.has(key)) tiles.set(key, []);
-          tiles.get(key).push({ props: f.props, runs });
+          tiles.get(key).push({ props: keep ? Object.fromEntries(Object.entries(f.props).filter(([k]) => keep.has(k))) : f.props, runs });
         }
       }
     }
-    for (const [key, list] of tiles) out.set(key, edgeTile(list));
+    for (const [key, list] of tiles) out.set(key, edgeTile(list, EXT));
   }
   return out;
 }
@@ -340,8 +353,8 @@ function clipLine(pts, lo, hi) {
 }
 
 /** An MVT tile with the layer `edges`: each piece is a feature (MoveTo and LineTo commands, zigzag deltas). */
-function edgeTile(list) {
-  const layer = { name: "edges", extent: 4096, version: 2, keys: [], values: [], features: [] }, idx = indexOf(layer);
+function edgeTile(list, extent = 4096) {
+  const layer = { name: "edges", extent, version: 2, keys: [], values: [], features: [] }, idx = indexOf(layer);
   const zig = (v) => (v << 1) ^ (v >> 31);
   for (const { props, runs } of list) {
     const g = [];
@@ -502,9 +515,11 @@ async function edgesCheck(r, query, modes) {
     if (!key.startsWith(`${r.max}/`)) continue;
     for (const l of decodeTile(bytes)) for (const f of l.features) for (let t = 0; t < f.tags.length; t += 2) if (l.keys[f.tags[t]] === "edge_id") ids.add(l.values[f.tags[t + 1]]);
   }
-  const want = await count(query, "SELECT count(*) AS n FROM (" + modes.map((m) => `SELECT edge_id FROM ${m}.edges`).join(" UNION ") + ")");
+  const rows = new Map();                          // an edge of two networks is one edge
+  for (const m of modes) for (const e of await query(`SELECT edge_id::VARCHAR AS id, highway FROM ${m}.edges`)) rows.set(e.id, e.highway);
+  const want = [...rows.values()].filter((h) => fromZoom(h, r.classFrom) <= r.max).length;          // a class that starts above the highest zoom is not in these tiles
   if (ids.size !== want) throw new Error(`the tiles of zoom ${r.max} have ${fmt(ids.size)} edges, the tables have ${fmt(want)}`);
-  return `; all ${fmt(want)} edges of all networks are in the tiles of zoom ${r.max}`;
+  return want === rows.size ? `; all ${fmt(want)} edges of all networks are in the tiles of zoom ${r.max}` : `; ${fmt(want)} of ${fmt(rows.size)} edges are in the tiles of zoom ${r.max} (the other classes start at a higher zoom)`;
 }
 
 /** The formats of the card Export: id, title, what it is for, the group, the function, and the networks that it takes. */
