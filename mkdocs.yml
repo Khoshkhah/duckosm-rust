@@ -45,6 +45,26 @@ markdown_extensions:
 plugins:
   - search
 
+# the manual is for the people who use the page: the documents of the developers and the proposals stay in the repository only
+exclude_docs: |
+  /development.md
+  /design.md
+  /benchmark.md
+  /app.md
+  /browser.md
+  /osm-editing.md
+  /features.md
+  /levels.md
+  /lane_profile.md
+  /bus.md
+  /edge_graph.md
+  /boundary_tool.md
+  /relay.md
+  /tables.md
+  /todo.md
+  /wall-types.md
+  /proposals/
+
 nav:
   - Home: index.md
   - Manual:
@@ -66,26 +86,3 @@ nav:
   - Reference:
       - Columns of the tables: output-tables.md
       - When the page does not work: troubleshooting.md
-  - Development:
-      - Development: development.md
-      - Design: design.md
-      - Benchmark: benchmark.md
-      - The page code: app.md
-      - The browser plan: browser.md
-      - Editing OSM data: osm-editing.md
-      - Base-map layers: features.md
-      - Drawing levels: levels.md
-      - Lane profile: lane_profile.md
-      - Bus routes: bus.md
-      - Edge graph: edge_graph.md
-      - Boundary tool: boundary_tool.md
-      - Relay: relay.md
-      - Tables not made yet: tables.md
-      - To do: todo.md
-  - Proposals:
-      - The name: proposals/name.md
-      - Hosting: proposals/hosting.md
-      - Disk store for the result: proposals/disk-store.md
-      - Less memory in the build: proposals/build-memory.md
-      - A build by tiles: proposals/tiled-build.md
-      - The look of the exports: proposals/export-look.md

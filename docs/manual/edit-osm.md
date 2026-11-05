@@ -78,7 +78,7 @@ The page tests the rules in this order. The first rule that fits gives the type.
 6. A second wall is also a front wall when it faces another street, or the same facade. The street must be at most 20 m away, and at most 8 m farther than the main front street. A building has two front runs at most.
 7. A wall that points away from the front wall and faces no street within 25 m is a back wall. A wall that two buildings share is a party wall.
 
-Check the walls that say "guess" or "no street seen". [wall-types.md](../wall-types.md) has the method.
+Check the walls that say "guess" or "no street seen". [wall-types.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/wall-types.md) has the method.
 
 ## Node
 
@@ -151,7 +151,7 @@ A choice in one field can close another field, or shorten its list. The reason s
 - The page keeps the rules in your browser, for the area.
 - The tab **Changes** and the button **.yaml** of [step 5](result.md) download them as a fixes file.
 - The next build applies the rules to the OSM data, before it makes the networks. So the tables, the map and the exports have your fixes.
-- The fixes file is also the input of duckOSM. [osm-editing.md](../osm-editing.md) has the design.
+- The fixes file is also the input of duckOSM. [osm-editing.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/osm-editing.md) has the design.
 
 ## Next
 
