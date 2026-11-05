@@ -2,6 +2,7 @@
 
 A build writes one table for each part of the road network. This page lists the tables and their columns. The numbers come from a build of the Monaco sample (`tests/data/monaco_sample.osm.pbf`, three networks).
 
+- To learn what each table is for, read [The tables](manual/tables.md).
 - To make the tables, read [Your first map](first_map.md).
 - To see how the tables are made and tested against duckOSM, read [design.md](design.md).
 - To see the tables that are not made yet, read [tables.md](tables.md).
@@ -9,14 +10,14 @@ A build writes one table for each part of the road network. This page lists the 
 
 ## Where the tables are
 
-The CLI, the wheel and the page write the same tables in two forms:
+The page and duckOSM write the same tables in two forms:
 
 | Form | Name | Notes |
 |---|---|---|
 | GeoParquet | `<table>_<network>.parquet`, for example `edges_driving.parquet` | One file for each table and network. The tables that do not depend on a network end in `_main`, `_mm` or `_visualization`. |
 | DuckDB | `<name>.duckdb` | One schema for each network (`driving`, `walking`, `cycling`), and the schemas `main`, `mm` and `visualization`. The table names have no network suffix: `driving.edges`. |
 
-The CLI and the wheel write both forms by default. The page gives both as downloads (step 5 of the [page guide](dashboard.md)).
+duckOSM writes the DuckDB form. The page gives both forms as downloads (step 5 of the [manual](manual/result.md)).
 
 ## Keys that join the tables
 
@@ -128,8 +129,6 @@ The OSM ways that the network kept, and their nodes in order. 1,294 ways and 9,5
 | `ways` | `osm_id`, `highway`, `name`, `maxspeed`, `oneway`, `bus_back`, `surface`, `service`, `access`, `junction`, `layer`, `bridge`, `tunnel`, `lanes_fwd`, `lanes_bwd`, `tags` (a map of all other tags), `refs` (the nodes) |
 | `way_nodes` | `way_id`, `node_id`, `seq` (the place of the node in the way) |
 
-Use `--no-ways-tables` (CLI) or `ways_tables=False` (wheel) to leave them out of a large area.
-
 ### `virtual_nodes`
 
 The columns `node_id` and `geometry`. The table is always empty, as in duckOSM: the virtual nodes are in `nodes`.
@@ -164,7 +163,7 @@ These tables exist only when you give the build more than an `.osm.pbf` file.
 
 | Tables | You need | Where to read |
 |---|---|---|
-| `raw.nodes`, `raw.ways`, `raw.relations` and the base-map layers `features.*` | A boundary (`--boundary` in the CLI, an area in the page) | [features.md](features.md) |
-| `main.building_faces`, `main.building_info`, `main.building_entrances` | The base-map layers (the page makes them; the CLI makes `building_faces` with `--building-faces`) | [osm-editing.md](osm-editing.md) |
+| `raw.nodes`, `raw.ways`, `raw.relations` and the base-map layers `features.*` | A boundary (`--boundary` in duckOSM, an area in the page) | [features.md](features.md) |
+| `main.building_faces`, `main.building_info`, `main.building_entrances` | The base-map layers (the page makes them) | [osm-editing.md](osm-editing.md) |
 | `bus.routes`, `bus.route_edges` | A boundary, and the driving network | [bus.md](bus.md) |
-| `nodes.ele`, `edges.z_from`, `z_to`, `z_vertices` | A DEM file (`--dem`) | [CHANGELOG.md](https://github.com/Khoshkhah/duckosm-rust/blob/main/CHANGELOG.md) |
+| `nodes.ele`, `edges.z_from`, `z_to`, `z_vertices` | A DEM file (`--dem`) | [CHANGELOG.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/CHANGELOG.md) |

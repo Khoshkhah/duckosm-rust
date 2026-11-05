@@ -1,4 +1,4 @@
-"""The pictures of docs/dashboard.md, made in headless Chromium (Playwright): build Monaco, and take one picture of each part of the page.
+"""The pictures of the manual (docs/dashboard.md and docs/manual/*.md), made in headless Chromium (Playwright): build Monaco, and take one picture of each part of the page.
 
     python crates/duckosm-wasm/www/docs_shots.py [out folder]        (default: docs/img/dashboard)
 
@@ -25,12 +25,27 @@ def rows(page, sql):
     return page.evaluate(f"window.duckApi.query({sql!r}).then((r) => r.toArray().map((x) => x.toJSON()))")
 
 
+def trim_bottom(path):
+    """cut the empty rows at the bottom of a picture of a card that is shorter than its box (needs Pillow and numpy; else the picture stays)"""
+    try:
+        import numpy as np
+        from PIL import Image
+    except ImportError:
+        return
+    im = Image.open(path).convert("RGB")
+    a = np.asarray(im).astype(int)
+    rows = np.where((abs(a - a[-1, -1]).sum(axis=2) > 12).any(axis=1))[0]
+    if len(rows) and rows.max() + 12 < im.height:
+        im.crop((0, 0, im.width, int(rows.max()) + 12)).save(path)
+
+
 def shot(page, name, selector=None, **kw):
     """a picture of an element (a card of the panel) or of the whole page"""
     path = out / f"{name}.png"
     page.wait_for_timeout(400)
     if selector:
         page.locator(selector).first.screenshot(path=str(path))
+        trim_bottom(path)
     else:
         page.screenshot(path=str(path), **kw)
     print("wrote", path.relative_to(ROOT) if path.is_relative_to(ROOT) else path)
@@ -97,6 +112,9 @@ with sync_playwright() as p:
     page.set_input_files("#region", str(ROOT / "tests/data/monaco_sample.osm.pbf"))
     unfold(page, "extracts-box")
     shot(page, "07-data", "#extracts-box")
+    page.click("#tab-overpass")
+    shot(page, "39-overpass", "#extracts-box")
+    page.click("#tab-region")
     unfold(page, "step4-card")
     shot(page, "08-build-options", "#step4-card")
     page.click("#run")
@@ -105,11 +123,27 @@ with sync_playwright() as p:
     shot(page, "09-build-done", "#step4-card")
     unfold(page, "step5-card")
     shot(page, "10-result", "#step5-card")
+    page.click("#sql-box summary")
+    page.click("#query")
+    page.wait_for_function("document.getElementById('result').textContent.length > 20", timeout=60_000)
+    page.add_style_tag(content=".pg-scroll { max-height: none !important; }")       # the lists show in full in the pictures
+    page.set_viewport_size({"width": 1400, "height": 2600})
+    shot(page, "37-sql", "#sql-box")
+    page.click("#sql-box summary")
+    page.click("#files-box summary")
+    shot(page, "38-each-table", "#files-box")
+    page.click("#files-box summary")
+    page.set_viewport_size({"width": 1400, "height": 900})
+    page.evaluate("document.querySelectorAll('style').forEach((el) => { if (el.textContent.includes('.pg-scroll { max-height: none')) el.remove(); })")
     unfold(page, "step6-card")
     shot(page, "11-visualization", "#step6-card")
     unfold(page, "step10-card")
-    page.set_viewport_size({"width": 1400, "height": 1800})      # the card is taller than the panel
+    page.set_viewport_size({"width": 1400, "height": 3600})      # the card is taller than the panel (14 formats)
     shot(page, "11b-export", "#step10-card")
+    with page.expect_download(timeout=120_000) as d:                   # a file that the card made: the map image (SVG)
+        page.click("#export-list [data-fmt=svg]")
+    d.value.save_as(out / "40-export-map.svg")
+    print("wrote", out / "40-export-map.svg")
     page.set_viewport_size({"width": 1400, "height": 900})
     shot(page, "12-map-after-build")
 
@@ -176,6 +210,26 @@ with sync_playwright() as p:
     shot(page, "23-fix-panel-hidden")
     page.click("#sb-show")
     page.click("#fix-back")
+
+    # card 8: the level editor with two joined roads picked (road 1 red, road 2 blue)
+    page.click("#step8")
+    page.wait_for_function("window.levelEditorOpen", timeout=300_000)
+    page.evaluate("duckMap.jumpTo({center: [7.4246, 43.7384], zoom: 16, pitch: 0})")
+    page.wait_for_function("window.duckMap.loaded()", timeout=120_000)
+    page.wait_for_timeout(1500)
+    pair = page.evaluate("""() => { const m = window.duckMap, c = m.getCanvas().getBoundingClientRect(), L = %s, key = (p) => p[0].toFixed(6) + ',' + p[1].toFixed(6), items = [];
+        for (const f of m.queryRenderedFeatures({layers: L})) { if (f.geometry.type !== 'LineString') continue; const g = f.geometry.coordinates, q = m.project(g[Math.floor(g.length / 2)]);
+          if (q.x > 440 && q.x < c.width - 100 && q.y > 60 && q.y < c.height - 80 && m.queryRenderedFeatures(q, {layers: L})[0]) items.push({q, ends: [key(g[0]), key(g[g.length - 1])]}); }
+        for (const a of items) for (const b of items) if (a !== b && a.ends.some((e) => b.ends.includes(e)) && Math.hypot(a.q.x - b.q.x, a.q.y - b.q.y) > 40) return [[a.q.x + c.left, a.q.y + c.top], [b.q.x + c.left, b.q.y + c.top]];
+        return null; }""" % LAYERS)
+    assert pair, "two roads that join, in the free part of the map"
+    for x, y in pair:
+        page.mouse.click(x, y)
+        page.wait_for_timeout(1200)
+    page.wait_for_selector("#lv-cards .card, #lv-cards [data-hroad]", timeout=10_000)
+    shot(page, "36-levels-editor")
+    page.click("#lv-back")
+    page.wait_for_function("!window.levelEditorOpen && !window.mapDrawing && window.duckMap.loaded()", timeout=300_000)
 
     # card 9: the Design panel, one picture for each tab, and the map in the Dark theme
     unfold(page, "step9-card")

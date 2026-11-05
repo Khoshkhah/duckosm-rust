@@ -4,30 +4,56 @@ hide:
   - toc
 ---
 
-# duckosm-rust
+# duckOSM Studio
 
-Turn an OpenStreetMap file (`.osm.pbf`) into a routable road network: edges, nodes, the edge graph and the turn restrictions, for driving, walking and cycling. The output is GeoParquet files and one DuckDB file. Every row equals the output of [duckOSM](https://github.com/Khoshkhah/duckOSM) 0.6.0, and so does every `edge_id`, the key that other projects join on.
+**A portal that turns OpenStreetMap data into a routable road network, in your browser.**
 
-![The browser page after a build: the roads of Monaco on the map](img/dashboard/12-map-after-build.png)
+You choose an area on a map. The portal builds the driving, walking and cycling networks. You look at the roads, fix the errors in the OSM data, build again, and export the result to the software that you use. No server receives your data.
 
-[Make your first map](first_map.md){ .md-button .md-button--primary }
-[View on GitHub](https://github.com/Khoshkhah/duckosm-rust){ .md-button }
+![The portal after a build: the roads of Monaco on the map](img/dashboard/12-map-after-build.png)
 
-## Choose a way to work
+[Open duckOSM Studio](https://khoshkhah.github.io/duckosm-studio/){ .md-button .md-button--primary }
+[Make your first map](first_map.md){ .md-button }
+[View on GitHub](https://github.com/Khoshkhah/duckosm-studio){ .md-button }
 
-| You want to | Use | Guide |
-|---|---|---|
-| Choose an area on a map, see the roads, fix OSM data, export to QGIS, MATSim or SUMO | The browser page | [The browser page](dashboard.md) |
-| Build an area from a file, in a script or on a server | The CLI program | [The CLI](cli.md) |
-| Build an area inside Python code | The Python wheel | [The Python wheel](python.md) |
+## What is important in it
 
-All three run the same Rust code and give the same tables. Estonia takes 19 seconds and 1.5 GB ([benchmark](benchmark.md)). duckOSM in Python takes 1,545 seconds and 10 GB.
+- **A routable network from OSM data.** The raw data has no junctions, no directions and no travel times. The build cuts the ways at the junctions, sets the length, the speed and the travel time of each edge, and applies the turn restrictions.
+- **A stable `edge_id` for each edge.** The `edge_id` is a hash of the OSM way and the two end nodes. The same road has the same `edge_id` in every build. Other projects join their data on it.
+- **The same result as [duckOSM](https://github.com/Khoshkhah/duckOSM) 0.6.0.** Every row of every table is equal to the output of duckOSM.
+- **A fix loop.** You can change the OSM data in the portal and build again. The tables, the map and the exports have your fixes.
 
-## What you get
+## Advantages
 
-- **Edges and nodes** for each network, with road class, speed limit, lanes, length and travel time.
-- **The edge graph and the turn restrictions**: the moves that a vehicle can make from one edge to the next.
-- **Drawing levels and lane profiles**, for bridges, tunnels and lanes.
-- **Base-map layers** (water, land use, buildings) and the OSM data of the area, when you give a boundary.
+| Advantage | What it means for you |
+|---|---|
+| Nothing to install | Open a page. The build runs in your browser. Your area and your data stay on your computer. |
+| Fast | Estonia takes 19 seconds and 1.5 GB ([benchmark](benchmark.md)). duckOSM in Python takes 1,545 seconds and 10 GB. |
+| One result everywhere | The page, the command line and Python run the same Rust code. They give the same tables. |
+| Three networks in one build | Driving, walking and cycling, with the edge graph and the turn restrictions. |
+| Fix the data | Change a road, a building, a node or a turn rule. Draw a new road. Build again. |
+| A clear map | The roads have the style of roadstyle: outlines, bridges and tunnels. 33 ready themes. |
+| SQL in the page | Ask questions to the tables with DuckDB. |
+| Export to your tools | PMTiles, MBTiles, GeoPackage, GeoJSON, kepler.gl, MATSim and SUMO. |
+| Your work stays | The page saves each build in your browser. **Open** loads it with no new build. |
 
-[The output tables](output-tables.md) lists every table and column. [Concepts](concepts.md) explains the words: area, network, edge and `edge_id`.
+## Read the manual
+
+| Page | What it tells you |
+|---|---|
+| [The editing cycle](manual/cycle.md) | The whole work on one picture. |
+| [The page](dashboard.md) | The map, the panel and the bar of tools. |
+| [Steps 1 and 2](manual/area.md) | Choose the area. |
+| [Steps 3 and 4](manual/build.md) | Give the data. Build. |
+| [Steps 5 and 6](manual/result.md) | Read the result. Show the map. |
+| [Step 7: Edit OSM data](manual/edit-osm.md) | Fix roads, buildings, nodes and turns. |
+| [Step 8: Edit levels](manual/edit-levels.md) | Fix bridges and tunnels. |
+| [Step 9: Edit design](manual/edit-design.md) | Set the look of the map and the tiles. |
+| [Step 10: Export](manual/export.md) | The formats and the files. |
+| [The tables](manual/tables.md) | What each table is for. |
+
+## Command line and Python
+
+For a script, a server or Python code, use [duckOSM](cli.md). It uses the same Rust engine as the page.
+
+[Concepts](concepts.md) explains the words: area, network, edge and `edge_id`. [Columns of the tables](output-tables.md) lists every column.

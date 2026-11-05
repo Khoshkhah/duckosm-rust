@@ -70,7 +70,7 @@ Two kinds of data, with different jobs:
 
 ## What exists today
 
-- **A saved area on OPFS.** Each build is saved with its tables, its drawing cache and its cut file ([dashboard.md](../dashboard.md), "Your areas"). **Open** loads it into memory again.
+- **A saved area on OPFS.** Each build is saved with its tables, its drawing cache and its cut file ([dashboard.md](../dashboard.md#your-areas)). **Open** loads it into memory again.
 - **The map worker makes tiles on demand** from a road table that is in memory (`map/map_worker.js`, roadstyle's module).
 - **The export of tiles** makes a PMTiles file with a layer `edges`. It holds each piece of a road, clipped to the tile with a small buffer, with every column of the edge. It is made in memory, for at most 40,000 tiles ([dashboard.md](../dashboard.md), "Step 9: Export").
 - **DuckDB-wasm opens a `.duckdb` file with direct IO** (`app/duck.js`).

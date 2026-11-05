@@ -1,7 +1,7 @@
-site_name: duckosm-rust
-site_description: An OpenStreetMap file to a routable road network (GeoParquet and DuckDB), equal to duckOSM 0.6.0. A CLI, a Python wheel and a browser page.
-repo_url: https://github.com/Khoshkhah/duckosm-rust
-repo_name: Khoshkhah/duckosm-rust
+site_name: duckOSM Studio
+site_description: An OpenStreetMap file to a routable road network (GeoParquet and DuckDB), equal to duckOSM 0.6.0. A browser page. duckOSM has the command line and Python.
+repo_url: https://github.com/Khoshkhah/duckosm-studio
+repo_name: Khoshkhah/duckosm-studio
 
 theme:
   name: material
@@ -31,7 +31,11 @@ markdown_extensions:
   - pymdownx.details
   - pymdownx.highlight
   - pymdownx.inlinehilite
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - toc:
       permalink: true
       # GitHub-style anchors, so the in-page links of the docs work on the site too
@@ -42,17 +46,25 @@ plugins:
 
 nav:
   - Home: index.md
+  - Manual:
+      - The editing cycle: manual/cycle.md
+      - The page: dashboard.md
+      - "Steps 1 and 2: The area": manual/area.md
+      - "Steps 3 and 4: Data and build": manual/build.md
+      - "Steps 5 and 6: Result and map": manual/result.md
+      - "Step 7: Edit OSM data": manual/edit-osm.md
+      - "Step 8: Edit levels": manual/edit-levels.md
+      - "Step 9: Edit design": manual/edit-design.md
+      - "Step 10: Export": manual/export.md
+      - The tables: manual/tables.md
   - Get started:
       - Your first map: first_map.md
-  - Guides:
-      - The browser page: dashboard.md
-      - The CLI: cli.md
-      - The Python wheel: python.md
-      - When the page does not work: troubleshooting.md
-  - Concepts:
       - Concepts: concepts.md
+  - Command line and Python:
+      - Use duckOSM: cli.md
   - Reference:
-      - Output tables: output-tables.md
+      - Columns of the tables: output-tables.md
+      - When the page does not work: troubleshooting.md
   - Development:
       - Development: development.md
       - Design: design.md
@@ -75,3 +87,4 @@ nav:
       - Disk store for the result: proposals/disk-store.md
       - Less memory in the build: proposals/build-memory.md
       - A build by tiles: proposals/tiled-build.md
+      - The look of the exports: proposals/export-look.md
