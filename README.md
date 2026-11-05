@@ -1,86 +1,37 @@
 # duckOSM Studio
 
-**A portal that turns OpenStreetMap data into a routable road network, in your browser.**
+Build a routable road network from OpenStreetMap in your browser. Fix the OSM data, style the map and export the result. You install nothing, and your data stays on your computer.
 
-You choose an area on a map. The portal builds the driving, walking and cycling networks. You look at the roads, fix the errors in the OSM data, build again, and export the result to the software that you use. No server receives your data.
+**[Open duckOSM Studio](https://khoshkhah.github.io/duckosm-studio/)** · **[Read the manual](https://khoshkhah.github.io/duckosm-studio/manual/)**
 
-![The portal after a build: the roads of Monaco on the map](docs/img/dashboard/12-map-after-build.png)
+![The roads of Monaco on the map after a build](docs/img/dashboard/12-map-after-build.png)
 
-Open duckOSM Studio: <https://khoshkhah.github.io/duckosm-studio/>. Read the manual: <https://khoshkhah.github.io/duckosm-studio/manual/>.
+## How it works
 
-## What is important in it
+![The cycle: choose an area, get the OSM data, build, check the map and the tables, edit the OSM data and build again, edit levels and design, export](docs/img/cycle.svg)
 
-- **A routable network from OSM data.** The raw data has no junctions, no directions and no travel times. The build cuts the ways at the junctions, sets the length, the speed and the travel time of each edge, and applies the turn restrictions. The result is the input of a router or a simulator.
-- **A stable `edge_id` for each edge.** The `edge_id` is a hash of the OSM way and the two end nodes. The same road has the same `edge_id` in every build. Other projects join their data on it.
-- **The same result as [duckOSM](https://github.com/Khoshkhah/duckOSM) 0.6.0.** Every row of every table is equal to the output of duckOSM.
-- **A fix loop.** You can change the OSM data in the portal and build again. The tables, the map and the exports have your fixes.
-
-## Advantages
-
-| Advantage | What it means for you |
-|---|---|
-| Nothing to install | Open a page. The build runs in your browser. Your area and your data stay on your computer. |
-| Fast | Estonia takes 19 seconds and 1.5 GB. duckOSM in Python takes 1,545 seconds and 10 GB. |
-| One result everywhere | The page and [duckOSM](https://github.com/Khoshkhah/duckOSM) (command line and Python) use the same Rust engine. They give the same tables. |
-| Three networks in one build | Driving, walking and cycling, with the edge graph and the turn restrictions. |
-| Fix the data | Change a road, a building, a node or a turn rule. Draw a new road. Build again. |
-| A clear map | The roads have the style of [roadstyle](https://github.com/Khoshkhah/roadstyle): outlines, bridges and tunnels. 33 ready themes. |
-| SQL in the page | Ask questions to the tables with DuckDB. No other tool is needed. |
-| Export to your tools | PMTiles, MBTiles, GeoPackage, GeoJSON, kepler.gl, MATSim and SUMO. |
-| Your work stays | The page saves each build in your browser. **Open** loads it with no new build. |
-
-![The panel Edit OSM data: a road is picked on the map and its form is open](docs/img/dashboard/17-fix-road.png)
-<!-- retake: after the duckOSM PR that moves Edit OSM data into duckOSM -->
-
-## The cycle
-
-```mermaid
-flowchart LR
-    A["Choose an area"] --> B["Give the OSM data"]
-    B --> C["Build"]
-    C --> D["Look at the map and the tables"]
-    D --> E{"Is the data right?"}
-    E -- "No" --> F["Edit OSM data"]
-    F --> C
-    E -- "Yes" --> G["Edit levels and design"]
-    G --> H["Export"]
-```
-
-[The editing cycle](https://khoshkhah.github.io/duckosm-studio/manual/manual/cycle/) explains each step.
+1. Choose an area: search a place, draw a shape, load a file or pick H3 cells.
+2. Get the OSM data: a region file, the Overpass API or a cut file.
+3. Build the driving, walking and cycling networks.
+4. Check the roads on the map, and the tables with SQL.
+5. If the data has a fault, edit it (a road, a building, a node, a turn or a new road) and build again.
+6. Edit the drawing order of bridges and tunnels, and the design of the map.
+7. Export to your tools.
 
 ## What you get
 
-For each network, a build writes the tables `edges`, `nodes`, `edge_graph`, the turn restrictions and more. Each table is a GeoParquet file. One DuckDB file has all of them. [The tables](https://khoshkhah.github.io/duckosm-studio/manual/manual/tables/) explains each table.
-
-## Start
-
-1. Open <https://khoshkhah.github.io/duckosm-studio/>.
-2. In step 1, search for a place and click a match.
-3. In step 3, press **Get** for a region file that covers the area.
-4. In step 4, press **Build**.
-5. In step 6, press **Show on map**.
-
-[Your first map](https://khoshkhah.github.io/duckosm-studio/manual/first_map/) has the details.
-
-duckOSM Studio uses the engine of [duckOSM](https://github.com/Khoshkhah/duckOSM), so both give the same tables.
+- **Three networks:** driving, walking and cycling, with the graph of legal turns and the turn restrictions.
+- **A stable `edge_id`:** a hash of the OSM way and its two end nodes. The same road has the same `edge_id` in each build.
+- **The tables of [duckOSM](https://github.com/Khoshkhah/duckOSM):** the same Rust engine, the same rows.
+- **Speed:** Estonia builds in 19 seconds.
+- **Exports:** PMTiles, MBTiles, GeoPackage with a QGIS style, GeoJSON, kepler.gl, MATSim and SUMO.
 
 ## Documents
 
-| For | Read |
-|---|---|
-| Users | [The manual](https://khoshkhah.github.io/duckosm-studio/manual/manual/cycle/), [first map](https://khoshkhah.github.io/duckosm-studio/manual/first_map/), [concepts](https://khoshkhah.github.io/duckosm-studio/manual/concepts/), [the tables](https://khoshkhah.github.io/duckosm-studio/manual/manual/tables/), [columns of the tables](https://khoshkhah.github.io/duckosm-studio/manual/output-tables/), [troubleshooting](https://khoshkhah.github.io/duckosm-studio/manual/troubleshooting/) |
-| Developers | [Development](https://khoshkhah.github.io/duckosm-studio/manual/development/), [design](https://khoshkhah.github.io/duckosm-studio/manual/design/), [page code](https://khoshkhah.github.io/duckosm-studio/manual/app/), [benchmark](https://khoshkhah.github.io/duckosm-studio/manual/benchmark/), [to do](https://khoshkhah.github.io/duckosm-studio/manual/todo/) |
-| Decisions | [Name](https://khoshkhah.github.io/duckosm-studio/manual/proposals/name/), [hosting](https://khoshkhah.github.io/duckosm-studio/manual/proposals/hosting/), [disk store for the result](https://khoshkhah.github.io/duckosm-studio/manual/proposals/disk-store/), [less memory in the build](https://khoshkhah.github.io/duckosm-studio/manual/proposals/build-memory/), [a build by tiles](https://khoshkhah.github.io/duckosm-studio/manual/proposals/tiled-build/) |
-| History | [Changelog](CHANGELOG.md) |
-
-The documents are a [mkdocs](https://www.mkdocs.org) site on GitHub Pages: <https://khoshkhah.github.io/duckosm-studio/manual/>. To read it on your computer, run `pip install mkdocs mkdocs-material` and then `mkdocs serve`.
-
-## Status
-
-The driving, walking and cycling networks of Monaco, Tartu and Estonia equal duckOSM row for row. Only the direction labels of some connectors differ, which duckOSM does not fix.
-
-The Rust engine moved into the [duckOSM](https://github.com/Khoshkhah/duckOSM) repository (`rust/`) on 2026-11-04. This repository keeps the browser page (`crates/duckosm-wasm`) and the docs. The app is called duckOSM Studio. The repository is `duckosm-studio` (it was `duckosm-rust`).
+- [The manual](https://khoshkhah.github.io/duckosm-studio/manual/): every step, every editor, every export and every table.
+- [Development](https://khoshkhah.github.io/duckosm-studio/manual/development/): build and test the page.
+- [Changelog](CHANGELOG.md)
 
 ## License
 
-MIT, as duckOSM.
+MIT
