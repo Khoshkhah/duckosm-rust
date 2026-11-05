@@ -45,7 +45,7 @@ Next: [the Python guide](docs/python.md).
 |---|---|
 | Users | [First map](docs/first_map.md), [page guide](docs/dashboard.md), [CLI](docs/cli.md), [Python](docs/python.md), [concepts](docs/concepts.md), [output tables](docs/output-tables.md), [troubleshooting](docs/troubleshooting.md) |
 | Developers | [Development](docs/development.md), [design](docs/design.md), [page code](docs/app.md), [benchmark](docs/benchmark.md), [to do](docs/todo.md) |
-| Decisions | [Name](docs/proposals/name.md), [hosting](docs/proposals/hosting.md) |
+| Decisions | [Name](docs/proposals/name.md), [hosting](docs/proposals/hosting.md), [disk store for the result](docs/proposals/disk-store.md), [less memory in the build](docs/proposals/build-memory.md) |
 | History | [Changelog](CHANGELOG.md) |
 
 The user documents are also a [mkdocs](https://www.mkdocs.org) site, as in duckOSM and roadstyle. To read it on your computer, run `pip install mkdocs mkdocs-material` and then `mkdocs serve`.

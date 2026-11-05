@@ -278,6 +278,60 @@ DuckDB 1.5.3, 2026-10-21. The script is `tools/edge_id_reference.py`.
 4. Ask Kaveh if any database that downstream projects use came from DuckDB older than 1.2.
    Open question 3.
 
+### A way that walks a segment twice
+
+Found on 2026-11-04. The walking network of Kentucky (`kentucky-latest.osm.pbf`, 148 MB) stopped with
+`duplicate (osm_id, source, target) after the splits: 1214406652 11251734036->11251734037`. Driving worked.
+
+**The way.** OSM way 1214406652 is a golf cart path (`highway=path`, `golf=cartpath`) with 113 nodes at
+38.227 N, 85.221 W. It is not a closed way. It passes the same nodes in the same direction two times: the
+nodes 36, 37, 38 and 39 (the last digits of the ids `112517340xx`) come at positions 29 to 32 and again at
+positions 94 to 97. It also goes over the nodes 74, 75 and 76 there and back. Each of these 7 nodes is
+a junction, so the way is cut into the arcs 36-37, 37-38 and 38-39 twice. Each pair of arcs has the same
+`osm_id`, `source`, `target`, `refs`, geometry and `length_m`.
+
+**The small file.** `tests/data/ky_double_walk.osm.pbf` (872 bytes) holds only this way and its 106 nodes.
+`osmium getid -r -t kentucky-latest.osm.pbf w1214406652` cut it. The old program stops on it with the
+same message (`duckosm-rust tests/data/ky_double_walk.osm.pbf --modes walking`).
+
+**Where the check is.** The check is step 6 of `build_network` (`network.rs`, "the check that (osm_id,
+source, target) is unique"). The cause is in step 3, the split of same-direction parallel arcs. Step 3 keeps
+the shortest arc of each group whole and splits the others. It orders the arcs by `(length_m, refs text)`.
+Two identical arcs have the same key, so none is longer than the other and none is split. Step 4 does not
+help, because it only handles arcs with opposite directions. The two arcs stay, step 5 adds their reverse
+edges, and step 6 finds the duplicate.
+
+**What duckOSM does.** duckOSM 0.6.0 (git tag `v0.6.0`, DuckDB 1.5.3) and 0.6.1 stop on the same small file
+with `6 duplicate (osm_id, source, target) group(s) survived the loop/parallel/antiparallel splits`
+(three arcs and their three reverse twins). `_split_parallel_pairs` has the same tie rule: it splits an
+arc only if it is longer, or equal in length and greater in `refs::VARCHAR`. duckOSM does not build
+Kentucky walking, and it writes no `edge_id` for this way. There is no golden for it. The
+difference with the other areas is only that Kentucky has such a way.
+
+**The fix.** Add the index of the arc in the way as the last part of the key in step 3. Of the identical
+arcs, the first stays whole and the others are split at the midpoint with a virtual node, as for any longer
+parallel arc. Result for the small file: 44 edges and 7 virtual nodes, with all `(osm_id,
+source, target)` and all `edge_id` values unique, and the forward edges are as long as the way (test
+`crates/duckosm-core/tests/double_walk.rs`). Kentucky walking then builds in 84 s: 2,421,756 edges.
+
+**Risk to `edge_id` equality.** None for a build that works today. A tie at the minimum of a group always left
+a duplicate in the old program, because the arcs that tie are not split. Thus the old program stopped on
+every input that the new rule changes. To check this, the old and the new program built Tartu (three modes,
+with the fixes, no merge) and Kentucky driving. All tables are equal except `built_at` and `created`. The
+Monaco golden tests (`cargo test`) pass. For the identical arcs the choice of the arc to split cannot change
+a value: the arcs have the same `edge_id`, `refs`, geometry and `edge_ref` number.
+
+**For duckOSM.** The same change is small in `_split_parallel_pairs`: add `OR (e1.length_m = e2.length_m AND
+e1.refs::VARCHAR = e2.refs::VARCHAR AND e1.edge_id > e2.edge_id)` to the `WHERE` (`edge_id` is a temporary
+row number there). It gives the same ids as this program, because the identical arcs are interchangeable.
+This change is not made, and until it is made, duckOSM and this program differ for such a way: duckOSM
+stops and this program builds the network.
+
+**Known limit.** A way that walks one segment three times or more in the same direction still stops. The
+split arcs get the same virtual node id, because `hash(osm_id, source, target, refs)` is the same for all
+of them. The check in step 6 reports it. A fix is a salt with the number of the arc in the hash. No known
+data has this case, so the salt is not added. Test: a way `1 2 1 2 1 2` with 3 nodes in an OSM XML file.
+
 ## 6. Test plan
 
 Rule: a skipped test is not a pass.
