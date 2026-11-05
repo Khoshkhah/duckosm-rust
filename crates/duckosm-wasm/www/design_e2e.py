@@ -30,6 +30,7 @@ def settled(page):
     """the design is applied: the panel's state says so and no draw runs"""
     page.evaluate("window.designPanel.flush()")
     page.wait_for_function("!window.mapDrawing && /shows this design/.test(window.designPanel.state())", timeout=180_000)
+    page.evaluate("new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))")       # the map has drawn a frame of the new look
 
 
 def set_input(page, selector, value, event="input"):
@@ -173,7 +174,8 @@ with sync_playwright() as p:
             page.click("#design-pane [data-look=light]")
         page.click(f"#design-pane [data-look={t}]")
         settled(page)
-        assert page.evaluate("window.designPanel.get().theme") == t and "could not draw" not in page.evaluate("window.designPanel.state()")
+        st = page.evaluate("[window.designPanel.get().theme, window.designPanel.state()]")
+        assert st[0] == t and "could not draw" not in st[1], (t, st)
         sigs[t] = page.evaluate("JSON.stringify(window.duckMap.getStyle().layers.find((l) => l.id === 'rs-roads-simple').paint['line-color'])")   # the whole colour: the class colours are a lookup in it, not a table at its start
     assert len(set(sigs.values())) == len(ids), ("every theme gives its own road colors", [t for t in ids if list(sigs.values()).count(sigs[t]) > 1])
     # a road palette changes only the road colors: the base map of the design that is on now stays
@@ -411,9 +413,11 @@ with sync_playwright() as p:
     assert tiles_url() == gen and not page.evaluate("window.mapDrawing"), "a boundary change draws no new map"
     page.click("#design-tab-theme")
     page.click("#design-pane [data-look=print]")
+    settled(page)                    # a theme paints the boundary with its new look: one change on the map (restyle_e2e.py)
     b = bpaint()
     assert b["color"] == "#000000" and b["dash"] == [3, 2] and b["width"] == 1.5 and page.evaluate("window.designPanel.boundary().fillOpacity") == 0
     page.click("#design-pane [data-look=light]")
+    settled(page)
     assert bpaint()["color"] == "#2563eb" and bpaint()["dash"] is None and bpaint()["width"] == 2.5 and page.evaluate("window.designPanel.boundary()") == {"show": True, "color": "#2563eb", "width": 2.5, "dash": "solid", "fill": "#2563eb", "fillOpacity": 0.18, "fillOnRoads": False}
     settled(page)
     page.click("#design-tab-layers")

@@ -74,7 +74,19 @@ with sync_playwright() as p:
     assert "same tiles" in (page.text_content("#mapnote") or "")
     print("a new look on the same tiles: ok,", len(rows), "live colours kept")
 
+    # one change on the map: each frame that MapLibre draws during the change has the old ground and colours, or the new ground and colours
+    page.evaluate("""() => { const m = window.duckMap; window.frames = [];
+      window.frameProbe = () => window.frames.push([m.getPaintProperty('bg', 'background-opacity'), JSON.stringify(m.getPaintProperty('rs-roads-simple', 'line-color'))]);
+      m.on('render', window.frameProbe); }""")
+    old_frame = page.evaluate("[window.duckMap.getPaintProperty('bg', 'background-opacity'), JSON.stringify(window.duckMap.getPaintProperty('rs-roads-simple', 'line-color'))]")
     assert theme(page, "hollow") == "same tiles", "Hollow's wider roads fit in the tiles' buffer: the map keeps its tiles"
+    new_frame = page.evaluate("window.duckMap.off('render', window.frameProbe), [window.duckMap.getPaintProperty('bg', 'background-opacity'), JSON.stringify(window.duckMap.getPaintProperty('rs-roads-simple', 'line-color'))]")
+    frames = page.evaluate("window.frames")
+    assert old_frame != new_frame and old_frame[0] != new_frame[0] and old_frame[1] != new_frame[1], "Hollow changes the ground and the colours"
+    mixed = [f for f in frames if f != old_frame and f != new_frame]
+    assert not mixed, f"{len(mixed)} of {len(frames)} frames show a half-changed theme (the ground of one, the colours of the other)"
+    assert "a new look on the same tiles, in" in page.evaluate("window.designPanel.state()"), "the Design panel tells how the map changed and the time"
+    print("one change on the map:", len(frames), "frames, none half-changed")
     assert theme(page, "access") == "same tiles", "Accessibility large is the widest ready theme: the headroom covers it"
     assert page.evaluate(state, rows) == ["#ff00ff"] * len(rows), "the live colours stay"
     print("wider roads within the headroom keep the tiles: ok")

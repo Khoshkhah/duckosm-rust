@@ -2207,7 +2207,7 @@ function addOverview(style) {
 // A new look over the same tiles (roadstyle's LiveMap.setLook, docs/design/restyle_without_retile.md): each road layer, and its overview copy, gets the
 // new style's paint, layout and filter, and the images come again; the source, its tiles and the roads' feature state (the live colours) stay. Then
 // the dashboard reads the new style and the design's own paint comes on top, as after a draw. false: the new style has other layers (draw again).
-async function restyleRoads(style) {
+async function restyleRoads(style, paint = () => {}) {
   const own = style.metadata?.["roadstyle:images"] || {};
   const now = new Map(map.getStyle().layers.filter((l) => l.id.startsWith("rs-")).map((l) => [l.id, l]));
   const roadIds = [...now.keys()].filter((id) => !id.startsWith("rs-low-"));
@@ -2231,6 +2231,7 @@ async function restyleRoads(style) {
       if (!same(was.filter, layer.filter)) map.setFilter(id, layer.filter ?? null);
     }
   }
+  paint();                // the design's ground, layers and opacity: in this frame, and before the dashboard reads the style and tells its layers
   rs.setStyle(style);     // the dashboard reads the new style (its controls, its legend and its state)
   applyDesignLayers();
   return true;
@@ -2806,7 +2807,7 @@ document.addEventListener("rs:basemapchange", paintGround);       // a base map 
 // (design.json in its folder, app/area_store.js). ----
 let designSave = null;
 const designSlug = () => areaStore.sanitizeSlug(areaName || $("name").value);
-async function redrawDesign(lookObj, isDefault, draw) {
+async function redrawDesign(lookObj, isDefault, draw, paint = () => {}) {
   duck.setLookText(isDefault ? null : JSON.stringify(lookObj));       // the next draw reads this look
   if (!draw) return "";
   if (editor) return "The level editor is open. The map shows this design after you close it and draw again.";
@@ -2818,20 +2819,23 @@ async function redrawDesign(lookObj, isDefault, draw) {
       const t0 = performance.now();
       const style = await duck.setLook();
       window.lastRestyle = !style ? "the look needs new tiles" : "other layers";      // for the tests: why the map is drawn again
-      if (style && await restyleRoads(style)) {
+      if (style && await restyleRoads(style, paint)) {
         window.lastRestyle = "same tiles";
-        $("mapnote").textContent = `${num(roadCount[$("mapmode").value] ?? 0)} roads, drawn in ${num((performance.now() - t0) / 1000, 2)} s (a new look on the same tiles)`;
-        return "The map shows this design.";
+        const s = num((performance.now() - t0) / 1000, 2);
+        $("mapnote").textContent = `${num(roadCount[$("mapmode").value] ?? 0)} roads, drawn in ${s} s (a new look on the same tiles)`;
+        return `The map shows this design: a new look on the same tiles, in ${s} s.`;
       }
     } catch (e) {
       window.lastRestyle = "failed: " + e.message;
       console.warn("a new look on the same tiles failed, the map is drawn again:", e);
     }
   }
+  const t1 = performance.now();
+  paint();                                           // a new map: the old one shows the design's ground and layers while the new one is drawn
   await showRoads();
   const note = $("mapnote").textContent;
   if (/^The map failed|needs more memory|draws at most/.test(note)) throw new Error(note);       // drawRoads writes its failure in the note and keeps the old map
-  return "The map shows this design.";
+  return `The map shows this design: a new map, in ${num((performance.now() - t1) / 1000, 2)} s.`;
 }
 function designChanged(p) {
   if (p.format !== duck.tileFormat) { $("tilefmt").value = p.format; $("tilefmt").onchange(); }       // the format of the map follows the profile
