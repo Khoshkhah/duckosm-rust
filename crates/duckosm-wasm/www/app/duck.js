@@ -7,7 +7,11 @@ import { writeFeatures } from "../map/roadstyle/features_sql.js";
 // it. It loads the first time that the page needs it.
 import init, * as roadstylePkg from "../map/pkg/roadstyle_wasm.js";
 let roadstyleReady = null;
-export const roadstyle = () => (roadstyleReady ??= init().then(() => roadstylePkg));
+// The module is fetched and compiled once for the page, and each map worker gets the compiled module (a message), so a new worker does not download the 16 MB
+// file again: a private window of a browser has a cache too small for it, and a change of the design starts a new worker.
+let roadstyleCompiled = null;
+export const roadstyleModule = () => (roadstyleCompiled ??= WebAssembly.compileStreaming(fetch(new URL("../map/pkg/roadstyle_wasm_bg.wasm", import.meta.url))));
+export const roadstyle = () => (roadstyleReady ??= roadstyleModule().then((module_or_path) => init({ module_or_path })).then(() => roadstylePkg));
 
 // duckdb-wasm with DuckDB 1.5: the GEOMETRY type of the tables is core from 1.5 (the version that the geolibre-roadstyle spike tested)
 const DUCKDB = "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.33.1-dev57.0/+esm";
@@ -350,8 +354,12 @@ export async function zipAll(areaName, boundary) {
 // map asks for (tile()), until the next style (a worker that ends gives its memory back). keep: the road properties in the tiles, with the
 // ones the style reads. The road table (the fields of each road, for roadstyle's dashboard: the popup) comes with the style.
 let look = null, mapWorker = null, generation = 0, tileId = 0;
-// The look of the next draw: the text of map/look.json with the design written into it (app/design.js). None: the worker reads map/look.json.
+// The look of the next draw: the text of map/look.json with the design written into it (app/design.js). None: the page's look (pageLookText).
 let lookText = null;
+let pageLook = null;
+/** The text of map/look.json, read once. Every part of the page (the draw, a new look, the Design panel, the level editor) uses this one text: a
+ *  file that changes while the page is open (a deploy) must not give two looks, because their tiles differ and each theme then draws a new map. */
+export const pageLookText = () => (pageLook ??= fetch(new URL("../map/look.json", import.meta.url)).then((r) => r.text()).catch((e) => { pageLook = null; throw e; }));
 export const setLookText = (t) => { lookText = t || null; };
 // The tile format of the roads map: "mlt" (the default, roadstyle's format with smaller tiles) or "mvt". The style has the format (the
 // source's encoding) and each tile address has it (&f=, after the generation's ?g=), so that a tile of the other format is never reused.
@@ -416,7 +424,7 @@ async function roadInputs(mode, lap) {
     lap(`SQL: copyFileToBuffer (${(roads.byteLength / 2 ** 20).toFixed(1)} MB)`);
     // the base-map layers, when the build made them: features.parquet, the rows of the look's layers (map/roadstyle/features_sql.js)
     if (tables.some((t) => t.mode === "features")) {
-      look ??= fetch(new URL("../map/look.json", import.meta.url)).then((r) => r.json());
+      look ??= pageLookText().then(JSON.parse);
       if (await writeFeatures(q, "memory", (await look).base_map.layers_yaml.layers)) features = await db.copyFileToBuffer("features.parquet");
     }
   } finally {
@@ -473,9 +481,11 @@ export async function roadsStyle(mode, name, keep = []) {
   const roads = inputs.roads.slice(), features = inputs.features?.slice(), levels = inputs.levels;
   const roadsSeconds = (performance.now() - t) / 1000;
   lap("SQL and features, all");
+  const wasmModule = await roadstyleModule();
   endMapWorker();
   const w = (mapWorker = new Worker(new URL("../map/map_worker.js", import.meta.url), { type: "module" }));
   const prefix = `rs://${++generation}/`;
+  const lookNow = lookText ?? await pageLookText();
   const out = await new Promise((ok, fail) => {
     w.onmessage = ({ data }) => {
       if (data.id != null) {
@@ -491,7 +501,7 @@ export async function roadsStyle(mode, name, keep = []) {
       }
     };
     w.onerror = (e) => { endMapWorker(); fail(new Error(e.message || "the map worker failed")); };
-    w.postMessage({ look: lookText, roads, features, name, prefix, keep, levels, format: tileFormat, tableFields: [...new Set([...keep, ...TABLE_FIELDS])] }, [roads.buffer, ...(features ? [features.buffer] : [])]);
+    w.postMessage({ wasmModule, look: lookNow, roads, features, name, prefix, keep, levels, format: tileFormat, tableFields: [...new Set([...keep, ...TABLE_FIELDS])] }, [roads.buffer, ...(features ? [features.buffer] : [])]);
   });
   // the road table is parsed by the page when it asks (after the first tiles): its own step, timed alone
   const roadTable = () => {
@@ -501,6 +511,16 @@ export async function roadsStyle(mode, name, keep = []) {
     return table;
   };
   return { style: inFormat(out.style), roadTable, roadsSeconds, styleSeconds: out.seconds, memoryMiB: out.memoryMiB, liveMiB: out.liveMiB };
+}
+
+// A new look over the map that the worker holds (roadstyle's LiveMap.setLook, docs/design/restyle_without_retile.md): the new style when the map keeps
+// its tiles; null when the look needs new tiles (draw again), or when no map is drawn. The look is the one of setLookText (none: pageLookText).
+export async function setLook() {
+  if (!mapWorker) return null;
+  const text = lookText ?? await pageLookText();
+  const r = await ask({ setLook: text, format: tileFormat }, { style: null });
+  if (r.error) throw new Error(r.error);
+  return r.style ? inFormat(r.style) : null;
 }
 
 // a question to the map worker, answered by its id

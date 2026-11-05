@@ -60,6 +60,14 @@ const amberOnNight = D.makeTheme(base, D.THEME_DATA.find((t) => t.id === "amber"
 assert.deepEqual(amberOnNight.base, nightD.base); assert.deepEqual(amberOnNight.labels, nightD.labels);
 assert.equal(amberOnNight.roads.fill.motorway, "#f28c28"); assert.equal(amberOnNight.roads.fill.pedestrian, nightD.roads.fill.pedestrian, "a class that the palette lacks keeps its color");
 assert.equal(D.makeTheme(base, D.THEME_DATA.find((t) => t.id === "google"), nightD).base.background, "#f5f4f1");
+// a road palette draws the full fill: on Roads hollow (fill 0) its colors show
+const hollowD = D.makeTheme(base, D.THEME_DATA.find((t) => t.id === "hollow"));
+const highsatOnHollow = D.makeTheme(base, D.THEME_DATA.find((t) => t.id === "highsat"), hollowD);
+assert.deepEqual(highsatOnHollow.roads.opacity, D.defaultRoadOpacity()); assert.deepEqual(highsatOnHollow.base, hollowD.base);
+// each ready theme has one kind; the kinds are in the list's order
+assert.deepEqual(D.THEME_KINDS.map(([k]) => k), ["map", "overlay", "palette"]);
+assert.deepEqual(D.THEME_DATA.filter((t) => D.themeKind(t) === "palette").map((t) => t.id), ["amber", "cartoroads", "highsat", "monoroads"]);
+assert.deepEqual(D.THEME_DATA.filter((t) => D.themeKind(t) === "overlay").map((t) => t.id), ["overlay", "overlaydark", "hollow", "ghost"]);
 assert.deepEqual(D.THEME_DATA.filter((t) => t.group === "roadstyle").map((t) => t.id), ["google", "grey", "roadstyle", "osmcarto", "amber", "cartoroads", "highsat", "monoroads"]);
 assert.deepEqual(D.THEME_DATA.slice(0, 10).map((t) => t.id).slice(0, 2), ["light", "dark"], "Light and Dark are the first, the roadstyle themes come next");
 // the ground and the layers
@@ -158,8 +166,8 @@ const T = (id) => D.makeTheme(base, D.THEME_DATA.find((t) => t.id === id));
 assert.deepEqual(T("overlay").roads.opacity, { fill: 0.6, casing: 0.85, outline: true }); assert.deepEqual(T("overlaydark").roads.opacity, { fill: 0.6, casing: 0.85, outline: true });
 assert.deepEqual(T("hollow").roads.opacity, { fill: 0, casing: 1, outline: true }); assert.deepEqual(T("ghost").roads.opacity, { fill: 0.35, casing: 0.7, outline: true });
 assert.deepEqual(T("print").roads.opacity, { fill: 1, casing: 1, outline: false }, "a theme with no opacity has the default");
-const nightHollow = D.makeTheme(base, D.THEME_DATA.find((t) => t.id === "amber"), T("hollow"));
-assert.deepEqual(nightHollow.roads.opacity, T("hollow").roads.opacity, "a road palette keeps the opacity of the design");
+const amberHollow = D.makeTheme(base, D.THEME_DATA.find((t) => t.id === "amber"), T("hollow"));
+assert.deepEqual(amberHollow.roads.opacity, D.defaultRoadOpacity(), "a road palette draws the full fill and casing, also on Roads hollow");
 const rowExpr = ["+", ["*", ["at", ["+", ["*", ["get", "__rs_k"], 8], 0], ["literal", [0, 1, 2]]], 13], 5];
 const widthExpr = ["let", "row", rowExpr, ["interpolate", ["linear"], ["zoom"], 12, ["*", ["at", ["var", "row"], ["literal", [6, 4]]], 1], 14, ["*", ["at", ["var", "row"], ["literal", [12, 8]]], 1]]];
 const opExpr = ["interpolate", ["linear"], ["zoom"], 14, ["case", ["==", ["get", "__rs_k"], 2], 0, 1], 17, 1];

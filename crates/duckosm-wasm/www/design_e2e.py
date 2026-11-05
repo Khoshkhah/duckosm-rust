@@ -30,6 +30,7 @@ def settled(page):
     """the design is applied: the panel's state says so and no draw runs"""
     page.evaluate("window.designPanel.flush()")
     page.wait_for_function("!window.mapDrawing && /shows this design/.test(window.designPanel.state())", timeout=180_000)
+    page.evaluate("new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))")       # the map has drawn a frame of the new look
 
 
 def set_input(page, selector, value, event="input"):
@@ -142,7 +143,8 @@ with sync_playwright() as p:
     page.click("#design-tab-theme")
     ready = lambda: page.eval_on_selector_all("#ready-list [data-look]", "(l) => l.map((x) => x.dataset.look)")
     assert page.text_content("#theme-count").strip() == "33 of 33 ready themes" and len(ready()) == 33
-    assert ready()[:4] == ["light", "dark", "overlay", "overlaydark"], "Light and Dark are first, the Roads overlay next"
+    assert ready()[:3] == ["light", "dark", "google"], "the whole-map themes are first: Light, Dark, then the roadstyle themes"
+    assert ready()[-8:] == ["overlay", "overlaydark", "hollow", "ghost", "amber", "cartoroads", "highsat", "monoroads"], "then the roads on any map, then the road colors"
     page.fill("#theme-search", "google")
     assert "google" in ready() and len(ready()) < 6 and page.is_visible("#theme-search"), ("a search for google finds the theme Google like", ready())
     page.fill("#theme-search", "Google like")
@@ -172,14 +174,27 @@ with sync_playwright() as p:
             page.click("#design-pane [data-look=light]")
         page.click(f"#design-pane [data-look={t}]")
         settled(page)
-        assert page.evaluate("window.designPanel.get().theme") == t and "could not draw" not in page.evaluate("window.designPanel.state()")
-        sigs[t] = page.evaluate("JSON.stringify(window.duckMap.getStyle().layers.find((l) => l.id === 'rs-roads-simple').paint['line-color']).slice(0, 700)")
+        st = page.evaluate("[window.designPanel.get().theme, window.designPanel.state()]")
+        assert st[0] == t and "could not draw" not in st[1], (t, st)
+        sigs[t] = page.evaluate("JSON.stringify(window.duckMap.getStyle().layers.find((l) => l.id === 'rs-roads-simple').paint['line-color'])")   # the whole colour: the class colours are a lookup in it, not a table at its start
     assert len(set(sigs.values())) == len(ids), ("every theme gives its own road colors", [t for t in ids if list(sigs.values()).count(sigs[t]) > 1])
     # a road palette changes only the road colors: the base map of the design that is on now stays
     page.click("#design-pane [data-look=night]")
     page.click("#design-pane [data-look=amber]")
     now = page.evaluate("window.designPanel.get()")
     assert now["roads"]["fill"]["motorway"] == "#f28c28" and now["base"]["background"] == "#121417" and now["name"] == "Amber roads", "Amber roads on Night: amber roads, the Night ground"
+    # Roads hollow, then High saturation (Kaveh's path): the palette's fill shows, as after Light
+    opacity = lambda: page.evaluate("JSON.stringify(window.duckMap.getPaintProperty('rs-roads-simple', 'line-opacity'))")
+    page.click("#design-pane [data-look=light]"); page.click("#design-pane [data-look=highsat]"); settled(page)
+    after_light = opacity()
+    page.click("#design-pane [data-look=hollow]"); settled(page)
+    hollow = opacity()
+    page.click("#design-pane [data-look=highsat]"); settled(page)
+    assert page.evaluate("window.designPanel.get().roads.opacity") == {"fill": 1, "casing": 1, "outline": False}, "a road palette after Roads hollow draws the fill"
+    assert opacity() == after_light != hollow, "the road layer has the opacity of the style again, not the hollow one"
+    # the list shows the three kinds, each with its themes under it
+    assert page.eval_on_selector_all("#design-pane .kind", "(l) => l.map((x) => x.dataset.kind)") == ["map", "overlay", "palette"]
+    assert page.eval_on_selector_all("#design-pane .kind[data-kind=palette] ~ [data-look]", "(l) => l.map((x) => x.dataset.look)") == ["amber", "cartoroads", "highsat", "monoroads"]
     page.click("#design-pane [data-look=google]")
     assert page.evaluate("window.designPanel.get().base.background") == "#f5f4f1" and page.evaluate("window.designPanel.get().base.water") == "#aadaff", "a roadstyle base-map theme sets the ground and the water"
     settled(page)
@@ -398,9 +413,11 @@ with sync_playwright() as p:
     assert tiles_url() == gen and not page.evaluate("window.mapDrawing"), "a boundary change draws no new map"
     page.click("#design-tab-theme")
     page.click("#design-pane [data-look=print]")
+    settled(page)                    # a theme paints the boundary with its new look: one change on the map (restyle_e2e.py)
     b = bpaint()
     assert b["color"] == "#000000" and b["dash"] == [3, 2] and b["width"] == 1.5 and page.evaluate("window.designPanel.boundary().fillOpacity") == 0
     page.click("#design-pane [data-look=light]")
+    settled(page)
     assert bpaint()["color"] == "#2563eb" and bpaint()["dash"] is None and bpaint()["width"] == 2.5 and page.evaluate("window.designPanel.boundary()") == {"show": True, "color": "#2563eb", "width": 2.5, "dash": "solid", "fill": "#2563eb", "fillOpacity": 0.18, "fillOnRoads": False}
     settled(page)
     page.click("#design-tab-layers")

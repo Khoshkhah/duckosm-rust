@@ -265,6 +265,9 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   #design-panel .themes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   #design-panel .theme { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px; text-align: left; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--fg); font: inherit; cursor: pointer; }
   #design-panel .theme:hover { border-color: var(--accent); }
+  #design-panel .themes .kind { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+  #design-panel .themes .kind:first-child { margin-top: 0; }
+  #design-panel .themes .kind small { color: var(--muted); font-size: 12px; line-height: 1.35; }
   #design-panel .theme[aria-checked=true] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
   #design-panel .theme small { color: var(--muted); font-size: 12px; line-height: 1.35; }
   #design-panel .sw5 { display: flex; width: 100%; height: 14px; border-radius: 4px; overflow: hidden; border: 1px solid var(--line); }
@@ -2201,6 +2204,38 @@ function addOverview(style) {
     if (opaque) map.addLayer({ ...l, id: "rs-low-" + l.id, source: "rs-low" }, "rs-" + first.id);
   }
 }
+// A new look over the same tiles (roadstyle's LiveMap.setLook, docs/design/restyle_without_retile.md): each road layer, and its overview copy, gets the
+// new style's paint, layout and filter, and the images come again; the source, its tiles and the roads' feature state (the live colours) stay. Then
+// the dashboard reads the new style and the design's own paint comes on top, as after a draw. false: the new style has other layers (draw again).
+async function restyleRoads(style, paint = () => {}) {
+  const own = style.metadata?.["roadstyle:images"] || {};
+  const now = new Map(map.getStyle().layers.filter((l) => l.id.startsWith("rs-")).map((l) => [l.id, l]));
+  const roadIds = [...now.keys()].filter((id) => !id.startsWith("rs-low-"));
+  if (roadIds.length !== style.layers.length || style.layers.some((l) => !now.has("rs-" + l.id))) return false;
+  for (const n of Object.keys(own)) if (map.hasImage("rs-" + n)) map.removeImage("rs-" + n);
+  await addImages(Object.fromEntries(Object.entries(own).map(([n, v]) => ["rs-" + n, v])));
+  roadOrig.clear();                                 // paintRoads takes the new paint as the original
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  for (const l of style.layers) {
+    let json = JSON.stringify(l);
+    for (const n of Object.keys(own)) json = json.replaceAll(`"${n}"`, `"rs-${n}"`);   // the image names in the layout
+    const layer = JSON.parse(json);
+    for (const id of ["rs-" + l.id, "rs-low-" + l.id].filter((id) => now.has(id))) {
+      const was = now.get(id);
+      for (const k of new Set([...Object.keys(was.paint || {}), ...Object.keys(layer.paint || {})])) {
+        if (!same(was.paint?.[k], layer.paint?.[k])) map.setPaintProperty(id, k, layer.paint?.[k]);
+      }
+      for (const k of new Set([...Object.keys(was.layout || {}), ...Object.keys(layer.layout || {})])) {
+        if (!same(was.layout?.[k], layer.layout?.[k])) map.setLayoutProperty(id, k, layer.layout?.[k]);
+      }
+      if (!same(was.filter, layer.filter)) map.setFilter(id, layer.filter ?? null);
+    }
+  }
+  paint();                // the design's ground, layers and opacity: in this frame, and before the dashboard reads the style and tells its layers
+  rs.setStyle(style);     // the dashboard reads the new style (its controls, its legend and its state)
+  applyDesignLayers();
+  return true;
+}
 // A new style for the roads that show (the editor's redraw, a change of the tile format): the old layers and sources go, the new ones come
 async function useStyle(style) {
   removeRoads();
@@ -2772,15 +2807,35 @@ document.addEventListener("rs:basemapchange", paintGround);       // a base map 
 // (design.json in its folder, app/area_store.js). ----
 let designSave = null;
 const designSlug = () => areaStore.sanitizeSlug(areaName || $("name").value);
-async function redrawDesign(lookObj, isDefault, draw) {
+async function redrawDesign(lookObj, isDefault, draw, paint = () => {}) {
   duck.setLookText(isDefault ? null : JSON.stringify(lookObj));       // the next draw reads this look
   if (!draw) return "";
   if (editor) return "The level editor is open. The map shows this design after you close it and draw again.";
   if (!roadsShown) return "The map is not drawn yet. The design shows when you draw it (step 6).";
+  // a look that keeps the tiles (roadstyle's LiveMap.setLook, docs/design/restyle_without_retile.md): the new style over the same map, with no new
+  // worker and no tile cut again, and the roads keep their live colours. Else (or while a draw runs) the map is drawn again.
+  if (!drawing) {
+    try {
+      const t0 = performance.now();
+      const style = await duck.setLook();
+      window.lastRestyle = !style ? "the look needs new tiles" : "other layers";      // for the tests: why the map is drawn again
+      if (style && await restyleRoads(style, paint)) {
+        window.lastRestyle = "same tiles";
+        const s = num((performance.now() - t0) / 1000, 2);
+        $("mapnote").textContent = `${num(roadCount[$("mapmode").value] ?? 0)} roads, drawn in ${s} s (a new look on the same tiles)`;
+        return `The map shows this design: a new look on the same tiles, in ${s} s.`;
+      }
+    } catch (e) {
+      window.lastRestyle = "failed: " + e.message;
+      console.warn("a new look on the same tiles failed, the map is drawn again:", e);
+    }
+  }
+  const t1 = performance.now();
+  paint();                                           // a new map: the old one shows the design's ground and layers while the new one is drawn
   await showRoads();
   const note = $("mapnote").textContent;
   if (/^The map failed|needs more memory|draws at most/.test(note)) throw new Error(note);       // drawRoads writes its failure in the note and keeps the old map
-  return "The map shows this design.";
+  return `The map shows this design: a new map, in ${num((performance.now() - t1) / 1000, 2)} s.`;
 }
 function designChanged(p) {
   if (p.format !== duck.tileFormat) { $("tilefmt").value = p.format; $("tilefmt").onchange(); }       // the format of the map follows the profile
@@ -2795,7 +2850,7 @@ function designSaved(text) {
   designSave = setTimeout(() => { if (netBuilt) areaStore.saveDesign(designSlug(), text).catch(() => {}); }, 800);       // with the saved area
 }
 try {
-  const look = await fetch("map/look.json").then((r) => r.json());
+  const look = JSON.parse(await duck.pageLookText());
   designPanel = await initDesignPanel({ $, esc, look, redraw: redrawDesign, onProfile: designChanged, onBoundary: (b) => { boundaryNow = b; paintBoundary(); },
     onGround: (g) => { groundNow = g; paintGround(); }, onVisible: (v) => { visibleNow = v; applyVisible(); }, onRoads: (d) => { roadsNow = d; paintRoads(); }, has: hasLayer, preview: { get: previewValue, set: setPreview }, onSave: designSaved });
   let stored = null;
@@ -2923,7 +2978,7 @@ async function prepareArea() {
 }
 // the worker loads roadstyle's module by this URL (the deploy puts its version on it, version_refs.py)
 const editorPkgUrl = () => new URL("./map/pkg/roadstyle_wasm.js", location.href);
-const editorLook = () => (lookText ??= fetch("map/look.json").then((r) => r.text()));
+const editorLook = () => (lookText ??= duck.pageLookText());
 $("edit-open").onclick = async () => {
   // the editor draws every road of the area (all networks): the same limit as the map on a small device
   if (roadCount.all > window.mapMaxRoads) return editNote(`The level editor shows all ${num(roadCount.all)} roads of the area. ${SMALL_DEVICE ? "This device" : "A browser page"} draws at most ${num(roadLimit())}. ` +
@@ -2953,7 +3008,7 @@ $("edit-open").onclick = async () => {
     // `host`: the editor keeps the page's roads (it builds no roads or tiles of its own) and gives replaceRoads the edges that a change redrew;
     // `look`: the page's saved look, in which the editor finds the page's select and hover colours (it swaps them for its red and blue picks)
     editor = await levelEditor({ map, panel: $("sb"), backLabel: "Steps", pkgUrl, store, dashboard: rs, prefix: "rs-", levels: levels ?? undefined,
-      host: { edgeIdCol: "edge_id", replaceRoads }, look: await (lookText ??= fetch("map/look.json").then((r) => r.text())) });
+      host: { edgeIdCol: "edge_id", replaceRoads }, look: await (lookText ??= duck.pageLookText()) });
     lap("levelEditor()", t);
     lap("open, all", t0);
     editorStore = store;

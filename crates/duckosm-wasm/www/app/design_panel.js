@@ -4,7 +4,7 @@
 //
 //   initDesignPanel({ $, esc, look, redraw, onProfile, onBoundary, onGround, onVisible, onRoads, has, preview, onSave }) -> { open, close, isOpen, tab, get, text, set, patchProfile, profile, boundary, setVisible, refresh, load, setCount, flush, state }
 //
-// A change of the style draws the map again after 0.5 s of quiet (`redraw(lookObject, isDefault, draw)`: it gives the look to the map and, with `draw`, draws). A change of the profile calls `onProfile(profile)`, a change of the boundary calls `onBoundary(boundary)`, of the ground `onGround(ground)`, and of the layers `onVisible(visible)` (the page paints them at once: no new draw of the roads). `has(key)` tells whether the build has a layer (false: "not in this build"); `preview` = {get(), set(v)} is the base map under the map (checkerboard, blank, openfreemap, satellite, other);
+// A change of the style draws the map again after 0.5 s of quiet (`redraw(lookObject, isDefault, draw, paint)`: it gives the look to the map and, with `draw`, draws; it calls `paint()` when the new look shows, and the ground, the layers and the opacity of the design are then painted in the same frame). A change of the profile calls `onProfile(profile)`, a change of the boundary calls `onBoundary(boundary)`, of the ground `onGround(ground)`, and of the layers `onVisible(visible)` (the page paints them at once: no new draw of the roads). `has(key)` tells whether the build has a layer (false: "not in this build"); `preview` = {get(), set(v)} is the base map under the map (checkerboard, blank, openfreemap, satellite, other);
 // the Export card reads the profile through `profile()`.
 import * as D from "./design.js";
 import * as UT from "./user_themes.js";
@@ -34,6 +34,10 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
     return JSON.stringify(k);
   };
   const announce = () => { onProfile(design.profile); onBoundary(design.boundary); onGround(design.ground); onVisible(design.visible); onRoads(design); };
+  // a change that also changes the look (a theme) paints the ground, the layers and the opacity when the new look shows, not before: one change on the map
+  let held = false;
+  const announceSoon = () => { if (styleKey(design) !== lastKey) held = true; else { held = false; announce(); } };
+  const paintHeld = () => { if (held) { held = false; announce(); } };
   const profile = () => design.profile;
 
   // ---- the controls ----
@@ -76,7 +80,11 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
   const shownThemes = () => D.THEMES.filter((t) => D.themeMatches(t, themeFilter, themeQuery));
   const readyList = () => {
     const list = shownThemes();
-    return list.length ? list.map(themeCard).join("") : `<p class="why">No ready theme has these words in this filter.</p>`;
+    if (!list.length) return `<p class="why">No ready theme has these words in this filter.</p>`;
+    return D.THEME_KINDS.map(([k, n, why]) => {
+      const of = list.filter((t) => D.themeKind(t) === k);
+      return of.length ? `<div class="kind" data-kind="${k}"><b>${n}</b><small>${why}</small></div>${of.map(themeCard).join("")}` : "";
+    }).join("");
   };
   const paneTheme = () => sec("Ready themes", `<input type="search" id="theme-search" placeholder="Search themes: google, dark, print…" value="${esc(themeQuery)}" aria-label="Search themes">
       <div class="chips" role="group" aria-label="Filter themes">${D.THEME_FILTERS.map(([k, n]) => `<button type="button" class="chip" data-tf="${k}" aria-pressed="${themeFilter === k}">${n}</button>`).join("")}</div>
@@ -199,18 +207,18 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
     note = "Drawing the map…"; paintBar();
     try {
       lastKey = key;
-      note = (await redraw(D.applyToLook(look, design), key === styleKey(base), true)) ?? "The map shows this design.";
+      note = (await redraw(D.applyToLook(look, design), key === styleKey(base), true, paintHeld)) ?? "The map shows this design.";
     } catch (e) {
       lastKey = null; note = "The map could not draw this design: " + e.message;
     } finally {
-      busy = false; paintBar();
+      busy = false; paintHeld(); paintBar();
       if (again) { again = false; schedule(0); }
     }
   }
   function schedule(ms = 500) { clearTimeout(timer); timer = setTimeout(run, ms); }
   const changed = () => {
     design = D.normalize(design, base);
-    save(); schedule(); announce(); paintBar();
+    save(); schedule(); announceSoon(); paintBar();
   };
 
   // ---- events ----
@@ -237,7 +245,7 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
     const t = e.target.closest("[data-look]");
     if (t) {
       const keep = design.profile;
-      design = D.THEMES.find((x) => x.id === t.dataset.look).make(base, design);          // a road palette keeps the base map of the design that is on now
+      design = D.THEMES.find((x) => x.id === t.dataset.look).make(base, design);          // a road palette keeps the base map of the design that is on now (D.THEME_KINDS)
       design.profile = keep; origin = null; changed(); return paint();
     }
     const pr = e.target.closest("[data-profile]");
@@ -334,7 +342,7 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
   $("design-pane").addEventListener("change", (e) => { if (e.target.dataset.p === "name") { design.name = e.target.value; changed(); paintBar(); } });
   for (const t of TABS) $(`design-tab-${t}`).onclick = () => tabTo(t);
 
-  function set(d) { design = D.normalize(d, base); save(); schedule(0); announce(); paint(); }
+  function set(d) { design = D.normalize(d, base); save(); schedule(0); announceSoon(); paint(); }
   /** A change of the profile from outside the panel (the Export card, the tile format select). */
   function patchProfile(part) {
     design.profile = D.normalizeProfile({ ...design.profile, preset: "custom", ...part });
@@ -343,9 +351,8 @@ export async function initDesignPanel({ $, esc, look, redraw, onProfile = () => 
   /** A stored design (the text of a file). A bad text keeps the design that is now. `draw: false` only gives the look to the page (the next draw has it). */
   async function load(text, { draw = true } = {}) {
     try { design = D.fromFile(text, base); } catch (_) { return false; }
-    announce();
-    if (draw) schedule(0);
-    else { lastKey = styleKey(design); await redraw(D.applyToLook(look, design), lastKey === styleKey(base), false); }
+    if (draw) { announceSoon(); schedule(0); }
+    else { announce(); lastKey = styleKey(design); await redraw(D.applyToLook(look, design), lastKey === styleKey(base), false); }
     paint(); paintBar();
     return true;
   }
