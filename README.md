@@ -54,7 +54,7 @@ The user documents are also a [mkdocs](https://www.mkdocs.org) site, as in duckO
 
 Version 0.3.0. The network step is complete. The driving, walking and cycling networks of Monaco, Tartu and Estonia equal duckOSM row for row. Only the direction labels of some connectors differ, which duckOSM does not fix. Python duckOSM uses the wheel with `options.engine: rust`.
 
-Decided on 2026-11-04: the Rust engine moves into the duckOSM repository, as the Rust engine moved into roadstyle. This repository then keeps the browser page. The name is open: [name.md](docs/proposals/name.md).
+The Rust engine (`duckosm-core`, `duckosm-parquet`, `duckosm-duckdb`, `duckosm-build`, the CLI and the Python module) moved into the [duckOSM](https://github.com/Khoshkhah/duckOSM) repository (`rust/`) on 2026-11-04, as the Rust engine moved into roadstyle. Python duckOSM uses it by default. This repository keeps the browser page (`crates/duckosm-wasm`) and the docs, and takes `duckosm-core` and `duckosm-build` from duckOSM with a Git dependency. The releases 0.3.0 and older (the CLI archives and the wheels above) were built here. New releases of the CLI and the Python module come from duckOSM. The name of this repository is open: [name.md](docs/proposals/name.md).
 
 ## License
 
