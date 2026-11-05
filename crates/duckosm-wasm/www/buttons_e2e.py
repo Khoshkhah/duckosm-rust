@@ -1,6 +1,6 @@
 """The action buttons of the steps in headless Chromium (Playwright): each is `disabled` until its inputs are ready, with a clearly different look (muted
 background and text from the panel's tokens, the normal cursor, no hover change) and a short reason as text under it (no tooltip). Search (a name), GeoJSON
-(an area), Build (an area and a data file), Run (a query), Show on map and Edit levels (while a draw runs or the editor opens). On a computer (light and dark)
+(an area), Build (an area and a data file), Show on map and Edit levels (while a draw runs or the editor opens). On a computer (light and dark)
 and on a phone (390 x 844, touch).
 
     python crates/duckosm-wasm/www/buttons_e2e.py [out folder]
