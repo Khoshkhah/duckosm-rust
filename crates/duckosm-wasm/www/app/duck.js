@@ -361,6 +361,16 @@ let pageLook = null;
  *  file that changes while the page is open (a deploy) must not give two looks, because their tiles differ and each theme then draws a new map. */
 export const pageLookText = () => (pageLook ??= fetch(new URL("../map/look.json", import.meta.url)).then((r) => r.text()).catch((e) => { pageLook = null; throw e; }));
 export const setLookText = (t) => { lookText = t || null; };
+/** The text of the look that the map draws with now: the page's look with the design (setLookText), else map/look.json. */
+export const lookNowText = async () => lookText ?? await pageLookText();
+/**
+ * roadstyle's exportLook of the look of the map now, for the drawing positions `positions`: MapLibre layers with no source that read the raw
+ * columns highway, oneway, tunnel, bridge, casing_level and fill_level. The exports (app/export_style.js) take the look of the roads from it.
+ */
+export async function exportRoadLook(positions) {
+  const rs = await roadstyle(), look = rs.Look.fromJson(await lookNowText());
+  try { return JSON.parse(rs.exportLook(look, ["highway", "oneway", "tunnel", "bridge", "edge_id"], Int32Array.from(positions))); } finally { look.free(); }
+}
 // The tile format of the roads map: "mlt" (the default, roadstyle's format with smaller tiles) or "mvt". The style has the format (the
 // source's encoding) and each tile address has it (&f=, after the generation's ?g=), so that a tile of the other format is never reused.
 export let tileFormat = "mlt";

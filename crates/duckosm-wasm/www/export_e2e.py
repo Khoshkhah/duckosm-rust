@@ -5,6 +5,7 @@
 It uses tests/data/monaco_sample.osm.pbf and tests/data/monaco.geojson. The page loads fflate from cdn.jsdelivr.net.
 """
 import io
+import math
 import json
 import struct
 import pathlib
@@ -75,6 +76,15 @@ with sync_playwright() as p:
     if "folded" in (page.get_attribute("#step10-card", "class") or ""):
         page.click("#step10")
     assert page.locator("#export-list [data-fmt]").count() == 14
+    # each check box of the card is a plain check box (the rule of the 80 px number box "Width" took them too), also at the width of a phone
+    for vw, vh in ((1400, 900), (390, 844)):
+        page.set_viewport_size({"width": vw, "height": vh})
+        page.locator("#export-list .exp:has([data-fmt=geojson]) .export-merge").scroll_into_view_if_needed()
+        ws = page.eval_on_selector_all("#export-list input[type=checkbox]", "(l) => l.map((x) => x.getBoundingClientRect().width)")
+        assert ws and 0 < max(ws) <= 24, ("the check boxes are their own size", vw, ws)
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "no page wider than the window"
+    page.screenshot(path=str(out / "export_card_phone.png"))
+    page.set_viewport_size({"width": 1400, "height": 900})
     assert page.evaluate("document.getElementById('export-zmax').compareDocumentPosition(document.getElementById('export-seg')) & Node.DOCUMENT_POSITION_FOLLOWING"), "the network control comes after the tile section (it is for the files)"
     assert page.locator("#export-list .expsec").count() == 4 and page.locator("#export-seg [data-m]").count() == 3 and page.get_attribute("#export-seg [data-m=driving]", "aria-checked") == "true"
     assert [t.strip() for t in page.eval_on_selector_all("#export-list .expsec h3", "(l) => l.map((x) => x.textContent)")] == ["Tiles", "Network", "Visualization", "Simulation"], "tiles, the network, visualization and simulation are four sections"
@@ -101,7 +111,11 @@ with sync_playwright() as p:
     for f in two[:200]:
         other = byid[f["properties"]["edge_id_pair"]]
         assert other["properties"]["edge_id_pair"] == f["properties"]["edge_id"] and other["properties"]["direction"] != f["properties"]["direction"]
-        assert other["geometry"]["coordinates"][::-1] == f["geometry"]["coordinates"], "the other direction is the same line the other way"
+        # each direction is moved to its right (kepler.gl cannot offset a line): the start of one is apart from the end of the other by the two offsets
+        (ax, ay), (bx, by) = f["geometry"]["coordinates"][0], other["geometry"]["coordinates"][-1]
+        gap = math.hypot((ax - bx) * 111320 * math.cos(math.radians(ay)), (ay - by) * 110540)
+        want = f["properties"]["offset_m"] + other["properties"]["offset_m"]
+        assert want > 0 and abs(gap - want) < 0.05 + 0.02 * want, ("the two directions lie on two sides of the road", gap, want)
     assert all(not f["properties"]["twoway"] and f["properties"]["edge_id_pair"] is None for f in roads["features"] if f["properties"]["oneway"])
     # the option "One feature for a two-way road": the forward edge with the id of the reverse edge
     page.check("#export-list .exp:has([data-fmt=geojson]) .export-merge")
@@ -113,8 +127,10 @@ with sync_playwright() as p:
     assert all(f["geometry"]["type"] == "LineString" for f in roads["features"][:50]) and all(f["geometry"]["type"] == "Point" for f in nodes["features"][:50])
     assert "NaN" not in gj.read_text() and "Infinity" not in gj.read_text()
     props = roads["features"][0]["properties"]
-    assert all(k in props for k in ("level", "bridge", "tunnel", "layer", "surface", "highway", "twoway")), ("the roads carry the level and the bridge and tunnel columns", sorted(props))
-    assert any(f["properties"]["level"] not in (None, 0) for f in roads["features"]) or True
+    assert all(k in props for k in ("casing_level", "fill_level", "bridge", "tunnel", "layer", "surface", "highway", "twoway")), ("the roads carry the levels and the bridge and tunnel columns", sorted(props))
+    look_cols = ("fill_color", "fill_width_m", "casing_color", "casing_width_m", "offset_m", "stroke")
+    assert all(k in props for k in look_cols) and all(f["properties"]["fill_color"] and f["properties"]["fill_width_m"] > 0 for f in roads["features"]), ("the look's columns", sorted(props))
+    assert any(f["properties"]["fill_color"] == "#ffeeaa" for f in roads["features"] if f["properties"]["highway"] == "primary"), "the colors of the page's palette (liberty), not amber"
     # the other layers as GeoJSON files: buildings, water, land use ..., the street names and the one-way arrows
     lz = zipfile.ZipFile(download(page, "geojson_layers"))
     lnames = sorted(lz.namelist())
@@ -140,8 +156,8 @@ with sync_playwright() as p:
     assert blob[:2] == b"GP" and blob[3] == 1 and struct.unpack("<i", blob[4:8])[0] == 4326 and blob[8] == 1 and struct.unpack("<I", blob[9:13])[0] == 2, "GP header, then a little-endian WKB LineString"
     npts = struct.unpack("<I", blob[13:17])[0]
     x0, y0 = struct.unpack("<dd", blob[17:33])
-    first = next(f for f in roads["features"] if f["properties"]["edge_id"] == eid)
-    assert npts == len(first["geometry"]["coordinates"]) and abs(first["geometry"]["coordinates"][0][0] - x0) < 1e-9 and abs(first["geometry"]["coordinates"][0][1] - y0) < 1e-9
+    first = rows(page, f"SELECT ST_NPoints(geometry)::INTEGER AS n, ST_X(ST_StartPoint(geometry)) AS x, ST_Y(ST_StartPoint(geometry)) AS y FROM driving.edges WHERE edge_id = {eid}")[0]
+    assert npts == first["n"] and abs(first["x"] - x0) < 1e-9 and abs(first["y"] - y0) < 1e-9, "the GeoPackage has the center line of the table"
     tables = {r[0] for r in gp.execute("SELECT table_name FROM gpkg_contents")}
     assert {"roads", "nodes", "names", "arrows", "features_buildings"} <= tables, tables
     assert gp.execute("SELECT count(*) FROM features_buildings").fetchone()[0] == len(bl["features"]) and gp.execute("SELECT count(*) FROM arrows").fetchone()[0] == len(ar["features"])
@@ -151,9 +167,13 @@ with sync_playwright() as p:
     for t, q in styles.items():
         XML.fromstring(q.split("\n", 1)[1])          # the QML parses (the first line is the DOCTYPE)
     rq = XML.fromstring(styles["roads"].split("\n", 1)[1])
-    cats = [c.get("value") for c in rq.iter("category")]
-    assert "motorway" in cats and "residential" in cats and rq.find("renderer-v2").get("attr") == "highway" and rq.find("renderer-v2").get("symbollevels") == "1"
-    assert all(len(sym.findall("layer")) == 2 for sym in rq.iter("symbol")), "a casing and a fill in each symbol"
+    levels = {v for r in gp.execute("SELECT DISTINCT casing_level, fill_level FROM roads") for v in r}
+    rules = [r.get("key") for r in rq.iter("rule")]
+    assert rq.find("renderer-v2").get("type") == "RuleRenderer" and rq.find("renderer-v2").get("symbollevels") == "1"
+    assert sorted(rules) == sorted(f"{k}-{v}" for v in levels for k in ("casing", "fill")), ("a casing and a fill rule for each drawing position", rules, levels)
+    dd = [o.get("name") for o in rq.iter("Option") if o.get("type") == "Map" and o.get("name") in ("outlineWidth", "outlineColor", "offset")]
+    assert dd.count("outlineWidth") == len(rules) and dd.count("offset") == len(rules), "each line has a data-defined width and offset"
+    assert all("@map_scale" in o.get("value") for o in rq.iter("Option") if o.get("name") == "expression"), "each expression reads the zoom of the QGIS map"
     print(f"GeoPackage: {n_edges} roads and {n_nodes} nodes, layers {sorted(tables)}, QGIS styles for {sorted(styles)}")
     # the QGIS style as a file
     qf = download(page, "qml")
@@ -200,12 +220,14 @@ with sync_playwright() as p:
     page.uncheck("#export-list .exp:has([data-fmt=png]) .export-img-t")
     print("PNG with a transparent background: the corner has alpha 0")
 
-    # kepler.gl: a map file with the data and two layers colored by road class
+    # kepler.gl: a map file with one dataset for each drawing position, each with a casing layer under a fill layer that read the look's columns
     kp = json.loads(download(page, "kepler").read_text())
-    kd = kp["datasets"][0]["data"]
-    assert len(kd["allData"]) == n_roads and kd["fields"][0]["type"] == "geojson" and len(kp["config"]["config"]["visState"]["layers"]) == 2
-    assert kp["config"]["config"]["visState"]["layers"][0]["visualChannels"]["strokeColorField"]["name"] == "highway"
-    print(f"kepler.gl: {len(kd['allData'])} roads, 2 layers")
+    sets, klayers = [d["data"] for d in kp["datasets"]], kp["config"]["config"]["visState"]["layers"]
+    assert sum(len(d["allData"]) for d in sets) == n_edges and all(d["fields"][0]["type"] == "geojson" for d in sets) and len(klayers) == 2 * len(sets)
+    assert {l["visualChannels"]["strokeColorField"]["name"] for l in klayers} == {"casing_color", "fill_color"} and all(l["config"]["visConfig"]["thickness"] == 0.125 for l in klayers)
+    order = [l["config"]["dataId"] for l in klayers[::-1]]          # kepler.gl draws the last layer of the list first
+    assert order == sorted(order, key=lambda i: [d["id"] for d in sets].index(i)), "the drawing positions from the lowest up"
+    print(f"kepler.gl: {sum(len(d['allData']) for d in sets)} edges, {len(sets)} drawing positions, {len(klayers)} layers")
 
     # the segmented control picks the network of the files: Walking gives the walking edges
     page.click("#export-seg [data-m=walking]")

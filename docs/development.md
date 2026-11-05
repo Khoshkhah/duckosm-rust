@@ -165,6 +165,16 @@ download, "← Steps". It writes `editor.png` and `editor-dark.png` and prints t
 python crates/duckosm-wasm/www/editor_e2e.py out-editor
 ```
 
+Check the look of the exports in QGIS and kepler.gl (`docs/proposals/export-look.md`): QGIS with no screen draws the GeoPackage with its own
+style, and kepler.gl 3.2.6 in headless Chromium draws the kepler.gl map file, at zoom 13, 15, 17 and 18 of Monaco. The script compares each
+picture with the page's roads at the same view. It needs a conda environment with `qgis` from conda-forge (`QGIS_ENV`, default
+`~/miniconda3/envs/qgis-headless`), and it gets kepler.gl and React from CDNs. CI has no QGIS: run it before a merge of export work.
+
+```bash
+conda create -n qgis-headless -c conda-forge qgis python=3.12                # one time; qgis=3.40 for the LTR
+python crates/duckosm-wasm/www/qgis_e2e.py out-qgis
+```
+
 Check the level editor as a person uses it (real clicks, no test hook): two roads, a change, "← Steps" with the change waiting, Apply and solve.
 On a computer (light and dark) and on a phone (390 × 844, touch):
 

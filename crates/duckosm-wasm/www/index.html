@@ -233,7 +233,7 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   #export-seg button svg { width: 16px; height: 16px; }
   #export-seg button[aria-checked=true] { background: var(--accent); border-color: var(--accent); color: #fff; }
   #export-list .imgw { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; }
-  #export-list .imgw input { width: 80px; }
+  #export-list .imgw input[type=number] { width: 80px; }        /* the width of a picture; a checkbox keeps its own size */
   #export-list .zoomrow { padding: 4px 0 8px; display: grid; gap: 6px; }
   #export-list .zoomrow input[type=number] { width: 58px; }
   #export-list .chk { grid-column: 1 / -1; font-size: 12px; line-height: 1.35; }
@@ -2607,8 +2607,7 @@ for (const old of [...document.querySelectorAll("section.step")]) {
   if (areaStore.isSupported) renderSavedAreasList();
 }
 // card 10, Export: the networks that the build made, and one row for each format
-let lookObj = null;
-const exportLook = async () => (lookObj ??= JSON.parse(await (lookText ??= duck.pageLookText())));
+const exportLook = async () => JSON.parse(await duck.lookNowText());       // the look of the map now: the page's look with the design
 const exportQuery = async (sql) => { await duck.loadSpatial(); return (await duck.query(sql)).toArray().map((r) => r.toJSON()); };       // the spatial functions (ST_XMin, ST_AsGeoJSON) need the extension, which a restored area has not loaded yet
 const EXPORT_GROUPS = {
   Tiles: ["Tiles", "The map as vector tiles, for web maps and tile servers."],
@@ -2620,7 +2619,7 @@ function paintExport() {
   $("export-mode").value = modes.includes(was) ? was : modes[0] ?? "";
   const zoomRow = '<div class="zoomrow"><p class="small muted" id="export-profile"></p><label class="optrow"><input type="checkbox" id="export-full"><span class="t"><b>Layer edges</b><small>Every road of every network, with the columns of the profile.</small></span></label><span class="small">Zoom from <input id="export-zmin" type="number" min="0" max="18" value="0" aria-label="The lowest zoom"> to <input id="export-zmax" type="number" min="0" max="18" value="14" aria-label="The highest zoom"></span><label class="small"><input type="checkbox" id="export-auto"> The highest zoom that fits the limit</label><span id="export-tiles" class="small"></span><button type="button" class="link" id="export-design">Edit the tile profile (step 9) →</button></div>';
   const network = `<section class="expsec netsec"><h3>Network</h3><p class="small muted">The files below use one network.</p><div class="segmented" id="export-seg" role="radiogroup" aria-label="Network of the files">${modes.map((m) => `<button type="button" role="radio" data-m="${m}" aria-checked="${m === $("export-mode").value}">${icon(({ driving: "car", walking: "walk", cycling: "bike" })[m] ?? "arrow")}${m[0].toUpperCase() + m.slice(1)}</button>`).join("")}</div></section>`;
-  const row = (f) => `<div class="exp"><b>${esc(f.title)}</b><button type="button" class="btn sm" data-fmt="${f.id}"${f.tiles || f.needsMap ? " data-tiles" : ""}>Download</button><small>${esc(f.note)}</small>${f.width ? '<label class="small imgw">Width <input type="number" class="export-img-w" min="500" max="8000" step="100" value="2400" aria-label="Width of the picture in pixels"> px</label><label class="small imgw"><input type="checkbox" class="export-img-t"> Transparent background</label>' : ""}${f.merge ? '<label class="small imgw"><input type="checkbox" class="export-merge"> One feature for a two-way road</label>' : ""}</div>`;
+  const row = (f) => `<div class="exp"><b>${esc(f.title)}</b><button type="button" class="btn sm" data-fmt="${f.id}"${f.tiles || f.needsMap ? " data-tiles" : ""}>Download</button><small>${esc(f.note)}</small>${f.width ? '<label class="small imgw">Width <input type="number" class="export-img-w" min="500" max="8000" step="100" value="2400" aria-label="Width of the picture in pixels"> px</label><label class="small imgw"><input type="checkbox" class="export-img-t"> Transparent background</label>' : ""}${f.merge ? '<label class="small imgw"><input type="checkbox" class="export-merge"> One feature for a two-way road (the center lines, no look)</label>' : ""}</div>`;
   const section = (g) => `<section class="expsec"><h3>${EXPORT_GROUPS[g][0]}</h3><p class="small muted">${EXPORT_GROUPS[g][1]}</p>${g === "Tiles" ? zoomRow : ""}${exporter.FORMATS.filter((f) => f.group === g).map(row).join("")}</section>`;
   $("export-list").innerHTML = section("Tiles") + (modes.length > 1 ? network : "") + section("Visualization") + section("Simulation");
   paintTileCount();
@@ -2685,7 +2684,7 @@ $("export-list").addEventListener("click", async (e) => {
   b.disabled = true; $("export-status").textContent = `Making ${f.title}…`;
   try {
     const t0 = performance.now();
-    let ctx = { look: await exportLook(), imageWidth: Math.min(8000, Math.max(500, +b.closest(".exp").querySelector(".export-img-w")?.value || 2400)), transparent: !!b.closest(".exp").querySelector(".export-img-t")?.checked, mergeTwoWay: !!b.closest(".exp").querySelector(".export-merge")?.checked };         // the colors and widths of the map, for the styles of the files
+    let ctx = { look: await exportLook(), rsLook: duck.exportRoadLook, imageWidth: Math.min(8000, Math.max(500, +b.closest(".exp").querySelector(".export-img-w")?.value || 2400)), transparent: !!b.closest(".exp").querySelector(".export-img-t")?.checked, mergeTwoWay: !!b.closest(".exp").querySelector(".export-merge")?.checked };         // the colors and widths of the map, for the styles of the files
     if (f.needsMap || (f.id === "svg" && roadsShown)) ctx.style = { live: map.getStyle(), globalState: map.getGlobalState?.() ?? {} };
     if (f.tiles) {
       const p = profile(), box = await exportExtent(), [lo, hi] = profileZooms(box, p);

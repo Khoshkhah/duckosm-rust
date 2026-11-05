@@ -46,7 +46,7 @@ async function roadRows(query, m, geometry, extra = "", merge = false) {
   const join = `LEFT JOIN ${m}.edges p ON p.is_reverse <> e.is_reverse AND p.osm_id = e.osm_id AND p.source = e.target AND p.target = e.source AND left(p.edge_ref, length(p.edge_ref) - 1) = left(e.edge_ref, length(e.edge_ref) - 1)`;
   const cols = merge ? "p.edge_id::VARCHAR AS edge_id_reverse, (p.edge_id IS NOT NULL) AS twoway" : "(p.edge_id IS NOT NULL) AS twoway, CASE WHEN e.is_reverse THEN 'reverse' ELSE 'forward' END AS direction, p.edge_id::VARCHAR AS edge_id_pair";
   return query(`SELECT e.edge_id::VARCHAR AS edge_id, ${cols}, e.osm_id::VARCHAR AS osm_id, e.source::VARCHAR AS source, e.target::VARCHAR AS target,
-      e.name, e.highway, e.oneway, e.lanes, e.maxspeed_kmh, e.length_m, e.surface, e.access, e.bridge, e.tunnel, e.layer, e.junction, e.service${lv ? ", l.fill_level::INTEGER AS level" : ""}, ${geometry} AS g${extra}
+      e.name, e.highway, e.oneway, e.lanes, e.maxspeed_kmh, e.length_m, e.surface, e.access, e.bridge, e.tunnel, e.layer, e.junction, e.service${lv ? ", l.casing_level::INTEGER AS casing_level, l.fill_level::INTEGER AS fill_level" : ""}, ${geometry} AS g${extra}
     FROM ${m}.edges e ${join}
     ${lv ? "LEFT JOIN visualization.edge_levels l ON l.edge_id = e.edge_id" : ""}
     ${merge ? `WHERE NOT e.is_reverse OR p.edge_id IS NULL` : ""} ORDER BY e.edge_id`);
@@ -71,10 +71,32 @@ async function otherLayers(query, mode, geometry) {
   return out;
 }
 
-/** The roads as one GeoJSON file (a plain .geojson that kepler.gl, QGIS and web maps open; a LineString for each road, a two-way road once; the ids as text). */
+/** The drawing positions of the roads (their casing_level and fill_level; none: 0), for roadstyle's exportLook. */
+const positionsOf = (rows) => [...new Set(rows.flatMap((r) => [r.casing_level ?? r.fill_level ?? 0, r.fill_level ?? 0]))].sort((a, b) => a - b);
+
+/**
+ * The roads with the look of the page's map (docs/proposals/export-look.md): one feature for each edge, each direction of a two-way road moved to
+ * its side, with the colors and widths of the map at the zoom of the full split (lookFeatures). kepler.gl cannot offset a line, so the file has it.
+ * `ctx.rsLook(positions)`: roadstyle's exportLook of the look of the map; `ctx.look`: that look (for its zoom).
+ */
+async function lookRows(query, mode, ctx) {
+  const rows = (await roadRows(query, mode, "ST_AsGeoJSON(e.geometry)")).map(({ g, ...p }) => ({ ...p, coords: JSON.parse(g).coordinates }));
+  return lookFeatures(await ctx.rsLook(positionsOf(rows)), rows, lookZoom(ctx.look));
+}
+
+/**
+ * The roads as one GeoJSON file (a plain .geojson that kepler.gl, QGIS and web maps open; the ids as text). Default: each direction moved to its
+ * side, with the look's columns and `stroke` (the fill color, the name that geojson.io and GitHub read). `mergeTwoWay`: the center lines, a
+ * two-way road once.
+ */
 export async function geojson(query, mode, area, ctx) {
-  const roads = await roadRows(query, mode, "ST_AsGeoJSON(e.geometry)", "", !!ctx?.mergeTwoWay);
-  return { name: `${SLUG(area)}_${mode}_roads.geojson`, blob: featureCollection(roads), rows: roads.length, merged: !!ctx?.mergeTwoWay };
+  if (ctx?.mergeTwoWay) {
+    const roads = await roadRows(query, mode, "ST_AsGeoJSON(e.geometry)", "", true);
+    return { name: `${SLUG(area)}_${mode}_roads.geojson`, blob: featureCollection(roads), rows: roads.length, merged: true };
+  }
+  const feats = await lookRows(query, mode, ctx);
+  const rows = feats.map((f) => ({ ...f.properties, stroke: f.properties.fill_color, g: JSON.stringify({ type: "LineString", coordinates: f.coords }) }));
+  return { name: `${SLUG(area)}_${mode}_roads.geojson`, blob: featureCollection(rows), rows: rows.length, merged: false };
 }
 
 /** The other layers as GeoJSON files in one .zip (buildings, water, land use, railways, names, arrows ...): load the files that you want, one by one (kepler.gl opens one file at a time). */
@@ -220,7 +242,7 @@ export async function sumo(query, mode, area) {
 }
 
 import { decodeTile, encodeTile, addProps, indexOf } from "./mvt.js";
-import { qgisStyles, roadsQml, paletteOf, mapSvg, keplerMap, landColorsFrom } from "./export_style.js";
+import { qgisStyles, roadsQml, paletteOf, mapSvg, keplerMap, lookFeatures, lookZoom, landColorsFrom } from "./export_style.js";
 
 import { CLASS_FROM, OTHER_FROM } from "./design.js";
 // ---- tiles: the vector tiles of the map that is on screen (the roads and the base-map layers), made again by the map worker as MVT for a range of zooms,
@@ -506,7 +528,7 @@ const put0 = (g, v) => { while (v >= 128) { g.push((v & 127) | 128); v >>>= 7; }
 /**
  * A GeoPackage (OGC GeoPackage 1.2, SQLite) in EPSG:4326, with no spatial index: the tables `roads` (LineString, a two-way road once), `nodes` (Point), the other layers
  * (`features_*`, `names`, `arrows`) and, when `style` is given, a QGIS style for each layer in `layer_styles` (QGIS draws the layer with it at once).
- * `ctx.look`: the page's look (map/look.json); the colors and widths of the roads come from it.
+ * `ctx.rsLook(positions)`: roadstyle's exportLook of the look of the map; the style of the roads comes from it (export_style.js, roadsQml).
  */
 export async function geopackage(query, mode, area, ctx) {
   const SQL = await sqlite(), db = new SQL.Database();
@@ -541,7 +563,7 @@ export async function geopackage(query, mode, area, ctx) {
     db.run("INSERT INTO gpkg_contents (table_name, data_type, identifier, min_x, min_y, max_x, max_y, srs_id) VALUES (?, 'features', ?, ?, ?, ?, ?, 4326)", [L.name, L.name, ...box]);
     db.run("INSERT INTO gpkg_geometry_columns VALUES (?, 'geom', ?, 4326, 0, 0)", [L.name, L.type]);
   }
-  const styles = ctx?.look ? qgisStyles(ctx.look, layers.map((l) => l.name)) : {}, styled = Object.keys(styles).filter((t) => layers.some((L) => L.name === t));
+  const styles = ctx?.rsLook ? qgisStyles(await ctx.rsLook(positionsOf(roads)), layers.map((l) => l.name)) : {}, styled = Object.keys(styles).filter((t) => layers.some((L) => L.name === t));
   if (styled.length) {
     db.run(`CREATE TABLE layer_styles (id INTEGER PRIMARY KEY AUTOINCREMENT, f_table_catalog TEXT, f_table_schema TEXT, f_table_name TEXT, f_geometry_column TEXT, styleName TEXT, styleQML TEXT, styleSLD TEXT, useAsDefault BOOLEAN, description TEXT, owner TEXT, ui TEXT, update_time DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))`);
     for (const t of styled) db.run("INSERT INTO layer_styles (f_table_catalog, f_table_schema, f_table_name, f_geometry_column, styleName, styleQML, styleSLD, useAsDefault, description, owner) VALUES ('', '', ?, 'geom', 'duckOSM', ?, '', 1, 'The style of the duckOSM-rust map', '')", [t, styles[t]]);
@@ -593,7 +615,7 @@ async function readPmtiles(bytes) {
 export async function verify(id, r, { query, mode, modes = [mode] }) {
   const NO_TABLE = ["pmtiles", "mbtiles", "webmap", "qml", "geojson_layers", "style", "png"];      // the formats that have no count of the tables
   const roadsCount = ["geojson", "gpkg", "svg", "kepler"].includes(id);
-  const merged = id === "svg" || id === "kepler" || !!r.merged;
+  const merged = id === "svg" || !!r.merged;
   const nEdges = NO_TABLE.includes(id) || id === "geojson_nodes" ? 0 : await count(query, roadsCount ? roadCountSql(mode, merged) : `SELECT count(*) AS n FROM ${mode}.edges`);
   const nNodes = NO_TABLE.includes(id) || ["geojson", "svg", "kepler"].includes(id) ? 0 : await count(query, `SELECT count(*) AS n FROM ${mode}.nodes`);
   const same = (what, got, want) => { if (got !== want) throw new Error(`${what}: the file has ${fmt(got)}, the tables have ${fmt(want)}`); };
@@ -662,14 +684,16 @@ export async function verify(id, r, { query, mode, modes = [mode] }) {
       return { ok: true, text: `${fmt(nEdges)} roads in ${fills} classes (casing and fill); polygons: ${Object.entries(r.polygons).map(([k, v]) => `${k} ${fmt(v)}`).join(", ")}` };
     }
     if (id === "kepler") {
-      const k = r.kepler, d = k.datasets[0].data;
-      same("roads", d.allData.length, nEdges);
-      if (!k.config.config.visState.layers.length || d.fields[0].type !== "geojson") throw new Error("the map file has no layer or no geojson field");
-      if (d.allData.some((row) => row.length !== d.fields.length)) throw new Error("a row has not the number of the fields");
-      const classes = new Set(d.allData.map((row) => row[d.fields.findIndex((f) => f.name === "highway")]));
-      const colors = k.config.config.visState.layers[0].config.visConfig.strokeColorRange.colors.length;
-      if (colors < classes.size) throw new Error(`the color range has ${colors} colors for ${classes.size} road classes`);
-      return { ok: true, text: `${fmt(nEdges)} roads, ${d.fields.length} fields, 2 layers with ${colors} class colors. Not loaded in kepler.gl here` };
+      const k = r.kepler, sets = k.datasets.map((x) => x.data), layers = k.config.config.visState.layers;
+      same("roads", sets.reduce((n, d) => n + d.allData.length, 0), nEdges);
+      if (layers.length !== 2 * sets.length || sets.some((d) => d.fields[0].type !== "geojson")) throw new Error("a dataset has not a casing and a fill layer, or no geojson field");
+      for (const d of sets) {
+        if (d.allData.some((row) => row.length !== d.fields.length)) throw new Error("a row has not the number of the fields");
+        const c = d.fields.findIndex((f) => f.name === "fill_color"), fill = layers.find((l) => l.config.dataId === d.id && l.id.endsWith("_fill"));
+        const want = [...new Set(d.allData.map((row) => row[c]).filter(Boolean))].sort();
+        if (JSON.stringify(fill.config.visConfig.strokeColorRange.colors) !== JSON.stringify(want)) throw new Error(`the fill colors of ${d.id} are not the colors of its rows`);
+      }
+      return { ok: true, text: `${fmt(nEdges)} edges in ${sets.length} drawing positions, a casing and a fill layer for each; the colors of each layer are the colors of its rows. Not loaded in kepler.gl here` };
     }
     if (id === "geojson_layers") {
       const z = await unzip(r.blob), names = Object.keys(z);
@@ -679,9 +703,9 @@ export async function verify(id, r, { query, mode, modes = [mode] }) {
       return { ok: true, text: `${names.length} files, ${fmt(total)} features; each is a FeatureCollection with features` };
     }
     if (id === "qml") {
-      const d = xml(new TextEncoder().encode(r.qml)), cats = d.querySelectorAll("category").length, symbols = d.querySelectorAll("symbol").length, layers = d.querySelectorAll("symbol layer").length;
-      if (cats < 5 || layers !== 2 * symbols || cats < symbols) throw new Error("the style has too few categories, or a symbol has not a casing and a fill line");
-      return { ok: true, text: `${cats} categories of highway (links too), ${symbols} symbols with a casing and a fill line each; the file parses as XML. Not loaded in QGIS here` };
+      const d = xml(new TextEncoder().encode(r.qml)), rules = d.querySelectorAll("rule").length, symbols = d.querySelectorAll("symbol").length, layers = d.querySelectorAll("symbol layer").length;
+      if (rules !== 2 * r.positions.length || symbols !== rules || layers !== symbols) throw new Error(`the style has ${rules} rules for ${r.positions.length} drawing positions (want a casing and a fill rule for each)`);
+      return { ok: true, text: `${rules} rules: a casing and a fill for each of the ${r.positions.length} drawing positions (${r.positions.join(", ")}); the file parses as XML. Not loaded in QGIS here` };
     }
     if (id === "webmap") {
       const z = await unzip(r.blob), want = ["tiles.pmtiles", "style.json", "index.html", "serve.py", "README.txt"];
@@ -744,10 +768,15 @@ async function edgesCheck(r, query, modes) {
   return want === rows.size ? `; all ${fmt(want)} edges of all networks are in the tiles of zoom ${r.max}` : `; ${fmt(want)} of ${fmt(rows.size)} edges are in the tiles of zoom ${r.max} (the other classes start at a higher zoom)`;
 }
 
-/** The QGIS style of the roads as a .qml file: load it on the roads of the GeoJSON file (Layer Styling, Style, Load Style). The categories are the values of `highway`. */
+/**
+ * The QGIS style of the roads as a .qml file, for a layer of center lines with the columns of the GeoPackage's roads (highway, oneway, bridge,
+ * tunnel, casing_level, fill_level): Layer Styling, Style, Load Style. A rule for the casing and the fill of each drawing position of this network.
+ */
 export async function qml(query, mode, area, ctx) {
-  const text = roadsQml(paletteOf(ctx.look));
-  return { name: `${SLUG(area)}_roads.qml`, blob: new Blob([text], { type: "application/xml" }), rows: Object.keys(paletteOf(ctx.look)).length, qml: text };
+  const lv = await hasTable(query, "visualization", "edge_levels");
+  const rows = lv ? await query(`SELECT DISTINCT l.casing_level::INTEGER AS casing_level, l.fill_level::INTEGER AS fill_level FROM ${mode}.edges e JOIN visualization.edge_levels l USING (edge_id)`) : [];
+  const positions = rows.length ? positionsOf(rows) : [0], text = roadsQml(await ctx.rsLook(positions));
+  return { name: `${SLUG(area)}_${mode}_roads.qml`, blob: new Blob([text], { type: "application/xml" }), rows: positions.length, positions, qml: text };
 }
 
 /** The map as an SVG picture, drawn from the tables with the colors and widths of the page (the area, its roads, and the buildings, water and land use of the build). */
@@ -789,11 +818,12 @@ async function extentOf(query, mode) {
   return [e.w, e.s, e.e, e.n];
 }
 
-/** A kepler.gl map file (.json): the roads as data, with a casing layer and a fill layer colored like the page's map. Drop it on kepler.gl. */
+/** A kepler.gl map file (.json): the roads with the look of the page's map (lookRows), a casing and a fill layer for each drawing position. Drop it on kepler.gl. */
 export async function kepler(query, mode, area, ctx) {
-  const roads = (await roadRows(query, mode, "ST_AsGeoJSON(e.geometry)", "", true)).map(({ g, ...p }) => ({ type: "Feature", properties: Object.fromEntries(Object.entries(p).map(([k, v]) => [k, typeof v === "bigint" ? String(v) : v])), geometry: JSON.parse(g) }));
-  const map = keplerMap({ features: roads, palette: paletteOf(ctx.look), name: "roads" });
-  return { name: `${SLUG(area)}_${mode}_kepler.json`, blob: new Blob([JSON.stringify(map)], { type: "application/json" }), rows: roads.length, kepler: map };
+  const feats = await lookRows(query, mode, ctx);
+  for (const f of feats) for (const [k, v] of Object.entries(f.properties)) if (typeof v === "bigint") f.properties[k] = String(v);
+  const map = keplerMap(feats, "roads");
+  return { name: `${SLUG(area)}_${mode}_kepler.json`, blob: new Blob([JSON.stringify(map)], { type: "application/json" }), rows: feats.length, kepler: map };
 }
 
 /** The MapLibre style of the page's map as a file (style.json): the sources read `tiles.pmtiles` next to it; change the url if the tiles are somewhere else. */
@@ -809,12 +839,12 @@ export const FORMATS = [
   { id: "webmap", group: "Tiles", title: "Web map (tiles, style and viewer)", note: "A .zip with the tiles, the style of this page's map and a viewer page. Run \"python serve.py\" in the folder and open it in a browser: the map looks like this page. Needs the map (step 6).", run: webMap, tiles: true },
   { id: "pmtiles", group: "Tiles", title: "PMTiles", note: "The vector tiles of the map (MVT) in one file, for MapLibre, roadstyle and any static server. Needs the map (step 6).", run: pmtilesFile, tiles: true },
   { id: "mbtiles", group: "Tiles", title: "MBTiles", note: "The same tiles in a SQLite file, for QGIS and tile servers. Needs the map (step 6).", run: mbtilesFile, tiles: true },
-  { id: "gpkg", group: "Visualization", title: "GeoPackage", note: "Roads (lines) and nodes (points) in one .gpkg file, for QGIS and ArcGIS.", run: geopackage, merge: true, modes: ["driving", "walking", "cycling"] },
+  { id: "gpkg", group: "Visualization", title: "GeoPackage", note: "Roads (lines, one for each edge) and nodes (points) in one .gpkg file, with the look of this page's map for QGIS: colors, casings, a width for each zoom, and each direction of a two-way road on its own side. For QGIS and ArcGIS.", run: geopackage, modes: ["driving", "walking", "cycling"] },
   { id: "png", group: "Visualization", title: "Map image (PNG)", note: "One picture of the whole area, drawn with the style of this page's map. Needs the map (step 6).", run: png, needsMap: true, width: true, modes: ["driving", "walking", "cycling"] },
   { id: "svg", group: "Visualization", title: "Map image (SVG)", note: "One vector picture of the area (land, water, buildings, roads with casings), made from the tables. For reports and printing.", run: svg, width: true, modes: ["driving", "walking", "cycling"] },
-  { id: "kepler", group: "Visualization", title: "kepler.gl map", note: "One .json file with the roads and their style (casing and fill by road class). Drop it on kepler.gl.", run: kepler, modes: ["driving", "walking", "cycling"] },
-  { id: "qml", group: "Visualization", title: "QGIS style (.qml)", note: "The colors, casings and widths of this page's roads for QGIS. Load it on the GeoJSON roads (Layer Styling, Style, Load Style). The GeoPackage has it inside.", run: qml, modes: ["driving", "walking", "cycling"] },
-  { id: "geojson", group: "Visualization", title: "GeoJSON roads", note: "One .geojson file of lines, one for each edge: a two-way road is two features, one for each direction, as on the page's map. For kepler.gl, QGIS and web maps.", run: geojson, merge: true, modes: ["driving", "walking", "cycling"] },
+  { id: "kepler", group: "Visualization", title: "kepler.gl map", note: "One .json file: the roads with the colors and widths of this page's map, each direction of a two-way road on its own side, over and under in the map's order. Drop it on kepler.gl.", run: kepler, modes: ["driving", "walking", "cycling"] },
+  { id: "qml", group: "Visualization", title: "QGIS style (.qml)", note: "The look of this page's roads for QGIS: colors, casings, a width for each zoom, and each direction of a two-way road on its own side. For the roads of the GeoPackage, which has it inside (Layer Styling, Style, Load Style).", run: qml, modes: ["driving", "walking", "cycling"] },
+  { id: "geojson", group: "Visualization", title: "GeoJSON roads", note: "One .geojson file of lines, one for each edge: each direction of a two-way road on its own side, with the colors and widths of this page's map in its columns. For kepler.gl, QGIS and web maps.", run: geojson, merge: true, modes: ["driving", "walking", "cycling"] },
   { id: "geojson_layers", group: "Visualization", title: "GeoJSON layers", note: "A .zip of one .geojson file for each other layer: buildings, water, land use, railways, street names, one-way arrows. Load the files that you want.", run: geojsonLayers, modes: ["driving", "walking", "cycling"] },
   { id: "geojson_nodes", group: "Visualization", title: "GeoJSON nodes", note: "One .geojson file of points: the junctions and the ends of the roads.", run: geojsonNodes, modes: ["driving", "walking", "cycling"] },
   { id: "matsim", group: "Simulation", title: "MATSim network", note: "network.xml: nodes, and a link for each edge with length, free speed, capacity and lanes. Meters in the UTM zone of the area.", run: matsim, modes: ["driving", "walking", "cycling"] },

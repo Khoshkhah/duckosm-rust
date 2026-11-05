@@ -1,7 +1,11 @@
-// The style of the exported files (docs/dashboard.md, "Step 9: Export"): the colors and widths of the page's map (roadstyle's look, `map/look.json`) written for other tools.
+// The style of the exported files (docs/dashboard.md, "Step 10: Export", docs/proposals/export-look.md): the look of the page's map written for other tools.
+// The roads take their look from roadstyle's `exportLook` (`rsLook`: MapLibre layers with no source, a casing and a fill layer for each drawing
+// position, that read the raw columns highway, oneway, bridge, tunnel, casing_level and fill_level). This file has no copy of a color or a width.
 // - `qgisStyles`: a QGIS style (QML) for each layer of the GeoPackage, put in its table `layer_styles` (QGIS draws the layer with it at once).
+//   The roads: the expressions of `rsLook` in the QGIS expression language (`qgisExpr`), read for each feature at the zoom of the QGIS map.
+// - `lookFeatures` and `keplerMap`: the roads with the look at one zoom, each direction of a two-way road moved to its side (kepler.gl cannot
+//   offset a line); a kepler.gl map file (data and style in one JSON).
 // - `mapSvg`: a picture of the area as SVG, drawn from the tables.
-// - `keplerMap`: a kepler.gl map file (data and style in one JSON) of the roads.
 // Everything here is text: nothing reads the page or the tables.
 
 // the order of the road classes, from the one that is drawn first (the bottom) to the one that is drawn last (the top)
@@ -32,14 +36,103 @@ const lineLayer = (color, widthPx, pass, dash) => `      <layer class="SimpleLin
       </layer>
 `;
 
-/** The QML of the roads: one category for each class of `highway`; each symbol has a casing line and a fill line, and the passes put every casing under every fill (the sandwich of the map). */
-export function roadsQml(palette) {
-  const classes = Object.keys(palette), n = classes.length;
-  const links = ["motorway", "trunk", "primary", "secondary", "tertiary"].filter((c) => classes.includes(c));
-  const cats = classes.map((c, i) => `    <category render="true" symbol="${i}" value="${c}" label="${c}"/>\n`).join("") + links.map((c) => `    <category render="true" symbol="${classes.indexOf(c)}" value="${c}_link" label="${c}_link"/>\n`).join("") + `    <category render="true" symbol="${n}" value="" label="other"/>\n`;
-  const sym = (name, p, rank) => `    <symbol type="line" name="${name}" alpha="${p.opacity ?? 1}" clip_to_extent="1" force_rhr="0">\n${lineLayer(p.casing, p.casing_width, rank, p.dash)}${lineLayer(p.fill, p.width, n + 1 + rank, p.dash)}    </symbol>\n`;
-  const symbols = classes.map((c, i) => sym(i, palette[c], i)).join("") + sym(n, palette.residential ?? Object.values(palette)[0] ?? { fill: "#ffffff", casing: "#cfcdca", width: 2, casing_width: 3.5 }, 0);
-  return doc(`  <renderer-v2 type="categorizedSymbol" attr="highway" symbollevels="1" forceraster="0" enableorderby="0" referencescale="-1">\n  <categories>\n${cats}  </categories>\n  <symbols>\n${symbols}  </symbols>\n  </renderer-v2>\n`);
+// ---- the roads in QGIS: the expressions of rsLook in the QGIS expression language
+
+const PX_MM = 25.4 / 96;                         // one CSS pixel of the page's map in millimeters
+// The page's zoom (MapLibre, 512 px tiles) from the scale of the QGIS map at 96 dpi. A CRS that is not Web Mercator has a ground scale: times
+// cos(latitude). The round: the scale of zoom 13 gives 12.99999, and a class with the first zoom 13 must show at 13.
+const QGIS_ZOOM = "round(log(2, 295829355.45 * if(@map_crs IN ('EPSG:3857', 'EPSG:900913'), 1, cos(radians(y(transform(@map_extent_center, @map_crs, 'EPSG:4326'))))) / @map_scale), 3)";
+const qlit = (v) => (typeof v === "string" ? `'${v.replace(/'/g, "''")}'` : v == null ? "NULL" : typeof v === "boolean" ? (v ? "TRUE" : "FALSE") : Array.isArray(v) ? `array(${v.map(qlit).join(", ")})` : String(v));
+const columnOf = (x) => (x?.[0] === "get" ? x[1] : x?.[0] === "coalesce" && x[1]?.[0] === "get" ? x[1][1] : null);
+
+/** The labels of every `match` on a column, by column. A feature's index in them (@k_<column>) is computed once in each expression, and a match of plain values is an array_get. */
+function matchKeys(rsLook) {
+  const keys = {};
+  const walk = (e) => {
+    if (!Array.isArray(e)) return;
+    if (e[0] === "match" && columnOf(e[1])) { const ks = (keys[columnOf(e[1])] ??= []); for (let i = 2; i + 1 < e.length; i += 2) for (const k of [].concat(e[i])) if (!ks.includes(k)) ks.push(k); }
+    e.forEach(walk);
+  };
+  walk(rsLook.layers.map((l) => [l.filter, l.paint, l.layout]));
+  return keys;
+}
+
+/** A MapLibre expression of rsLook as a QGIS expression: the zoom is @z, a match on a column of `keys` reads @k_<column>. An operator that is not known stops the export. */
+export function qgisExpr(e, keys = {}) {
+  if (!Array.isArray(e)) return qlit(e);
+  const [op, ...a] = e, q = (x) => qgisExpr(x, keys);
+  switch (op) {
+    case "zoom": return "@z";
+    case "get": return `"${a[0]}"`;
+    case "literal": return qlit(a[0]);
+    case "coalesce": return `coalesce(${a.map(q).join(", ")})`;
+    case "to-string": return `coalesce(to_string(${q(a[0])}), '')`;
+    case "downcase": return `lower(${q(a[0])})`;
+    case "!": return `(NOT ${q(a[0])})`;
+    case "all": return `(${a.map(q).join(" AND ")})`;
+    case "any": return `(${a.map(q).join(" OR ")})`;
+    case "==": case "!=": case ">=": case "<=": case ">": case "<": return `(${q(a[0])} ${op === "==" ? "=" : op === "!=" ? "<>" : op} ${q(a[1])})`;
+    case "*": case "+": case "-": case "/": return `(${a.map(q).join(` ${op} `)})`;
+    case "in": return `array_contains(${q(a[1])}, ${q(a[0])})`;
+    case "case": { let s = "CASE"; for (let i = 0; i + 1 < a.length; i += 2) s += ` WHEN ${q(a[i])} THEN ${q(a[i + 1])}`; return `${s} ELSE ${q(a[a.length - 1])} END`; }
+    case "match": {
+      const c = columnOf(a[0]), val = new Map();
+      for (let i = 1; i + 1 < a.length; i += 2) for (const k of [].concat(a[i])) val.set(k, a[i + 1]);
+      const all = keys[c] && [...keys[c].map((k) => (val.has(k) ? val.get(k) : a[a.length - 1])), a[a.length - 1]];
+      if (all && all.every((v) => !Array.isArray(v) || v[0] === "literal")) {
+        const vs = all.map((v) => q(v));
+        return new Set(vs).size === 1 ? vs[0] : `array_get(array(${vs.join(",")}), @k_${c})`;
+      }
+      const x = q(a[0]); let s = "CASE";
+      for (const [k, v] of val) s += ` WHEN ${x} = ${qlit(k)} THEN ${q(v)}`;
+      return `${s} ELSE ${q(a[a.length - 1])} END`;
+    }
+    case "interpolate": {
+      if (a[0]?.[0] !== "linear" || a[1]?.[0] !== "zoom") throw new Error(`the QGIS style has no form for ${JSON.stringify(a.slice(0, 2))}`);
+      const st = []; for (let i = 2; i + 1 < a.length; i += 2) st.push([a[i], q(a[i + 1])]);
+      let s = `CASE WHEN @z <= ${st[0][0]} THEN ${st[0][1]}`;
+      for (let i = 1; i < st.length; i++) { const [z0, v0] = st[i - 1], [z1, v1] = st[i]; s += ` WHEN @z <= ${z1} THEN with_variable('t', (@z - ${z0}) / ${z1 - z0}, ${v0} * (1 - @t) + ${v1} * @t)`; }
+      return `${s} ELSE ${st[st.length - 1][1]} END`;
+    }
+    default: throw new Error(`the QGIS style has no form for the MapLibre operator "${op}"`);
+  }
+}
+
+const xmlText = (s) => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const optOf = (name, value, type = "QString") => `<Option name="${name}" type="${type}" value="${xmlText(value)}"/>`;
+const dataDefined = (props) => `<data_defined_properties><Option type="Map">${optOf("name", "")}<Option name="properties" type="Map">${Object.entries(props).map(([k, ex]) =>
+  `<Option name="${k}" type="Map">${optOf("active", "true", "bool")}${optOf("expression", ex)}${optOf("type", 3, "int")}</Option>`).join("")}</Option>${optOf("type", "collection")}</Option></data_defined_properties>`;
+
+/**
+ * The QML of the roads from rsLook: a rule for each layer of rsLook (the casing or the fill of one drawing position), drawn in the order of
+ * rsLook (symbol levels), and in one rule by rsLook's sort key. Each line has its color, width, offset and dash from the expressions of rsLook,
+ * read for each feature at the page's zoom of the QGIS map; the widths are the page's pixels as millimeters. The layer must have the columns of rsLook.
+ */
+export function roadsQml(rsLook) {
+  const keys = matchKeys(rsLook), Q = (e) => qgisExpr(e, keys);
+  // the zoom and each feature's index in the labels, once in each expression
+  const wrap = (s) => Object.entries(keys).reduceRight((acc, [c, ks]) => `with_variable('k_${c}', CASE ${ks.map((k, i) => `WHEN "${c}" = ${qlit(k)} THEN ${i}`).join(" ")} ELSE ${ks.length} END, ${acc})`, `with_variable('z', ${QGIS_ZOOM}, ${s})`);
+  const symbol = (i, l) => {
+    const p = l.paint, w = `(${Q(p["line-width"])}) * ${PX_MM}`;
+    const props = { outlineColor: wrap(Q(p["line-color"])), outlineWidth: wrap(w) };
+    if (p["line-offset"] != null) props.offset = wrap(`-(${Q(p["line-offset"])}) * ${PX_MM}`);      // MapLibre: + is to the right of the line; QGIS: + is to the left
+    const dash = p["line-dasharray"];        // in widths of the line; [1, 0] is no dash
+    if (dash) props.customDash = wrap(`with_variable('d', ${Q(dash)}, if(array_get(@d, 1) = 0, '1000;0', concat(array_get(@d, 0) * ${w}, ';', array_get(@d, 1) * ${w})))`);
+    const cap = { butt: "flat", round: "round", square: "square" }[l.layout?.["line-cap"]] ?? "round";
+    return `    <symbol type="line" name="${i}" alpha="${p["line-opacity"] ?? 1}" clip_to_extent="1" force_rhr="0"><layer class="SimpleLine" enabled="1" locked="0" pass="${i}"><Option type="Map">` +
+      optOf("capstyle", cap) + optOf("joinstyle", l.layout?.["line-join"] ?? "round") + optOf("line_color", "128,128,128,255") + optOf("line_style", "solid") + optOf("line_width", "0.5") +
+      optOf("line_width_unit", "MM") + optOf("offset", "0") + optOf("offset_unit", "MM") + optOf("use_custom_dash", dash ? "1" : "0") + optOf("customdash", "1000;0") + optOf("customdash_unit", "MM") +
+      `</Option>${dataDefined(props)}</layer></symbol>\n`;
+  };
+  const L = rsLook.layers, sort = L[0]?.layout?.["line-sort-key"];
+  const rules = L.map((l, i) => `    <rule key="${l.id}" label="${l.id}" symbol="${i}" filter="${xmlText(wrap(Q(l.filter)))}"/>\n`).join("");
+  return doc(`  <renderer-v2 type="RuleRenderer" symbollevels="1" enableorderby="${sort ? 1 : 0}" forceraster="0" referencescale="-1">
+  <rules key="root">
+${rules}  </rules>
+  <symbols>
+${L.map((l, i) => symbol(i, l)).join("")}  </symbols>
+${sort ? `  <orderby><orderByClause asc="1" nullsFirst="1">${xmlText(wrap(Q(sort)))}</orderByClause></orderby>\n` : ""}  </renderer-v2>
+`);
 }
 
 const fillQml = (color, outline) => doc(`  <renderer-v2 type="singleSymbol" symbollevels="0" forceraster="0" enableorderby="0" referencescale="-1">
@@ -125,9 +218,9 @@ const nodesQml = () => doc(`  <renderer-v2 type="singleSymbol" symbollevels="0" 
   </renderer-v2>
 `);
 
-/** The QML of each layer of the GeoPackage that has a style: {table: QML}. `layerNames`: the tables of the file. */
-export function qgisStyles(look, layerNames) {
-  const out = { roads: roadsQml(paletteOf(look)), nodes: nodesQml() };
+/** The QML of each layer of the GeoPackage that has a style: {table: QML}. `rsLook`: roadstyle's exportLook for the drawing positions of the roads; `layerNames`: the tables of the file. */
+export function qgisStyles(rsLook, layerNames) {
+  const out = { roads: roadsQml(rsLook), nodes: nodesQml() };
   for (const n of layerNames) {
     if (n === "names") out[n] = namesQml();
     else if (n === "arrows") out[n] = arrowsQml();
@@ -183,33 +276,115 @@ export function mapSvg({ bbox, roads, polygons = {}, palette, width = 2400, tran
     `<g id="road-casings">\n${strokes("casing", "casing_width")}\n</g>\n<g id="road-fills">\n${strokes("fill", "width")}\n</g>\n</svg>\n`;
 }
 
-// ---- a kepler.gl map file: the roads and their style in one JSON (drop it on kepler.gl)
+// ---- the roads with the look at one zoom, for kepler.gl and GeoJSON: kepler.gl cannot offset a line, and its widths are meters from zoom 14
 
-/** The kepler.gl map file for the roads. `rows`: GeoJSON features of the roads (properties and geometry). Two layers of the same data: the casing below, the fill above, both colored by `highway`. */
-export function keplerMap({ features, palette, name = "roads" }) {
-  const classes = [...new Set(features.map((f) => f.properties.highway))].filter(Boolean).sort();     // an ordinal scale takes its domain in this order
-  const colorOf = (c, key) => (palette[classOf(c)] ?? palette.residential ?? { fill: "#ffffff", casing: "#cfcdca" })[key];
+/** The value of a MapLibre expression of rsLook for the properties `p` at the zoom `z`. */
+export function evalExpr(e, p, z) {
+  if (!Array.isArray(e)) return e;
+  const [op, ...a] = e, v = (x) => evalExpr(x, p, z);
+  switch (op) {
+    case "zoom": return z;
+    case "get": return p[a[0]] ?? null;
+    case "literal": return a[0];
+    case "coalesce": { for (const x of a) { const r = v(x); if (r != null) return r; } return null; }
+    case "to-string": { const r = v(a[0]); return r == null ? "" : String(r); }
+    case "downcase": return String(v(a[0])).toLowerCase();
+    case "!": return !v(a[0]);
+    case "all": return a.every((x) => v(x));
+    case "any": return a.some((x) => v(x));
+    case "==": return v(a[0]) === v(a[1]);
+    case "!=": return v(a[0]) !== v(a[1]);
+    case ">=": return v(a[0]) >= v(a[1]);
+    case "<=": return v(a[0]) <= v(a[1]);
+    case ">": return v(a[0]) > v(a[1]);
+    case "<": return v(a[0]) < v(a[1]);
+    case "*": return a.reduce((s, x) => s * v(x), 1);
+    case "+": return a.reduce((s, x) => s + v(x), 0);
+    case "in": return v(a[1]).includes(v(a[0]));
+    case "case": { for (let i = 0; i + 1 < a.length; i += 2) if (v(a[i])) return v(a[i + 1]); return v(a[a.length - 1]); }
+    case "match": { const x = v(a[0]); for (let i = 1; i + 1 < a.length; i += 2) if ([].concat(a[i]).includes(x)) return v(a[i + 1]); return v(a[a.length - 1]); }
+    case "interpolate": {
+      const st = []; for (let i = 2; i + 1 < a.length; i += 2) st.push([a[i], a[i + 1]]);
+      if (z <= st[0][0]) return v(st[0][1]);
+      for (let i = 1; i < st.length; i++) if (z <= st[i][0]) { const t = (z - st[i - 1][0]) / (st[i][0] - st[i - 1][0]); return v(st[i - 1][1]) * (1 - t) + v(st[i][1]) * t; }
+      return v(st[st.length - 1][1]);
+    }
+    default: throw new Error(`the export has no value for the MapLibre operator "${op}"`);
+  }
+}
+
+/** A line ([[lon, lat]...]) moved `d` meters to its right (a negative d: to its left), with mitred joins (a mitre is at most 4 times d). */
+export function offsetLine(coords, d) {
+  if (!d || coords.length < 2) return coords;
+  const kx = 111320 * Math.cos((coords[0][1] * Math.PI) / 180), ky = 110540;          // meters of a degree, near the line
+  const P = coords.map(([x, y]) => [x * kx, y * ky]), right = (a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1; return [dy / l, -dx / l]; };
+  return P.map((pt, i) => {
+    const n0 = i > 0 ? right(P[i - 1], pt) : null, n1 = i < P.length - 1 ? right(pt, P[i + 1]) : null;
+    let [mx, my] = n0 && n1 ? [n0[0] + n1[0], n0[1] + n1[1]] : n0 ?? n1;
+    const l = Math.hypot(mx, my) || 1; mx /= l; my /= l;
+    const k = Math.min(1 / Math.max(n0 && n1 ? mx * n0[0] + my * n0[1] : 1, 1e-6), 4);
+    return [(pt[0] + mx * d * k) / kx, (pt[1] + my * d * k) / ky];
+  });
+}
+
+/** The zoom of the meters: the zoom where the look has the full split of the two directions (roads.split: offset_zoom + ramp_zooms of the look). */
+export const lookZoom = (look) => (look?.roads?.split?.offset_zoom ?? 15) + (look?.roads?.split?.ramp_zooms ?? 2);
+const hex = (c) => (typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c) ? c.toLowerCase() : null);
+
+/**
+ * The roads with the look of rsLook at the zoom `zoom`: for each row (its properties and `coords`), the line moved to its side, and the columns
+ * fill_color, fill_width_m, casing_color, casing_width_m (0: no casing) and offset_m (the page's pixels as meters on the ground at this zoom).
+ * Gives [{level, sort, properties, coords}], in the order of drawing (the drawing position, then the sort key of rsLook).
+ */
+export function lookFeatures(rsLook, rows, zoom) {
+  const byId = Object.fromEntries(rsLook.layers.map((l) => [l.id, l]));
+  return rows.map(({ coords, ...p }) => {
+    const props = { ...p, fill_level: p.fill_level ?? 0, casing_level: p.casing_level ?? p.fill_level ?? 0 };
+    const fill = byId[`fill-${props.fill_level}`], casing = byId[`casing-${props.casing_level}`];
+    if (!fill) throw new Error(`the look has no drawing position ${props.fill_level}`);
+    const mpp = (40075016.686 * Math.cos((coords[0][1] * Math.PI) / 180)) / (512 * 2 ** zoom), off = evalExpr(fill.paint["line-offset"] ?? 0, props, zoom);
+    const withCasing = casing && evalExpr(casing.filter, props, 22);          // the casing filter at a zoom where every class shows: the classes with no casing
+    const m = (px) => +(px * mpp).toFixed(2);
+    return { level: props.fill_level, sort: evalExpr(fill.layout?.["line-sort-key"] ?? 0, props, zoom), coords: offsetLine(coords, off * mpp),
+      properties: { ...p, fill_color: hex(evalExpr(fill.paint["line-color"], props, zoom)), fill_width_m: m(evalExpr(fill.paint["line-width"], props, zoom)),
+        casing_color: withCasing ? hex(evalExpr(casing.paint["line-color"], props, zoom)) : null, casing_width_m: withCasing ? m(evalExpr(casing.paint["line-width"], props, zoom)) : 0, offset_m: m(off) } };
+  }).sort((a, b) => a.level - b.level || a.sort - b.sort);
+}
+
+/**
+ * The kepler.gl map file of `features` (lookFeatures): one dataset for each drawing position, each with a casing layer under a fill layer. The
+ * layers take the color and the width from the columns: an ordinal scale whose colors are the sorted values of the column, a linear size scale whose
+ * range is its domain, and the thickness 0.125 (kepler.gl draws thickness × 8 × the width in meters from zoom 14).
+ */
+export function keplerMap(features, name = "roads") {
   const props = Object.keys(features[0]?.properties ?? {});
   const kind = (k) => { const v = features.find((f) => f.properties[k] != null)?.properties[k]; return typeof v === "number" ? (Number.isInteger(v) ? "integer" : "real") : typeof v === "boolean" ? "boolean" : "string"; };
   const fields = [{ name: "_geojson", format: "", type: "geojson", analyzerType: "GEOMETRY" }, ...props.map((k) => ({ name: k, format: "", type: kind(k), analyzerType: { integer: "INT", real: "FLOAT", boolean: "BOOLEAN", string: "STRING" }[kind(k)] }))];
-  const rows = features.map((f) => [f, ...props.map((k) => f.properties[k] ?? null)]);
-  const layer = (id, label, key, thickness) => ({
-    id, type: "geojson",
-    config: { dataId: name, label, color: [31, 186, 214], highlightColor: [252, 242, 26, 255], columns: { geojson: "_geojson" }, isVisible: true,
-      visConfig: { opacity: 1, strokeOpacity: 1, thickness, strokeColor: null, colorRange: { name: "duckOSM", type: "custom", category: "Custom", colors: classes.map((c) => colorOf(c, key)) },
-        strokeColorRange: { name: "duckOSM", type: "custom", category: "Custom", colors: classes.map((c) => colorOf(c, key)) }, radius: 10, sizeRange: [0, 10], radiusRange: [0, 50], heightRange: [0, 500], elevationScale: 5, enableElevationZoomFactor: true, stroked: true, filled: false, enable3d: false, wireframe: false },
-      hidden: false, textLabel: [{ field: null, color: [255, 255, 255], size: 18, offset: [0, 0], anchor: "start", alignment: "center" }] },
-    visualChannels: { colorField: null, colorScale: "quantile", strokeColorField: { name: "highway", type: "string" }, strokeColorScale: "ordinal", sizeField: null, sizeScale: "linear", heightField: null, heightScale: "linear", radiusField: null, radiusScale: "linear" },
-  });
-  let w = 180, s = 90, e = -180, nn = -90;
-  for (const f of features) { const c = f.geometry.type === "LineString" ? f.geometry.coordinates : f.geometry.coordinates.flat(); for (const [x, y] of c) { w = Math.min(w, x); e = Math.max(e, x); s = Math.min(s, y); nn = Math.max(nn, y); } }
-  const zoom = Math.max(1, Math.min(18, Math.log2(360 / Math.max(e - w, 1e-6)) - 0.5));
+  const levels = [...new Set(features.map((f) => f.level))].sort((a, b) => a - b), datasets = [], layers = [];
+  for (const lv of levels) {
+    const list = features.filter((f) => f.level === lv), id = `${name}_${lv < 0 ? "m" : ""}${Math.abs(lv)}`;
+    datasets.push({ version: "v1", data: { id, label: `${name}, drawing position ${lv}`, color: [128, 128, 128], allData: list.map((f) => [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: f.coords } }, ...props.map((k) => f.properties[k] ?? null)]), fields } });
+    for (const part of ["casing", "fill"]) {
+      const colors = [...new Set(list.map((f) => f.properties[`${part}_color`]).filter(Boolean))].sort(), ws = list.map((f) => f.properties[`${part}_width_m`]);
+      const range = { name: `duckOSM ${part}`, type: "custom", category: "Custom", colors };
+      layers.push({ id: `${id}_${part}`, type: "geojson",
+        config: { dataId: id, label: `${part}, position ${lv}`, color: [128, 128, 128], columns: { geojson: "_geojson" }, isVisible: colors.length > 0, hidden: false,
+          visConfig: { opacity: 1, strokeOpacity: 1, thickness: 0.125, strokeColor: null, colorRange: range, strokeColorRange: range, radius: 10, sizeRange: [Math.min(...ws), Math.max(...ws) + 0.001], radiusRange: [0, 50],
+            heightRange: [0, 500], elevationScale: 5, stroked: true, filled: false, enable3d: false, wireframe: false },
+          textLabel: [{ field: null, color: [255, 255, 255], size: 18, offset: [0, 0], anchor: "start", alignment: "center" }] },
+        visualChannels: { colorField: null, colorScale: "quantile", strokeColorField: { name: `${part}_color`, type: "string" }, strokeColorScale: "ordinal", sizeField: { name: `${part}_width_m`, type: "real" }, sizeScale: "linear", heightField: null, heightScale: "linear", radiusField: null, radiusScale: "linear" } });
+    }
+  }
+  let w = 180, s = 90, e = -180, n = -90;
+  for (const f of features) for (const [x, y] of f.coords) { w = Math.min(w, x); e = Math.max(e, x); s = Math.min(s, y); n = Math.max(n, y); }
+  const tooltip = ["name", "highway", "direction", "edge_id"].filter((k) => props.includes(k)).map((k) => ({ name: k, format: null }));
   return {
-    datasets: [{ version: "v1", data: { id: name, label: name, color: [31, 186, 214], allData: rows, fields } }],
+    datasets,
     config: { version: "v1", config: {
-      visState: { filters: [], layers: [layer("duckosm-casing", "road casing", "casing", 3), layer("duckosm-fill", "road fill", "fill", 1.6)], interactionConfig: { tooltip: { fieldsToShow: { [name]: [{ name: "highway", format: null }, { name: "name", format: null }, { name: "edge_id", format: null }] }, compareMode: false, compareType: "absolute", enabled: true }, brush: { size: 0.5, enabled: false }, geocoder: { enabled: false }, coordinate: { enabled: false } }, layerBlending: "normal", overlayBlending: "normal", splitMaps: [], animationConfig: { currentTime: null, speed: 1 } },
-      mapState: { bearing: 0, dragRotate: false, latitude: (s + nn) / 2, longitude: (w + e) / 2, pitch: 0, zoom, isSplit: false },
-      mapStyle: { styleType: "light", topLayerGroups: {}, visibleLayerGroups: { label: true, road: true, border: false, building: true, water: true, land: true, "3d building": false }, threeDBuildingColor: [224, 224, 224], mapStyles: {} } } },
+      // kepler.gl draws the first layer of the list on top
+      visState: { filters: [], layers: layers.reverse(), interactionConfig: { tooltip: { fieldsToShow: Object.fromEntries(datasets.map((d) => [d.data.id, tooltip])), compareMode: false, compareType: "absolute", enabled: true }, brush: { size: 0.5, enabled: false }, geocoder: { enabled: false }, coordinate: { enabled: false } }, layerBlending: "normal", overlayBlending: "normal", splitMaps: [], animationConfig: { currentTime: null, speed: 1 } },
+      mapState: { bearing: 0, dragRotate: false, latitude: (s + n) / 2, longitude: (w + e) / 2, pitch: 0, zoom: Math.max(1, Math.min(18, Math.log2(360 / Math.max(e - w, 1e-6)) - 0.5)), isSplit: false },
+      mapStyle: { styleType: "positron" } } },
     info: { app: "kepler.gl", created_at: new Date().toUTCString(), title: "duckOSM-rust roads" },
   };
 }
