@@ -149,7 +149,7 @@ A choice in one field can close another field, or shorten its list. The reason s
 ## Where your changes go
 
 - The page keeps the rules in your browser, for the area.
-- The tab **Changes** and the button **.yaml** of [step 5](result.md) download them as a fixes file.
+- The tab **Changes** and the button **.yaml** of [step 5](result.md) download them as a fixes file. [The fixes file (YAML)](fixes-file.md) explains each key of it.
 - The next build applies the rules to the OSM data, before it makes the networks. So the tables, the map and the exports have your fixes.
 - [The fixes file](fixes-file.md) gives the format of the file, each key, and the order in which the build applies the rules.
 - The fixes file is also the input of duckOSM. [osm-editing.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/osm-editing.md) has the design.
