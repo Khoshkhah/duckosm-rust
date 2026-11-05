@@ -43,7 +43,7 @@ Select an `.osm.pbf` file that is already cut to the area. The build does not cu
 |---|---|
 | **Networks** | Driving, walking and cycling. A network is a set of roads that one way of travel can use. Each network gives its own tables. |
 | **Layers** | Water, land use, buildings, railways and more. They make the base map of the area. A cut file gives no layers. With layers on, the build also makes the tables of walls and doors that step 7 needs. |
-| **Fixes** | A fixes file (`.yaml`). The build applies it to the OSM data. Step 7 writes such a file. |
+| **Fixes** | A fixes file (`.yaml`). The build applies it to the OSM data. Step 7 writes such a file. [The fixes file](fixes-file.md) gives its format. |
 | **Build** | Starts the build. The map shows the step that runs. |
 
 When the build ends, the card shows the time and the memory:

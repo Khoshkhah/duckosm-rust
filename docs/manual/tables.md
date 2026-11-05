@@ -79,10 +79,10 @@ FROM driving.edges GROUP BY highway ORDER BY km DESC;
 | Table | What it is for |
 |---|---|
 | `visualization.edge_levels` | The drawing order of each edge. A bridge is over the road under it. A tunnel is under the road over it. |
-| `visualization.edge_levels_meta` | One row: how the drawing order was made (from the tags, solved, or edited). |
-| `level_edits` | Your rules from [step 8](edit-levels.md), one rule for each row. The table exists only when you have rules. |
-| `level_heads` | The head lengths that you set in the level editor. |
-| `level_caps` | The line ends that you set in the level editor. |
+| `visualization.edge_levels_meta` | One row: how the drawing order was made (`tags`, `solve`, or `area` after an edit), and for which edges. |
+| `visualization.level_edits` | Your rules from [step 8](edit-levels.md), one rule for each row. The table exists only when you have rules. |
+| `visualization.level_heads` | The head lengths that you set in the level editor. |
+| `visualization.level_caps` | The line ends that you set in the level editor. |
 
 ## The buildings
 
