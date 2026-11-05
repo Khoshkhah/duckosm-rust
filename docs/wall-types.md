@@ -87,7 +87,7 @@ A run shorter than 3 m in total (a chamfer, a step) has the type and the reason 
 3. Monaco numbers before and after, in the same table as above. Targets: front walls under 35% of all walls; no building with 6 or more front walls unless it has 3 streets or more; fewer than 400 buildings with no back wall.
 4. A sheet of 12 Monaco buildings, before and after, drawn on the map. Kaveh looks at the sheet and decides. A number is a hint, not a proof.
 5. Tartu, only if Kaveh asks for a second city.
-6. `docs/osm-editing.md`, `docs/dashboard.md` (the list of rules) and `CHANGELOG.md` change in the same pull request.
+6. `docs/osm-editing.md`, `docs/manual/edit-osm.md` (the list of rules) and `CHANGELOG.md` change in the same pull request.
 
 ## Command for the numbers
 

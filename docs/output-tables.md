@@ -2,6 +2,7 @@
 
 A build writes one table for each part of the road network. This page lists the tables and their columns. The numbers come from a build of the Monaco sample (`tests/data/monaco_sample.osm.pbf`, three networks).
 
+- To learn what each table is for, read [The tables](manual/tables.md).
 - To make the tables, read [Your first map](first_map.md).
 - To see how the tables are made and tested against duckOSM, read [design.md](design.md).
 - To see the tables that are not made yet, read [tables.md](tables.md).
@@ -16,7 +17,7 @@ The CLI, the wheel and the page write the same tables in two forms:
 | GeoParquet | `<table>_<network>.parquet`, for example `edges_driving.parquet` | One file for each table and network. The tables that do not depend on a network end in `_main`, `_mm` or `_visualization`. |
 | DuckDB | `<name>.duckdb` | One schema for each network (`driving`, `walking`, `cycling`), and the schemas `main`, `mm` and `visualization`. The table names have no network suffix: `driving.edges`. |
 
-The CLI and the wheel write both forms by default. The page gives both as downloads (step 5 of the [page guide](dashboard.md)).
+The CLI and the wheel write both forms by default. The page gives both as downloads (step 5 of the [manual](manual/result.md)).
 
 ## Keys that join the tables
 

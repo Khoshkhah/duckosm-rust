@@ -1,17 +1,68 @@
 # duckosm-rust
 
-**Turn an OpenStreetMap file into a routable road network.** Give an `.osm.pbf` file (a country, a region or a city). Get the driving, walking and cycling networks as GeoParquet files and one DuckDB file: edges, nodes, the edge graph and the turn restrictions. Every row is equal to the output of [duckOSM](https://github.com/Khoshkhah/duckOSM) 0.6.0, and so is every `edge_id`, the key that other projects join on.
+**A portal that turns OpenStreetMap data into a routable road network, in your browser.**
 
-Use it in a browser page, from the command line, or from Python. All three run the same Rust code. Estonia takes 19 seconds and 1.5 GB (duckOSM in Python: 1,545 seconds and 10 GB).
+You choose an area on a map. The portal builds the driving, walking and cycling networks. You look at the roads, fix the errors in the OSM data, build again, and export the result to the software that you use. No server receives your data.
 
-![The browser page after a build: the roads of Monaco on the map](docs/img/dashboard/12-map-after-build.png)
+![The portal after a build: the roads of Monaco on the map](docs/img/dashboard/12-map-after-build.png)
+
+Open the portal: <https://khoshkhah.github.io/duckosm-rust/>. Read the manual: [The editing cycle](docs/manual/cycle.md).
+
+## What is important in it
+
+- **A routable network from OSM data.** The raw data has no junctions, no directions and no travel times. The build cuts the ways at the junctions, sets the length, the speed and the travel time of each edge, and applies the turn restrictions. The result is the input of a router or a simulator.
+- **A stable `edge_id` for each edge.** The `edge_id` is a hash of the OSM way and the two end nodes. The same road has the same `edge_id` in every build. Other projects join their data on it.
+- **The same result as [duckOSM](https://github.com/Khoshkhah/duckOSM) 0.6.0.** Every row of every table is equal to the output of duckOSM.
+- **A fix loop.** You can change the OSM data in the portal and build again. The tables, the map and the exports have your fixes.
+
+## Advantages
+
+| Advantage | What it means for you |
+|---|---|
+| Nothing to install | Open a page. The build runs in your browser. Your area and your data stay on your computer. |
+| Fast | Estonia takes 19 seconds and 1.5 GB. duckOSM in Python takes 1,545 seconds and 10 GB. |
+| One result everywhere | The page, the command line and Python run the same Rust code. They give the same tables. |
+| Three networks in one build | Driving, walking and cycling, with the edge graph and the turn restrictions. |
+| Fix the data | Change a road, a building, a node or a turn rule. Draw a new road. Build again. |
+| A clear map | The roads have the style of [roadstyle](https://github.com/Khoshkhah/roadstyle): outlines, bridges and tunnels. 33 ready themes. |
+| SQL in the page | Ask questions to the tables with DuckDB. No other tool is needed. |
+| Export to your tools | PMTiles, MBTiles, GeoPackage, GeoJSON, kepler.gl, MATSim and SUMO. |
+| Your work stays | The page saves each build in your browser. **Open** loads it with no new build. |
+
+![The panel Edit OSM data: a road is picked on the map and its form is open](docs/img/dashboard/17-fix-road.png)
+<!-- retake: after the duckOSM PR that moves Edit OSM data into duckOSM -->
+
+## The cycle
+
+```mermaid
+flowchart LR
+    A["Choose an area"] --> B["Give the OSM data"]
+    B --> C["Build"]
+    C --> D["Look at the map and the tables"]
+    D --> E{"Is the data right?"}
+    E -- "No" --> F["Edit OSM data"]
+    F --> C
+    E -- "Yes" --> G["Edit levels and design"]
+    G --> H["Export"]
+```
+
+[The editing cycle](docs/manual/cycle.md) explains each step.
+
+## What you get
+
+For each network, a build writes the tables `edges`, `nodes`, `edge_graph`, the turn restrictions and more. Each table is a GeoParquet file. One DuckDB file has all of them. [The tables](docs/manual/tables.md) explains each table.
 
 ## Start
 
 ### In the browser
 
-Open <https://khoshkhah.github.io/duckosm-rust/>. Search for a place, press the download button of the region file that covers it, and press **Build**. The page runs on your computer, and no server receives your data. It also fixes OSM data, draws the roads with [roadstyle](https://github.com/Khoshkhah/roadstyle) and exports to PMTiles, GeoPackage, GeoJSON, MATSim and SUMO.
-Next: [Your first map](docs/first_map.md) and [the page guide](docs/dashboard.md).
+1. Open <https://khoshkhah.github.io/duckosm-rust/>.
+2. In step 1, search for a place and click a match.
+3. In step 3, press **Get** for a region file that covers the area.
+4. In step 4, press **Build**.
+5. In step 6, press **Show on map**.
+
+[Your first map](docs/first_map.md) has the details.
 
 ### On the command line
 
@@ -21,8 +72,7 @@ tar xzf duckosm-rust-0.3.0-linux-x86_64.tar.gz
 ./duckosm-rust monaco.osm.pbf -o out --name monaco --modes driving,walking,cycling
 ```
 
-This writes `out/monaco.duckdb` and one `.parquet` file for each table. Archives for macOS, Windows and Linux aarch64 are on the [Releases](https://github.com/Khoshkhah/duckosm-rust/releases) page.
-Next: [the CLI guide](docs/cli.md).
+This writes `out/monaco.duckdb` and one `.parquet` file for each table. Archives for macOS, Windows and Linux aarch64 are on the [Releases](https://github.com/Khoshkhah/duckosm-rust/releases) page. [The CLI guide](docs/cli.md) has the options.
 
 ### In Python
 
@@ -36,25 +86,24 @@ res = dr.build("monaco.osm.pbf", "out/", modes=["driving", "walking"], name="mon
 res["modes"]["driving"]["edges"]
 ```
 
-The wheel has DuckDB inside and needs Python 3.9 or newer. There is no PyPI package yet.
-Next: [the Python guide](docs/python.md).
+The wheel has DuckDB inside. It needs Python 3.9 or newer. There is no PyPI package yet. [The Python guide](docs/python.md) has the details.
 
 ## Documents
 
 | For | Read |
 |---|---|
-| Users | [First map](docs/first_map.md), [page guide](docs/dashboard.md), [CLI](docs/cli.md), [Python](docs/python.md), [concepts](docs/concepts.md), [output tables](docs/output-tables.md), [troubleshooting](docs/troubleshooting.md) |
+| Users | [The manual](docs/manual/cycle.md), [first map](docs/first_map.md), [concepts](docs/concepts.md), [the tables](docs/manual/tables.md), [columns of the tables](docs/output-tables.md), [CLI](docs/cli.md), [Python](docs/python.md), [troubleshooting](docs/troubleshooting.md) |
 | Developers | [Development](docs/development.md), [design](docs/design.md), [page code](docs/app.md), [benchmark](docs/benchmark.md), [to do](docs/todo.md) |
 | Decisions | [Name](docs/proposals/name.md), [hosting](docs/proposals/hosting.md), [disk store for the result](docs/proposals/disk-store.md), [less memory in the build](docs/proposals/build-memory.md), [a build by tiles](docs/proposals/tiled-build.md) |
 | History | [Changelog](CHANGELOG.md) |
 
-The user documents are also a [mkdocs](https://www.mkdocs.org) site, as in duckOSM and roadstyle. To read it on your computer, run `pip install mkdocs mkdocs-material` and then `mkdocs serve`.
+The user documents are also a [mkdocs](https://www.mkdocs.org) site. To read it on your computer, run `pip install mkdocs mkdocs-material` and then `mkdocs serve`.
 
 ## Status
 
-Version 0.3.0. The network step is complete. The driving, walking and cycling networks of Monaco, Tartu and Estonia equal duckOSM row for row. Only the direction labels of some connectors differ, which duckOSM does not fix. Python duckOSM uses the wheel with `options.engine: rust`.
+Version 0.3.0. The driving, walking and cycling networks of Monaco, Tartu and Estonia equal duckOSM row for row. Only the direction labels of some connectors differ, which duckOSM does not fix.
 
-The Rust engine (`duckosm-core`, `duckosm-parquet`, `duckosm-duckdb`, `duckosm-build`, the CLI and the Python module) moved into the [duckOSM](https://github.com/Khoshkhah/duckOSM) repository (`rust/`) on 2026-11-04, as the Rust engine moved into roadstyle. Python duckOSM uses it by default. This repository keeps the browser page (`crates/duckosm-wasm`) and the docs, and takes `duckosm-core` and `duckosm-build` from duckOSM with a Git dependency. The releases 0.3.0 and older (the CLI archives and the wheels above) were built here. New releases of the CLI and the Python module come from duckOSM. The name of this repository is open: [name.md](docs/proposals/name.md).
+The Rust engine moved into the [duckOSM](https://github.com/Khoshkhah/duckOSM) repository (`rust/`) on 2026-11-04. Python duckOSM uses it by default. This repository keeps the browser page (`crates/duckosm-wasm`) and the docs. New releases of the CLI and the Python module come from duckOSM. The name of this repository is open: [name.md](docs/proposals/name.md).
 
 ## License
 

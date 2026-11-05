@@ -1,6 +1,6 @@
 # duckOSM in the browser: one app
 
-For a guide to every part of the page, with pictures, read [dashboard.md](dashboard.md). This file is the design and the history of the page.
+For a guide to every part of the page, with pictures, read [the manual](manual/cycle.md). This file is the design and the history of the page.
 
 Status: done, 2026-10-22 (the result is at the end). Kaveh's decision: "One app, one map". The button **Use in duckOSM** of the boundary
 tool opened another page (`index.html`, with its old design). Now the build is part of the boundary tool's page:
@@ -582,7 +582,7 @@ The check: `editor_e2e.py` (headless Chromium, Monaco through the File tab). It 
 
 ### Step 9: design
 
-Card 9 sets the style of the map and the profile of the tiles (the guide is in [dashboard.md](dashboard.md#step-9-edit-design)). It has a panel of its own, built like the fixes panel (`#design-panel`, `app/design_panel.js`). It is on at all times, because the design does not need a build.
+Card 9 sets the style of the map and the profile of the tiles (the guide is in [the manual](manual/edit-design.md)). It has a panel of its own, built like the fixes panel (`#design-panel`, `app/design_panel.js`). It is on at all times, because the design does not need a build.
 
 - **One object.** A design is one plain object (`app/design.js`) with every value: the road fills and casings, the width factors, the labels, the arrows, the base-map colors, the dark ranges and the profile. A file, a theme and the stored copy have the same shape. `normalize` repairs a wrong value and fills a missing one from the design of the look.
 - **How the style reaches the map.** `applyToLook` writes the design into a copy of `map/look.json`: the classes' colors in `roads.styles.classes`, the width curves in `roads.model.width`, and the other sections that the engine reads. It writes only the values that differ from the look, so the default design changes nothing. The panel gives the copy to `duck.setLookText`, and `showRoads` draws the map again. The worker (`map_worker.js`) reads `data.look` in place of `look.json`. `design_units.mjs` loads each theme in roadstyle's `Look.fromJson`.
