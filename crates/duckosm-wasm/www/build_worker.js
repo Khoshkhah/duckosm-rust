@@ -1,7 +1,7 @@
 // The build of duckosm-rust in a Web Worker, so the page stays responsive during a long build.
 // In: {pbf: ArrayBuffer} (a file cut to the area), {region: File, boundary: GeoJSON text, raw: true or false} (a
 // region file, cut while it is read, piece by piece; raw: also duckOSM's raw.* files, docs/features.md) or {json:
-// ArrayBuffer, boundary} (OSM JSON from the Overpass API), with {modes: "driving,walking", fixes: text or null}.
+// ArrayBuffer, boundary, raw} (OSM JSON from the Overpass API; raw: also raw.*, from the objects of the layers), with {modes: "driving,walking", fixes: text or null}.
 // Out: {step}, then {files: {name: Uint8Array}, summary, seconds: {load, build}, memoryMiB, threads, featuresSql, log}
 // (the buffers are transferred, not copied; featuresSql: the SQL of the base-map layers, with raw; log: [{step, ms,
 // mib}], the time of each step and the WebAssembly memory after it), or {error}. After {error}, the page makes a new
@@ -35,7 +35,7 @@ onmessage = async ({ data }) => {
     const res = data.region
       ? build_area(data.region, data.boundary, data.modes, fixes, !!data.raw, levels)
       : data.json
-        ? build_osm_json(new Uint8Array(data.json), data.boundary || undefined, data.modes, fixes, levels)
+        ? build_osm_json(new Uint8Array(data.json), data.boundary || undefined, data.modes, fixes, levels, !!data.raw)
         : build(new Uint8Array(data.pbf), data.modes, fixes, data.boundary || undefined, levels);
     const t2 = performance.now();
     const log = [{ step: "load the WebAssembly module", ms: t1 - t0, mib: loadMib }, ...JSON.parse(res.log)];
@@ -60,7 +60,7 @@ onmessage = async ({ data }) => {
         // WebAssembly memory only grows, so its size is the peak of all builds of this worker
         memoryMiB: Math.round(wasm.memory.buffer.byteLength / 2 ** 20),
         threads,
-        featuresSql: data.raw && data.region ? features_sql() : undefined,
+        featuresSql: data.raw && (data.region || data.json) ? features_sql() : undefined,
         log,
       },
       Object.values(files).map((f) => f.buffer),

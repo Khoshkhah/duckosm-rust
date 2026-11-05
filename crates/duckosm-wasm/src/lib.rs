@@ -240,7 +240,9 @@ pub fn build(
 
 /// The same as [`build`], from OSM JSON: the answer of the Overpass API to the query of the page (the highway
 /// ways and ferry lines with their nodes, and the `type=restriction` relations). With a `boundary` (GeoJSON),
-/// only the ways with a node inside are kept, as in [`build_area`].
+/// only the ways with a node inside are kept, as in [`build_area`]. With `raw`, the output also has the
+/// `raw_*.parquet` files of [`build_area`] (cut as osmium's `smart` does), from the objects of the base-map layers
+/// that the query also asked for.
 #[wasm_bindgen]
 pub fn build_osm_json(
     json: &[u8],
@@ -248,6 +250,7 @@ pub fn build_osm_json(
     modes: &str,
     fixes_yaml: Option<String>,
     levels: Option<String>,
+    raw: Option<bool>,
 ) -> Result<Output, JsError> {
     let parsed = boundary
         .as_deref()
@@ -259,7 +262,7 @@ pub fn build_osm_json(
         modes,
         fixes_yaml,
         boundary.as_deref(),
-        false,
+        raw.unwrap_or(false),
         levels,
     )
 }
@@ -289,7 +292,7 @@ fn js_build(
     let mut p = Params {
         modes: Mode::parse_all(&modes.split(',').collect::<Vec<_>>()).map_err(e)?,
         raw,
-        cut_pbf: raw,
+        cut_pbf: raw && matches!(input, Input::Area(..)), // the cut file: only of a region file
         building_faces: raw, // with the layers: the walls of the buildings (main.building_faces)
         built_at: Some((js_sys::Date::now() * 1000.0) as i64),
         timezone_entry: TIMEZONE_ENTRY.with(|e| e.borrow().clone()),
