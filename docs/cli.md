@@ -35,7 +35,7 @@ A region file is larger than the area that you want. Give a boundary and the pro
 duckosm-rust estonia.osm.pbf --boundary tartu.geojson -o out --name tartu --modes driving,walking
 ```
 
-The boundary is a GeoJSON file with a Polygon or MultiPolygon. The page writes one with its **GeoJSON** button (step 2). The cut keeps whole ways, as osmium `complete_ways` does. Without `--boundary`, the program uses the whole file.
+The boundary is a GeoJSON file with a Polygon or MultiPolygon. The page writes one with the button **Boundary** in step 2 (a GeoJSON file), the area (with its buffer). The cut keeps whole ways, as osmium `complete_ways` does. Without `--boundary`, the program uses the whole file.
 
 With `--boundary`, these options add more output:
 

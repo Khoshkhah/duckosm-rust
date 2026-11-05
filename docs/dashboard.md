@@ -134,7 +134,7 @@ The area is the union of hexagons of the [H3](https://h3geo.org) grid.
 
 1. Choose the level (5 to 10). The list shows the edge and the area of one cell.
 2. Click a hexagon on the map to add it. Click it again to remove it.
-3. **Clear the cells** removes all of them.
+3. **Unselect** removes all of them, and the area.
 
 A thin grid shows the hexagons in view, the hexagon under the pointer is lit, and the picked cells are filled. If the view has too many hexagons, the grid goes off and the text says to zoom in. The area has at most 500 cells and 5,000 km². A change of level removes the cells.
 
@@ -146,8 +146,8 @@ A thin grid shows the hexagons in view, the hexagon under the pointer is lit, an
 - **Buffer around the area (m).** Grows the area on all sides (0 to 50,000 m, in the UTM zone of the center), as duckOSM's `boundary.buffer_m`. The cut and the downloads use the grown area.
 - **Summary.** The size in km², the number of polygons and the number of vertices.
 - **Zoom to the area** (the magnifier in the title) moves the map to the area.
-- **Unselect the area** removes the area so that you can choose another one.
-- **GeoJSON** (at the bottom of the panel) downloads the area as `boundary.geojson`.
+- **Unselect** removes the area so that you can choose another one.
+- **Boundary** (beside **Unselect**) downloads the area with its buffer as `boundary.geojson`, for the CLI's `--boundary`.
 
 The boundary shows on the map in blue:
 
@@ -172,7 +172,7 @@ Card 3 tells the page where the OpenStreetMap data comes from. It has three tabs
 | **Networks** | The driving, walking and cycling networks to build. |
 | **Layers** | Water, land use, buildings, railways and more (the base map of the area). It needs a region file. With the layers on, the build also makes `main.building_faces` and the tables of the fixes panel. |
 | **Fixes** | A fixes file (`.yaml`) that the build applies. The fixes panel (step 7) writes one. |
-| **Build** (the main button) | Starts the build. The map shows a box with the step that runs. |
+| **Build** (the main button, in card 4 under the options) | Starts the build. The map shows a box with the step that runs. |
 
 When the build ends, the card shows the time and the memory:
 
@@ -495,7 +495,7 @@ Card 10 gives the network that you built to other software. It is off until a bu
 | **Web map** | `<area>_webmap.zip` | `tiles.pmtiles` (the tiles), `style.json` (the style of this page's map: roadstyle's layers with their global state), `index.html` (a MapLibre viewer), `serve.py` (a small web server with range requests) and a `README.txt`. Unpack it, run `python serve.py` in the folder, and open `http://localhost:8000/`: the map looks like this page. The viewer loads MapLibre and the pmtiles library from a CDN, so it needs internet. The icons of crossings and traffic signals, and the one-way arrows, are added by the page in the browser and are not in the package. |
 | **PMTiles** | `<area>_z<min>-<max>.pmtiles` | One PMTiles v3 file (gzip MVT tiles, Hilbert order, leaf directories for more than 4,000 tiles). For MapLibre, roadstyle and any static server. |
 | **MBTiles** | `<area>_z<min>-<max>.mbtiles` | The same tiles in a SQLite file (`metadata` and `tiles`, rows from the south). For QGIS and tile servers. |
-| **GeoPackage** | `<area>_<network>.gpkg` | The tables `roads` (LineString, one row for each edge, with `twoway`, `direction` and `edge_id_pair` as in GeoJSON; the check box **One feature for a two-way road** gives one row for it) and `nodes` (Point) in EPSG:4326, with no spatial index. For QGIS and ArcGIS. kepler.gl cannot open GeoPackage: use **GeoJSON roads** there. |
+| **GeoPackage** | `<area>_<network>.gpkg` | The tables `roads` (LineString, one row for each edge, with `twoway`, `direction` and `edge_id_pair` as in GeoJSON; the check box **One feature for a two-way road** gives one row for it) and `nodes` (Point) in EPSG:4326, with no spatial index. For QGIS and ArcGIS. |
 | **GeoJSON roads** | `<area>_<network>_roads.geojson` | One plain `.geojson` file with a LineString for each edge, as on the page's map: a two-way road is two features, one for each direction, each with its own `edge_id` and its own geometry (the line in the direction of travel). Properties: `twoway`, `direction` (`forward` or `reverse`), `edge_id_pair` (the id of the other direction), `edge_id`, `osm_id`, `source`, `target`, name, class, one-way, lanes, speed, length, surface, `bridge`, `tunnel`, `layer` and `level`. The check box **One feature for a two-way road** gives one feature for it (the forward edge, with `edge_id_reverse`). kepler.gl, QGIS and web maps open the file directly. |
 | **GeoJSON nodes** | `<area>_<network>_nodes.geojson` | One plain `.geojson` file of points: the junctions and the ends of the roads, with `node_id`. |
 | **MATSim network** | `<area>_<network>_matsim_network.xml` | A `network_v2.dtd` file: a node for each node, and a link for each edge with length (m), free speed (m/s), capacity (vehicles per hour), lanes and mode (`car`, `walk` or `bike`). Coordinates are meters in the UTM zone of the area. |

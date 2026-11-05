@@ -130,7 +130,9 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   .btn:disabled, .btn.primary:disabled { background: var(--surface); border-color: var(--line); color: var(--muted); opacity: 1; filter: none; cursor: default; }
   .why { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); }
   .why:empty { display: none; }
-  .sb-foot .why { grid-column: 1 / -1; margin: 0; }
+  .build-go { display: grid; margin-top: 12px; gap: 6px; }                     /* Build in card 4, under its options; the reason under it, as under every button */
+  .build-go #run { justify-self: end; min-width: 160px; }
+  .build-go .why { margin: 0; }
   .btn[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
   :focus-visible { outline: 2px solid var(--accent, currentColor); outline-offset: 2px; }
 
@@ -174,8 +176,11 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   .toolbox button:hover:not(:disabled) { background: var(--surface); }
   .toolbox button[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
   .toolbox button:disabled { opacity: 0.4; cursor: default; }
-  #h3-panel .rs-sel, #h3-clear { margin-bottom: 8px; }
-  #hint, #h3-hint { margin: 0; padding: 9px 11px; background: var(--bg); border-radius: 9px; font-size: 12.5px; color: var(--muted); }
+  #h3-panel .rs-sel { margin-bottom: 8px; }
+  .h3-box { padding: 9px 11px; background: var(--bg); border-radius: 9px; font-size: 12.5px; color: var(--muted); }
+  .h3-box p { margin: 0; }
+  .h3-box #h3-grid-note:not(:empty) { margin-top: 4px; }
+  #hint { margin: 0; padding: 9px 11px; background: var(--bg); border-radius: 9px; font-size: 12.5px; color: var(--muted); }
 
   #drop { display: grid; place-items: center; gap: 6px; text-align: center; padding: 26px 14px; border: 2px dashed var(--line); border-radius: 12px; color: var(--muted); cursor: pointer; }
   #drop:hover, body.dragging #drop { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
@@ -198,8 +203,8 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   #extracts input { accent-color: #ea580c; }
   #extracts .x { flex: 1; min-width: 0; }
   #extracts .x span { display: block; font-size: 12px; color: var(--muted); }
-  #extracts a.dl { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; color: var(--muted); }
-  #extracts a.dl:hover { background: var(--surface); color: var(--accent); }
+  #extracts .btn.sm { height: 34px; }                                                /* Get, Use and the download: one height in the row */
+  #extracts a.ex-dl { width: 34px; padding: 0; justify-content: center; color: var(--fg); }   /* the style of Get (.btn.sm), square */
   .btn.sm { height: 30px; padding: 0 10px; font-size: 12.5px; }
   #extracts label { flex-wrap: wrap; }
   /* a download: a line of its own under the extract, so the row keeps its width */
@@ -211,7 +216,9 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   #kept .k { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
   #kept .k span { flex: 1; min-width: 0; }
 
-  .sb-foot { flex: none; display: grid; grid-template-columns: 1fr 1.5fr; gap: 8px; padding: 12px 15px 14px; border-top: 1px solid var(--line); }
+  /* card 2: the boundary download and Unselect, side by side and of one width */
+  .area-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .area-acts .btn { justify-content: center; }
 
   /* steps 3 to 5: the data, the build, the result (docs/app.md) */
   #step7-card [hidden], #step8-card [hidden], #step9-card [hidden], #step10-card [hidden], #fix-panel [hidden], #design-panel [hidden] { display: none; }
@@ -234,12 +241,12 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   #export-list .chk.bad { color: var(--error, #b91c1c); }
   /* the fixes' own panel (like the level editor's): the steps, the title and the footer go while it is open, and the road popup is off */
   #fix-panel { display: none; }
-  body.editing-fixes #sb .sb-top, body.editing-fixes #sb .sb-body, body.editing-fixes #sb .sb-foot { display: none; }
+  body.editing-fixes #sb .sb-top, body.editing-fixes #sb .sb-body { display: none; }
   body.editing-fixes #fix-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
   body.editing-fixes #sb #rs-fold-all { display: none; }
   /* the design's own panel: the same shell (header, tabs, body, bar); the road popup stays, so a click on a road still shows it */
   #design-panel { display: none; }
-  body.editing-design #sb .sb-top, body.editing-design #sb .sb-body, body.editing-design #sb .sb-foot { display: none; }
+  body.editing-design #sb .sb-top, body.editing-design #sb .sb-body { display: none; }
   body.editing-design #design-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
   body.editing-design #sb #rs-fold-all { display: none; }
   div#design-panel .fix-tabs { grid-template-columns: repeat(5, 1fr); gap: 2px; margin-inline: 10px; }
@@ -476,7 +483,6 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   body.picking #map canvas { cursor: crosshair; }
   body.h3 #map canvas { cursor: pointer; }
   /* the level editor holds the page's one panel: roadstyle's editor hides the steps (.sb-body) and the title; the footer goes too */
-  body.editing .sb-foot { display: none; }
   @media (max-width: 700px) {
     /* a phone: roadstyle's phone form (the bar at the top, the panel as a bottom sheet with three heights: closed, 40 %, full). The page itself
        never scrolls. The map's padding follows the sheet (padMap() in the script), so the area stays above it. */
@@ -590,12 +596,10 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
 
 <section id="h3-panel" role="tabpanel" aria-labelledby="tab-h3" hidden>
   <select id="h3-level" aria-label="The size of a hexagon (H3 level)"></select>
-  <button id="h3-clear" class="btn" type="button" disabled>Clear the cells</button>
-  <p id="h3-hint" aria-live="polite">Click a hexagon on the map to add it to the area.</p>
-  <p id="h3-grid-note" class="small muted" style="margin:6px 0 0"></p>
+  <div class="h3-box"><p id="h3-hint" aria-live="polite">Click a hexagon on the map to add it to the area.</p><p id="h3-grid-note"></p></div>
 </section>
 
-<div class="row" style="margin-top:8px"><button class="btn area-clear" type="button" disabled>Unselect the area</button></div>
+<div class="area-acts"><button class="btn area-clear" type="button" disabled aria-label="Unselect the area">Unselect</button></div>
 <div id="areas-src" hidden>
   <p class="small muted" style="margin:0 0 8px">Built areas kept in this browser (OPFS). Open an area to load its tables and map with no build.</p>
   <div id="saved-areas-list" style="display:flex;flex-direction:column;gap:8px;max-height:420px;overflow-y:auto">
@@ -611,7 +615,7 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
 <input id="name" type="text" aria-label="Name of the area" placeholder="Name">
 <label class="small muted" for="buffer" style="display:flex;align-items:center;gap:8px;margin-top:8px">Buffer around the area (m)<input id="buffer" type="number" min="0" max="50000" step="50" value="0" inputmode="numeric" style="width:96px;margin-left:auto"></label>
 <div id="summary" aria-live="polite"></div>
-<div class="row" style="margin-top:8px"><button class="btn area-clear" type="button" disabled>Unselect the area</button></div>
+<div class="area-acts"><button id="save" class="btn" type="button" disabled aria-label="Download the boundary (GeoJSON)"><svg><use href="#i-download"/></svg>Boundary</button><button class="btn area-clear" type="button" disabled aria-label="Unselect the area">Unselect</button></div>
 </section>
 
 <section id="extracts-box" class="step" aria-labelledby="step3">
@@ -651,6 +655,8 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   <details class="drow"><summary>Fixes</summary>
     <label class="pick"><svg><use href="#i-upload"/></svg><span id="fixes-name">Select a fixes file (.yaml)</span><input id="fixes" type="file" accept=".yaml,.yml"></label>
   </details>
+  <div class="build-go"><button id="run" class="btn primary" disabled>Build<svg><use href="#i-arrow"/></svg></button>
+  <p id="buildhint" class="why" aria-live="polite"></p></div>
   <p id="buildstatus" class="progress" aria-live="polite"></p>
   <div id="buildinfo" class="pg-scroll">
   <details id="builddetails" class="drow" hidden><summary>Build details</summary><table class="steplog"><tbody></tbody></table></details>
@@ -715,11 +721,6 @@ FROM driving.edges GROUP BY highway ORDER BY edges DESC</textarea>
 
 </div>
 
-<footer class="sb-foot">
-  <button id="save" class="btn" disabled><svg><use href="#i-download"/></svg>GeoJSON</button>
-  <button id="run" class="btn primary" disabled>Build<svg><use href="#i-arrow"/></svg></button>
-  <p id="buildhint" class="why" aria-live="polite"></p>
-</footer>
 <div id="fix-panel" aria-label="Edit OSM data">
   <div class="fix-hd"><button id="fix-back" class="btn" type="button"><svg><use href="#i-chevron"/></svg>Steps</button><h2>Edit OSM data</h2><button id="fix-hide" class="btn" type="button" title="Hide panel" aria-label="Hide panel" aria-controls="sb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/><path d="m8.5 9.5 2.5 2.5-2.5 2.5"/></svg></button></div>
   <div class="fix-tabs" role="tablist" aria-label="What to fix">
@@ -1497,7 +1498,6 @@ async function h3Open() {
 // the text under the buttons: what to do, the size of the picks, or why the last click did nothing
 function h3Text(km2, note) {
   const n = cells.size;
-  $("h3-clear").disabled = !n;
   $("h3-hint").textContent = note ?? (n ? `${num(n)} cell${n > 1 ? "s" : ""}, ${num(km2, 2)} km². Click a hexagon to add or remove it.` : "Click a hexagon on the map to add it to the area.");
 }
 
@@ -1586,6 +1586,15 @@ document.addEventListener("rs:themechange", (e) => h3Paint(e.detail?.theme));
 // zoom in until about 150 hexagons are in view (a zoom step is 4 times the area); the button in the note does it, and the tab does it when it opens on a view that is too large
 const h3ZoomIn = () => map.easeTo({ zoom: Math.min(map.getZoom() + Math.max(1, Math.log(h3Estimate / 150) / Math.log(4)), 18), duration: 600 });
 $("h3-grid-note").addEventListener("click", (e) => { if (e.target.closest("#h3-zoom")) h3ZoomIn(); });
+// Picking hexagons (body.h3) is on while the H3 tab is open in card 1. It ends when the person works elsewhere (a build, another step's card, an
+// editor, card 1 folded), so a click on the map no longer picks a hexagon there; opening card 1 again, or the tab, starts it again.
+function h3Mode(on) {
+  on = on && $("tab-h3").getAttribute("aria-selected") === "true";
+  if (document.body.classList.contains("h3") === on) return;
+  document.body.classList.toggle("h3", on);
+  h3Grid();                                                  // off: the grid and the lit hexagon go away
+  document.dispatchEvent(new CustomEvent("rs:toprowschange"));
+}
 map.on("mousemove", async (ev) => {                       // the hexagon under the pointer is lit
   if (!document.body.classList.contains("h3")) return;
   let h3;
@@ -1616,7 +1625,6 @@ $("h3-level").onchange = async () => {
   h3Update(h3, had ? "You changed the level. The cells are removed." : undefined);
   h3Hover = null; h3Grid();
 };
-$("h3-clear").onclick = async () => { cells.clear(); h3Update(await h3Lib()); };
 
 // ---- the output: the format of `duckosm boundary`, a FeatureCollection with one Feature ----
 const text = () => JSON.stringify({ type: "FeatureCollection", features: [
@@ -1651,7 +1659,7 @@ function canBuild() {
   $("run").disabled = building || !!missing;
   $("save").disabled = !area;
   // the reason is the text under the buttons (not a tooltip); GeoJSON needs only the area. While it builds, the button has a spinner and the progress is in the map's busy box (progress())
-  $("buildhint").textContent = building ? "" : missing || (area ? "" : "GeoJSON needs an area: choose one in step 1.");
+  $("buildhint").textContent = building ? "" : missing || "";
   $("run").classList.toggle("busy", building);
   $("run").toggleAttribute("aria-busy", building);
   refreshSteps();
@@ -1692,7 +1700,7 @@ function renderExtracts() {
       : regions.relay ? `<button class="btn sm" data-get="${i}"${getting ? " disabled" : ""}>Get</button>` : "";
     return `<label><input type="radio" name="extract" value="${i}"${i === shown ? " checked" : ""} aria-label="Show ${esc(x.name)} on the map">` +
       `<span class="x">${esc(x.name)}<span>${k ? `kept · ${mb(k.size)} MB · ${day(k.modified)}` : `${esc(x.id)} · ${num(Math.round(x.km2))} km²`}</span></span>${what}` +
-      `<a class="dl" href="${esc(x.pbf)}" title="Download ${esc(x.name)} (.osm.pbf) to this computer" aria-label="Download ${esc(x.name)}">${icon("download")}</a>${prog}</label>`;
+      `<a class="btn sm ex-dl" href="${esc(x.pbf)}" title="Download ${esc(x.name)} (.osm.pbf) to this computer" aria-label="Download ${esc(x.name)}">${icon("download")}</a>${prog}</label>`;
   }).join("") : `<p class="small muted">No Geofabrik file covers the area. Use the Overpass tab or the planet file.</p>`;
 }
 function renderKept() {
@@ -1974,6 +1982,7 @@ let areaName = "area", timezones = null;
 $("run").onclick = async () => {
   const modes = [...document.querySelectorAll("input[name=mode]:checked")].map((c) => c.value).join(",");
   if (!modes) return status("Select at least one mode.");
+  h3Mode(false);                                                                               // a build ends the picking of hexagons
   if (area?.props.source === "h3" && h3Visible) { h3Visible = false; h3Apply(); }             // a build from hexagons: only the boundary of the area stays on the map
   building = true;
   canBuild();
@@ -2549,6 +2558,16 @@ function refreshSteps() {
     if (!touched) for (const c of cards) if (c !== next) autoFold(c, !keep(c));
   }
 }
+// the person works in a later step's card (a click or a tap anywhere in it), or folds card 1: the picking of hexagons ends; a click in card 1
+// starts it again when its H3 tab is open (h3Mode)
+// a click, not a pointerdown: the end of picking clears the grid note of card 1, so the cards move up; on a pointerdown that moved Build
+// away from under the pointer before the click (the click did not reach it)
+document.querySelector("#sb .sb-body").addEventListener("click", (e) => {
+  const n = +(e.target.closest("[id^=step][id$=-card]")?.id.match(/^step(\d+)-card$/)?.[1] ?? 0);
+  if (n === 1) h3Mode(true);
+  else if (n >= 3) h3Mode(false);
+}, true);
+document.addEventListener("rs:sectionchange", (e) => { if (!auto && e.detail.id === "step1" && e.detail.state === "fold") h3Mode(false); });
 // a card that the person opened or folded (a click on its title, or the button of all): the next step does not fold the others
 document.addEventListener("rs:sectionchange", (e) => {
   const c = cards.find((x) => x.dataset.rsSection === e.detail.id);
@@ -2562,7 +2581,7 @@ for (const old of [...document.querySelectorAll("section.step")]) {
   body.className = "step-body";
   while (h.nextSibling) body.append(h.nextSibling);
   const o = OPEN_CARDS[n];
-  const c = rs.sections.add(o ? { id: `step${n}`, label, open: () => o.open(), note: o.note } : { id: `step${n}`, label, fold: true, el: body });
+  const c = rs.sections.add(o ? { id: `step${n}`, label, open: () => { h3Mode(false); o.open(); }, note: o.note } : { id: `step${n}`, label, fold: true, el: body });
   if (o) Object.assign(c.querySelector(".rs-sec-note"), { id: o.noteId }).setAttribute("aria-live", "polite");
   c.classList.add("step");
   c.id = old.id;

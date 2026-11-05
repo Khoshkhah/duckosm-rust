@@ -74,7 +74,7 @@ with sync_playwright() as p:
 
     # the panel is the page's one panel; ← Steps brings the steps back
     page.click("#step7")
-    assert page.is_visible("#fix-panel") and not page.is_visible("#sb .sb-body") and not page.is_visible("#sb .sb-foot")
+    assert page.is_visible("#fix-panel") and not page.is_visible("#sb .sb-body")
     page.click("#fix-back")
     assert not page.is_visible("#fix-panel") and page.is_visible("#sb .sb-body")
     page.click("#step7")

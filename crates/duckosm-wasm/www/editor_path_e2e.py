@@ -151,7 +151,7 @@ def run(browser, name, dark=False, **context):
     assert "Applied" in page.inner_text("#editnote") and "Rules: 1" in page.inner_text("#editnote"), page.inner_text("#editnote")
     page.wait_for_function("!window.mapDrawing && window.duckMap.loaded()", timeout=300_000)
     assert page.evaluate("getComputedStyle(document.querySelector('#sb .sb-body')).display") != "none", "the steps are back"
-    assert page.evaluate("getComputedStyle(document.querySelector('.sb-foot')).display") != "none", "the footer is back"
+    assert page.is_visible("#sb .sb-body"), "the steps are back"
     assert page.evaluate(ROADS), "the roads are drawn again"
     page.screenshot(path=str(out / f"{name}-4-steps.png"))
     page.context.close()

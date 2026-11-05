@@ -256,9 +256,9 @@ the hexagons of the [H3](https://h3geo.org) grid:
 - **The level.** A list of the levels 5 to 10, each with the average edge and area of one cell, for example `Level 8: edge 531 m, 0.737 km²`.
   The default is level 8. A new level removes the picked cells (cells of two levels do not mix), and the page says so.
 - **The picks.** A click on the map picks the cell at that point; a second click on the same cell removes it. The map shows the lines of
-  all picked cells, and the usual blue area (the union) under them. Under the list, the text gives the number of cells and the area in km²
-  (for example `6 cells, 0.63 km²`) and **Clear the cells** removes all. While no cell is picked, the button is off and the text under it
-  says what to do (no tooltip). The pointer on the map is a hand while the tab is open.
+  all picked cells, and the usual blue area (the union) under them. Under the list, one box gives the number of cells and the area in km²
+  (for example `6 cells, 0.63 km²`) and the number of hexagons in view. **Unselect** (under the tabs) removes the cells and the area: one
+  button, because removing all cells removes the area too. While no cell is picked, it is off (no tooltip). The pointer on the map is a hand while the tab is open.
 - **The area.** The page joins the cells with `cellsToMultiPolygon` of [h3-js](https://github.com/uber/h3-js) (pinned: `h3-js@4.2.1`
   from cdn.jsdelivr.net, in the import map; the page loads it at the first use of the tab). Cells that touch make one polygon. A ring of
   cells keeps its hole. Cells that do not touch make a multipolygon. From here the area goes the same way as a file or a drawing:
