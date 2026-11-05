@@ -366,7 +366,9 @@ pub fn build_network_with(
     }
     let mut sel = FxHashSet::default();
     for idx in groups.values().filter(|v| v.len() > 1) {
-        let key = |i: usize| (fwd[i].e.length_m, refs_key(&fwd[i].e));
+        // The index is the last tie-break: a way that walks one segment twice makes two arcs with the same
+        // length and the same refs, and duckOSM keeps both (it stops with an error). Here the first stays whole.
+        let key = |i: usize| (fwd[i].e.length_m, refs_key(&fwd[i].e), i);
         let min = idx
             .iter()
             .map(|&i| key(i))
