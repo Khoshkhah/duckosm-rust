@@ -36,6 +36,8 @@ def boundary(page, ready):
     """Wait until the page finished `ready` areas, download boundary.geojson and check its format; returns the
     Feature."""
     page.wait_for_function(f"(window.areas ?? 0) >= {ready}")
+    if "folded" in (page.get_attribute("#step2-card", "class") or ""):
+        page.click("#step2")                    # Boundary is in card 2 (beside Unselect)
     with page.expect_download() as d:
         page.click("#save")
     g = json.loads(pathlib.Path(d.value.path()).read_text())

@@ -54,7 +54,9 @@ def run(browser, name, dark=False, **context):
 
     # before any input
     assert page.query_selector("#search-go") is None and page.query_selector("#search-why") is None, "the search has one field and no button"
-    off("run", "buildhint", "area")
+    # Build is in card 4, which is off ("after step 3") and folded until the data is ready: the button is off, and the card says why
+    b0 = look("run")
+    assert b0["disabled"] and "off" in (page.get_attribute("#step4-card", "class") or "") and "after step" in page.inner_text("#step4-card .after"), b0
     assert page.is_disabled("#save") and "off" in (page.get_attribute("#step2-card", "class") or ""), "the boundary waits for an area: card 2 is off ('after step 1')"
     page.screenshot(path=str(out / f"{name}-1-nothing.png"))
     # an area: GeoJSON is on, Build waits for the data file
@@ -62,7 +64,7 @@ def run(browser, name, dark=False, **context):
     page.wait_for_function("window.areas >= 1", timeout=60_000)
     tap("#tab-region")
     assert not look("save")["disabled"], "GeoJSON is on with an area"
-    off("run", "buildhint", "region file")
+    assert look("run")["disabled"] and "off" in (page.get_attribute("#step4-card", "class") or ""), "Build waits for the data file"
     page.screenshot(path=str(out / f"{name}-2-area.png"))
     # the data file: Build is on, and it looks like a primary button
     page.set_input_files("#region", str(ROOT / "tests/data/monaco_sample.osm.pbf"))

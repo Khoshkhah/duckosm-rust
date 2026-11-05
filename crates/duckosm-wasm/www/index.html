@@ -2560,7 +2560,9 @@ function refreshSteps() {
 }
 // the person works in a later step's card (a click or a tap anywhere in it), or folds card 1: the picking of hexagons ends; a click in card 1
 // starts it again when its H3 tab is open (h3Mode)
-document.querySelector("#sb .sb-body").addEventListener("pointerdown", (e) => {
+// a click, not a pointerdown: the end of picking clears the grid note of card 1, so the cards move up; on a pointerdown that moved Build
+// away from under the pointer before the click (the click did not reach it)
+document.querySelector("#sb .sb-body").addEventListener("click", (e) => {
   const n = +(e.target.closest("[id^=step][id$=-card]")?.id.match(/^step(\d+)-card$/)?.[1] ?? 0);
   if (n === 1) h3Mode(true);
   else if (n >= 3) h3Mode(false);

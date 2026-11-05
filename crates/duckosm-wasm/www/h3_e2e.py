@@ -169,12 +169,12 @@ def run(browser, phone):
     pick(centre)
     cells(6)
     # work in a later card ends the picking: a click on the map then picks nothing; a click in card 1 starts it again (h3Mode)
-    page.dispatch_event("#step4-card", "pointerdown")
+    page.dispatch_event("#step4-card", "click")
     assert not page.evaluate("document.body.classList.contains('h3')"), "a click in card 4 ends the picking of hexagons"
     pick(centre)
     page.wait_for_timeout(800)                  # time for a pick to act, if picking were still on
     cells(6)
-    page.dispatch_event("#step1-card", "pointerdown")
+    page.dispatch_event("#step1-card", "click")
     assert page.evaluate("document.body.classList.contains('h3')"), "a click in card 1 starts it again"
     # Unselect removes the cells and the area
     click("#step1-card .area-clear")
@@ -278,6 +278,8 @@ def run(browser, phone):
     # a build from hexagons hides them (the boundary of the area stays, like for another area); the H3 tab shows them again
     assert set(vis()) == {"none"} and not row.evaluate("(c) => c.checked"), (vis(), row.evaluate("(c) => c.checked"))
     assert page.evaluate("duckMap.getLayer('area-line') !== undefined && duckMap.getLayoutProperty('area-line', 'visibility') !== 'none'"), "the boundary stays"
+    if "folded" in (page.get_attribute("#step1-card", "class") or ""):
+        click("#step1")                         # the build ended the picking, and card 1 folded with the other finished steps
     click("#tab-h3")
     page.wait_for_function("(duckMap.getLayoutProperty('h3-grid', 'visibility') ?? 'visible') === 'visible'", timeout=10_000)
     assert row.evaluate("(c) => c.checked")
