@@ -74,6 +74,7 @@ nav:
       - "Steps 3 and 4: Data and build": manual/build.md
       - "Steps 5 and 6: Result and map": manual/result.md
       - "Step 7: Edit OSM data": manual/edit-osm.md
+      - The fixes file: manual/fixes-file.md
       - "Step 8: Edit levels": manual/edit-levels.md
       - "Step 9: Edit design": manual/edit-design.md
       - "Step 10: Export": manual/export.md

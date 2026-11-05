@@ -24,7 +24,8 @@ duckOSM writes the DuckDB form. The page gives both forms as downloads (step 5 o
 - `edge_id` (BIGINT) is a hash of `osm_id`, `source` and `target`. It is the same value that duckOSM 0.6.0 writes. Other projects join on it. Keep it a BIGINT in every join: a program that reads it as a floating-point number loses digits.
 - `source` and `target` (BIGINT) are the `node_id` values of the ends of an edge.
 - `osm_id` (BIGINT) is the OpenStreetMap way that the edge comes from. A way that has more than one edge gives more than one row with the same `osm_id`.
-- Geometry columns are `GEOMETRY('OGC:CRS84')` (longitude and latitude).
+- Geometry columns are `GEOMETRY('OGC:CRS84')` (longitude and latitude). The base-map layers and the doors have a `GEOMETRY` with no CRS, also in longitude and latitude.
+- In the `.duckdb` file, the geometry column of `nodes`, `virtual_nodes` and `main.boundary` has the name `geom`, as in duckOSM. In the Parquet files, its name is `geometry`.
 
 ## Tables of each network
 
@@ -49,8 +50,11 @@ One row for each directed piece of road between two junctions. 3,022 rows.
 | `geometry` | GEOMETRY | The edge as a LineString. |
 | `is_reverse` | BOOLEAN | True when the edge runs against the direction of the OSM way. |
 | `length_m` | FLOAT | The length in meters. |
+| `dismount` | BOOLEAN | Cycling only. True on a footway or a pedestrian street where you push the bike. |
 | `maxspeed_kmh` | FLOAT | The speed limit, or a default for the class. |
 | `cost_s` | FLOAT | The travel time in seconds. |
+| `walk_type` | VARCHAR | Walking only. The kind of path: `sidewalk`, `crossing`, `footpath`, `steps`, `path`, `platform`, `plaza` and more. |
+| `cycle_type` | VARCHAR | Cycling only. The kind of bike way: `cycle_lane`, `shared_path`, `bus_cycle_lane`, `mixed_traffic`, `dismount` and more. |
 
 ### `nodes`
 
@@ -59,7 +63,7 @@ The junctions and the ends of the edges. 1,859 rows.
 | Column | Type | Meaning |
 |---|---|---|
 | `node_id` | BIGINT | The key of the node. |
-| `geometry` | GEOMETRY | The node as a Point. |
+| `geometry` | GEOMETRY | The node as a Point. The name is `geom` in the `.duckdb` file. |
 
 ### `private_edges`
 
@@ -74,7 +78,7 @@ The graph of the legal moves from one edge to the next. A turn restriction remov
 | `from_edge`, `to_edge` | BIGINT | The edge that you leave and the edge that you take. |
 | `via_edge` | BIGINT | The edge that the move goes through. |
 | `cost` | FLOAT | The cost of the move in seconds. |
-| `uses` | VARCHAR | Who can make the move: `car`, `bus`, `pedestrian` or `private`. |
+| `uses` | VARCHAR | Who can make the move. Between two edges of the network, it is the user of the network: `car` (driving), `walk` or `bike`. When one edge is in `private_edges`, it is the label of that edge: `bus`, `private`, `pedestrian` or `delivery`. |
 
 ### `turn_permission`
 
@@ -126,8 +130,8 @@ The OSM ways that the network kept, and their nodes in order. 1,294 ways and 9,5
 
 | Table | Columns |
 |---|---|
-| `ways` | `osm_id`, `highway`, `name`, `maxspeed`, `oneway`, `bus_back`, `surface`, `service`, `access`, `junction`, `layer`, `bridge`, `tunnel`, `lanes_fwd`, `lanes_bwd`, `tags` (a map of all other tags), `refs` (the nodes) |
-| `way_nodes` | `way_id`, `node_id`, `seq` (the place of the node in the way) |
+| `ways` | `osm_id` BIGINT, `highway` VARCHAR, `name` VARCHAR, `maxspeed` VARCHAR, `oneway` BOOLEAN, `bus_back` BOOLEAN, `surface`, `service`, `access`, `junction`, `layer`, `bridge`, `tunnel` (VARCHAR), `lanes_fwd` INTEGER, `lanes_bwd` INTEGER, `tags` MAP(VARCHAR, VARCHAR) (all other tags), `refs` BIGINT[] (the nodes) |
+| `way_nodes` | `way_id` BIGINT, `node_id` BIGINT, `seq` BIGINT (the place of the node in the way) |
 
 ### `virtual_nodes`
 
@@ -150,12 +154,166 @@ One row for each lane of each driving edge, from left to right. 3,510 rows. The 
 
 | Table | File | Rows | Columns |
 |---|---|---|---|
-| `main.global_junctions` | `global_junctions_main.parquet` | 4,527 | `node_id`, `is_road_junction`. The nodes where every network cuts its ways. |
-| `main.visualization_metadata` | `visualization_metadata_main.parquet` | 1 | `boundary_geojson`, `center_lat`, `center_lon`, `initial_zoom`, `timezone`, `built_at`, `duckosm_version`. |
-| `mm.transfers` | `transfers_mm.parquet` | 12,352 | `node_id`, `from_mode`, `to_mode`, `cost_s`, `kind`. The changes of network at a node (`park`, `retrieve`, `bike_park`, `bike_unpark`). |
-| `mm.edges` | In the `.duckdb` file only | A view | All edges of all networks, with their network. |
-| `visualization.edge_levels` | `edge_levels_visualization.parquet` | 13,953 | The drawing order of the roads (a bridge over a road): `edge_id`, `casing_start`, `casing_level`, `casing_end`, `fill_level`, `head_start_m`, `head_end_m`, `cap_start`, `cap_end`. The method is in [levels.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/levels.md). |
-| `visualization.edge_levels_meta` | `edge_levels_meta_visualization.parquet` | 1 | How the levels were made (`source`: `tags` or `solve`). |
+| `main.boundary` | `boundary_main.parquet` | 1 | The area: `geometry` (`geom` in the `.duckdb` file), and one column for each property of the boundary GeoJSON, for example `name`, `osm_id`, `admin_level`, `area_km2` and `source`. |
+| `main.global_junctions` | `global_junctions_main.parquet` | 4,527 | `node_id` BIGINT, `is_road_junction` BOOLEAN. The nodes where every network cuts its ways. |
+| `main.visualization_metadata` | `visualization_metadata_main.parquet` | 1 | `boundary_geojson` (VARCHAR, JSON in the `.duckdb` file), `center_lat` DOUBLE, `center_lon` DOUBLE, `initial_zoom` INTEGER, `timezone` VARCHAR, `built_at` TIMESTAMP, `duckosm_version` VARCHAR. |
+| `mm.transfers` | `transfers_mm.parquet` | 12,352 | `node_id` BIGINT, `from_mode` VARCHAR, `to_mode` VARCHAR, `cost_s` DOUBLE, `kind` VARCHAR. The changes of network at a node (`park`, `retrieve`, `bike_park`, `bike_unpark`). |
+| `mm.edges` | In the `.duckdb` file only | A view | All edges of all networks: `mode` VARCHAR, `edge_id`, `source`, `target` (BIGINT), `cost_s`, `length_m` (FLOAT), `highway`, `name` (VARCHAR), `geometry`. The key is (`mode`, `edge_id`). |
+
+## Tables of the drawing order
+
+The schema `visualization`. The method is in [levels.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/levels.md).
+
+### `visualization.edge_levels`
+
+The drawing order of the roads: a bridge is over the road under it. One row for each edge ID in `edges` and `private_edges` of all networks. 13,953 rows. File: `edge_levels_visualization.parquet`.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `edge_id` | BIGINT | The edge. |
+| `casing_start`, `casing_level`, `casing_end` | BIGINT | The casing number of the head at the start, of the main part, and of the head at the end. |
+| `fill_level` | BIGINT | The fill number. |
+| `head_start_m`, `head_end_m` | DOUBLE | The length of each head, in meters. |
+| `cap_start`, `cap_end` | VARCHAR | The shape of each end: `round`, `square` or `flat`. |
+
+The map paints the numbers from low to high. At each number, it paints all casings before all fills. 0 is the ground.
+
+### `visualization.edge_levels_meta`
+
+One row: how the levels were made. File: `edge_levels_meta_visualization.parquet`.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `source` | VARCHAR | `tags` (from the OSM tags), `solve` (solved by roadstyle) or `area` (saved by the level editor). |
+| `area` | VARCHAR | The level area of the editor. NULL when `source` is not `area`. |
+| `n_edges` | BIGINT | The number of edges. |
+| `edge_hash` | VARCHAR | A hash of the edge IDs. The levels are correct only for these edges. |
+| `roadstyle_version` | VARCHAR | The roadstyle version that made the levels. |
+| `created` | VARCHAR | The time when the levels were made. |
+
+### `visualization.level_edits`, `level_heads`, `level_caps`
+
+Your rules from the level editor ([step 8](manual/edit-levels.md)). A table exists only when it has rules. The values are text, and the IDs are BIGINT. Files: `level_edits_visualization.parquet`, `level_heads_visualization.parquet`, `level_caps_visualization.parquet`.
+
+| Table | Columns |
+|---|---|
+| `level_edits` | `relation` (`order`, `stack` or `meet`), `a` and `b` (the two roads, BIGINT), `a_end`, `b_end`, `enabled`. |
+| `level_heads` | `road` (BIGINT), `start_m`, `end_m`: the head length at each end, in meters. |
+| `level_caps` | `road` (BIGINT), `start`, `end`: `round`, `square` or `flat`. |
+
+## Tables of the bus routes
+
+The schema `bus`. A build makes it when it has the driving network and the raw OSM data of the area (a boundary). The method is in [bus.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/bus.md).
+
+### `bus.routes`
+
+One row for each OSM bus route relation (`route` is `bus`, `trolleybus` or `share_taxi`). File: `routes_bus.parquet`.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `osm_id` | BIGINT | The OSM relation. |
+| `route` | VARCHAR | `bus`, `trolleybus` or `share_taxi`. |
+| `ref`, `name`, `operator`, `from`, `to`, `network` | VARCHAR | The tags of the relation. |
+| `edges` | INTEGER | The number of rows in `bus.route_edges`. |
+| `outside` | INTEGER | The number of member ways that are not in the area. |
+| `gaps` | VARCHAR[] | `'<way_id> <kind>'` for each way that the route could not follow. Empty when the route is complete. |
+
+### `bus.route_edges`
+
+One row for each edge of each route, in order and in the direction of travel. File: `route_edges_bus.parquet`.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `route_id` | BIGINT | The relation (`bus.routes.osm_id`). |
+| `ref` | VARCHAR | The line number of the route. |
+| `seq` | INTEGER | The place of the edge in the route, from 1. |
+| `edge_id`, `edge_ref` | BIGINT, VARCHAR | The driving edge. |
+| `bus_lane` | BOOLEAN | True when the edge is in `driving.private_edges` (a bus lane or a bus-only road). |
+
+## Tables of the buildings
+
+The schema `main`. These tables need a build with **Layers** on. [Step 7](manual/edit-osm.md) edits their data.
+
+### `main.building_faces`
+
+One row for each wall of each building: a segment of the outline. A wall shorter than 0.1 m has no row. File: `building_faces_main.parquet`.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `building_id` | BIGINT | The OSM way or relation of the building. |
+| `building_type` | VARCHAR | `way` or `relation`. |
+| `face_index` | INTEGER | The place of the wall in the ring, from 0. |
+| `from_node`, `to_node` | BIGINT | The OSM nodes at the two ends of the wall. |
+| `face_type` | VARCHAR | The type of the wall: `front`, `back`, `side`, `party` or `court`. A rule of the fixes file can change it. |
+| `computed_type` | VARCHAR | The type that the method found. |
+| `edited` | BOOLEAN | True when a rule gives a type that is not `computed_type`. |
+| `type_reason` | VARCHAR | Why the wall has its type: `entrance`, `address`, `street`, `corner`, `inferred`, `inner`, `opposite`, `shared`, `other` or `none`. |
+| `door` | VARCHAR | The kind of door that a rule gives the wall (for example `main`). NULL when the wall has no door. |
+| `length_m` | FLOAT | The length in meters. |
+| `azimuth_deg` | FLOAT | The direction that the wall faces, in degrees from north (90 is east). |
+| `street_osm_id`, `street_edge_id` | BIGINT | The OSM way and the edge of the street that the wall faces. NULL when there is none. |
+| `street_name` | VARCHAR | The name of that street. |
+| `distance_m` | FLOAT | The distance to that street, in meters. |
+| `geometry` | GEOMETRY | The wall as a LineString. |
+
+### `main.building_info`
+
+One row for each building of `features.buildings`, with values from its OSM tags. A value that the page cannot read is NULL. File: `building_info_main.parquet`.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `osm_id` | BIGINT | The OSM way or relation. |
+| `osm_type` | VARCHAR | `way` or `relation`. |
+| `kind`, `name` | VARCHAR | As in `features.buildings`. |
+| `levels`, `roof_levels` | INTEGER | From `building:levels` and `roof:levels`. |
+| `height_m` | DOUBLE | From `height`, in meters. A value in feet is changed to meters. |
+| `roof_shape` | VARCHAR | From `roof:shape`. |
+| `roof_color`, `facade_color` | VARCHAR | From `roof:colour` and `building:colour`, as `#rrggbb`. |
+| `material`, `roof_material` | VARCHAR | From `building:material` and `roof:material`. |
+
+### `main.building_entrances`
+
+One row for each door of the area: a node with an `entrance` or `door` tag. File: `building_entrances_main.parquet`.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `osm_id` | BIGINT | The OSM node. |
+| `osm_type` | VARCHAR | Always `node`. |
+| `kind` | VARCHAR | The `entrance` tag, or `door` when the node has only a `door` tag. |
+| `door`, `access`, `level`, `wheelchair`, `name` | VARCHAR | The tags of the same name. |
+| `housenumber`, `street` | VARCHAR | The tags `addr:housenumber` and `addr:street`. |
+| `building_id` | BIGINT | The building way that has the node in its outline (the lowest ID when two buildings share it). NULL when there is none. |
+| `tags` | MAP(VARCHAR, VARCHAR) | All tags of the node. Only in DuckDB: the Parquet file has no `tags` column. |
+| `geom` | GEOMETRY | The node as a Point. |
+
+## Tables of the base map
+
+The schema `features`. These tables need a build with **Layers** on. Each table is a layer of the map. duckOSM has the full reference: [Base-map layers](https://github.com/Khoshkhah/duckOSM/blob/main/docs/reference/features.md).
+
+| Table | What it holds |
+|---|---|
+| `features.buildings` | The buildings. |
+| `features.land` | Land use and natural areas. |
+| `features.water_polygons`, `features.water_lines` | Lakes, the sea and rivers. |
+| `features.streets` | Every way with a `highway` tag, and the railways (for drawing, not for routing). |
+| `features.paved` | Squares, pedestrian areas and piers. |
+| `features.sites` | Parking, bus stations, schools, hospitals and more. |
+| `features.public_transport` | Stops and stations. |
+| `features.pois` | Points of interest. |
+| `features.traffic` | Traffic signals and crossings. |
+| `features.place_labels` | Place names. |
+
+All tables have the same columns. `features.traffic` has one more column. Files: `features_<table>.parquet`, for example `features_buildings.parquet`.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `osm_id` | BIGINT | The OSM object. |
+| `osm_type` | VARCHAR | `node`, `way` or `relation`. |
+| `kind` | VARCHAR | The kind in the layer, for example `residential` or `forest`. |
+| `name` | VARCHAR | The `name` tag. |
+| `tags` | MAP(VARCHAR, VARCHAR) | All tags. Only in DuckDB: the Parquet files have no `tags` column. |
+| `geom` | GEOMETRY | The shape. |
+| `bearing` | DOUBLE | `features.traffic` only. On a crossing, the direction of its road, in degrees from north. NULL on the other rows. |
 
 ## Tables that need more input
 
@@ -163,7 +321,9 @@ These tables exist only when you give the build more than an `.osm.pbf` file.
 
 | Tables | You need | Where to read |
 |---|---|---|
-| `raw.nodes`, `raw.ways`, `raw.relations` and the base-map layers `features.*` | A boundary (`--boundary` in duckOSM, an area in the page) | [features.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/features.md) |
-| `main.building_faces`, `main.building_info`, `main.building_entrances` | The base-map layers (the page makes them) | [osm-editing.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/osm-editing.md) |
-| `bus.routes`, `bus.route_edges` | A boundary, and the driving network | [bus.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/bus.md) |
+| `raw.nodes`, `raw.ways`, `raw.relations` | A boundary (`--boundary` in duckOSM). The page uses them for the layers and then drops them: no download has them. | [features.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/features.md) |
+| The base-map layers `features.*` | A boundary, and **Layers** on in the page | [Tables of the base map](#tables-of-the-base-map) |
+| `main.building_faces`, `main.building_info`, `main.building_entrances` | The base-map layers. Only the page makes them. | [Tables of the buildings](#tables-of-the-buildings) |
+| `bus.routes`, `bus.route_edges` | A boundary, and the driving network | [Tables of the bus routes](#tables-of-the-bus-routes) |
+| `visualization.level_edits`, `level_heads`, `level_caps` | Rules from the level editor | [Tables of the drawing order](#tables-of-the-drawing-order) |
 | `nodes.ele`, `edges.z_from`, `z_to`, `z_vertices` | A DEM file (`--dem`) | [CHANGELOG.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/CHANGELOG.md) |

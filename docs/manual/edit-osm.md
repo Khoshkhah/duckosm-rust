@@ -114,7 +114,7 @@ The list **Roads that arrive at this junction** has the roads that you can use a
 ![The New road tab](../img/dashboard/21-fix-new-road.png)
 <!-- retake: after the duckOSM PR that moves Edit OSM data into duckOSM -->
 
-Draw a road that OSM does not have. Click points on the map. A click near a junction joins it. Set the kind, the name, the one-way rule and more. Then finish. The road is a rule `new_ways` in the fixes file. You can edit a new road again from the tab **Changes**.
+Draw a road that OSM does not have. Click points on the map. A click near a junction joins it. Set the kind, the name, the one-way rule and more. Then finish. The road is a rule [`new_ways`](fixes-file.md#new_ways-new-roads) in the fixes file. You can edit a new road again from the tab **Changes**.
 
 ## Changes
 
@@ -151,6 +151,7 @@ A choice in one field can close another field, or shorten its list. The reason s
 - The page keeps the rules in your browser, for the area.
 - The tab **Changes** and the button **.yaml** of [step 5](result.md) download them as a fixes file.
 - The next build applies the rules to the OSM data, before it makes the networks. So the tables, the map and the exports have your fixes.
+- [The fixes file](fixes-file.md) gives the format of the file, each key, and the order in which the build applies the rules.
 - The fixes file is also the input of duckOSM. [osm-editing.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/osm-editing.md) has the design.
 
 ## Next
