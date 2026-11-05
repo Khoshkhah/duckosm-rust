@@ -81,8 +81,10 @@ The check box **Keep the tile profile in the theme** is off by default. Turn it 
 ![The Roads tab](../img/dashboard/28-design-roads.png)
 <!-- retake: after roadstyle #40 (Edit design moves into roadstyle) -->
 
-- **Colors.** Each class has a color for the fill and one for the casing. The casing is the outline of the road. A link road has the colors of its class.
+- **Colors.** Each of the 14 classes has a color for the fill and one for the casing. The other classes keep the colors of the theme. The casing is the outline of the road. A link road has the colors of its class.
 - **Width.** A factor scales the width of a group at all zooms. A factor of 2 doubles the width. The groups are: motorway and trunk, primary, secondary, tertiary, residential and unclassified, living street, service, pedestrian, and footway, path, cycleway and track.
+
+[The roads on the map](roads.md#the-roads-on-the-map) lists the classes of each group and the first zoom of each class.
 - **Opacity.** **Fill opacity** and **Casing opacity** go from 0 to 100 percent. A lower value lets the map under the roads show through.
 - **Casing as an outline.** The casing is drawn only outside the fill. Turn it on when the fill is not opaque. Without it, the road looks dark over a satellite map.
 - **Dark mode.** The dark theme does not use the light colors directly. This section sets the range of lightness of the dark colors (0 is black, 1 is white).

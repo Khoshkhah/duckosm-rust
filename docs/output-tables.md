@@ -4,6 +4,7 @@ A build writes one table for each part of the road network. This page lists the 
 
 - To learn what each table is for, read [The tables](manual/tables.md).
 - To make the tables, read [Your first map](first_map.md).
+- To learn which roads each network takes, and how the build sets their values, read [The roads](manual/roads.md).
 - To see how the tables are made and tested against duckOSM, read [design.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/design.md).
 - To see the tables that are not made yet, read [tables.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/tables.md).
 - duckOSM has the same reference for its own tables: [database.md](https://github.com/Khoshkhah/duckOSM/blob/main/docs/reference/database.md).
@@ -41,18 +42,18 @@ One row for each directed piece of road between two junctions. 3,022 rows.
 | `edge_ref` | VARCHAR | A text name of the edge: the way ID, a segment number and a direction letter (`167625756#1f`). |
 | `source`, `target` | BIGINT | The node at the start and the node at the end. |
 | `osm_id` | BIGINT | The OSM way. |
-| `highway` | VARCHAR | The road class of OSM (`primary`, `residential`, `footway`, and so on). |
+| `highway` | VARCHAR | The road class of OSM (`primary`, `residential`, `footway`, and so on). A ferry line has `ferry`. In the driving network, a pedestrian street that cars can use has `living_street`. |
 | `name` | VARCHAR | The street name. NULL when OSM has none. |
-| `oneway` | BOOLEAN | True when the edge is one-way. |
-| `lanes` | INTEGER | The number of lanes. |
+| `oneway` | BOOLEAN | True when the edge is one-way in this network. The walking network reads only `oneway:foot`. |
+| `lanes` | INTEGER | The number of car lanes in the direction of the edge. NULL on a footway, path, cycleway and the other paths. |
 | `surface`, `access`, `junction`, `layer`, `bridge`, `tunnel`, `service` | VARCHAR | The OSM tags of the same name. |
 | `refs` | BIGINT[] | The OSM nodes along the edge, in order. |
 | `geometry` | GEOMETRY | The edge as a LineString. |
-| `is_reverse` | BOOLEAN | True when the edge runs against the direction of the OSM way. |
-| `length_m` | FLOAT | The length in meters. |
+| `is_reverse` | BOOLEAN | True on the second edge of a two-way road, which runs against the node order of the OSM way. The one edge of a `oneway=-1` road also runs against the node order, but has `is_reverse` false. |
+| `length_m` | FLOAT | The length in meters (haversine). |
 | `dismount` | BOOLEAN | Cycling only. True on a footway or a pedestrian street where you push the bike. |
-| `maxspeed_kmh` | FLOAT | The speed limit, or a default for the class. |
-| `cost_s` | FLOAT | The travel time in seconds. |
+| `maxspeed_kmh` | FLOAT | Driving: the speed limit (`maxspeed`), or the [default of the class](manual/roads.md#speed-maxspeed_kmh). Walking: 5. Cycling: 15, or 5 on a pushed edge. |
+| `cost_s` | FLOAT | The travel time in seconds: `length_m / 1000 / maxspeed_kmh * 3600`. |
 | `walk_type` | VARCHAR | Walking only. The kind of path: `sidewalk`, `crossing`, `footpath`, `steps`, `path`, `platform`, `plaza` and more. |
 | `cycle_type` | VARCHAR | Cycling only. The kind of bike way: `cycle_lane`, `shared_path`, `bus_cycle_lane`, `mixed_traffic`, `dismount` and more. |
 
@@ -67,7 +68,7 @@ The junctions and the ends of the edges. 1,859 rows.
 
 ### `private_edges`
 
-The roads that the network cannot use, moved out of `edges`: private roads, bus-only roads and pedestrian streets (for driving). The columns are the columns of `edges`. 724 rows.
+The roads that the network cannot use, moved out of `edges`: private roads, bus-only roads and bus lanes, and pedestrian streets (for driving). [Access](manual/roads.md#access-who-can-use-the-road) gives the rules. The columns are the columns of `edges`. 724 rows.
 
 ### `edge_graph`
 

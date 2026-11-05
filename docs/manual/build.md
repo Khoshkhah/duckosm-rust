@@ -64,7 +64,7 @@ The page uses threads when the browser allows it. Estonia takes 19 seconds with 
 5. It finds the drawing levels of bridges and tunnels.
 6. It makes the layers.
 
-Each network has its own `edges`, `nodes` and `edge_graph` tables. [The tables](tables.md) explains them.
+Each network has its own `edges`, `nodes` and `edge_graph` tables. [The tables](tables.md) explains them. [The roads](roads.md) tells you which roads each network takes, and how the build sets their speed, lanes and travel time.
 
 ## Next
 

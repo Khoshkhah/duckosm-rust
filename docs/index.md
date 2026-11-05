@@ -51,6 +51,7 @@ You choose an area on a map. The portal builds the driving, walking and cycling 
 | [Step 9: Edit design](manual/edit-design.md) | Set the look of the map and the tiles. |
 | [Step 10: Export](manual/export.md) | The formats and the files. |
 | [The tables](manual/tables.md) | What each table is for. |
+| [The roads](manual/roads.md) | Each road class and its networks, the access and one-way rules, the default speeds and lanes, and how the map draws the roads. |
 
 ## Command line and Python
 
