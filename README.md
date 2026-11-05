@@ -6,7 +6,7 @@ You choose an area on a map. The portal builds the driving, walking and cycling 
 
 ![The portal after a build: the roads of Monaco on the map](docs/img/dashboard/12-map-after-build.png)
 
-Open duckOSM Studio: <https://khoshkhah.github.io/duckosm-studio/>. Read the manual: [The editing cycle](docs/manual/cycle.md).
+Open duckOSM Studio: <https://khoshkhah.github.io/duckosm-studio/>. Read the manual: <https://khoshkhah.github.io/duckosm-studio/manual/>.
 
 ## What is important in it
 
@@ -46,11 +46,11 @@ flowchart LR
     G --> H["Export"]
 ```
 
-[The editing cycle](docs/manual/cycle.md) explains each step.
+[The editing cycle](https://khoshkhah.github.io/duckosm-studio/manual/manual/cycle/) explains each step.
 
 ## What you get
 
-For each network, a build writes the tables `edges`, `nodes`, `edge_graph`, the turn restrictions and more. Each table is a GeoParquet file. One DuckDB file has all of them. [The tables](docs/manual/tables.md) explains each table.
+For each network, a build writes the tables `edges`, `nodes`, `edge_graph`, the turn restrictions and more. Each table is a GeoParquet file. One DuckDB file has all of them. [The tables](https://khoshkhah.github.io/duckosm-studio/manual/manual/tables/) explains each table.
 
 ## Start
 
@@ -62,7 +62,7 @@ For each network, a build writes the tables `edges`, `nodes`, `edge_graph`, the 
 4. In step 4, press **Build**.
 5. In step 6, press **Show on map**.
 
-[Your first map](docs/first_map.md) has the details.
+[Your first map](https://khoshkhah.github.io/duckosm-studio/manual/first_map/) has the details.
 
 ### On the command line and in Python
 
@@ -73,18 +73,18 @@ pip install duckosm
 duckosm build --pbf monaco.osm.pbf --output monaco.duckdb --modes driving
 ```
 
-The Rust engine comes with the next duckOSM release. The version on PyPI today (0.6.1) is from before the engine moved into duckOSM. [Command line and Python](docs/cli.md) has the details.
+The Rust engine comes with the next duckOSM release. The version on PyPI today (0.6.1) is from before the engine moved into duckOSM. [Command line and Python](https://khoshkhah.github.io/duckosm-studio/manual/cli/) has the details.
 
 ## Documents
 
 | For | Read |
 |---|---|
-| Users | [The manual](docs/manual/cycle.md), [first map](docs/first_map.md), [concepts](docs/concepts.md), [the tables](docs/manual/tables.md), [columns of the tables](docs/output-tables.md), [command line and Python](docs/cli.md), [troubleshooting](docs/troubleshooting.md) |
-| Developers | [Development](docs/development.md), [design](docs/design.md), [page code](docs/app.md), [benchmark](docs/benchmark.md), [to do](docs/todo.md) |
-| Decisions | [Name](docs/proposals/name.md), [hosting](docs/proposals/hosting.md), [disk store for the result](docs/proposals/disk-store.md), [less memory in the build](docs/proposals/build-memory.md), [a build by tiles](docs/proposals/tiled-build.md) |
+| Users | [The manual](https://khoshkhah.github.io/duckosm-studio/manual/manual/cycle/), [first map](https://khoshkhah.github.io/duckosm-studio/manual/first_map/), [concepts](https://khoshkhah.github.io/duckosm-studio/manual/concepts/), [the tables](https://khoshkhah.github.io/duckosm-studio/manual/manual/tables/), [columns of the tables](https://khoshkhah.github.io/duckosm-studio/manual/output-tables/), [command line and Python](https://khoshkhah.github.io/duckosm-studio/manual/cli/), [troubleshooting](https://khoshkhah.github.io/duckosm-studio/manual/troubleshooting/) |
+| Developers | [Development](https://khoshkhah.github.io/duckosm-studio/manual/development/), [design](https://khoshkhah.github.io/duckosm-studio/manual/design/), [page code](https://khoshkhah.github.io/duckosm-studio/manual/app/), [benchmark](https://khoshkhah.github.io/duckosm-studio/manual/benchmark/), [to do](https://khoshkhah.github.io/duckosm-studio/manual/todo/) |
+| Decisions | [Name](https://khoshkhah.github.io/duckosm-studio/manual/proposals/name/), [hosting](https://khoshkhah.github.io/duckosm-studio/manual/proposals/hosting/), [disk store for the result](https://khoshkhah.github.io/duckosm-studio/manual/proposals/disk-store/), [less memory in the build](https://khoshkhah.github.io/duckosm-studio/manual/proposals/build-memory/), [a build by tiles](https://khoshkhah.github.io/duckosm-studio/manual/proposals/tiled-build/) |
 | History | [Changelog](CHANGELOG.md) |
 
-The user documents are also a [mkdocs](https://www.mkdocs.org) site. To read it on your computer, run `pip install mkdocs mkdocs-material` and then `mkdocs serve`.
+The documents are a [mkdocs](https://www.mkdocs.org) site on GitHub Pages: <https://khoshkhah.github.io/duckosm-studio/manual/>. To read it on your computer, run `pip install mkdocs mkdocs-material` and then `mkdocs serve`.
 
 ## Status
 
