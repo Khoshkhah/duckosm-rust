@@ -278,13 +278,17 @@ struct Ring {
 /// The closed rings of the member ways of a role: a closed way is a ring, and open ways are chained by their end nodes (a way is turned round when it
 /// has to be). A chain that does not close is dropped.
 fn assemble(parts: Vec<Vec<i64>>) -> Vec<Vec<i64>> {
-    let (mut rings, mut open): (Vec<_>, Vec<_>) =
-        parts.into_iter().partition(|w| w.len() >= 4 && w.first() == w.last());
+    let (mut rings, mut open): (Vec<_>, Vec<_>) = parts
+        .into_iter()
+        .partition(|w| w.len() >= 4 && w.first() == w.last());
     open.retain(|w| w.len() >= 2);
     while let Some(mut cur) = open.pop() {
         while cur.first() != cur.last() {
             let end = *cur.last().unwrap();
-            let Some(k) = open.iter().position(|o| o[0] == end || *o.last().unwrap() == end) else {
+            let Some(k) = open
+                .iter()
+                .position(|o| o[0] == end || *o.last().unwrap() == end)
+            else {
                 break;
             };
             let mut next = open.remove(k);
@@ -422,7 +426,12 @@ pub fn building_faces(
 ) -> Vec<BuildingFace> {
     let coords = |refs: &[i64]| -> Option<Vec<Pt>> {
         refs.iter()
-            .map(|id| nodes.binary_search_by_key(id, |n| n.id).ok().map(|i| (nodes[i].lon, nodes[i].lat)))
+            .map(|id| {
+                nodes
+                    .binary_search_by_key(id, |n| n.id)
+                    .ok()
+                    .map(|i| (nodes[i].lon, nodes[i].lat))
+            })
             .collect()
     };
     let addr_of = |tags: &[(String, String)]| {
@@ -451,7 +460,14 @@ pub fn building_faces(
             .collect();
         if let Some(pts) = pts {
             let addr = addr_of(&w.tags);
-            rings.push(Ring { id: w.id, relation: false, inner: false, ids: w.refs.clone(), pts, addr });
+            rings.push(Ring {
+                id: w.id,
+                relation: false,
+                inner: false,
+                ids: w.refs.clone(),
+                pts,
+                addr,
+            });
         }
     }
     // the buildings that are multipolygon relations: the outer rings are walls like those of a way, and the inner rings (courtyards) have `court` walls
@@ -466,11 +482,22 @@ pub fn building_faces(
                 .members
                 .iter()
                 .filter(|m| m.1 == MemberType::Way && (m.2 == role || (!inner && m.2.is_empty())))
-                .filter_map(|m| ways.binary_search_by_key(&m.0, |w| w.id).ok().map(|i| ways[i].refs.clone()))
+                .filter_map(|m| {
+                    ways.binary_search_by_key(&m.0, |w| w.id)
+                        .ok()
+                        .map(|i| ways[i].refs.clone())
+                })
                 .collect();
             for ids in assemble(parts) {
                 if let Some(pts) = coords(&ids) {
-                    rings.push(Ring { id: r.id, relation: true, inner, ids, pts, addr: addr.clone() });
+                    rings.push(Ring {
+                        id: r.id,
+                        relation: true,
+                        inner,
+                        ids,
+                        pts,
+                        addr: addr.clone(),
+                    });
                 }
             }
         }
@@ -538,14 +565,26 @@ pub fn building_faces(
     // the entrances: the nodes with an `entrance` tag that is a way in for people
     let entrances: FxHashMap<i64, ()> = nodes
         .iter()
-        .filter(|n| n.tags.iter().any(|t| t.0 == "entrance" && !NOT_ENTRANCES.contains(&t.1.as_str())))
+        .filter(|n| {
+            n.tags
+                .iter()
+                .any(|t| t.0 == "entrance" && !NOT_ENTRANCES.contains(&t.1.as_str()))
+        })
         .map(|n| (n.id, ()))
         .collect();
 
     // 5. each ring counter-clockwise, so that the outward normal of a wall is (dy, -dx); and the tree of all walls, for the line of sight
     let mut oriented = Vec::new();
     let mut wall_segs = Vec::new();
-    for Ring { id, relation, inner, mut ids, mut pts, addr } in rings {
+    for Ring {
+        id,
+        relation,
+        inner,
+        mut ids,
+        mut pts,
+        addr,
+    } in rings
+    {
         let mut local: Vec<P> = pts.iter().map(|&p| proj.pt(p)).collect();
         let n = local.len() - 1;
         let area: f64 = (0..n)
@@ -581,7 +620,7 @@ pub fn building_faces(
     };
 
     let mut out = Vec::new();
-    let mut next_index: FxHashMap<(i64, bool), i32> = FxHashMap::default();       // the place of a wall in the building goes on from the outer ring to the inner rings
+    let mut next_index: FxHashMap<(i64, bool), i32> = FxHashMap::default(); // the place of a wall in the building goes on from the outer ring to the inner rings
     for (id, relation, inner, ids, pts, local, addr) in oriented {
         let n = local.len() - 1;
         let offset = *next_index.entry((id, relation)).or_default();
@@ -612,7 +651,8 @@ pub fn building_faces(
                     type_reason: "inner",
                     door: door.map(str::to_string),
                     length_m: length as f32,
-                    azimuth_deg: (90.0 - normal.1.atan2(normal.0).to_degrees()).rem_euclid(360.0) as f32,
+                    azimuth_deg: (90.0 - normal.1.atan2(normal.0).to_degrees()).rem_euclid(360.0)
+                        as f32,
                     street_osm_id: None,
                     street_edge_id: None,
                     street_name: None,
@@ -647,7 +687,9 @@ pub fn building_faces(
                     continue;
                 }
                 let by_address = addr.as_deref().is_some_and(|a| {
-                    s.name.as_deref().is_some_and(|n| n.trim().to_lowercase() == a)
+                    s.name
+                        .as_deref()
+                        .is_some_and(|n| n.trim().to_lowercase() == a)
                 });
                 let score = align / (dist + 1.0).sqrt()
                     * (1.0 + (length + 1.0).ln())
@@ -680,7 +722,11 @@ pub fn building_faces(
                 .collect();
             let best = candidates.into_iter().find(|m| {
                 samples.iter().any(|&p| {
-                    let seg_q = if p == samples[0] { m.q } else { closest_to_street(&tree, m, p) };
+                    let seg_q = if p == samples[0] {
+                        m.q
+                    } else {
+                        closest_to_street(&tree, m, p)
+                    };
                     visible(p, seg_q)
                 })
             });
@@ -743,11 +789,13 @@ pub fn building_faces(
                     if dist > INFER_STREET_M || dist < 1e-4 {
                         continue;
                     }
-                    let align = w.normal.0 * (q.0 - mid.0) / dist + w.normal.1 * (q.1 - mid.1) / dist;
+                    let align =
+                        w.normal.0 * (q.0 - mid.0) / dist + w.normal.1 * (q.1 - mid.1) / dist;
                     if align < FRONT_ALIGN {
                         continue;
                     }
-                    let score = align / (dist + 1.0).sqrt() * (1.0 + (w.length + 1.0).ln()) * s.weight;
+                    let score =
+                        align / (dist + 1.0).sqrt() * (1.0 + (w.length + 1.0).ln()) * s.weight;
                     if best.as_ref().map_or(true, |(_, b)| {
                         score > b.score || (score == b.score && s.edge_id < b.edge_id)
                     }) {
@@ -817,7 +865,12 @@ mod tests {
     const M: f64 = 1.0 / M_PER_DEG; // one meter in degrees (at the equator, where the tests are)
 
     /// the buildings of the tests are ways: no relations
-    fn building_faces(ways: &[RawWay], nodes: &[RawNode], streets: &[Street], edits: &[FaceEdit]) -> Vec<BuildingFace> {
+    fn building_faces(
+        ways: &[RawWay],
+        nodes: &[RawNode],
+        streets: &[Street],
+        edits: &[FaceEdit],
+    ) -> Vec<BuildingFace> {
         super::building_faces(ways, nodes, &[], streets, edits)
     }
 
@@ -1072,9 +1125,18 @@ mod tests {
     fn a_rule_gives_a_wall_a_door_with_no_change_of_type() {
         let ways = [building(100, &[1, 2, 3, 4, 1])];
         let streets = [street(7, (-30.0, -8.0), (50.0, -8.0))];
-        let rules = [FaceEdit { building: 100, from_node: 2, to_node: 1, face_type: FaceType::Front, door: Some("main".into()) }];
+        let rules = [FaceEdit {
+            building: 100,
+            from_node: 2,
+            to_node: 1,
+            face_type: FaceType::Front,
+            door: Some("main".into()),
+        }];
         let f = building_faces(&ways, &block(), &streets, &rules);
-        assert_eq!((f[0].face_type, f[0].edited, f[0].door.as_deref()), (FaceType::Front, false, Some("main")));
+        assert_eq!(
+            (f[0].face_type, f[0].edited, f[0].door.as_deref()),
+            (FaceType::Front, false, Some("main"))
+        );
         assert_eq!(f.iter().filter(|x| x.door.is_some()).count(), 1);
     }
 
@@ -1151,9 +1213,17 @@ mod tests {
             ["front", "side", "back", "side"],
             "B does not see the street (A is in the way), so its front is inferred from the nearest street"
         );
-        let reasons: Vec<_> = f.iter().filter(|x| x.building_id == 101).map(|x| x.type_reason).collect();
+        let reasons: Vec<_> = f
+            .iter()
+            .filter(|x| x.building_id == 101)
+            .map(|x| x.type_reason)
+            .collect();
         assert_eq!(reasons, ["inferred", "other", "opposite", "other"]);
-        let a_reasons: Vec<_> = f.iter().filter(|x| x.building_id == 100).map(|x| x.type_reason).collect();
+        let a_reasons: Vec<_> = f
+            .iter()
+            .filter(|x| x.building_id == 100)
+            .map(|x| x.type_reason)
+            .collect();
         assert_eq!(a_reasons[0], "street");
     }
 
@@ -1161,34 +1231,84 @@ mod tests {
     fn a_multipolygon_building_has_court_walls_for_its_inner_ring() {
         // an outer ring of 20 x 10 m (nodes 1 to 4) and a courtyard of 6 x 2 m (nodes 5 to 8) in the middle; the street is in the south
         let mut nodes = block();
-        nodes.extend([node(5, 7.0, 4.0), node(6, 13.0, 4.0), node(7, 13.0, 6.0), node(8, 7.0, 6.0)]);
+        nodes.extend([
+            node(5, 7.0, 4.0),
+            node(6, 13.0, 4.0),
+            node(7, 13.0, 6.0),
+            node(8, 7.0, 6.0),
+        ]);
         let ways = [
-            RawWay { id: 200, tags: vec![], refs: vec![1, 2, 3, 4, 1] },
-            RawWay { id: 201, tags: vec![], refs: vec![5, 6, 7, 8, 5] },
+            RawWay {
+                id: 200,
+                tags: vec![],
+                refs: vec![1, 2, 3, 4, 1],
+            },
+            RawWay {
+                id: 201,
+                tags: vec![],
+                refs: vec![5, 6, 7, 8, 5],
+            },
         ];
         let rel = Relation {
             id: 900,
-            tags: vec![("type".into(), "multipolygon".into()), ("building".into(), "yes".into())],
-            members: vec![(200, MemberType::Way, "outer".into()), (201, MemberType::Way, "inner".into())],
+            tags: vec![
+                ("type".into(), "multipolygon".into()),
+                ("building".into(), "yes".into()),
+            ],
+            members: vec![
+                (200, MemberType::Way, "outer".into()),
+                (201, MemberType::Way, "inner".into()),
+            ],
         };
-        let f = super::building_faces(&ways, &nodes, &[rel], &[street(7, (-30.0, -8.0), (50.0, -8.0))], &[]);
-        assert!(f.iter().all(|x| x.building_id == 900 && x.building_type == "relation"));
-        let outer: Vec<_> = f.iter().filter(|x| x.face_index < 4).map(|x| x.face_type.name()).collect();
-        assert_eq!(outer, ["front", "side", "back", "side"], "the outer ring is a building like a way");
+        let f = super::building_faces(
+            &ways,
+            &nodes,
+            &[rel],
+            &[street(7, (-30.0, -8.0), (50.0, -8.0))],
+            &[],
+        );
+        assert!(f
+            .iter()
+            .all(|x| x.building_id == 900 && x.building_type == "relation"));
+        let outer: Vec<_> = f
+            .iter()
+            .filter(|x| x.face_index < 4)
+            .map(|x| x.face_type.name())
+            .collect();
+        assert_eq!(
+            outer,
+            ["front", "side", "back", "side"],
+            "the outer ring is a building like a way"
+        );
         let inner: Vec<_> = f.iter().filter(|x| x.face_index >= 4).collect();
         assert_eq!(inner.len(), 4);
-        assert!(inner.iter().all(|x| x.face_type == FaceType::Court && x.type_reason == "inner"));
+        assert!(inner
+            .iter()
+            .all(|x| x.face_type == FaceType::Court && x.type_reason == "inner"));
         // the normal of a court wall points into the courtyard: the southern wall of the courtyard (nodes 5 to 6) points north (azimuth 0)
-        let south = inner.iter().find(|x| x.from_node.min(x.to_node) == 5 && x.from_node.max(x.to_node) == 6).unwrap();
-        assert!(south.azimuth_deg < 1.0 || south.azimuth_deg > 359.0, "{}", south.azimuth_deg);
+        let south = inner
+            .iter()
+            .find(|x| x.from_node.min(x.to_node) == 5 && x.from_node.max(x.to_node) == 6)
+            .unwrap();
+        assert!(
+            south.azimuth_deg < 1.0 || south.azimuth_deg > 359.0,
+            "{}",
+            south.azimuth_deg
+        );
     }
 
     #[test]
     fn open_member_ways_are_chained_into_a_ring() {
         let rings = assemble(vec![vec![1, 2, 3], vec![1, 4, 3], vec![9, 10, 11, 9]]);
         assert!(rings.contains(&vec![9, 10, 11, 9]));
-        assert!(rings.iter().any(|r| r.len() == 5 && r.first() == r.last()), "{rings:?}");
-        assert!(assemble(vec![vec![1, 2, 3]]).is_empty(), "a chain that does not close is dropped");
+        assert!(
+            rings.iter().any(|r| r.len() == 5 && r.first() == r.last()),
+            "{rings:?}"
+        );
+        assert!(
+            assemble(vec![vec![1, 2, 3]]).is_empty(),
+            "a chain that does not close is dropped"
+        );
     }
 
     #[test]
@@ -1199,11 +1319,13 @@ mod tests {
         let ways = [building(100, &[1, 2, 3, 4, 1])];
         let streets = [street(7, (-30.0, 500.0), (50.0, 500.0))];
         let f = building_faces(&ways, &nodes, &streets, &[]);
-        assert_eq!(types(&f), ["side", "front", "front", "back"]);   // the west wall is opposite the east front wall
+        assert_eq!(types(&f), ["side", "front", "front", "back"]); // the west wall is opposite the east front wall
         assert_eq!(f[1].type_reason, "entrance");
         // a service door is no way in
         nodes[2].tags = vec![("entrance".into(), "service".into())];
-        assert!(building_faces(&ways, &nodes, &streets, &[]).iter().all(|x| x.face_type == FaceType::Side));
+        assert!(building_faces(&ways, &nodes, &streets, &[])
+            .iter()
+            .all(|x| x.face_type == FaceType::Side));
     }
 
     #[test]
@@ -1227,8 +1349,17 @@ mod tests {
         small.highway = "service".into();
         let mut big = street(3, (-30.0, 18.0), (50.0, 18.0));
         big.highway = "primary".into();
-        let f = building_faces(&[building(100, &[1, 2, 3, 4, 1])], &block(), &[small, big], &[]);
-        assert_eq!(f[2].face_type, FaceType::Front, "the north wall faces the primary road");
+        let f = building_faces(
+            &[building(100, &[1, 2, 3, 4, 1])],
+            &block(),
+            &[small, big],
+            &[],
+        );
+        assert_eq!(
+            f[2].face_type,
+            FaceType::Front,
+            "the north wall faces the primary road"
+        );
         assert_eq!(f[2].type_reason, "street");
     }
 

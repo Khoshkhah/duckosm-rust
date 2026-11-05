@@ -425,7 +425,14 @@ pub fn edge_graph(
         by_source.entry(e.source).or_default().push(i);
     }
     let heads: Vec<(f64, f64)> = all.iter().map(|(e, _)| headings(e)).collect();
-    let mut rows = Vec::new();
+    // The number of moves is known before the rows are made (a move that a bridge rule or two access labels remove only makes the
+    // vector a little too large). Without this, the vector doubles its capacity by pushes: it holds the old and the new block at the
+    // same time, and it keeps up to half of the capacity unused.
+    let moves: usize = all
+        .iter()
+        .map(|(e, _)| by_source.get(&e.target).map_or(0, |v| v.len()))
+        .sum();
+    let mut rows = Vec::with_capacity(moves);
     for (i, &(e1, l1)) in all.iter().enumerate() {
         for &j in by_source.get(&e1.target).map_or(&[][..], |v| v.as_slice()) {
             let (e2, l2) = all[j];
@@ -503,7 +510,10 @@ pub fn edge_graph(
             })
         });
     }
-    rows.sort_by_key(|g| (g.from_edge, g.to_edge));
+    // Each (from, to) pair has one row (a pair of edge indexes makes one move, and the edge ids are unique), so the sort needs no
+    // tie rule. An unstable sort works in place; the stable one allocates half of the rows again.
+    rows.sort_unstable_by_key(|g| (g.from_edge, g.to_edge));
+    rows.shrink_to_fit();
     permission.sort();
     (rows, permission)
 }
