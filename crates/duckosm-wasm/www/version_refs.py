@@ -28,6 +28,9 @@ NAMES |= {"index.min.css"}
 # app/export.js adds these names to the address of the sql.js CDN (`base + "sql-wasm.js"`): not a file of the page
 NAMES |= {"sql-wasm.js"}
 
+# app/design_panel.js gives this name to the file of your themes that the browser downloads: not a file of the page
+NAMES |= {"duckosm-themes.json"}
+
 
 def version(text, v):
     tag = lambda path: f"{path}?v={v}"  # noqa: E731
