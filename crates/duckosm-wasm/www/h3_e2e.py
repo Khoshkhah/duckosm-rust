@@ -168,6 +168,14 @@ def run(browser, phone):
     assert f["geometry"]["type"] == "Polygon" and len(f["geometry"]["coordinates"]) == 1 and inside((cx, cy), f["geometry"]), "no hole"
     pick(centre)
     cells(6)
+    # work in a later card ends the picking: a click on the map then picks nothing; a click in card 1 starts it again (h3Mode)
+    page.dispatch_event("#step4-card", "pointerdown")
+    assert not page.evaluate("document.body.classList.contains('h3')"), "a click in card 4 ends the picking of hexagons"
+    pick(centre)
+    page.wait_for_timeout(800)                  # time for a pick to act, if picking were still on
+    cells(6)
+    page.dispatch_event("#step1-card", "pointerdown")
+    assert page.evaluate("document.body.classList.contains('h3')"), "a click in card 1 starts it again"
     # Unselect removes the cells and the area
     click("#step1-card .area-clear")
     cells(0)
