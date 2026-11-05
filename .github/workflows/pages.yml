@@ -1,7 +1,8 @@
 # The browser page on GitHub Pages: https://khoshkhah.github.io/duckosm-rust/ (README.md, "the browser page").
 # The job builds the WebAssembly modules with crates/duckosm-wasm/build.sh (the module with threads needs nightly
 # Rust, as in ci.yml), puts the Google Maps key of the repository secret GOOGLE_MAPS_KEY into the deployed copy of
-# the page, and deploys crates/duckosm-wasm/www/. The key is never in git. The site is public, so the key must be
+# the page, builds the manual (mkdocs.yml, docs/) into the folder manual/ of the site, and deploys crates/duckosm-wasm/www/.
+# The key is never in git. The site is public, so the key must be
 # limited to https://khoshkhah.github.io/* and to the Maps JavaScript API (roadstyle docs/guides/google-key.md).
 # Pages cannot send the COOP and COEP headers: www/coi-serviceworker.js adds them in the browser.
 name: Pages
@@ -51,9 +52,10 @@ jobs:
           fi
           echo "::add-mask::$GOOGLE_MAPS_KEY"
           f=crates/duckosm-wasm/www/index.html
-          # the one place: the dashboard's street_view_key (a key that the person saves in the settings is used first)
-          test "$(grep -c 'street_view_key: ""' $f)" = 1
-          sed -i "s#street_view_key: \"\"#street_view_key: \"$GOOGLE_MAPS_KEY\"#" $f
+          # the one place: the dashboard's street_view_key (a key that the person saves in the settings is used first, and a key
+          # in local_keys.json on localhost is before it: the page reads `localKeys.google ?? ""`)
+          test "$(grep -cF 'street_view_key: localKeys.google ?? ""' $f)" = 1
+          sed -i "s#street_view_key: localKeys.google ?? \"\"#street_view_key: localKeys.google ?? \"$GOOGLE_MAPS_KEY\"#" $f
           test "$(grep -c "$GOOGLE_MAPS_KEY" $f)" = 1
           echo "The page has the key."
       - name: Put the version on the page's own file references
@@ -62,6 +64,14 @@ jobs:
         run: |
           cp -r crates/duckosm-wasm/www "$RUNNER_TEMP/site"
           python3 crates/duckosm-wasm/www/version_refs.py "$RUNNER_TEMP/site" "${GITHUB_SHA::7}"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build the manual into the folder manual/ of the site
+        # MkDocs 2.0 drops the plugin and theme system that Material needs: stay on 1.x (as duckOSM's docs.yml)
+        run: |
+          pip install "mkdocs>=1.6,<2" "mkdocs-material>=9.5,<10"
+          mkdocs build --strict -d "$RUNNER_TEMP/site/manual"
       - uses: actions/upload-pages-artifact@v5
         with:
           path: ${{ runner.temp }}/site
