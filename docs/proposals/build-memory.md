@@ -8,6 +8,8 @@ The build runs in one WebAssembly module. A 32-bit module can use at most 4 GB, 
 
 The old numbers (2026-10-21 and 2026-10-22) said that Kentucky (2,114,699 driving edges) uses 2,053 MiB, and that Iran fails at 3,816 MiB. **I measured again on 2026-11-04 with the build of 2026-10-29, and the build now needs much more memory:** Kentucky driving alone uses **3,422 MiB**, which is 84% of the limit, and Estonia with three networks uses 2,305 MiB (it was 710 MiB for driving). The newer steps (the edge graph, the restrictions, the lane profile, the area tables) cost memory. Kentucky with three networks will not fit: walking alone adds more than 1 GB in Estonia (my estimate for Kentucky, not measured).
 
+**A first round of savings is done and measured** (below, "A first round of savings"): the peak of Estonia walking fell by 20% with no change of the output.
+
 The proposal has three levels, from cheap to large:
 
 1. **Measure first, and fail with a clear message.** A memory probe for each step, a re-measure of the largest known areas, and a message before the module runs out of memory.
@@ -65,6 +67,53 @@ Facts from the tables:
 
 Native numbers, from [design.md](../design.md), section 7 (2026-10-22): Kentucky has a heap peak of 2,145 MiB on one thread, and Iran has a heap peak of 5,222 MiB. So the native CLI also needs more than 4 GB for Iran, and a 64-bit module needs about the same.
 
+## A first round of savings (2026-11-04)
+
+I added a memory probe (`crates/duckosm-core/examples/mem_probe.rs` on the branch `claude/mem-probe`, commit `556c8d2`). It uses a counting allocator and prints the live bytes and the peak at the start of each numbered step of `build_network_with`, and what each part of the network holds. The numbers are the Rust heap of one process with one thread, not the WebAssembly memory. The data structures are the same, so the shares are probably the same. Estonia walking, before the fixes:
+
+| Start of step | Live (MiB) | Peak since the step before (MiB) | What happens |
+|---|---|---|---|
+| 1 Cut the ways | 309 | 362 | |
+| 2b Merge chains | 552 | 552 | |
+| 3 Parallel arcs | 610 | 845 | **+235 transient** |
+| 4 Antiparallel pairs | 568 | 794 | +226 transient |
+| 5 Reverse edges | 639 | 752 | |
+| 6 Edge ids | 816 | 1,038 | **+222: three blocks of edges at one time** |
+| 8b Connect the path ends | 934 | 935 | |
+| 8b2 | 1,152 | **1,342** | **The edge list doubled its capacity: +217 live, +407 at the peak** |
+| 9b Edge graph | 925 | 1,193 | |
+| 10 Component filter | 1,084 | 1,221 | |
+
+Where the final memory is (Estonia walking, 1,394,642 edges): the edges 437 MiB (328 bytes for each edge, with a 160-byte `Edge`), the edge graph 159 MiB (120 bytes for each edge), the tables `ways` and `way_nodes` 79 MiB, the input 64 MiB and the coordinates 56 MiB.
+
+Four changes, all in `duckosm-core` (commit `a4deb7f` on the same branch):
+
+1. The edge list gave back its unused capacity after the connectors were added. Tartu walking had 9.7 MiB unused (22% of the live memory), because 640 pushes doubled a full vector of 160-byte edges.
+2. The connect step reserves the room for its edges before it pushes them.
+3. Step 5 makes the reverse edges into the vector of all edges, so there is no third block.
+4. The edge graph counts its moves first, sorts in place and shrinks to fit.
+
+Result (native heap, one thread, measured with the probe):
+
+| Area and network | Live before | Live after | Peak before | Peak after |
+|---|---|---|---|---|
+| Tartu driving | 18.8 | 16.2 | 32.7 | 28.4 |
+| Tartu walking | 43.6 | 31.2 | 71.5 | 55.8 |
+| Estonia driving | 585 | 498 | 864 | 757 |
+| Estonia walking | 1,045 | 813 | 1,532 | **1,221** |
+
+Estonia walking peak is **20% lower**. The output is the same: the tests of `duckosm-core` pass (50 tests), and for Tartu and Estonia with three networks, 33 of the 35 Parquet files are byte equal to the files of release 0.3.0. The two others hold the build time (`visualization_metadata`, `edge_levels_meta`).
+
+**What this does not show.** The WebAssembly memory in the page is not measured again. It needs a build of the module with the nightly toolchain, which is a heavy build, so I did not run it.
+
+**What remains** (from the same profile, my estimates for the gain):
+
+- The top peak is now in step 10 (the component filter, 1,221 MiB), then the graph step and the connect step (+200 MiB of temporary maps).
+- Steps 2b, 3 and 4 each add about 225 MiB for a moment. I did not find the cause. The code builds hash maps with one vector for each key, so that is the first thing to check. A sorted list of indexes needs much less.
+- The edge graph is 159 MiB in Estonia walking. Writing the rows in sorted order as they are made removes them from memory.
+- An `Edge` has 160 bytes. Fields that are rarely set can move to a smaller part.
+- The tables `ways` and `way_nodes` hold 79 MiB. They are off with `--no-ways-tables`.
+
 ## Where the memory goes
 
 From the code (`crates/duckosm-core/src/model.rs`, `graph.rs`, `pbf.rs`). The sizes in bytes are my estimates, not measurements.
@@ -105,7 +154,7 @@ Each step has a check, and a step starts only when the step before it is done. L
 |---|---|---|
 | 0 | **Measure.** Done in part (2026-11-04): the step log on Nacka, Tartu, Estonia and Kentucky, in Node. Still to do: the probe (option 1), which shows the memory by type and not only by step, and a run in the page with the `Blob` path. | The table of this note has the current numbers. The probe shows where the 1.3 to 1.7 KiB for each edge go. |
 | 1 | **The clear error** (option 6). | A test with a small limit shows the message, and no `RuntimeError: unreachable`. |
-| 2 | **Cheap savings** (options 2 and 3, then 4 if the probe shows it). | `cargo test -p duckosm-wasm` (the same 33 files as the native build), `tools/compare_tables.py` on Monaco and Tartu, and the memory in the table is lower. |
+| 2 | **Cheap savings.** Started: four changes, Estonia walking peak −20% (above). Next: steps 2b, 3, 4 and 10, and the edge graph. | `cargo test -p duckosm-wasm` (the same 33 files as the native build), `tools/compare_tables.py` on Monaco and Tartu, and the memory in the table is lower. |
 | 3 | **Instances for each network** (option 5), if the probe shows that three networks cost much more than one. | Same checks. The time of a three-network build is not much worse. |
 | 4 | **Decide** between options 7, 8 and 9 with the numbers of step 0 and step 2. | A short design note for the chosen option. |
 
