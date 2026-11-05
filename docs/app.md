@@ -445,8 +445,8 @@ name, the boundary, the fixes text, the summary and the table list) and a cache 
 
 The card holds rules that correct known errors of OpenStreetMap and add information that OSM does not give in a usable form. The design is in [osm-editing.md](osm-editing.md).
 The rules are a fixes file: duckOSM's `overrides` and `turn_restrictions`, and the extension `extra.tag_edits` ([design.md](design.md), item 6c2). The page keeps the rules as data
-(`app/fixes.js`) and writes the YAML from them. It never edits the YAML text, and it does not show it. The card needs the build. It shows the number of changes and one button,
-**Edit fixes**, which opens the **fixes panel** (`app/fixes_panel.js`).
+(`app/fixes.js`) and writes the YAML from them. It never edits the YAML text, and it does not show it. The card needs the build. It shows the number of changes under its title, and a click on the
+card opens the **fixes panel** (`app/fixes_panel.js`). Cards 7, 8 and 9 are roadstyle's cards that open something (`open`, `note`): one click opens the panel.
 
 - **The panel** is the page's one panel, as the level editor is: the steps and the title go while it is open, and **← Steps** brings them back. It has six tabs: **Road**, **Building**, **Node**, **Turn**, **New road** and **Changes**
   (the design is in [osm-editing.md](osm-editing.md), "The panel"). The one **Build again** button is at the bottom of **Changes**. It closes the panel and runs step 4 with the rules.
@@ -581,7 +581,7 @@ The check: `editor_e2e.py` (headless Chromium, Monaco through the File tab). It 
 
 ### Step 9: design
 
-Card 9 sets the style of the map and the profile of the tiles (the guide is in [dashboard.md](dashboard.md#step-9-design)). It has a panel of its own, built like the fixes panel (`#design-panel`, `app/design_panel.js`). It is on at all times, because the design does not need a build.
+Card 9 sets the style of the map and the profile of the tiles (the guide is in [dashboard.md](dashboard.md#step-9-edit-design)). It has a panel of its own, built like the fixes panel (`#design-panel`, `app/design_panel.js`). It is on at all times, because the design does not need a build.
 
 - **One object.** A design is one plain object (`app/design.js`) with every value: the road fills and casings, the width factors, the labels, the arrows, the base-map colors, the dark ranges and the profile. A file, a theme and the stored copy have the same shape. `normalize` repairs a wrong value and fills a missing one from the design of the look.
 - **How the style reaches the map.** `applyToLook` writes the design into a copy of `map/look.json`: the classes' colors in `roads.styles.classes`, the width curves in `roads.model.width`, and the other sections that the engine reads. It writes only the values that differ from the look, so the default design changes nothing. The panel gives the copy to `duck.setLookText`, and `showRoads` draws the map again. The worker (`map_worker.js`) reads `data.look` in place of `look.json`. `design_units.mjs` loads each theme in roadstyle's `Look.fromJson`.

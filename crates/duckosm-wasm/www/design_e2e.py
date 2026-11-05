@@ -61,14 +61,14 @@ with sync_playwright() as p:
 
     # the card: number 10, ready before a build, with its own button; the panel has five tabs, the header, and the bar
     card = page.locator("#step9-card")
-    assert card.count() == 1 and page.text_content("#step9-card .rs-sec-title").strip() == "Design" and page.text_content("#step9-card .n") == "9"
+    assert card.count() == 1 and page.text_content("#step9-card .rs-sec-title").strip() == "Edit design" and page.text_content("#step9-card .n") == "9"
     assert "off" not in (page.get_attribute("#step9-card", "class") or ""), "the design needs no build"
     if "folded" in (page.get_attribute("#step9-card", "class") or ""):
         page.click("#step9")
-    assert page.is_visible("#design-open") and not page.is_visible("#design-panel")
-    page.click("#design-open")
+    assert page.is_visible("#step9") and not page.is_visible("#design-panel")
+    page.click("#step9")
     assert page.evaluate("document.body.classList.contains('editing-design')") and page.is_visible("#design-panel") and not page.is_visible("#fix-panel") and not page.is_visible("#step1-card")
-    assert page.locator("#design-panel [role=tab]").count() == 5 and page.text_content("#design-panel h2") == "Design"
+    assert page.locator("#design-panel [role=tab]").count() == 5 and page.text_content("#design-panel h2") == "Edit design"
     assert page.is_visible("#design-back") and page.is_visible("#design-hide") and page.is_visible("#design-changes")
     page.click("#design-back")
     assert not page.is_visible("#design-panel") and page.is_visible("#step9-card"), "Steps comes back to the steps"
@@ -83,7 +83,7 @@ with sync_playwright() as p:
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=600_000)
     print("built and drawn")
 
-    page.click("#design-open")
+    page.click("#step9")
     before = style_text(page)
         # the themes
     assert page.locator("#design-pane .theme[data-look]").count() == 33 and page.get_attribute("#design-pane [data-look=light]", "aria-checked") == "true"
@@ -448,7 +448,7 @@ with sync_playwright() as p:
     page.check("#export-full")
     assert page.evaluate("window.designPanel.profile().layers.edges")
     # the Analysis profile with fewer columns, a bigger extent and no base-map layers
-    page.click("#design-open"); page.click("#design-tab-tiles")
+    page.click("#step9"); page.click("#design-tab-tiles")
     page.click("#design-pane [data-profile=analysis]")
     assert page.evaluate("window.designPanel.profile().auto") and page.is_disabled("#design-pane [data-p='profile.maxzoom']")
     page.click("#design-pane [data-cols=few]")
@@ -476,7 +476,7 @@ with sync_playwright() as p:
     print("tiles: ok")
 
     # the design file: Download, Load, a bad file
-    page.click("#design-open"); page.click("#design-tab-theme")
+    page.click("#step9"); page.click("#design-tab-theme")
     set_input(page, "[data-p=name]", "My roads", event="change")
     assert page.text_content("#design-name") == "My roads"
     with page.expect_download() as d:
@@ -529,7 +529,7 @@ with sync_playwright() as p:
     print("restore: ok")
 
     # Your themes: edit a ready theme, save it under a name, ask before a replace, keep the tile profile, update, a file of all of them; after a reload apply, rename, delete
-    page.evaluate("document.getElementById('design-open').click()")
+    page.evaluate("document.getElementById('step9').click()")
     page.click("#design-tab-theme")
     stored = lambda: json.loads(page.evaluate("localStorage.getItem('duckosm.themes')") or "[]")
     assert "No saved theme yet" in page.text_content("#design-pane") and page.is_disabled("#mine-download")
@@ -600,7 +600,7 @@ with sync_playwright() as p:
     # a reload: the themes are still there; apply, rename, delete (a second click)
     page.goto(url)
     page.wait_for_function("window.mapReady && window.timings && window.timings.duckdbStart", timeout=120_000)
-    page.evaluate("document.getElementById('design-open').click()")
+    page.evaluate("document.getElementById('step9').click()")
     page.click("#design-tab-theme")
     assert page.locator("#design-pane #mine-list [data-mine]").count() == 3
     page.click("[data-mine=from-a-file] [data-mine-do=apply]")

@@ -50,7 +50,7 @@ with sync_playwright() as p:
     if "folded" in (page.get_attribute("#step9-card", "class") or ""):
         page.click("#step9")
     changed["now"] = True
-    page.click("#design-open")
+    page.click("#step9")
     page.click("#design-tab-theme")
     assert theme(page, "light") == "same tiles", "the default look over the default map keeps the tiles, also when map/look.json changed"
 

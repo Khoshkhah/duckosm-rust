@@ -18,7 +18,7 @@ The page saves the build in your browser. When you come back, **Your areas** lis
 | Choose an area with a drawing, a GeoJSON file or H3 hexagons | [Step 1](dashboard.md#step-1-choose-an-area) |
 | Add a buffer around the area | [Step 2](dashboard.md#step-2-the-area) |
 | Build from Overpass or from a file that is already cut | [Step 3](dashboard.md#step-3-the-data) |
-| Change a road, a building, a node or a turn rule, then build again | [Step 7](dashboard.md#step-7-fix-osm-data) |
+| Change a road, a building, a node or a turn rule, then build again | [Step 7](dashboard.md#step-7-edit-osm-data) |
 | Edit the drawing levels of bridges and tunnels | [Step 8](dashboard.md#step-8-edit-levels) |
 | Give the network to QGIS, MATSim, SUMO or a tile server | [Step 9](dashboard.md#step-9-export) |
 | Build the same area from a script | [The CLI](cli.md), [the Python wheel](python.md) |

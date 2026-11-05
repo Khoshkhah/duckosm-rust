@@ -29,7 +29,7 @@ with sync_playwright() as p:
     # the card opens the panel in the sheet (a tap, as on a phone)
     if "folded" in (page.get_attribute("#step9-card", "class") or ""):
         page.evaluate("document.getElementById('step9').click()")
-    page.evaluate("document.getElementById('design-open').click()")
+    page.evaluate("document.getElementById('step9').click()")
     page.wait_for_timeout(800)
     assert page.evaluate("document.body.classList.contains('editing-design')")
 

@@ -103,14 +103,14 @@ def run(browser, name, dark=False, **context):
     # the map: Show on map is off while the draw runs (the roads draw after the build), Edit levels waits for it
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=600_000)
     on("show", "show-why")
-    on("edit-open", "edit-why")
+    on("step8", "step8-why")
     # a click on Show on map starts a draw: in the same turn of the page, both buttons are off with their reasons (the page is busy while it draws)
     now = page.evaluate("""() => { document.getElementById('show').click(); const g = (i) => document.getElementById(i);
-        return [g('show').disabled, g('show-why').textContent, g('edit-open').disabled, g('edit-why').textContent, getComputedStyle(g('show')).cursor]; }""")
+        return [g('show').disabled, g('show-why').textContent, g("step8").disabled, g("step8-why").textContent, getComputedStyle(g('show')).cursor]; }""")
     assert now[0] and "Drawing" in now[1] and now[2] and "map is drawn" in now[3] and now[4] == "default", now
     page.wait_for_function("!window.mapDrawing", timeout=600_000)
     on("show", "show-why")
-    on("edit-open", "edit-why")
+    on("step8", "step8-why")
     page.context.close()
     print(f"buttons ({name}): GeoJSON, Build, Run, Show on map and Edit levels are off with a reason until their inputs are ready, and on after")
 

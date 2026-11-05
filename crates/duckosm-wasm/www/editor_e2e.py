@@ -183,7 +183,7 @@ with sync_playwright() as p:
     at = lambda: page.evaluate("r => { const q = window.duckMap.project(r); return [q.x, q.y]; }", ref)
     pos0 = at()
     t = time.time()
-    page.click("#edit-open")
+    page.click("#step8")
     # "Opening the level editor…" is in the map's busy box (spinner and veil), as Build and Show on map show their progress (Kaveh, 2026-11-02)
     page.wait_for_function("!document.getElementById('mapbusy').hidden && /Opening the level editor/.test(document.getElementById('mapbusy-text').textContent)", timeout=5_000)
     page.wait_for_function("window.levelEditorOpen || /failed/.test(document.getElementById('editnote').textContent)", timeout=300_000)
@@ -263,7 +263,7 @@ with sync_playwright() as p:
     made = page.evaluate("window.editorArea")
     page.evaluate("window.editorArea = null")
     t = time.time()
-    page.click("#edit-open")
+    page.click("#step8")
     page.wait_for_function("window.levelEditorOpen || /failed/.test(document.getElementById('editnote').textContent)", timeout=300_000)
     assert page.evaluate("!!window.levelEditorOpen"), page.inner_text("#editnote")
     assert page.evaluate("window.editorArea") is None, "the area is not made again: its edges did not change (areaIsFor)"
@@ -375,7 +375,7 @@ with sync_playwright() as p:
     print("duckdb: the download has the edited levels and level_heads")
 
     # Close with no Apply changes nothing; the editor opens again with the edit of this area
-    page.click("#edit-open")
+    page.click("#step8")
     page.wait_for_function("window.levelEditorOpen", timeout=300_000)
     # the area's files are in the site's private file system (roadstyle's browserStore since 65af6e6), heads.csv with the edit
     heads = page.evaluate("""async () => { const d = await (await navigator.storage.getDirectory()).getDirectoryHandle('lv-duckosm_Monaco');
@@ -399,7 +399,7 @@ with sync_playwright() as p:
           const n = typeof data === "string" ? data.length : data.byteLength ?? data.size ?? 0;
           if (n > 100000) return Promise.reject(new DOMException("the quota has been exceeded", "QuotaExceededError"));
           return w.call(this, data); }; }""")
-    page.click("#edit-open")
+    page.click("#step8")
     page.wait_for_function("window.levelEditorOpen || /failed/.test(document.getElementById('editnote').textContent)", timeout=300_000)
     assert page.evaluate("!!window.levelEditorOpen"), page.inner_text("#editnote")
     assert "could not keep the area files" in page.inner_text("#editnote"), page.inner_text("#editnote")
