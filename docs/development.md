@@ -1,5 +1,25 @@
 # Development
 
+## Where the engine lives
+
+Since the engine move (2026-11), the Rust engine (`duckosm-core`, `duckosm-parquet`, `duckosm-duckdb`,
+`duckosm-build`, `duckosm-cli`, `duckosm-py`) is in the [duckOSM](https://github.com/Khoshkhah/duckOSM) repository, in
+`rust/`. It has the engine tests (the Monaco golden files), the wheels and the release. This repository has the browser
+page (`crates/duckosm-wasm`, `www/`) and these docs. `crates/duckosm-wasm/Cargo.toml` takes `duckosm-core` and
+`duckosm-build` from duckOSM with a Git dependency at one `rev`.
+
+To change the engine and the page together, check out duckOSM beside this repository. Then add a `[patch]` table to the
+root `Cargo.toml` (do not commit it):
+
+```toml
+[patch."https://github.com/Khoshkhah/duckOSM"]
+duckosm-core = { path = "../duckOSM/rust/duckosm-core" }
+duckosm-build = { path = "../duckOSM/rust/duckosm-build" }
+```
+
+To use a new engine in the page, merge the engine change in duckOSM. Then set the new commit as `rev` in
+`crates/duckosm-wasm/Cargo.toml` and run `cargo update -p duckosm-core`.
+
 ## Toolchain status (2026-10-21)
 
 | Tool | Status |
@@ -27,13 +47,12 @@ rustup toolchain install nightly-2026-10-15 --profile minimal --component rust-s
 ## Build and test
 
 ```bash
-cargo build --release          # the first build takes several minutes: it compiles DuckDB
-cargo test --release           # hash vectors, geometry tests, and the Monaco golden test
-cargo build --release --no-default-features -p duckosm-cli   # without DuckDB: GeoParquet only, 7.9 MB program, builds in under a minute
-./target/release/duckosm-rust tests/data/monaco.osm.pbf -o out --name monaco --no-component-filter
+cargo build --release -p duckosm-wasm --target wasm32-unknown-unknown   # the first build takes minutes
+cargo test --release -p duckosm-wasm   # the browser build equals duckosm_build::build, byte for byte
 ```
 
-The binary is `target/release/duckosm-rust`. `--timing` prints the time of each step.
+The engine tests (hash vectors, geometry, the Monaco golden test, the lane profile, the levels) and the native program
+`duckosm-rust` (`duckosm-cli`) are in duckOSM: run `cargo test --release` in its `rust/` folder.
 
 ## One shared build folder
 
@@ -68,35 +87,12 @@ a complete clone. The clone is a different Git repository, so it builds in its o
 To stop the shared folder, delete `~/.local/bin/cargo`, or set `CARGO_TARGET_DIR` or `--target-dir` to a
 folder outside `.shared-target`. `cargo clean` deletes the shared folder of all worktrees.
 
-## Check the result against duckOSM
+## Engine checks (moved to duckOSM)
 
-`tests/data/golden_monaco.yaml` builds the golden database with duckOSM 0.6.0 (run it in an empty
-folder, with `duckosm build --config`). Then compare every row, column and geometry byte:
-
-```bash
-python tools/compare_with_duckosm.py monaco_golden.duckdb out/monaco.duckdb [driving|walking|cycling]   # or the GeoParquet folder
-```
-
-`tests/data/golden_monaco_modes.yaml` is the config of the three-mode golden (four variants; the comments say which lines to change). `tools/make_golden_summary.py` writes `tests/data/monaco_modes_summary.tsv` from those databases. `tools/make_golden.py` writes `tests/data/monaco_driving_edges.tsv` from such a database.
-`tools/compare_levels.py` compares `visualization.edge_levels` of a duckosm-rust file with roadstyle's result on
-the same edges, in duckOSM's virtual environment ([levels.md](levels.md), "The equality check"):
-
-```bash
-/home/kaveh/projects/duckOSM/.venv/bin/python tools/compare_levels.py out/monaco.duckdb
-```
-
-`tools/edge_id_reference.py` is the `edge_id` hash in plain Python. It compares itself with the
-installed DuckDB, and with every edge of a duckOSM database:
-
-```bash
-pip install duckdb
-python tools/edge_id_reference.py                       # random checks
-python tools/edge_id_reference.py path/to/area.duckdb   # every edge of a duckOSM database
-```
-
-## Benchmark
-
-See [benchmark.md](benchmark.md). The runner is `bench/run_bench.py`.
+The checks of the network step against duckOSM (the golden files, `compare_with_duckosm.py`, `compare_tables.py`,
+`compare_levels.py`, `edge_id_reference.py`, the OSM fixes, another area such as Tartu) and the benchmark
+(`bench/run_bench.py`) are in the duckOSM repository now: `tests/data/`, `tools/`, `bench/` and `rust/`. The docs there
+describe them. [benchmark.md](benchmark.md) keeps the results.
 
 ## WebAssembly
 
@@ -272,106 +268,17 @@ python tools/make_geofabrik_index.py index-v1.json crates/duckosm-wasm/www/geofa
 
 ## Check the base-map layers
 
-The `raw.*` cut and the base-map layers (`features.*`) of [features.md](features.md). duckOSM's `monaco.duckdb`
-keeps its `raw.*` and is built with its OSM fixes, so `raw.*` and all 11 layers must be equal:
+The `raw.*` cut and the base-map layers (`features.*`) of [features.md](features.md). The engine side of the check
+(the raw cut against osmium's smart cut, `tools/compare_features.py`, and `crates/duckosm-build/sql/features.sql`) is in
+duckOSM now, in `rust/` and `tools/`. The page side stays here: run the page on the Monaco sample with the boundary and
+compare its `features_*.parquet` with the native result of duckOSM's `tools/compare_features.py --page`:
 
 ```bash
-cargo test --release -p duckosm-core --test raw     # the raw cut equals osmium's smart cut (tests/data/monaco_smart.osm.pbf)
-./target/release/duckosm-rust tests/data/monaco_sample.osm.pbf --boundary tests/data/monaco.geojson -m driving,walking,cycling \
-    --fixes ../duckOSM/osm_overrides/osm_overrides.yaml --raw -f geoparquet -o out-raw
-python tools/compare_features.py out-raw --duckosm ../duckOSM/monaco.duckdb
 python crates/duckosm-wasm/www/e2e.py tests/data/monaco_sample.osm.pbf out-page --boundary tests/data/monaco.geojson \
     --fixes ../duckOSM/osm_overrides/osm_overrides.yaml
-python tools/compare_features.py out-raw --page out-page     # the page's features_*.parquet against the native result
 ```
 
-Another area against osmium (`osmium extract -s smart -p boundary.geojson region.osm.pbf -o cut.osm.pbf`):
+## The Python wheel and the release
 
-```bash
-RAW_CHECK="region.osm.pbf boundary.geojson cut.osm.pbf" cargo test --release -p duckosm-core --test raw -- --ignored
-```
-
-`crates/duckosm-build/sql/features.sql` is made from duckOSM's code. Make it again when duckOSM's layers change, then
-build the WebAssembly modules again (the module holds the text):
-
-```bash
-../duckOSM/.venv/bin/python tools/make_features_sql.py
-```
-
-## Check the OSM fixes
-
-`monaco.duckdb` of duckOSM is built with its OSM fixes file, so all driving rows must be equal:
-
-```bash
-./target/release/duckosm-rust tests/data/monaco.osm.pbf -o out-fixes --fixes ../duckOSM/osm_overrides/osm_overrides.yaml
-python tools/compare_with_duckosm.py ../duckOSM/monaco.duckdb out-fixes driving
-```
-
-## Check another area (example: Tartu)
-
-Build the golden with duckOSM, then run duckosm-rust with the matching flags and compare. The yaml is
-`tests/data/golden_monaco_modes.yaml` with `pbf_path` changed and the switches set (see the comments in it).
-
-```bash
-# duckOSM (in an empty folder; the lane profile step is switched off because it is slow and not part of the network step)
-python bench/python_steps.py g.yaml --no-lane-profile
-# duckosm-rust, same settings as g.yaml (here: no boundary, merge on, global junctions on, sidewalk rule on, connector on)
-duckosm-rust area.osm.pbf -o out --format geoparquet --modes driving,walking,cycling --no-component-filter
-python tools/compare_with_duckosm.py golden.duckdb out walking
-```
-
-Switches: `--no-functional-types`, `--no-speeds`, `--no-costs`, `--no-merge-segments`, `--no-global-junctions`, `--no-sidewalk-inference`, `--no-connect-paths`,
-`--no-component-filter`. With a boundary in the yaml (and `build_graph`, `process_speeds` and
-`calculate_costs` on, because duckOSM runs the component filter only then), give duckosm-rust the cut file
-that duckOSM wrote in `pbf/` and leave the component filter on.
-
-Known difference: a connector between two facing dangling ends can have the other direction label
-(`edge_ref`, `is_reverse`, sometimes `highway`). See section 6 of the design.
-
-## Build and test the Python wheel
-
-```bash
-python3 -m venv .venv && .venv/bin/pip install maturin
-.venv/bin/maturin build --release -m crates/duckosm-py/Cargo.toml -o wheels          # with DuckDB (the first build takes minutes)
-.venv/bin/maturin build --release -m crates/duckosm-py/Cargo.toml --no-default-features -o wheels_small   # without DuckDB: 2 MB
-python3 -m venv /tmp/t && /tmp/t/bin/pip install wheels/duckosm_rust-*.whl duckdb && /tmp/t/bin/python tests/test_wheel.py
-```
-
-## Wheels for other systems
-
-`.github/workflows/ci.yml` builds the wheel on 5 targets (Linux x86_64 and aarch64 with manylinux 2_28, macOS
-x86_64 and arm64, Windows x64), plus the sdist, runs `tests/test_wheel.py` on each wheel, runs the Rust tests of
-`duckosm-core`, `duckosm-duckdb`, `duckosm-build` and `duckosm-wasm`, and builds the WebAssembly modules. Then it
-runs the module in Node on Monaco (`run_node.mjs`) and compares each file with `cmp` to the native file of the
-`duckosm-wasm` test. The metadata files hold the build time, so it does not compare them. It runs on each push to `main` of
-[Khoshkhah/duckosm-rust](https://github.com/Khoshkhah/duckosm-rust) (private) and on each pull request. The
-results are on the Actions page of the repository. It does not publish.
-
-What was checked on this machine (Linux x86_64, 2026-10-21):
-
-```bash
-pip install maturin ziglang
-maturin build --release --zig --compatibility manylinux2014 -m crates/duckosm-py/Cargo.toml -o wheels   # 13.6 MB, glibc 2.17 or newer
-maturin sdist -m crates/duckosm-py/Cargo.toml -o sdist                                                  # 46 KB, contains all crates
-```
-
-The `manylinux2014` wheel with DuckDB needs only glibc 2.17 (it has no libstdc++ dependency) and passed
-`tests/test_wheel.py` in a new virtual environment. The wheel from a plain `maturin build` needs glibc 2.35.
-Not checked: macOS, Windows, aarch64, and a real old Linux distribution.
-
-## Keys for a local test of the page
-
-Street View (Linked) and Google 3D need a Google Maps JavaScript API key, and the Mapillary photos need a Mapillary client token. The page does not have them in its code. Two ways to give them in a test:
-
-- **The settings of the map bar** (the gear button): paste each key. The browser keeps it for this site only (`localStorage`).
-- **`crates/duckosm-wasm/www/local_keys.json`**, a file that `.gitignore` leaves out of git: `{"google": "<key>", "mapillary": "<token>"}`. A page on `localhost` or `127.0.0.1` reads it at the start and gives the keys to roadstyle's dashboard as the page's keys. A key that the person saved in the settings is over it. The deployed page never reads the file.
-
-## The pictures of the dashboard guide
-
-`docs/dashboard.md` has pictures in `docs/img/dashboard/`. Make them again after a change of the page:
-
-```bash
-python crates/duckosm-wasm/www/docs_shots.py
-```
-
-The script builds Monaco in headless Chromium and needs the page built first. The Search picture needs the network.
+The Python module (`duckosm._rust`), the wheels for 5 systems, the sdist and the CLI archives are built and tested in
+duckOSM (`.github/workflows/release.yml`). This repository publishes only the page (`pages.yml`).
