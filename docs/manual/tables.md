@@ -1,6 +1,6 @@
 # The tables
 
-A build writes a set of tables. Each table is a Parquet file in the `.zip` download. All tables are also in the `.duckdb` download, in schemas. This page tells you what each table is for. [Columns of the tables](../output-tables.md) lists every column.
+A build writes a set of tables. Each table is a Parquet file in the `.zip` download. All tables are also in the `.duckdb` download, in schemas. This page tells you what each table is for. [Columns of the tables](../output-tables.md) lists every column. [The roads](roads.md) tells you which ways are in each network, and how the build sets the values of each road.
 
 ![The list of tables of a build, with their number of rows](../img/dashboard/38-each-table.png)
 
@@ -46,7 +46,7 @@ Each network (driving, walking and cycling) has its own set.
 |---|---|
 | `edges` | The network. One row for each direction of a road, with its line, length, speed and travel time. Start here. |
 | `nodes` | The ends of the edges: the junctions and the dead ends. |
-| `private_edges` | The roads that the network cannot use: private roads, bus-only roads, and pedestrian streets for cars. |
+| `private_edges` | The roads that the network cannot use: private roads, bus-only roads, and pedestrian streets for cars. [Access](roads.md#access-who-can-use-the-road) gives the rules. |
 | `edge_graph` | The legal moves. Each row is a pair of edges that can follow each other. A router with turns uses it. |
 | `turn_restrictions` | Driving only. The OSM turn restrictions at one node, as pairs of edges. |
 | `turn_path_restrictions` | Driving only. The turn restrictions through a via way, as paths of edges. |

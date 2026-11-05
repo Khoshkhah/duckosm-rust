@@ -79,6 +79,7 @@ nav:
       - "Step 9: Edit design": manual/edit-design.md
       - "Step 10: Export": manual/export.md
       - The tables: manual/tables.md
+      - The roads: manual/roads.md
   - Get started:
       - Your first map: first_map.md
       - Concepts: concepts.md

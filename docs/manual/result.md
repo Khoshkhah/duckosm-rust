@@ -30,7 +30,7 @@ Download the **.duckdb** file and open it with DuckDB (the CLI or Python). Write
 SELECT highway, count(*) AS edges, round(sum(length_m) / 1000, 1) AS km
 FROM driving.edges GROUP BY highway ORDER BY edges DESC;
 
--- the streets with a speed limit of 30 km/h or less
+-- the streets with a speed of 30 km/h or less (the speed limit, or the default speed of the class)
 SELECT DISTINCT name FROM driving.edges WHERE maxspeed_kmh <= 30 AND name IS NOT NULL;
 ```
 

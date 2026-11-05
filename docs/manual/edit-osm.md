@@ -37,6 +37,8 @@ Click a road on the map, or type its way ID and press **Load**. The form shows t
 - **Other tags.** Add or delete any tag.
 - **Delete.** Remove the road from the data.
 
+The tags `highway`, `access`, `foot`, `bicycle`, `oneway`, `maxspeed` and `lanes` decide in which network the road is, and its speed and lanes. [The roads](roads.md) gives the rules.
+
 ## Building
 
 ![The Building tab with numbered walls on the map](../img/dashboard/18-fix-building.png)
