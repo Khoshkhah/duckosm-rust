@@ -1,4 +1,4 @@
-"""The card Export (step 9, docs/dashboard.md) in headless Chromium (Playwright): build Monaco, download each format, and check the files against the tables.
+"""The card Export (step 10, docs/dashboard.md) in headless Chromium (Playwright): build Monaco, download each format, and check the files against the tables.
 
     python crates/duckosm-wasm/www/export_e2e.py [out folder]
 
@@ -62,7 +62,7 @@ with sync_playwright() as p:
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.goto(url)
     page.wait_for_function("window.mapReady && window.timings && window.timings.duckdbStart", timeout=120_000)
-    assert "off" in (page.get_attribute("#step9-card", "class") or ""), "the card is off before a build"
+    assert "off" in (page.get_attribute("#step10-card", "class") or ""), "the card is off before a build"
     page.set_input_files("#file", str(ROOT / "tests/data/monaco.geojson"))
     page.wait_for_function("window.areas >= 1", timeout=60_000)
     page.click("#tab-region")
@@ -70,9 +70,9 @@ with sync_playwright() as p:
     page.click("#run")
     page.wait_for_function("!document.getElementById('run').hasAttribute('aria-busy') && !document.getElementById('step7-card').classList.contains('off')", timeout=600_000)
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=600_000)
-    assert "off" not in (page.get_attribute("#step9-card", "class") or ""), "the card is on after a build"
-    if "folded" in (page.get_attribute("#step9-card", "class") or ""):
-        page.click("#step9")
+    assert "off" not in (page.get_attribute("#step10-card", "class") or ""), "the card is on after a build"
+    if "folded" in (page.get_attribute("#step10-card", "class") or ""):
+        page.click("#step10")
     assert page.locator("#export-list [data-fmt]").count() == 7
     assert page.evaluate("document.getElementById('export-zmax').compareDocumentPosition(document.getElementById('export-seg')) & Node.DOCUMENT_POSITION_FOLLOWING"), "the network control comes after the tile section (it is for the files)"
     assert page.locator("#export-list .expsec").count() == 4 and page.locator("#export-seg [data-m]").count() == 3 and page.get_attribute("#export-seg [data-m=driving]", "aria-checked") == "true"
@@ -149,8 +149,9 @@ with sync_playwright() as p:
     print(f"SUMO: {len(es)} edges, {len(cs)} connections")
     # tiles: the zooms of the card, a count; PMTiles that the pmtiles library reads (the header, the metadata, a tile that is MVT), and MBTiles (SQLite) with the same tiles
     assert page.locator("#export-list [data-tiles]").count() == 2 and page.evaluate("[...document.querySelectorAll('#export-list [data-tiles]')].every((b) => !b.disabled)"), "the tile buttons are on after the map is drawn"
-    # Everything (on by default): zoom 0 to the highest that fits, all networks, every road attribute in the tiles
-    assert page.is_checked("#export-full") and page.is_disabled("#export-zmin") and page.input_value("#export-zmin") == "0"
+    # the profile at the first visit (Analysis, step 9): the layer edges, zoom 0 to the highest that fits, all networks, every road attribute in the tiles
+    assert page.is_checked("#export-full") and page.is_checked("#export-auto") and page.is_disabled("#export-zmax") and page.input_value("#export-zmin") == "0"
+    assert "Analysis" in page.text_content("#export-profile")
     zmax = int(page.input_value("#export-zmax"))
     assert zmax >= 14, zmax
     page.wait_for_function("/\\d+ tiles\\./.test(document.getElementById('export-tiles').textContent)")
@@ -181,6 +182,7 @@ with sync_playwright() as p:
     assert ev["lowClasses"] is None or set(ev["lowClasses"]) <= {"motorway", "trunk", "primary", "primary_link", "motorway_link", "trunk_link"}, ev["lowClasses"]
     print(f"Everything: zoom 0 to {zmax}, {len(ev['ids'])} edges of {union} in the tiles of zoom {zmax} ({ev['pieces']} pieces), low zoom classes {ev['lowClasses']}")
     page.uncheck("#export-full")
+    page.uncheck("#export-auto")
     page.fill("#export-zmin", "12")
     page.fill("#export-zmax", "14")
     page.wait_for_function("/\\d+ tiles\\./.test(document.getElementById('export-tiles').textContent)")
