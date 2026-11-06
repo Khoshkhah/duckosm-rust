@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 360" width="920" height="360" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14">
+  <title>How the tables join: edges in the middle; each box names the key of its join</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#64748b"/></marker>
+  </defs>
+  <rect width="920" height="360" rx="14" fill="#ffffff"/>
+  <rect x="340" y="135" width="220" height="90" rx="10" fill="#0d9488"/>
+  <text x="450" y="170" text-anchor="middle" fill="#ffffff" font-weight="700" font-size="17">edges</text>
+  <text x="450" y="193" text-anchor="middle" fill="#ffffff" font-size="12.5" font-family="ui-monospace, monospace">edge_id, osm_id</text>
+  <text x="450" y="211" text-anchor="middle" fill="#ffffff" font-size="12.5" font-family="ui-monospace, monospace">source, target</text>
+  <g fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.5">
+    <rect x="20" y="70" width="230" height="56" rx="10"/>
+    <rect x="20" y="234" width="230" height="56" rx="10"/>
+    <rect x="650" y="16" width="250" height="56" rx="10"/>
+    <rect x="650" y="84" width="250" height="56" rx="10"/>
+    <rect x="650" y="152" width="250" height="56" rx="10"/>
+    <rect x="650" y="220" width="250" height="56" rx="10"/>
+    <rect x="650" y="288" width="250" height="56" rx="10"/>
+  </g>
+  <g text-anchor="middle" fill="#0f172a" font-weight="700">
+    <text x="135" y="93">ways</text>
+    <text x="135" y="257">nodes</text>
+    <text x="775" y="39">edge_graph</text>
+    <text x="775" y="107">turn_restrictions</text>
+    <text x="775" y="175">lane_profile</text>
+    <text x="775" y="243">visualization.edge_levels</text>
+    <text x="775" y="311">bus.route_edges</text>
+  </g>
+  <g text-anchor="middle" fill="#475569" font-size="12" font-family="ui-monospace, monospace">
+    <text x="135" y="113">osm_id</text>
+    <text x="135" y="277">node_id = source, target</text>
+    <text x="775" y="59">from_edge, to_edge</text>
+    <text x="775" y="127">from_edge_id, to_edge_id</text>
+    <text x="775" y="195">edge_id</text>
+    <text x="775" y="263">edge_id</text>
+    <text x="775" y="331">edge_id</text>
+  </g>
+  <g stroke="#64748b" stroke-width="1.8" fill="none" marker-end="url(#a)">
+    <path d="M250 98C300 98 300 160 338 162"/>
+    <path d="M250 262C300 262 300 200 338 198"/>
+    <path d="M560 150C610 150 610 44 648 44"/>
+    <path d="M560 165C610 165 610 112 648 112"/>
+    <path d="M560 180H648"/>
+    <path d="M560 195C610 195 610 248 648 248"/>
+    <path d="M560 210C610 210 610 316 648 316"/>
+  </g>
+</svg>
