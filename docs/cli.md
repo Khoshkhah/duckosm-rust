@@ -2,7 +2,7 @@
 
 For a script, a server or Python code, use [duckOSM](https://github.com/Khoshkhah/duckOSM). It uses the same Rust engine as the page and gives the same tables.
 
-The Rust engine comes with the next duckOSM release. The version on PyPI today (0.6.1) is from before the engine moved into duckOSM.
+duckOSM 0.7.0 and newer have this engine in the `duckosm` wheel, for Linux, macOS and Windows.
 
 ## Build from the command line
 
