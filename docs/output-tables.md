@@ -1,36 +1,38 @@
 # The output tables
 
-A build writes one table for each part of the road network. This page lists the tables and their columns. The numbers come from a build of the Monaco sample (`tests/data/monaco_sample.osm.pbf`, three networks).
+A build writes one table for each part of the road network. This page lists every table and every column. Read it when you query the tables or join them in another program. The row counts come from a build of the Monaco sample (`tests/data/monaco_sample.osm.pbf`, three networks).
 
-- To learn what each table is for, read [The tables](manual/tables.md).
-- To make the tables, read [Your first map](first_map.md).
-- To learn which roads each network takes, and how the build sets their values, read [The roads](manual/roads.md).
-- To see how the tables are made and tested against duckOSM, read [design.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/design.md).
-- To see the tables that are not made yet, read [tables.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/tables.md).
-- duckOSM has the same reference for its own tables: [database.md](https://github.com/Khoshkhah/duckOSM/blob/main/docs/reference/database.md).
+| For | Read |
+|---|---|
+| What each table is for | [The tables](manual/tables.md) |
+| How to make the tables | [Your first map](first_map.md) |
+| Which roads each network takes, and how the build sets their values | [The roads](manual/roads.md) |
+| How the tables are made and tested against duckOSM | [design.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/design.md) |
+| The tables that are not made yet | [tables.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/tables.md) |
+| The same reference for the duckOSM tables | [database.md](https://github.com/Khoshkhah/duckOSM/blob/main/docs/reference/database.md) |
 
 ## Where the tables are
 
-The page and duckOSM write the same tables in two forms:
+The page and duckOSM write the same tables in two forms.
 
 | Form | Name | Notes |
 |---|---|---|
 | GeoParquet | `<table>_<network>.parquet`, for example `edges_driving.parquet` | One file for each table and network. The tables that do not depend on a network end in `_main`, `_mm` or `_visualization`. |
 | DuckDB | `<name>.duckdb` | One schema for each network (`driving`, `walking`, `cycling`), and the schemas `main`, `mm` and `visualization`. The table names have no network suffix: `driving.edges`. |
 
-duckOSM writes the DuckDB form. The page gives both forms as downloads (step 5 of the [manual](manual/result.md)).
+duckOSM writes the DuckDB form. The page gives both forms as downloads ([step 5](manual/result.md)).
 
 ## Keys that join the tables
 
-- `edge_id` (BIGINT) is a hash of `osm_id`, `source` and `target`. It is the same value that duckOSM 0.6.0 writes. Other projects join on it. Keep it a BIGINT in every join: a program that reads it as a floating-point number loses digits.
+- `edge_id` (BIGINT) is a hash of `osm_id`, `source` and `target`, the same value that duckOSM 0.6.0 writes. Other projects join on it. Keep it a BIGINT in every join, because a program that reads it as a floating-point number loses digits.
 - `source` and `target` (BIGINT) are the `node_id` values of the ends of an edge.
-- `osm_id` (BIGINT) is the OpenStreetMap way that the edge comes from. A way that has more than one edge gives more than one row with the same `osm_id`.
+- `osm_id` (BIGINT) is the OpenStreetMap way of the edge. A way with more than one edge gives more than one row with the same `osm_id`.
 - Geometry columns are `GEOMETRY('OGC:CRS84')` (longitude and latitude). The base-map layers and the doors have a `GEOMETRY` with no CRS, also in longitude and latitude.
 - In the `.duckdb` file, the geometry column of `nodes`, `virtual_nodes` and `main.boundary` has the name `geom`, as in duckOSM. In the Parquet files, its name is `geometry`.
 
 ## Tables of each network
 
-The network is `driving`, `walking` or `cycling`. All rows below are from the driving network of the Monaco sample.
+The network is `driving`, `walking` or `cycling`. The row counts are from the driving network of the Monaco sample.
 
 ### `edges`
 
@@ -68,7 +70,7 @@ The junctions and the ends of the edges. 1,859 rows.
 
 ### `private_edges`
 
-The roads that the network cannot use, moved out of `edges`: private roads, bus-only roads and bus lanes, and pedestrian streets (for driving). [Access](manual/roads.md#access-who-can-use-the-road) gives the rules. The columns are the columns of `edges`. 724 rows.
+The roads that the network cannot use, moved out of `edges`: private roads, bus-only roads and bus lanes, and pedestrian streets (for driving). The columns are the columns of `edges`. [Access](manual/roads.md#access-who-can-use-the-road) gives the rules. 724 rows.
 
 ### `edge_graph`
 
@@ -136,7 +138,7 @@ The OSM ways that the network kept, and their nodes in order. 1,294 ways and 9,5
 
 ### `virtual_nodes`
 
-The columns `node_id` and `geometry`. The table is always empty, as in duckOSM: the virtual nodes are in `nodes`.
+The columns `node_id` and `geometry`. As in duckOSM, the table is always empty, because the virtual nodes are in `nodes`.
 
 ### `lane_profile` (driving only)
 
@@ -181,7 +183,7 @@ The map paints the numbers from low to high. At each number, it paints all casin
 
 ### `visualization.edge_levels_meta`
 
-One row: how the levels were made. File: `edge_levels_meta_visualization.parquet`.
+One row that tells how the levels were made. File: `edge_levels_meta_visualization.parquet`.
 
 | Column | Type | Meaning |
 |---|---|---|
@@ -304,7 +306,7 @@ The schema `features`. These tables need a build with **Layers** on. Each table 
 | `features.traffic` | Traffic signals and crossings. |
 | `features.place_labels` | Place names. |
 
-All tables have the same columns. `features.traffic` has one more column. Files: `features_<table>.parquet`, for example `features_buildings.parquet`.
+All tables have the same columns, and `features.traffic` has one more column. Files: `features_<table>.parquet`, for example `features_buildings.parquet`.
 
 | Column | Type | Meaning |
 |---|---|---|
@@ -322,7 +324,7 @@ These tables exist only when you give the build more than an `.osm.pbf` file.
 
 | Tables | You need | Where to read |
 |---|---|---|
-| `raw.nodes`, `raw.ways`, `raw.relations` | A boundary (`--boundary` in duckOSM). The page uses them for the layers and then drops them: no download has them. | [features.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/features.md) |
+| `raw.nodes`, `raw.ways`, `raw.relations` | A boundary (`--boundary` in duckOSM). The page uses them for the layers and then drops them, so no download has them. | [features.md](https://github.com/Khoshkhah/duckosm-studio/blob/main/docs/features.md) |
 | The base-map layers `features.*` | A boundary, and **Layers** on in the page | [Tables of the base map](#tables-of-the-base-map) |
 | `main.building_faces`, `main.building_info`, `main.building_entrances` | The base-map layers. Only the page makes them. | [Tables of the buildings](#tables-of-the-buildings) |
 | `bus.routes`, `bus.route_edges` | A boundary, and the driving network | [Tables of the bus routes](#tables-of-the-bus-routes) |
