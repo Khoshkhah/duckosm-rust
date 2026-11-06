@@ -75,8 +75,8 @@ def run(browser, name, dark=False, **context):
     page.screenshot(path=str(out / f"{name}-1-start.png"))
     # ---- the main button and the search field: only Build is filled with the accent (the standard's: the page has no accent of its own)
     # (Build is in card 4, which is folded at the start: no other button in view is filled, and Build is the one that is; the banner's Open is hidden)
-    assert set(page.evaluate("[...document.querySelectorAll('#sb .btn.primary')].filter((b) => b.offsetParent).map((b) => b.id)")) <= {"run"}
-    assert page.evaluate("document.getElementById('run').classList.contains('primary')")
+    assert set(page.evaluate("[...document.querySelectorAll('#sb button.sb-primary')].filter((b) => b.offsetParent).map((b) => b.id)")) <= {"run"}
+    assert page.evaluate("document.getElementById('run').classList.contains('sb-primary')")
     # the accent is roadstyle's (0.26.1: the Sonocount teal; a lighter variant in the dark theme), and the page sets none
     assert page.evaluate("getComputedStyle(document.getElementById('sb')).getPropertyValue('--accent').trim()") == ("#42c2d7" if dark else "#0e7c8e")
     assert not page.evaluate("[...document.styleSheets].some((sh) => { try { return [...sh.cssRules].some((r) => r.style && r.cssText.includes('--accent:') && !sh.href); } catch (e) { return false; } })"), "the page has no --accent of its own"
@@ -85,7 +85,7 @@ def run(browser, name, dark=False, **context):
         return [Math.round(i.top), Math.round(i.height), Math.round(h.top - i.top), Math.round(i.right - h.right), Math.round(h.left - i.left)]; }""")
     assert 0 <= f[2] <= 8 and 0 <= f[3] <= 8 and f[4] > f[1], ("the 'What is here?' button is inside the field, at its right", f)
     assert page.get_attribute("#here", "aria-label") == "What is here? Click the map" and page.get_attribute("#q", "placeholder") == "City, region, country or H3 ID"
-    assert page.evaluate("document.getElementById('find').querySelector('.btn') === null"), "no Search button"
+    assert page.evaluate("document.getElementById('find').querySelector('button:not(#here)') === null"), "no Search button"
     text = page.inner_text("#step1-card")
     assert "Type a place first" not in text and "Then click the map" not in text and "Photon" not in text and "OpenStreetMap contributors" not in text, text
     page.screenshot(path=str(out / f"{name}-1a-step1-search.png"))

@@ -238,7 +238,7 @@ with sync_playwright() as p:
     page.click("#fix-tab-changes")
     page.wait_for_timeout(500)
     shot(page, "22-fix-changes")
-    page.click("#fix-hide")
+    page.click("#sb-hide")
     page.wait_for_timeout(800)
     shot(page, "23-fix-panel-hidden")
     page.click("#sb-show")                                              # the hide button closed the editor first: the panel shows the steps

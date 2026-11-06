@@ -35,6 +35,19 @@ than one duckOSM rev. `e2e.py` checks that the served files of both editors are 
 change it in its owner's repository, merge it there, and then move the pin here. The unit tests of the fixes editor are in duckOSM
 (`node web/fixes_editor/fixes_units.mjs`).
 
+## The page uses roadstyle's parts
+
+Every control of the page is a part of roadstyle's dashboard ([Dashboard parts](https://github.com/Khoshkhah/roadstyle/blob/main/docs/guides/dashboard-parts.md)):
+a plain `<button>`, `sb-primary`, the tabs `rs-tabs`, the switch `rs-seg`, the option rows `rs-opt`, the number tiles `rs-kpis`, `rs-callout`,
+`rs-chip`, `rs-sec-box`, `rs-cap`, a link (`<a href>`) and, for card 7, the editor frame (`rs.frame`). Do not write a control or a hover rule in
+the page: when roadstyle does not have a part, add it in roadstyle. `index.html` copies the three rules of roadstyle's page template for a plain
+button (`#sb button`), because a host page has no template. `parts_e2e.py` (also in CI) puts the pointer on each control of the panel, of the
+export list and of card 7, in both themes, and fails on a control that does not change its look:
+
+```bash
+python3 crates/duckosm-wasm/www/parts_e2e.py out-parts
+```
+
 ## Toolchain status (2026-10-21)
 
 | Tool | Status |

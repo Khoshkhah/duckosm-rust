@@ -87,21 +87,26 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   .step > .rs-sec-hd .rs-sec-title:disabled { cursor: default; color: var(--muted); }
   .step > .rs-sec-hd .after { font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); }
   .step > .rs-sec-hd .done { color: var(--accent); font-size: 13px; font-weight: 700; text-transform: none; }
-  .step > .rs-sec-hd .icon-btn { width: 22px; height: 22px; margin: -3px 0; }          /* the card's own button (the zoom to the area): the size of roadstyle's "?" */
+  .step > .rs-sec-hd .icon-btn { display: grid; place-items: center; width: 22px; height: 22px; margin: -3px 0; padding: 0; flex: none; }   /* the card's own button (the zoom to the area): a plain button of the size of roadstyle's "?" */
   .step > .rs-sec-hd .icon-btn svg { width: 16px; height: 16px; }
   .step.off > .rs-sec-hd .icon-btn, .step.off > .rs-sec-hd .rs-help-btn { opacity: 0.5; }
   .step.off { background: var(--surface); }
   .step.off .n { background: var(--line); color: var(--muted); }
-  .step .icon-btn { margin: 0; }
   /* the panel's sections give their text the ink (dashboard.css); the muted lines of the cards stay muted */
   #sb .muted, #sb .why { color: var(--muted); }
   .sb-top p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
   /* the panel's type: the cards' own sizes (roadstyle's template sets 13px for its controls) */
   :where(#sb) h2 { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 10px; }
-  :where(#sb) button { font: inherit; color: inherit; cursor: pointer; }
+  /* a plain button and a filled one (sb-primary) are roadstyle's. roadstyle has the look of a plain <button> in the panel only in its page template
+     (templates/dashboard.html: `#sb button`), and a host page has no template: these are the template's rules, with no weight (:where), so each
+     part of roadstyle keeps its own look. The template has no look for a disabled button and no busy mark: the page gives them here. */
+  :where(#sb button) { padding: 5px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); cursor: pointer; font: inherit; }
+  :where(#sb button:is(:hover, :focus-visible):not(:disabled)) { border-color: var(--accent); color: var(--accent); background: var(--rs-hover-bg); }
+  :where(#sb button:disabled) { opacity: 0.5; cursor: default; }
+  #sb .step-body button:has(> svg):not(.rs-sel-btn) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }      /* an icon and a word in one line */
+  #sb button.busy svg { display: none; }
+  #sb button.busy::after { content: ""; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--muted); animation: spin 0.8s linear infinite; }
   .icon-btn:disabled { visibility: hidden; }
-  .icon-btn { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 8px; background: none; color: var(--muted); flex: none; }
-  .icon-btn:hover { background: var(--bg); color: var(--fg); }
   .step-body { display: flex; flex-direction: column; gap: 10px; }
   .step-body > * { margin-top: 0 !important; margin-bottom: 0 !important; }
   .step .n { width: 20px; height: 20px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 11px; flex: none; }
@@ -111,7 +116,7 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   .step details > summary:has(h3) { color: var(--muted); }
   .dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }      /* two buttons in a row: four (.zip, .duckdb, .osm.pbf, .yaml) do not fit in one row of the panel */
   .dl [hidden] { display: none; }
-  .dl .btn { padding: 0 8px; font-size: 12.5px; white-space: nowrap; }
+  .dl button { padding: 6px 8px; white-space: nowrap; }
   /* the panel's icons; not the map's, the bar's and the floating windows' own SVGs (roadstyle's) */
   :is(#sb, #mapbusy) svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
   #sb .field input[type=search] { padding-left: 36px; }
@@ -119,28 +124,18 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   a { color: var(--accent); }
   .muted { color: var(--muted); }
   .small { font-size: 12.5px; }
-  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: 9px;
-         border: 1px solid var(--line); background: var(--bg); font-weight: 500; }
-  .btn:hover:not(:disabled) { background: var(--surface); }
-  .btn.primary { background: var(--accent-fill); border-color: var(--accent-fill); color: #ffffff; }
-  .btn.primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent-fill); }
-  /* an action button is disabled until its inputs are ready: grey (the panel's tokens), no hover, the normal cursor (no forbidden sign); the reason is the text under it (.why) */
-  .btn.busy svg { display: none; }
-  .btn.busy::after { content: ""; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--muted); animation: spin 0.8s linear infinite; }
-  .btn:disabled, .btn.primary:disabled { background: var(--surface); border-color: var(--line); color: var(--muted); opacity: 1; filter: none; cursor: default; }
+  /* an action button is disabled until its inputs are ready; the reason is the text under it (.why) */
   .why { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); }
   .why:empty { display: none; }
   .build-go { display: grid; margin-top: 12px; gap: 6px; }                     /* Build in card 4, under its options; the reason under it, as under every button */
-  .build-go #run { justify-self: end; min-width: 160px; }
+  .build-go #run { justify-self: end; min-width: 160px; padding: 8px 14px; }
   .build-go .why { margin: 0; }
-  .btn[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
   :focus-visible { outline: 2px solid var(--accent, currentColor); outline-offset: 2px; }
 
-  .segmented { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); background: var(--surface); border-radius: 10px; padding: 3px; gap: 3px; }
-  .segmented [role=tab] { display: flex; align-items: center; justify-content: center; gap: 6px; height: 34px; border: 0; border-radius: 8px; background: none; color: var(--muted); font-weight: 500; }
-  .segmented [role=tab][hidden] { display: none; }
-  .segmented [role=tab][aria-selected=true] { background: var(--bg); color: var(--fg); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
-  [role=tabpanel] { padding-top: 12px; }
+  /* the tabs of cards 1 and 3 are roadstyle's tabs (rs-tabs): the four of card 1 share the row */
+  #sb .step-body .rs-tabs { flex-wrap: nowrap; }
+  #sb .step-body .rs-tab { flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; }
+  #sb .step-body .rs-tab svg { width: 16px; height: 16px; }
 
   .field { position: relative; }
   .field > svg { position: absolute; left: 11px; top: 9px; color: var(--muted); pointer-events: none; }
@@ -148,67 +143,39 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   input[type=search] { padding-left: 36px; }
   /* the search field is one field: the search icon at the left, the "What is here?" icon button at the right */
   .field input[type=search] { padding-right: 40px; }
-  .here { position: absolute; right: 4px; top: 4px; width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--muted); }
-  .here:hover { background: var(--surface); color: var(--fg); }
-  .here[aria-pressed=true] { background: var(--accent-soft); color: var(--accent); }
+  #sb .here { position: absolute; right: 4px; top: 4px; width: 28px; height: 28px; display: grid; place-items: center; padding: 0; }
+  /* "What is here?" is on: the filled look of roadstyle's selected tab (roadstyle has no toggle button) */
+  #sb .here[aria-pressed=true] { background: var(--accent-fill); border-color: var(--accent-fill); color: #fff; }
   input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
-  #found { margin-top: 10px; display: grid; gap: 4px; }
-  #found label { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
-  #found label:hover, #found label:focus-within { border-color: var(--accent); background: var(--surface); }
-  #found label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
-  #found label.point { cursor: default; opacity: 0.7; }
-  #found input { margin-top: 3px; accent-color: var(--accent); }
-  #found .t { font-weight: 600; }
-  #found label > span { min-width: 0; }
-  /* the rest of the address: at most two lines in the card; the whole address is in the title */
-  #found .d { color: var(--muted); font-size: 12px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
-  .badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 99px; background: var(--surface); color: var(--muted); border: 1px solid var(--line); margin-left: 4px; font-weight: 500; }
-  .badge.no { color: var(--warn); border-color: var(--warn); background: none; }
+  /* the matches are roadstyle's option rows (rs-opt); the rest of the address: at most two lines in the card; the whole address is in the title */
+  #found { margin-top: 10px; }
+  #found .rs-opt small { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+  #found .rs-chip { justify-self: start; }
 
   .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
-  /* the drawing tools: a card in the Draw tab */
-  /* the drawing tools: one row of icon buttons (a tool has its label and its tooltip); the row scrolls sideways when it is too narrow */
-  .toolbox { display: flex; align-items: center; gap: 2px; padding: 6px; background: var(--surface); border-radius: 10px; overflow-x: auto; }
-  .toolbox button { flex: none; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid transparent; border-radius: 9px; background: none; color: var(--fg); }
-  .toolbox .sep { flex: none; width: 1px; height: 22px; background: var(--line); margin: 0 2px; }
-  #hint { margin: 8px 0 0; font-size: 12.5px; color: var(--muted); }
-  .toolbox button:hover:not(:disabled) { background: var(--surface); }
-  .toolbox button[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
-  .toolbox button:disabled { opacity: 0.4; cursor: default; }
+  /* the drawing tools: the shapes are one mode (roadstyle's switch, rs-seg), then the plain buttons Merge, Delete and Clear; each has its label and its tooltip */
+  .toolbox { display: flex; align-items: center; gap: 6px; }
+  #sb .toolbox .rs-seg { flex: 1; margin: 0; }
+  .toolbox > button { flex: none; width: 34px; height: 32px; padding: 0; }
   #h3-panel .rs-sel { margin-bottom: 8px; }
   .h3-box { padding: 9px 11px; background: var(--bg); border-radius: 9px; font-size: 12.5px; color: var(--muted); }
   .h3-box p { margin: 0; }
   .h3-box #h3-grid-note:not(:empty) { margin-top: 4px; }
   #hint { margin: 0; padding: 9px 11px; background: var(--bg); border-radius: 9px; font-size: 12.5px; color: var(--muted); }
 
-  #drop { display: grid; place-items: center; gap: 6px; text-align: center; padding: 26px 14px; border: 2px dashed var(--line); border-radius: 12px; color: var(--muted); cursor: pointer; }
-  #drop:hover, body.dragging #drop { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  /* the GeoJSON file: a plain button (roadstyle has no drop zone; a file also drops on the map) */
+  #sb #drop { display: grid; place-items: center; gap: 6px; width: 100%; padding: 22px 14px; text-align: center; }
   #drop svg { width: 28px; height: 28px; }
-  #drop strong { color: var(--fg); }
-  #file { position: absolute; width: 1px; height: 1px; opacity: 0; }
 
   .empty { padding: 18px 14px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; font-size: 13px; }
-  .stats { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 6px; }
-  .stat { background: var(--surface); border-radius: 10px; padding: 6px 10px; }
-  .stat b { display: block; font-size: 16px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
-  .stat span { font-size: 11.5px; color: var(--muted); }
   .source { margin-top: 8px; font-size: 12.5px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
-  .callout { display: flex; gap: 8px; margin-top: 8px; padding: 9px 11px; border-radius: 9px; background: var(--warn-soft); color: var(--warn); font-size: 12.5px; }
   .error { color: var(--error); }
 
-  #extracts { display: grid; gap: 4px; }
-  #extracts label { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
-  #extracts label:has(input:checked) { border-color: #ea580c; }
-  #extracts input { accent-color: #ea580c; }
-  #extracts .x { flex: 1; min-width: 0; }
-  #extracts .x span { display: block; font-size: 12px; color: var(--muted); }
-  #extracts .btn.sm { height: 34px; }                                                /* Get, Use and the download: one height in the row */
-  #extracts a.ex-dl { width: 34px; padding: 0; justify-content: center; color: var(--fg); }   /* the style of Get (.btn.sm), square */
-  .btn.sm { height: 30px; padding: 0 10px; font-size: 12.5px; }
-  #extracts label { flex-wrap: wrap; }
-  /* a download: a line of its own under the extract, so the row keeps its width */
-  #extracts .prog { flex-basis: 100%; display: flex; align-items: center; gap: 8px; padding-left: 23px; }
+  /* the extracts are roadstyle's option rows (rs-opt), with Get or Use and the download at the end; a download: a line of its own under the name */
+  #extracts .rs-opt { align-items: center; }
+  #extracts .rs-opt > button { padding: 5px 9px; }
+  #extracts .prog { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
   #extracts .prog .bar { flex: 1; min-width: 40px; height: 6px; border-radius: 3px; background: var(--surface); overflow: hidden; }
   #extracts .prog .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.15s; }
   #extracts .got { font-size: 12px; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -218,54 +185,28 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
 
   /* card 2: the boundary download and Unselect, side by side and of one width */
   .area-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
-  .area-acts .btn { justify-content: center; }
 
   /* steps 3 to 5: the data, the build, the result (docs/app.md) */
-  #step7-card [hidden], #step8-card [hidden], #step9-card [hidden], #step10-card [hidden], #fix-panel [hidden] { display: none; }
-  #export-list .expsec { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px 4px; margin-top: 12px; background: var(--bg); }
-  #export-list .expsec h3 { margin: 0 0 2px; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--fg); }
-  #export-list .expsec > .small.muted { margin: 0 0 6px; }
-  #export-list .netsec { border-color: var(--accent); background: var(--accent-soft); }
+  #step7-card [hidden], #step8-card [hidden], #step9-card [hidden], #step10-card [hidden] { display: none; }
+  /* the sections of the export list are roadstyle's boxes (rs-sec-box): an h3 and its muted line; a format is one row */
   #export-list .exp { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
-  #export-list .exp small { grid-column: 1; color: var(--mut); line-height: 1.35; }
-  #export-seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; margin: 4px 0 8px; }
-  #export-seg button { display: flex; align-items: center; justify-content: center; gap: 6px; height: 38px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--fg); font-weight: 600; cursor: pointer; }
+  #export-list .exp > small { grid-column: 1 / -1; color: var(--mut); line-height: 1.35; }      /* the note under the name and the button: the full width (the box of the section takes room) */
+  #export-seg button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
   #export-seg button svg { width: 16px; height: 16px; }
-  #export-seg button[aria-checked=true] { background: var(--accent); border-color: var(--accent); color: #fff; }
   #export-list .imgw { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; }
-  #export-list .imgw input[type=number] { width: 80px; }        /* the width of a picture; a checkbox keeps its own size */
+  #export-list .exp .rs-opt { grid-column: 1 / -1; }
+  #export-list .imgw input[type=number] { width: 80px; }        /* the width of a picture */
   #export-list .zoomrow { padding: 4px 0 8px; display: grid; gap: 6px; }
   #export-list .zoomrow input[type=number] { width: 58px; }
   #export-list .chk { grid-column: 1 / -1; font-size: 12px; line-height: 1.35; }
   #export-list .chk.ok { color: #15803d; }
   #export-list .chk.bad { color: var(--error, #b91c1c); }
-  /* the fixes' own panel (like the level editor's): the steps, the title and the footer go while it is open, and the road popup is off */
-  #fix-panel { display: none; }
-  body.editing-fixes #sb .sb-top, body.editing-fixes #sb .sb-body { display: none; }
-  body.editing-fixes #fix-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-  body.editing-fixes #sb #rs-fold-all { display: none; }
-  body.editing-fixes .maplibregl-popup:not(.rs-tip) { display: none !important; }
-  #fix-panel .fix-hd { flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 15px; border-bottom: 1px solid var(--line); }
-  #fix-panel .fix-hd h2 { margin: 0; font-size: 16px; text-transform: none; color: var(--fg); }
-  #fix-panel .fix-hd .btn svg { width: 14px; height: 14px; }
-  #fix-panel #fix-hide { margin-left: auto; width: 32px; padding: 0; justify-content: center; }
-  html.rs-phone #fix-hide { display: none; }       /* a phone has the sheet's grip */
-  /* the rest of the fixes panel's look is duckOSM's (duckosm/fixes_editor/fixes_panel.css) */
+  /* card 7 opens duckOSM's fixes editor in roadstyle's editor frame: its look is the frame's and duckosm/fixes_editor/fixes_panel.css */
   .grid2 [hidden] { display: none; }
-  .pick { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 10px; cursor: pointer; margin-bottom: 10px; }
-  .pick:hover { border-color: var(--accent); color: var(--accent); }
+  /* a file to select: a plain button with the name of the file (the file input is hidden) */
+  #sb .pick { display: flex; align-items: center; gap: 8px; width: 100%; margin-bottom: 10px; padding: 8px 10px; text-align: left; justify-content: flex-start; }
   .pick span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pick input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-  /* card 4: the networks as three chips, the layers as one row with its reason, then the optional parts as rows that open */
-  #step4-card .bhead { margin-bottom: 6px; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
-  #step4-card .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-  #step4-card .mode { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font-weight: 500; cursor: pointer; }
-  #step4-card .mode:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
-  :is(#step4-card, #step10-card) .mode input, :is(#step4-card, #step10-card) .optrow input { margin: 0; accent-color: var(--accent); flex: none; }
-  :is(#step4-card, #step10-card) .optrow { display: flex; gap: 10px; align-items: flex-start; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); cursor: pointer; }
-  :is(#step4-card, #step10-card) .optrow:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
-  :is(#step4-card, #step10-card) .optrow .t { display: flex; flex-direction: column; gap: 2px; }
-  :is(#step4-card, #step10-card) .optrow small { color: var(--muted); font-size: 12px; line-height: 1.35; }
+  /* card 4: the networks as three option rows side by side, the layers as one option row with its reason, then the optional parts as rows that open */
   #step4-card details.drow { margin: 0; padding: 10px 0 0; border-radius: 0; background: none; border-top: 1px solid var(--line); }       /* flat rows: roadstyle's rule makes a details a box (padding, radius, background) */
   #step4-card details.drow > summary { display: flex; align-items: center; justify-content: space-between; list-style: none; color: var(--fg); font-size: 13px; font-weight: 500; }
   #step4-card details.drow > summary::-webkit-details-marker { display: none; }
@@ -275,9 +216,6 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   #step4-card .pick { margin-bottom: 0; }
   #step4-card .progress { margin: 0; }
   #step4-card .steplog th, #step4-card .steplog td { padding: 3px 4px; }
-  .checks { display: flex; gap: 14px; flex-wrap: wrap; }
-  .checks label { display: flex; gap: 6px; align-items: center; }
-  .checks input { accent-color: var(--accent); }
   .pg-scroll { max-height: 220px; overflow: auto; }
   /* the table of the networks: roadstyle's table, with no row that acts */
   #resultline .rs-table tbody tr { cursor: default; }
@@ -315,7 +253,6 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   #files .layers { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px; margin-top: 6px; }
   #files .layers a { display: flex; justify-content: space-between; gap: 8px; padding: 4px 8px; border-radius: 6px;
     background: var(--surface); text-decoration: none; font-variant-numeric: tabular-nums; }
-  #files .layers a:hover { outline: 1px solid var(--line); }
   #files .layers a span { color: var(--muted); font-size: 11.5px; }
 
   #status { position: fixed; left: calc(var(--free-l, 0px) + (100% - var(--free-l, 0px) - var(--free-r, 0px)) / 2); top: 14px; transform: translateX(-50%); z-index: 9; background: var(--fg); color: var(--bg); padding: 7px 14px; border-radius: 99px; font-size: 13px; box-shadow: var(--shadow); }
@@ -330,24 +267,17 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
     #status { top: calc(var(--rs-top, 52px) + 6px); }
     #sb .sb-body { overscroll-behavior: contain; }
     .sb-top p { display: none; }
-    .btn, .segmented [role=tab], input[type=search], input[type=text] { height: 44px; }
+    #sb .step-body button:not(.rs-sel-btn), #sb .rs-tab, input[type=search], input[type=text] { min-height: 44px; }
     .field > svg { top: 13px; }
-    .here { width: 36px; height: 36px; top: 4px; }
-    .toolbox button { width: 44px; height: 44px; }
+    #sb .here { width: 36px; height: 36px; min-height: 0; top: 4px; }
+    #sb .toolbox button { min-height: 44px; }
   }
-.saved-area { cursor: pointer; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--line, #d0d7de); border-radius: 10px; background: var(--bg); transition: border-color 0.12s, background 0.12s; }
-.saved-area:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg)); }
-.saved-area.picked { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
-.saved-area .sa-name { font-size: 14px; line-height: 1.3; overflow-wrap: anywhere; }
+/* a saved area is a roadstyle option row (rs-opt): the name, the date and the size, a chip for each network, then Open and Delete */
 .saved-area .sa-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .saved-area .sa-nets { display: flex; flex-wrap: wrap; gap: 6px; }
-.saved-area .sa-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 12.5px; color: var(--fg); }
-.saved-area .sa-chip svg { width: 16px; height: 16px; color: var(--mut); }
-.saved-area .sa-chip b { font-weight: 600; font-variant-numeric: tabular-nums; }
-.saved-area .sa-pill { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--accent); color: var(--accent); background: var(--accent-soft); white-space: nowrap; }
-.saved-area .sa-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 2px; }
-.saved-area .sa-actions .btn { width: 100%; height: 32px; justify-content: center; }
-.saved-area .del-saved-area-btn:hover { border-color: var(--error, #b91c1c); color: var(--error, #b91c1c); }
+#sb .saved-area .rs-chip { display: inline-flex; align-items: center; gap: 5px; }
+.saved-area .rs-chip svg { width: 14px; height: 14px; }
+.saved-area .sa-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -395,11 +325,11 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
 <section id="step1-card" class="step" aria-labelledby="step1">
 <h2 id="step1"><span class="n">1</span>Choose an area</h2>
 
-<div class="segmented" role="tablist" aria-label="The ways to make an area">
-  <button role="tab" id="tab-find" aria-controls="find" aria-selected="true"><svg><use href="#i-search"/></svg>Search</button>
-  <button role="tab" id="tab-draw" aria-controls="draw" aria-selected="false"><svg><use href="#i-pen"/></svg>Draw</button>
-  <button role="tab" id="tab-file" aria-controls="file-panel" aria-selected="false"><svg><use href="#i-file"/></svg>File</button>
-  <button role="tab" id="tab-h3" aria-controls="h3-panel" aria-selected="false"><svg><use href="#i-hex"/></svg>H3</button>
+<div class="rs-tabs" role="tablist" aria-label="The ways to make an area">
+  <button class="rs-tab on" role="tab" id="tab-find" aria-controls="find" aria-selected="true"><svg><use href="#i-search"/></svg>Search</button>
+  <button class="rs-tab" role="tab" id="tab-draw" aria-controls="draw" aria-selected="false"><svg><use href="#i-pen"/></svg>Draw</button>
+  <button class="rs-tab" role="tab" id="tab-file" aria-controls="file-panel" aria-selected="false"><svg><use href="#i-file"/></svg>File</button>
+  <button class="rs-tab" role="tab" id="tab-h3" aria-controls="h3-panel" aria-selected="false"><svg><use href="#i-hex"/></svg>H3</button>
 </div>
 
 <section id="find" role="tabpanel" aria-labelledby="tab-find">
@@ -408,17 +338,18 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
     <input id="q" type="search" placeholder="City, region, country or H3 ID" aria-label="Name of a place or an H3 cell ID" autocomplete="off">
     <button id="here" type="button" class="here" aria-pressed="false" aria-label="What is here? Click the map" title="What is here? Click the map"><svg><use href="#i-target"/></svg></button>
   </form>
-  <div id="found" role="radiogroup" aria-label="The matches"></div>
+  <div id="found" class="rs-opts" role="radiogroup" aria-label="The matches"></div>
 </section>
 
 <section id="draw" role="tabpanel" aria-labelledby="tab-draw" hidden>
   <div class="toolbox" role="toolbar" aria-label="Drawing tools">
+    <div class="rs-seg" role="group" aria-label="The shape to draw">
     <button data-mode="rectangle" aria-pressed="false" aria-keyshortcuts="R" aria-label="Rectangle" title="Rectangle (R)"><svg><use href="#i-rect"/></svg></button>
     <button data-mode="polygon" aria-pressed="false" aria-keyshortcuts="P" aria-label="Polygon" title="Polygon (P)"><svg><use href="#i-poly"/></svg></button>
     <button data-mode="circle" aria-pressed="false" aria-keyshortcuts="C" aria-label="Circle" title="Circle (C)"><svg><use href="#i-circle"/></svg></button>
     <button data-mode="freehand" aria-pressed="false" aria-keyshortcuts="F" aria-label="Freehand" title="Freehand (F)"><svg><use href="#i-free"/></svg></button>
-    <span class="sep" aria-hidden="true"></span>
     <button data-mode="select" aria-pressed="false" aria-keyshortcuts="S" aria-label="Select, move or change a shape" title="Select, move or change a shape (S)"><svg><use href="#i-select"/></svg></button>
+    </div>
     <button id="merge" disabled aria-label="Merge the shapes that overlap" title="Merge the shapes that overlap"><svg><use href="#i-merge"/></svg></button>
     <button id="delete" disabled aria-label="Delete the selected shape" aria-keyshortcuts="Delete" title="Delete the selected shape (Delete)"><svg><use href="#i-trash"/></svg></button>
     <button id="clear" aria-label="Delete all shapes" title="Delete all shapes"><svg><use href="#i-x"/></svg></button>
@@ -427,11 +358,11 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
 </section>
 
 <section id="file-panel" role="tabpanel" aria-labelledby="tab-file" hidden>
-  <label id="drop">
+  <button id="drop" type="button" data-file="file">
     <svg><use href="#i-upload"/></svg>
     <span><strong>Select a GeoJSON file</strong> or drop it on the map</span>
-    <input id="file" type="file" accept=".geojson,.json">
-  </label>
+  </button>
+  <input id="file" type="file" accept=".geojson,.json" hidden>
 </section>
 
 <section id="h3-panel" role="tabpanel" aria-labelledby="tab-h3" hidden>
@@ -439,7 +370,7 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   <div class="h3-box"><p id="h3-hint" aria-live="polite">Click a hexagon on the map to add it to the area.</p><p id="h3-grid-note"></p></div>
 </section>
 
-<div class="area-acts"><button class="btn area-clear" type="button" disabled aria-label="Unselect the area">Unselect</button></div>
+<div class="area-acts"><button class="area-clear" type="button" disabled aria-label="Unselect the area">Unselect</button></div>
 <div id="areas-src" hidden>
   <p class="small muted" style="margin:0 0 8px">Built areas kept in this browser (OPFS). Open an area to load its tables and map with no build.</p>
   <div id="saved-areas-list" style="display:flex;flex-direction:column;gap:8px;max-height:420px;overflow-y:auto">
@@ -455,47 +386,47 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
 <input id="name" type="text" aria-label="Name of the area" placeholder="Name">
 <label class="small muted" for="buffer" style="display:flex;align-items:center;gap:8px;margin-top:8px">Buffer around the area (m)<input id="buffer" type="number" min="0" max="50000" step="50" value="0" inputmode="numeric" style="width:96px;margin-left:auto"></label>
 <div id="summary" aria-live="polite"></div>
-<div class="area-acts"><button id="save" class="btn" type="button" disabled aria-label="Download the boundary (GeoJSON)"><svg><use href="#i-download"/></svg>Boundary</button><button class="btn area-clear" type="button" disabled aria-label="Unselect the area">Unselect</button></div>
+<div class="area-acts"><button id="save" type="button" disabled aria-label="Download the boundary (GeoJSON)"><svg><use href="#i-download"/></svg>Boundary</button><button class="area-clear" type="button" disabled aria-label="Unselect the area">Unselect</button></div>
 </section>
 
 <section id="extracts-box" class="step" aria-labelledby="step3">
   <h2 id="step3"><span class="n">3</span>The data</h2>
-  <div class="segmented" role="tablist" aria-label="Where the OpenStreetMap data comes from">
-    <button role="tab" id="tab-region" aria-controls="src-region" aria-selected="true" data-source="region">Region file</button>
-    <button role="tab" id="tab-overpass" aria-controls="src-overpass" aria-selected="false" data-source="overpass">Overpass</button>
-    <button role="tab" id="tab-cut" aria-controls="src-cut" aria-selected="false" data-source="cut">Cut file</button>
+  <div class="rs-tabs" role="tablist" aria-label="Where the OpenStreetMap data comes from">
+    <button class="rs-tab on" role="tab" id="tab-region" aria-controls="src-region" aria-selected="true" data-source="region">Region file</button>
+    <button class="rs-tab" role="tab" id="tab-overpass" aria-controls="src-overpass" aria-selected="false" data-source="overpass">Overpass</button>
+    <button class="rs-tab" role="tab" id="tab-cut" aria-controls="src-cut" aria-selected="false" data-source="cut">Cut file</button>
   </div>
   <section id="src-region" role="tabpanel" aria-labelledby="tab-region">
-    <label class="pick"><svg><use href="#i-upload"/></svg><span id="region-name">Select a region file (.osm.pbf)</span><input id="region" type="file" accept=".pbf"></label>
-    <div id="extracts" role="radiogroup" aria-label="Show an extract on the map"></div>
+    <button class="pick" type="button" data-file="region"><svg><use href="#i-upload"/></svg><span id="region-name">Select a region file (.osm.pbf)</span></button><input id="region" type="file" accept=".pbf" hidden>
+    <div id="extracts" class="rs-opts" role="radiogroup" aria-label="Show an extract on the map"></div>
     <div id="kept" aria-live="polite"></div>
   </section>
   <section id="src-overpass" role="tabpanel" aria-labelledby="tab-overpass" hidden>
     <p class="small muted">Data from the <a href="https://wiki.openstreetmap.org/wiki/Overpass_API" target="_blank" rel="noopener">Overpass API</a>.</p>
   </section>
   <section id="src-cut" role="tabpanel" aria-labelledby="tab-cut" hidden>
-    <label class="pick"><svg><use href="#i-upload"/></svg><span id="pbf-name">Select a cut file (.osm.pbf)</span><input id="pbf" type="file" accept=".pbf"></label>
+    <button class="pick" type="button" data-file="pbf"><svg><use href="#i-upload"/></svg><span id="pbf-name">Select a cut file (.osm.pbf)</span></button><input id="pbf" type="file" accept=".pbf" hidden>
   </section>
 </section>
 
 <section id="step4-card" class="step" aria-labelledby="step4">
   <h2 id="step4"><span class="n">4</span>Build</h2>
   <div class="bgroup">
-    <div class="bhead">Networks</div>
-    <div class="modes" role="group" aria-label="The networks">
-      <label class="mode"><input type="checkbox" name="mode" value="driving" checked>Driving</label>
-      <label class="mode"><input type="checkbox" name="mode" value="walking" checked>Walking</label>
-      <label class="mode"><input type="checkbox" name="mode" value="cycling" checked>Cycling</label>
+    <div class="rs-cap">Networks</div>
+    <div class="rs-opts rs-opts-row" role="group" aria-label="The networks">
+      <label class="rs-opt"><input type="checkbox" name="mode" value="driving" checked><span>Driving</span></label>
+      <label class="rs-opt"><input type="checkbox" name="mode" value="walking" checked><span>Walking</span></label>
+      <label class="rs-opt"><input type="checkbox" name="mode" value="cycling" checked><span>Cycling</span></label>
     </div>
   </div>
   <div class="bgroup">
-    <div class="bhead">Base map</div>
-    <label class="optrow"><input type="checkbox" id="features" checked><span class="t"><b>Layers</b><small>Water, land use, buildings, railways and more. Not with a cut file.</small></span></label>
+    <div class="rs-cap">Base map</div>
+    <div class="rs-opts"><label class="rs-opt"><input type="checkbox" id="features" checked><span><b>Layers</b><small>Water, land use, buildings, railways and more. Not with a cut file.</small></span></label></div>
   </div>
   <details class="drow"><summary>Fixes</summary>
-    <label class="pick"><svg><use href="#i-upload"/></svg><span id="fixes-name">Select a fixes file (.yaml)</span><input id="fixes" type="file" accept=".yaml,.yml"></label>
+    <button class="pick" type="button" data-file="fixes"><svg><use href="#i-upload"/></svg><span id="fixes-name">Select a fixes file (.yaml)</span></button><input id="fixes" type="file" accept=".yaml,.yml" hidden>
   </details>
-  <div class="build-go"><button id="run" class="btn primary" disabled>Build<svg><use href="#i-arrow"/></svg></button>
+  <div class="build-go"><button id="run" class="sb-primary" disabled>Build<svg><use href="#i-arrow"/></svg></button>
   <p id="buildhint" class="why" aria-live="polite"></p></div>
   <p id="buildstatus" class="progress" aria-live="polite"></p>
   <div id="buildinfo" class="pg-scroll">
@@ -510,8 +441,8 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
 <section id="step5-card" class="step" aria-labelledby="step5">
   <h2 id="step5"><span class="n">5</span>The result</h2>
   <div id="resultline"></div>
-  <button id="query-tables" class="btn" type="button" style="width:100%;margin:8px 0 0">Query the tables</button>
-  <div class="dl"><button id="zip" class="btn" aria-label="Download all the tables as a zip"><svg><use href="#i-download"/></svg>.zip</button><button id="duckdb" class="btn" aria-label="Download the .duckdb database"><svg><use href="#i-download"/></svg>.duckdb</button><button id="cutpbf" class="btn" hidden aria-label="Download the cut area as an .osm.pbf file"><svg><use href="#i-download"/></svg>.osm.pbf</button><button id="fixesyaml" class="btn" aria-label="Download the fixes file (.yaml) of this build"><svg><use href="#i-download"/></svg>.yaml</button></div>
+  <button id="query-tables" type="button" style="width:100%;margin:8px 0 0">Query the tables</button>
+  <div class="dl"><button id="zip" aria-label="Download all the tables as a zip"><svg><use href="#i-download"/></svg>.zip</button><button id="duckdb" aria-label="Download the .duckdb database"><svg><use href="#i-download"/></svg>.duckdb</button><button id="cutpbf" hidden aria-label="Download the cut area as an .osm.pbf file"><svg><use href="#i-download"/></svg>.osm.pbf</button><button id="fixesyaml" aria-label="Download the fixes file (.yaml) of this build"><svg><use href="#i-download"/></svg>.yaml</button></div>
   <details id="files-box"><summary><h3>Each table</h3></summary>
     <p class="small muted"><a id="reference" target="_blank" rel="noopener">The columns of each table</a></p>
     <div id="files" class="pg-scroll"></div>
@@ -528,7 +459,7 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
     <label for="tilefmt" class="small">Map tiles</label>
     <select id="tilefmt"><option value="mlt">MLT</option><option value="mvt">MVT</option></select>
   </div>
-  <div id="showrow" style="margin-top:10px" hidden><div class="row"><button id="show" class="btn">Show on map</button></div>
+  <div id="showrow" style="margin-top:10px" hidden><div class="row"><button id="show">Show on map</button></div>
     <p id="show-why" class="why"></p></div>
   <p id="mapnote" class="progress" aria-live="polite"></p>
 </section>
@@ -555,9 +486,6 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
 
 </div>
 
-<div id="fix-panel" aria-label="Edit OSM data">
-  <div class="fix-hd"><button id="fix-back" class="btn" type="button"><svg><use href="#i-chevron"/></svg>Steps</button><h2>Edit OSM data</h2><button id="fix-hide" class="btn" type="button" title="Hide panel" aria-label="Hide panel" aria-controls="sb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/><path d="m8.5 9.5 2.5 2.5-2.5 2.5"/></svg></button></div>
-</div>
 </div>
 </div>
 <button id="sb-show" title="Show panel" aria-label="Show panel" aria-controls="sb"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/><path d="m10.5 9.5-2.5 2.5 2.5 2.5"/></svg></button>
@@ -571,7 +499,7 @@ window.duckApi = duck;   // for the tests (drawLaps, tileStats)
 import * as regions from "./app/regions.js";
 import * as areaStore from "./app/area_store.js";
 import { initFixesPanel } from "./duckosm/fixes_editor/fixes_panel.js";   // duckOSM's fixes editor (copied by build.sh at the engine's rev)
-import { rsSelectBoxes } from "./map/roadstyle/dashboard/selectbox.js";   // roadstyle's select box: the look of the lists that the fixes editor draws
+import { rsKpi } from "./map/roadstyle/dashboard/kpi.js";   // roadstyle's number tile (the area of card 2)
 import * as exporter from "./app/export.js";
 import * as designLib from "./map/roadstyle/dashboard/design/design.js";      // roadstyle's design model: the boundary defaults and the changes of a design
 import { designPanel as rsDesignPanel } from "./map/roadstyle/dashboard/design/design_panel.js";   // roadstyle's design panel (card 9, roadstyle docs/guides/design-panel.md)
@@ -825,8 +753,8 @@ function showPanel(on, remember = true) {
 }
 if (kept("duckosm.panel") === "collapsed" && !phone.matches) showPanel(false);
 phone.addEventListener("change", () => { if (phone.matches) showPanel(true, false); });
-$("sb-hide").onclick = () => showPanel(false);
-$("fix-hide").onclick = () => { closeFixes(); showPanel(false); };      // the hide button of Edit OSM data closes the editor first, so no road stays selected behind the hidden panel
+// the hide button closes Edit OSM data first, so no road stays selected behind the hidden panel
+$("sb-hide").onclick = () => { if (window.fixesPanel?.isOpen()) closeFixes(); showPanel(false); };
 $("sb-show").onclick = () => { showPanel(true); $("sb-hide").focus(); };
 // the sheet and the panel move in a transition (0.15 s): each frame of it gives the padding, and its end gives the last one, also when the main
 // thread is busy
@@ -843,9 +771,11 @@ addEventListener("resize", padMap);
 loaded.then(padMap);
 
 // ---- the tabs ----
+// a button with data-file opens the file input of that id (the inputs are hidden: a plain button selects the file)
+$("sb").addEventListener("click", (e) => { const b = e.target.closest("button[data-file]"); if (b) $(b.dataset.file).click(); });
 const tabs = [...document.querySelectorAll("#step1-card [role=tab]")];
 for (const t of tabs) t.onclick = () => {
-  for (const u of tabs) { u.setAttribute("aria-selected", u === t); $(u.getAttribute("aria-controls")).hidden = u !== t; }
+  for (const u of tabs) { u.setAttribute("aria-selected", u === t); u.classList.toggle("on", u === t); $(u.getAttribute("aria-controls")).hidden = u !== t; }
   if (t.id !== "tab-find") picking(false);
   document.body.classList.toggle("h3", t.id === "tab-h3");
   if (t.id === "tab-h3") h3Open();
@@ -916,10 +846,8 @@ async function setArea(polys, props, { zoom = true, findExtracts = true } = {}) 
   const km2 = Math.round(areaKm2(polys) * 100) / 100;
   const vertices = polys.flat().reduce((s, r) => s + r.length - 1, 0);
   $("summary").innerHTML =
-    `<div class="stats"><div class="stat"><b>${num(km2, 2)}</b><span>km²${m > 0 ? ` · +${num(m)} m` : ""}</span></div>` +
-    `<div class="stat"><b>${num(polys.length)}</b><span>polygon${polys.length > 1 ? "s" : ""}</span></div>` +
-    `<div class="stat"><b>${num(vertices)}</b><span>vertices</span></div>` + `</div>` +
-    (km2 > 10000 ? `<div class="callout">${icon("alert")}<span>Large area. The build can take minutes and use more than 1 GB of memory.</span></div>` : "");
+    `<div class="rs-kpis">${rsKpi("Area", num(km2, 2), `km²${m > 0 ? ` · +${num(m)} m` : ""}`)}${rsKpi("Polygons", num(polys.length), "")}${rsKpi("Vertices", num(vertices), "")}</div>` +
+    (km2 > 10000 ? `<div class="rs-callout" style="--rs-callout:var(--warn)">Large area. The build can take minutes and use more than 1 GB of memory.</div>` : "");
   if (!findExtracts) {
     cover = props.geofabrik || [];
     $("save").disabled = false;
@@ -988,10 +916,10 @@ function list(features) {
   $("found").innerHTML = found.map((f, i) => {
     const p = f.properties, ok = p.photon || polygons(f.geometry).length > 0;
     const [title, ...rest] = p.display_name.split(", ");
-    return `<label class="${ok ? "" : "point"}" data-i="${i}" title="${esc(p.display_name)}"><input type="radio" name="hit" value="${i}"${ok ? "" : " disabled"}>` +
-      `<span><span class="t">${esc(title)}</span><span class="badge">${esc(p.addresstype ?? p.type)}</span>` +
-      (ok ? "" : `<span class="badge no">${f.geometry?.type === "Point" ? "a point: " : ""}no boundary</span>`) +
-      `<span class="d">${esc(rest.join(", ") || `${p.osm_type} ${p.osm_id}`)}</span></span></label>`;
+    return `<label class="rs-opt${ok ? "" : " point"}" data-i="${i}" title="${esc(p.display_name)}"><input type="radio" name="hit" value="${i}"${ok ? "" : " disabled"}>` +
+      `<span><b>${esc(title)}</b><span class="rs-chip">${esc(p.addresstype ?? p.type)}</span>` +
+      (ok ? "" : `<span class="rs-chip">${f.geometry?.type === "Point" ? "a point: " : ""}no boundary</span>`) +
+      `<small>${esc(rest.join(", ") || `${p.osm_type} ${p.osm_id}`)}</small></span></label>`;
   }).join("") || `<p class="small muted">No place found.</p>`;
 }
 
@@ -1115,8 +1043,9 @@ function boundaryFailed(input, box, text) {
   input.checked = false;
   status(text, 8000);
   $("found-err")?.remove();
-  $("found").insertAdjacentHTML("beforeend", `<p class="small error" id="found-err">${esc(text)} Select the place again to ask again, or <button type="button" class="link" id="use-box">use the box of the place</button>.</p>`);
-  $("use-box").onclick = () => {
+  $("found").insertAdjacentHTML("beforeend", `<p class="small error" id="found-err">${esc(text)} Select the place again to ask again, or <a href="#" role="button" id="use-box">use the box of the place</a>.</p>`);
+  $("use-box").onclick = (e) => {
+    e.preventDefault();
     $("found-err")?.remove();
     preview(null);
     setArea(polygons(box.geometry), { name: box.properties.name || box.properties.display_name.split(",")[0], osm_id: null, admin_level: null, source: `Photon box ${box.properties.osm_type} ${box.properties.osm_id}` });
@@ -1155,7 +1084,7 @@ const hints = {
 };
 const toolButtons = [...document.querySelectorAll("[data-mode]")];
 function tool(mode) {
-  for (const b of toolButtons) b.setAttribute("aria-pressed", b.dataset.mode === mode);
+  for (const b of toolButtons) { b.setAttribute("aria-pressed", b.dataset.mode === mode); b.classList.toggle("on", b.dataset.mode === mode); }
   if (mode) { picking(false); $("hint").textContent = hints[mode]; }
   if (draw.enabled) draw.setMode(mode ?? "static");
 }
@@ -1301,7 +1230,7 @@ async function h3Grid() {
   if (estimate > H3_MAX_GRID) {
     src.setData(empty);
     h3GridOn = false;
-    $("h3-grid-note").innerHTML = 'The view has too many hexagons. Zoom in, or choose a bigger hexagon, to pick hexagons. <button type="button" class="link" id="h3-zoom">Zoom in</button>';
+    $("h3-grid-note").innerHTML = 'The view has too many hexagons. Zoom in, or choose a bigger hexagon, to pick hexagons. <a href="#" role="button" id="h3-zoom">Zoom in</a>';
     return;
   }
   h3GridOn = true;
@@ -1344,7 +1273,7 @@ function h3Paint(theme = document.documentElement.dataset.rsTheme) {
 document.addEventListener("rs:themechange", (e) => h3Paint(e.detail?.theme));
 // zoom in until about 150 hexagons are in view (a zoom step is 4 times the area); the button in the note does it, and the tab does it when it opens on a view that is too large
 const h3ZoomIn = () => map.easeTo({ zoom: Math.min(map.getZoom() + Math.max(1, Math.log(h3Estimate / 150) / Math.log(4)), 18), duration: 600 });
-$("h3-grid-note").addEventListener("click", (e) => { if (e.target.closest("#h3-zoom")) h3ZoomIn(); });
+$("h3-grid-note").addEventListener("click", (e) => { if (e.target.closest("#h3-zoom")) { e.preventDefault(); h3ZoomIn(); } });
 // Picking hexagons (body.h3) is on while the H3 tab is open in card 1. It ends when the person works elsewhere (a build, another step's card, an
 // editor, card 1 folded), so a click on the map no longer picks a hexagon there; opening card 1 again, or the tab, starts it again.
 function h3Mode(on) {
@@ -1401,7 +1330,7 @@ let source = "region", building = false;
 let stepsReady = false, netBuilt = false, fixesApplied = false, levelsApplied = false, touched = false;   // the cards (below): the networks are netBuilt; the edits are in the tables; the person opened or folded a card by hand
 const dataTabs = [...document.querySelectorAll("#extracts-box [role=tab]")];
 for (const t of dataTabs) t.onclick = () => {
-  for (const u of dataTabs) { u.setAttribute("aria-selected", u === t); $(u.getAttribute("aria-controls")).hidden = u !== t; }
+  for (const u of dataTabs) { u.setAttribute("aria-selected", u === t); u.classList.toggle("on", u === t); $(u.getAttribute("aria-controls")).hidden = u !== t; }
   source = t.dataset.source;
   canBuild();
 };
@@ -1453,19 +1382,19 @@ function renderExtracts() {
   $("extracts").innerHTML = cover.length ? cover.map((x, i) => {
     const k = keptRegions.find((r) => r.id === x.id), inUse = k && regionKept === k.id;
     const prog = getting?.id === x.id ? `<span class="prog"><span class="bar"><i id="bar"></i></span><span class="got" id="got">0 %</span>` +
-      `<button class="btn sm" data-cancel>Cancel</button></span>` : "";
+      `<button type="button" data-cancel>Cancel</button></span>` : "";
     const what = getting?.id === x.id ? ""
-      : k ? `<button class="btn sm" data-use="${i}"${inUse ? " disabled" : ""}>${inUse ? "In use" : "Use"}</button>`
-      : regions.relay ? `<button class="btn sm" data-get="${i}"${getting ? " disabled" : ""}>Get</button>` : "";
-    return `<label><input type="radio" name="extract" value="${i}"${i === shown ? " checked" : ""} aria-label="Show ${esc(x.name)} on the map">` +
-      `<span class="x">${esc(x.name)}<span>${k ? `kept · ${mb(k.size)} MB · ${day(k.modified)}` : `${esc(x.id)} · ${num(Math.round(x.km2))} km²`}</span></span>${what}` +
-      `<a class="btn sm ex-dl" href="${esc(x.pbf)}" title="Download ${esc(x.name)} (.osm.pbf) to this computer" aria-label="Download ${esc(x.name)}">${icon("download")}</a>${prog}</label>`;
+      : k ? `<button type="button" data-use="${i}"${inUse ? " disabled" : ""}>${inUse ? "In use" : "Use"}</button>`
+      : regions.relay ? `<button type="button" data-get="${i}"${getting ? " disabled" : ""}>Get</button>` : "";
+    return `<label class="rs-opt"><input type="radio" name="extract" value="${i}"${i === shown ? " checked" : ""} aria-label="Show ${esc(x.name)} on the map">` +
+      `<span><b>${esc(x.name)}</b><small>${k ? `kept · ${mb(k.size)} MB · ${day(k.modified)}` : `${esc(x.id)} · ${num(Math.round(x.km2))} km²`}</small>${prog}</span>${what}` +
+      `<button type="button" class="ex-dl" data-dl="${esc(x.pbf)}" title="Download ${esc(x.name)} (.osm.pbf) to this computer" aria-label="Download ${esc(x.name)}">${icon("download")}</button></label>`;
   }).join("") : `<p class="small muted">No Geofabrik file covers the area. Use the Overpass tab or the planet file.</p>`;
 }
 function renderKept() {
   $("kept").innerHTML = keptRegions.length ? `<p class="small muted" style="margin:0">Kept in this browser:</p>` + keptRegions.map((k) =>
     `<div class="k"><span>${esc(k.name)} · ${mb(k.size)} MB · ${day(k.modified)}</span>` +
-    `<button class="btn sm" data-del="${esc(k.id)}" title="Delete it from this browser">Delete</button></div>`).join("") : "";
+    `<button type="button" data-del="${esc(k.id)}" title="Delete it from this browser">Delete</button></div>`).join("") : "";
 }
 async function refreshKept() {
   try { keptRegions = await regions.kept(); } catch (e) { keptRegions = []; }   // no storage (for example a private window)
@@ -1501,6 +1430,7 @@ $("extracts").addEventListener("click", (ev) => {
   if (b.hasAttribute("data-cancel")) getting?.abort.abort();
   else if (b.dataset.use) useKept(keptRegions.find((r) => r.id === cover[Number(b.dataset.use)].id));
   else if (b.dataset.get) get(cover[Number(b.dataset.get)]);
+  else if (b.dataset.dl) Object.assign(document.createElement("a"), { href: b.dataset.dl }).click();     // the .osm.pbf file of Geofabrik, to this computer
 });
 $("kept").onclick = async (ev) => {
   const id = ev.target.closest("button[data-del]")?.dataset.del;
@@ -1523,7 +1453,7 @@ async function restoreSavedArea(slug) {
   $("showrow").hidden = true;
   $("mapnote").textContent = "";
   setData("preview", null);
-  document.querySelectorAll(".saved-area.picked").forEach((r) => r.classList.remove("picked"));
+  document.querySelectorAll(".saved-area.picked").forEach((r) => { r.classList.remove("picked"); r.querySelector("input").checked = false; });
   closeEditor();
   roadsRun++;
   await drawing;
@@ -1614,33 +1544,35 @@ async function renderSavedAreasList() {
     if (!list.length) { container.innerHTML = ""; return; }
     // the networks of the build, from its summary text (the other lines of it are the log of the build, for example the sidewalk rule): a chip with an icon and the number of roads for each
     const NETS = { driving: ["car", "Driving"], walking: ["walk", "Walking"], cycling: ["bike", "Cycling"] };
-    const networks = (t) => [...String(t ?? "").matchAll(/^(\w+): (\d+) edges/gm)].map((m) => `<span class="sa-chip" title="${NETS[m[1]]?.[1] ?? m[1]}: ${num(+m[2])} roads">${icon(NETS[m[1]]?.[0] ?? "arrow")}<b>${num(+m[2])}</b></span>`).join("");
+    const networks = (t) => [...String(t ?? "").matchAll(/^(\w+): (\d+) edges/gm)].map((m) => `<span class="rs-chip" title="${NETS[m[1]]?.[1] ?? m[1]}: ${num(+m[2])} roads">${icon(NETS[m[1]]?.[0] ?? "arrow")}<b>${num(+m[2])}</b></span>`).join("");
     const formatBytes = (b) => (b ? (b / 2 ** 20).toFixed(1) + " MB" : "");
     container.innerHTML = list.map((a) => {
       const dateStr = a.builtAt ? new Date(a.builtAt).toLocaleString() : "";
       return `
-        <div class="saved-area" data-slug="${esc(a.slug)}" title="Show the boundary of the area on the map">
+        <label class="rs-opt saved-area" data-slug="${esc(a.slug)}" title="Show the boundary of the area on the map"><input type="radio" name="saved-area" aria-label="Show ${esc(a.name || a.slug)} on the map"><span>
           <strong class="sa-name">${esc(a.name || a.slug)}</strong>
-          <div class="sa-meta small muted">${dateStr}${a.sizeBytes ? " · " + formatBytes(a.sizeBytes) : ""}${a.hasViz ? ' <span class="sa-pill" title="The drawing of the roads is saved too: Open shows the map with no wait.">Opens fast</span>' : ""}</div>
-          ${networks(a.summary) ? `<div class="sa-nets" aria-label="Roads of each network">${networks(a.summary)}</div>` : ""}
-          <div class="sa-actions">
-            <button class="btn sm primary load-saved-area-btn" data-slug="${esc(a.slug)}">Open</button>
-            <button class="btn sm del-saved-area-btn" data-slug="${esc(a.slug)}">Delete</button>
-          </div>
-        </div>
+          <small class="sa-meta">${dateStr}${a.sizeBytes ? " · " + formatBytes(a.sizeBytes) : ""}${a.hasViz ? ' <span class="rs-chip accent" title="The drawing of the roads is saved too: Open shows the map with no wait.">Opens fast</span>' : ""}</small>
+          ${networks(a.summary) ? `<span class="sa-nets" aria-label="Roads of each network">${networks(a.summary)}</span>` : ""}
+          <span class="sa-actions">
+            <button type="button" class="sb-primary load-saved-area-btn" data-slug="${esc(a.slug)}">Open</button>
+            <button type="button" class="del-saved-area-btn" data-slug="${esc(a.slug)}">Delete</button>
+          </span>
+        </span></label>
       `;
     }).join("");
 
     // a click on a row shows the boundary of the area on the map (the preview layer) and zooms to it; a second click hides it; Open loads the area
     container.querySelectorAll(".saved-area").forEach((row) => {
+      // the row is a roadstyle option row (a label with a radio): the page sets the radio itself, so that a second click can clear it
       row.onclick = (ev) => {
         if (ev.target.closest("button")) return;
+        ev.preventDefault();
         const was = row.classList.contains("picked");
-        container.querySelectorAll(".saved-area.picked").forEach((r) => r.classList.remove("picked"));
+        container.querySelectorAll(".saved-area").forEach((r) => { r.classList.remove("picked"); r.querySelector("input").checked = false; });
         const b = list.find((a) => a.slug === row.dataset.slug)?.boundary;
         const polys = b?.base || b?.geometry;
         if (was || !Array.isArray(polys) || !polys.length) { setData("preview", null); return; }
-        row.classList.add("picked");
+        row.classList.add("picked"); row.querySelector("input").checked = true;
         setData("preview", { type: "Feature", properties: { name: row.querySelector("strong").textContent }, geometry: geometry(polys) });
         fitTo(geometry(polys));
       };
@@ -2341,10 +2273,10 @@ const EXPORT_GROUPS = {
 function paintExport() {
   const modes = exportModes(), was = $("export-mode").value;
   $("export-mode").value = modes.includes(was) ? was : modes[0] ?? "";
-  const zoomRow = '<div class="zoomrow"><p class="small muted" id="export-profile"></p><label class="optrow"><input type="checkbox" id="export-full"><span class="t"><b>Layer edges</b><small>Every road of every network, with the columns of the profile.</small></span></label><span class="small">Zoom from <input id="export-zmin" type="number" min="0" max="18" value="0" aria-label="The lowest zoom"> to <input id="export-zmax" type="number" min="0" max="18" value="14" aria-label="The highest zoom"></span><label class="small"><input type="checkbox" id="export-auto"> The highest zoom that fits the limit</label><span id="export-tiles" class="small"></span><button type="button" class="link" id="export-design">Edit the tile profile (step 9) →</button></div>';
-  const network = `<section class="expsec netsec"><h3>Network</h3><p class="small muted">The files below use one network.</p><div class="segmented" id="export-seg" role="radiogroup" aria-label="Network of the files">${modes.map((m) => `<button type="button" role="radio" data-m="${m}" aria-checked="${m === $("export-mode").value}">${icon(({ driving: "car", walking: "walk", cycling: "bike" })[m] ?? "arrow")}${m[0].toUpperCase() + m.slice(1)}</button>`).join("")}</div></section>`;
-  const row = (f) => `<div class="exp"><b>${esc(f.title)}</b><button type="button" class="btn sm" data-fmt="${f.id}"${f.tiles || f.needsMap ? " data-tiles" : ""}>Download</button><small>${esc(f.note)}</small>${f.width ? '<label class="small imgw">Width <input type="number" class="export-img-w" min="500" max="8000" step="100" value="2400" aria-label="Width of the picture in pixels"> px</label><label class="small imgw"><input type="checkbox" class="export-img-t"> Transparent background</label>' : ""}${f.merge ? '<label class="small imgw"><input type="checkbox" class="export-merge"> One feature for a two-way road (the center lines, no look)</label>' : ""}</div>`;
-  const section = (g) => `<section class="expsec"><h3>${EXPORT_GROUPS[g][0]}</h3><p class="small muted">${EXPORT_GROUPS[g][1]}</p>${g === "Tiles" ? zoomRow : ""}${exporter.FORMATS.filter((f) => f.group === g).map(row).join("")}</section>`;
+  const zoomRow = '<div class="zoomrow"><p class="small muted" id="export-profile"></p><div class="rs-opts"><label class="rs-opt"><input type="checkbox" id="export-full"><span><b>Layer edges</b><small>Every road of every network, with the columns of the profile.</small></span></label></div><span class="small">Zoom from <input id="export-zmin" type="number" min="0" max="18" value="0" aria-label="The lowest zoom"> to <input id="export-zmax" type="number" min="0" max="18" value="14" aria-label="The highest zoom"></span><div class="rs-opts"><label class="rs-opt"><input type="checkbox" id="export-auto"><span>The highest zoom that fits the limit</span></label></div><span id="export-tiles" class="small"></span><a href="#" id="export-design" role="button">Edit the tile profile (step 9) →</a></div>';
+  const network = `<section class="rs-sec-box expsec"><h3>Network</h3><p>The files below use one network.</p><div class="rs-seg" id="export-seg" role="radiogroup" aria-label="Network of the files">${modes.map((m) => `<button type="button" role="radio" data-m="${m}" aria-checked="${m === $("export-mode").value}"${m === $("export-mode").value ? ' class="on"' : ""}>${icon(({ driving: "car", walking: "walk", cycling: "bike" })[m] ?? "arrow")}${m[0].toUpperCase() + m.slice(1)}</button>`).join("")}</div></section>`;
+  const row = (f) => `<div class="exp"><b>${esc(f.title)}</b><button type="button" data-fmt="${f.id}"${f.tiles || f.needsMap ? " data-tiles" : ""}>Download</button><small>${esc(f.note)}</small>${f.width ? '<label class="small imgw">Width <input type="number" class="export-img-w" min="500" max="8000" step="100" value="2400" aria-label="Width of the picture in pixels"> px</label><label class="rs-opt"><input type="checkbox" class="export-img-t"><span>Transparent background</span></label>' : ""}${f.merge ? '<label class="rs-opt"><input type="checkbox" class="export-merge"><span>One feature for a two-way road (the center lines, no look)</span></label>' : ""}</div>`;
+  const section = (g) => `<section class="rs-sec-box expsec"><h3>${EXPORT_GROUPS[g][0]}</h3><p>${EXPORT_GROUPS[g][1]}</p>${g === "Tiles" ? zoomRow : ""}${exporter.FORMATS.filter((f) => f.group === g).map(row).join("")}</section>`;
   $("export-list").innerHTML = section("Tiles") + (modes.length > 1 ? network : "") + section("Visualization") + section("Simulation");
   paintTileCount();
 }
@@ -2352,7 +2284,7 @@ $("export-list").addEventListener("click", (e) => {
   const b = e.target.closest("#export-seg [data-m]");
   if (!b) return;
   $("export-mode").value = b.dataset.m;
-  for (const x of $("export-seg").children) x.setAttribute("aria-checked", x === b);
+  for (const x of $("export-seg").children) { x.setAttribute("aria-checked", x === b); x.classList.toggle("on", x === b); }
   exportBox = null; paintTileCount();
 });
 // the tiles of the map (card 6): the sources of the map's style, in MVT; the box is the extent of the network; the zooms are the two numbers of the card
@@ -2404,7 +2336,7 @@ $("export-list").addEventListener("input", (e) => {
   if (e.target.id === "export-full") patchProfile({ layers: { ...p.layers, edges: e.target.checked } });
   if (e.target.id === "export-auto") patchProfile({ auto: e.target.checked });
 });
-$("export-list").addEventListener("click", (e) => { if (e.target.id === "export-design") designPanel?.open("tiles"); });
+$("export-list").addEventListener("click", (e) => { if (e.target.id === "export-design") { e.preventDefault(); designPanel?.open("tiles"); } });
 document.addEventListener("duckosm:built", () => { exportBox = null; });
 document.addEventListener("duckosm:drawn", () => { paintTileCount(); });
 $("export-list").addEventListener("click", async (e) => {
@@ -2449,7 +2381,8 @@ rs.help.set(HELP);
 refreshSteps();
 
 // ---- card 7: the OSM fixes (docs/app.md, docs/osm-editing.md). The panel is duckOSM's fixes editor (duckosm/fixes_editor/, web/fixes_editor/ of duckOSM at
-// the engine's rev): it makes its tabs and body in #fix-panel, under the page's header, owns the rules (fixes.js, as data) and writes the YAML from them. The file of step 4 loads into it, and a build gets its text. The build reads it with duckosm-build's parser, as it is. ----
+// the engine's rev): it draws in roadstyle's editor frame (rs.frame, with "← Steps") in the page's panel, owns the rules (fixes.js, as data) and writes the YAML
+// from them. The file of step 4 loads into it, and a build gets its text. The build reads it with duckosm-build's parser, as it is. ----
 let fixesPanel = null;
 const fixesText = () => fixesPanel?.text() ?? null;
 const loadFixesText = (text) => fixesPanel?.load(text);
@@ -2459,14 +2392,14 @@ const osmIdOf = (row) => { const p = window.RS_SIDE?.props?.[row]; return Array.
 const fixNoteNow = { sum: "No fixes.", why: "" };
 function fixNote(part) { Object.assign(fixNoteNow, part); $("fix-sum").textContent = [fixNoteNow.sum, fixNoteNow.why].filter(Boolean).join(" "); }
 try {
-  fixesPanel = await initFixesPanel($("fix-panel"), { duck, map, status, yaml: jsyaml, selectBoxes: rsSelectBoxes, roadIdOfRow: osmIdOf, areaKey: () => $("name").value.trim(), onChange: (text) => fixNote({ sum: text }),
+  const frame = (opts) => { const f = rs.frame({ ...opts, panel: $("sb"), back: "Steps" }); f.addEventListener("back", closeFixes); return f; };
+  fixesPanel = await initFixesPanel({ frame, duck, map, status, yaml: jsyaml, roadIdOfRow: osmIdOf, areaKey: () => $("name").value.trim(), onChange: (text) => fixNote({ sum: text }),
     onBuild, changesNote: "To load a file, use <b>Fixes</b> in step 4." });
   fixesPanel.restore();                           // the changes of this area name from the last visit (the panel keeps them in this browser)
   $("name").addEventListener("change", () => fixesPanel?.restore());
 } catch (e) { openWhy[7] = "The fixes panel did not start: " + e.message; refreshSteps(); }
 window.fixesPanel = fixesPanel;                   // for the tests (fixes_e2e.py)
 function closeFixes() { fixesPanel?.close(); padMap(); map.resize(); }
-$("fix-back").onclick = closeFixes;
 // "Build again" in the Changes tab: the build reads the panel's text (fixesText)
 function onBuild() {
   if ($("run").disabled) return status("The build cannot start yet: check step 3 and step 4.");

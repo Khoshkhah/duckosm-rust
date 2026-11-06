@@ -96,7 +96,7 @@ with sync_playwright() as p:
     assert page.get_attribute("#fix-tab-road", "aria-selected") == "true", "the panel opens on the Road tab"
     # the hide button of the panel closes the editor first (Kaveh: a road stayed picked behind the hidden panel), then the map takes
     # the panel's place; the button at the corner shows the steps again, and card 7 opens the editor again
-    page.click("#fix-hide")
+    page.click("#sb-hide")
     page.wait_for_function("document.getElementById('sb').classList.contains('hidden')")
     assert page.is_visible("#sb-show") and not page.evaluate("document.body.classList.contains('editing-fixes')"), "the hide button closes the editor"
     assert page.evaluate("(window.duckMap.getSource('fix-sel')?._data?.features || []).length") == 0, "nothing stays picked on the map"
@@ -135,18 +135,19 @@ with sync_playwright() as p:
     page.click("#fix-load")
     page.wait_for_function(f"document.querySelector('#fix-obj .objhead')?.textContent.includes('way {ROAD}') && document.querySelector('#fixf-sidewalk')", timeout=20_000)
     assert page.input_value("#fixf-sidewalk") == "", "no sidewalk tag in the data"
-    page.select_option("#fixf-sidewalk", "both")
-    page.select_option("#fixf-surface", "paved")
+    # the lists are roadstyle's select boxes (the frame of card 7): the native <select> is hidden, so the test sets it with force
+    page.select_option("#fixf-sidewalk", "both", force=True)
+    page.select_option("#fixf-surface", "paved", force=True)
     page.fill("#fixf-lanes", "7")
     # guards: a one-way road closes the forward and backward lanes (with the reason under them); a choice that opens them again takes the guard away; a bridge closes the tunnel list
-    page.select_option("#fixf-oneway", "true")
+    page.select_option("#fixf-oneway", "true", force=True)
     assert page.is_disabled("#fixf-lanes_forward") and page.is_disabled("#fixf-lanes_backward") and "one direction" in page.inner_text("#fix-form"), "a one-way road closes the lanes for each direction"
     assert page.input_value("#fixf-lanes") == "7", "the guard keeps the other fields"
-    page.select_option("#fixf-oneway", "false")
+    page.select_option("#fixf-oneway", "false", force=True)
     assert not page.is_disabled("#fixf-lanes_forward"), "a two-way road opens them"
-    page.select_option("#fixf-bridge", "yes")
+    page.select_option("#fixf-bridge", "yes", force=True)
     assert page.is_disabled("#fixf-tunnel") and "bridge or a tunnel" in page.inner_text("#fix-form")
-    page.select_option("#fixf-bridge", "")
+    page.select_option("#fixf-bridge", "", force=True)
     assert not page.is_disabled("#fixf-tunnel")
     page.click("#fix-save")
     y = text(page)
@@ -222,7 +223,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(500)
     assert popups(page) == 0 and "Building way" in page.inner_text("#fix-obj .objhead"), page.inner_text("#fix-obj")
     page.fill("#fixf-building_levels", "7")
-    page.select_option("#fixf-roof_shape", "gabled")
+    page.select_option("#fixf-roof_shape", "gabled", force=True)
     page.fill("#fixf-roof_colour", "#cc3300")
     page.click("#fix-save")
     y = text(page)
@@ -263,7 +264,7 @@ with sync_playwright() as p:
     print(f"wall numbers: none by default; row {key} under the pointer shows #{n}; the wall {other} on the map lights its row, and a click selects it")
     wall = page.evaluate("(() => { const r = document.querySelector('#fix-form .wallrow'); return [r.dataset.a, r.dataset.b, r.dataset.computed]; })()")
     new_type = "party" if wall[2] != "party" else "side"
-    page.select_option("#fix-form .wallrow select", new_type)
+    page.select_option("#fix-form .wallrow select", new_type, force=True)
     assert "building_faces" not in text(page) and not page.is_disabled("#fix-save") and "1 change not added yet" in page.inner_text("#fix-state"), "a wall type waits for Add to changes"
     page.click("#fix-save")
     y = text(page)
@@ -271,7 +272,7 @@ with sync_playwright() as p:
     assert "edited" in (page.get_attribute("#fix-form .wallrow", "class") or "")
     print(f"a wall: nodes {wall[0]} and {wall[1]} were {wall[2]}, now {new_type}")
     # a door on a wall: a select in the row, a draft until Add to changes, then a rule with `door` (the type stays), a dot on the map, and the text in the Changes tab
-    page.select_option("#fix-form .wallrow >> nth=0 >> select[data-walldoor]", "main")
+    page.select_option("#fix-form .wallrow >> nth=0 >> select[data-walldoor]", "main", force=True)
     assert "door: main" not in text(page) and not page.is_disabled("#fix-save"), "a door waits for Add to changes"
     page.click("#fix-save")
     y = text(page)
@@ -323,7 +324,7 @@ with sync_playwright() as p:
     assert "Wall 1 of" in page.inner_text("#fix-wallpos")
     page.click("[data-wall-nav='-1']")                      # Wall 1 and Previous: the last wall; its row scrolls into view above the bar at the bottom of the panel
     page.wait_for_timeout(300)
-    assert page.evaluate("(() => { const r = document.querySelector('#fix-form .wallrow.sel').getBoundingClientRect(), b = document.querySelector('#fix-panel .fix-body').getBoundingClientRect(), bars = [...document.querySelectorAll('#fix-panel .fix-bar')].filter((x) => x.offsetParent).map((x) => x.getBoundingClientRect().top); return r.top >= b.top - 1 && r.bottom <= Math.min(b.bottom, ...bars) + 1; })()"), "the picked wall is under the bar or out of the panel"
+    assert page.evaluate("(() => { const r = document.querySelector('#fix-form .wallrow.sel').getBoundingClientRect(), b = document.getElementById('fix-body').getBoundingClientRect(), bars = [...document.querySelectorAll('#fix-panel .fix-bar')].filter((x) => x.offsetParent).map((x) => x.getBoundingClientRect().top); return r.top >= b.top - 1 && r.bottom <= Math.min(b.bottom, ...bars) + 1; })()"), "the picked wall is under the bar or out of the panel"
     page.click("[data-wall-nav='1']")
     assert "Wall 1 of" in page.inner_text("#fix-wallpos")
     w3 = rows(page, f"SELECT ST_X(ST_LineInterpolatePoint(geometry, 0.5)) AS x, ST_Y(ST_LineInterpolatePoint(geometry, 0.5)) AS y FROM main.building_faces WHERE building_id = {b['osm_id']} AND face_index = 2")[0]
@@ -356,7 +357,7 @@ with sync_playwright() as p:
     page.wait_for_function(f"document.getElementById('fix-id').value === '{n['osm_id']}' && document.querySelector('#fixf-traffic_signals_direction')", timeout=20_000)
     page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['fix-sel-pt']}).length > 0", timeout=20_000)    # the picked node has its blue ring
     print("the Node tab draws the traffic signals and crossings in view as dots, and the picked node has a ring")
-    page.select_option("#fixf-traffic_signals_direction", "backward")
+    page.select_option("#fixf-traffic_signals_direction", "backward", force=True)
     page.click("#fix-save")
     y = text(page)
     assert "type: node" in y and "traffic_signals:direction: backward" in y, y
@@ -396,10 +397,10 @@ with sync_playwright() as p:
     via = page.eval_on_selector("#fix-via", "(s) => [s.tagName, s.options.length, s.value, s.options[0]?.value]")
     assert via[0] == "SELECT" and via[1] >= 1 and via[2] == via[3], via
     assert page.evaluate("[...document.querySelectorAll('#fix-via-row > *, #fix-out .turn')].filter((r) => r.offsetParent).every((r) => r.getBoundingClientRect().right <= document.getElementById('fix-panel').getBoundingClientRect().right + 1)"), "a part is wider than the panel"
-    # the bar sticks to the bottom edge of the panel: no list row shows under it (a sticky box stops at the padding of its scroll box)
-    gap = page.evaluate("""(() => { const bar = [...document.querySelectorAll('#fix-panel .fix-bar')].find((b) => b.offsetParent), body = bar.closest('.fix-body');
-      if (body.scrollHeight <= body.clientHeight + 1) return null; body.scrollTop = 0; return Math.round(body.getBoundingClientRect().bottom - bar.getBoundingClientRect().bottom); })()""")
-    assert gap is None or abs(gap) <= 1, f"a gap of {gap} px under the bar"
+    # the bar is roadstyle's frame bar, under the body and outside it: no list row shows under it
+    gap = page.evaluate("""(() => { const bar = [...document.querySelectorAll('#fix-panel .fix-bar')].find((b) => b.offsetParent), body = document.getElementById('fix-body');
+      return !body.contains(bar) && Math.round(bar.getBoundingClientRect().top - body.getBoundingClientRect().bottom); })()""")
+    assert gap is not False and gap >= -1, f"the bar is in the body or over it ({gap} px)"
     print("the junctions are a dropdown list" + ("" if gap is None else ", and the bar leaves no gap under it"))
     page.mouse.move(5, 5)
     still = page.eval_on_selector("#fix-out .turn", "(r) => getComputedStyle(r).backgroundColor")
@@ -434,7 +435,7 @@ with sync_playwright() as p:
     page.wait_for_selector("#fix-out .turn")
     print("the Turn tab: the junctions say how many roads leave, a dead end says why, and an arriving road can be the start road")
     rule = page.eval_on_selector("#fix-out .turn select", "(x) => x.options[1].value")      # the first rule that fits the turn: No <way>
-    page.select_option("#fix-out .turn select", rule)
+    page.select_option("#fix-out .turn select", rule, force=True)
     assert "not added yet" in page.inner_text("#fix-turn-note") and "restriction" not in text(page), "a choice is not a change until Add to changes"
     assert page.is_visible("#fix-tab-turns .dot")
     page.click("#fix-turn-add")
@@ -506,7 +507,7 @@ with sync_playwright() as p:
     assert "joins a junction" in page.inner_text("#fix-draw-n"), page.inner_text("#fix-draw-n")
     page.mouse.click(px[0] + 150, px[1] - 80)
     page.wait_for_function("window.fixesPanel.drawn().draw === 2", timeout=20_000)
-    page.select_option("#fixn-highway", "service")
+    page.select_option("#fixn-highway", "service", force=True)
     page.fill("#fixn-name", "Test Lane")
     page.click("#fix-draw-done")
     y = text(page)
@@ -607,7 +608,7 @@ with sync_playwright() as p:
         raise
     assert page.is_visible("#fix-doors-legend") and "In view" in page.inner_text("#fix-doors-info")
     new_kind = "service" if door["kind"] != "service" else "main"
-    page.select_option("#fix-form .doorrow >> nth=0 >> select", new_kind)
+    page.select_option("#fix-form .doorrow >> nth=0 >> select", new_kind, force=True)
     assert f"entrance: {new_kind}" not in text(page) and not page.is_disabled("#fix-save"), "a door kind waits for Add to changes"
     page.click("#fix-save")
     y = text(page)
@@ -635,7 +636,7 @@ with sync_playwright() as p:
     page.wait_for_function(f"document.querySelector('#fix-obj .objhead')?.textContent.includes('node {j['id']}') && document.querySelector('#fixf-highway')", timeout=20_000)
     assert "no traffic tag" in page.inner_text("#fix-obj"), page.inner_text("#fix-obj")
     assert page.is_disabled("#fixf-kerb") and page.is_disabled("#fixf-crossing") and "for a crossing" in page.inner_text("#fix-form"), "a node with no kind has no crossing, kerb or tactile paving"
-    page.select_option("#fixf-highway", "traffic_signals")
+    page.select_option("#fixf-highway", "traffic_signals", force=True)
     assert not page.is_disabled("#fixf-kerb") and page.is_disabled("#fixf-traffic_signals_direction") is False
     assert page.eval_on_selector_all("#fixf-crossing option", "(o) => o.map((x) => x.value)") == ["", "traffic_signals"], "a traffic signal with a crossing has one crossing value"
     assert page.input_value("#fixf-highway") == "traffic_signals"

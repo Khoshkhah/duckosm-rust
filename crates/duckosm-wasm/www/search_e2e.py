@@ -72,7 +72,7 @@ with sync_playwright() as p:
     assert page.evaluate("window.areas || 0") == 0
     page.click("#use-box")
     page.wait_for_function("window.areas >= 1", timeout=30_000)
-    assert page.locator("#found-err").count() == 0 and float(page.inner_text("#summary .stat b").replace(",", "")) > 1
+    assert page.locator("#found-err").count() == 0 and float(page.inner_text("#summary .rs-kpi-val").replace(",", "")) > 1
     print("Nominatim fails: the map zoomed to the box, the text and the box button show, and the box is the area")
 
     # a slow file at the start (a test page behind an ssh tunnel): the map's `load` comes during the wait, and the page must not lose it (the area, the zoom and the layers came from it)

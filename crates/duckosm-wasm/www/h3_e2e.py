@@ -156,10 +156,10 @@ def run(browser, phone):
     cx, cy = h3(page, "const [lat, lng] = h3.cellToLatLng(args[0]); return [lng, lat];", centre)
     assert not inside((cx, cy), g), "the middle of the ring is a hole"
     total = sum(h3(page, "return h3.cellArea(args[0], 'km2');", c) for c in ring)
-    got = page.inner_text("#summary .stat b")
+    got = page.inner_text("#summary .rs-kpi-val")
     assert abs(float(got.replace(",", "")) - total) < 0.02 * total + 0.01, ("the area of card 2 is the area of the cells", got, total)
     assert f"{total:.2f}"[:3] in text(), (text(), total)
-    assert page.inner_text("#summary .stats .stat:nth-child(2) b") == "1"
+    assert page.inner_text("#summary .rs-kpi:nth-child(2) .rs-kpi-val") == "1"
     page.screenshot(path=str(out / f"{name}-1-ring.png"))
     # a seventh click fills the hole; a click on a picked cell removes it
     pick(centre)
@@ -208,7 +208,7 @@ def run(browser, phone):
     pick(centre)
     pick(far)
     cells(2)
-    assert page.inner_text("#summary .stats .stat:nth-child(2) b") == "2"
+    assert page.inner_text("#summary .rs-kpi:nth-child(2) .rs-kpi-val") == "2"
     page.screenshot(path=str(out / f"{name}-2-two.png"))
     click("#step1-card .area-clear")
     cells(0)
