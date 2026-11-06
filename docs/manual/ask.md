@@ -46,6 +46,8 @@ Only one `SELECT` or `WITH` statement runs. The dock refuses a statement that ch
 3. Click **Key**, select the service, paste the key and click **Save**.
 4. Write a question, for example "Which primary roads are longer than 300 m?". Press **Enter**.
 
+To get a chart, ask for it, for example "Draw a bar chart of the km of road in each class.". Ask draws the chart in the data dock. Ask can draw a bar, line, histogram, scatter or pie chart.
+
 Each answer shows its SQL. **Show** puts the table of the answer in the data dock again. **New** starts a new conversation. If the service is busy, try again in a minute or select another service.
 
 ### Your key and your data

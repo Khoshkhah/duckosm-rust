@@ -2507,7 +2507,8 @@ const data = () => dataPart ??= dataDock({
 $("query-tables").onclick = () => data().open();
 const ask = () => askPart ??= askPanel({ data: data(), dialect: "DuckDB",
   about: "The road networks of one area, built by duckOSM from OpenStreetMap. Each network is a schema: driving, walking and cycling. In a network, edges has one row for each direction of a road; edge_id is its id, osm_id the OSM way. The map draws the roads by edge_id.",
-  examples: ["Which one-way roads have no name?", "How many km of road does each class have?", "Which primary roads are longer than 300 m?"] });
+  examples: ["Which one-way roads have no name?", "Which primary roads are longer than 300 m?", "Draw a bar chart of the km of road in each class.",
+    "Draw a histogram of the road lengths.", "Show a pie chart of the one-way and the two-way roads."] });
 Object.defineProperties(window, { dataPart: { get: data }, askPart: { get: ask } });   // for the tests
 rs.sections.add({ id: "ask", label: "Ask the data", note: "A question about the roads, in words", open: () => ask().open(), icon: "ask", background: true, after: "step6" });
 
