@@ -208,7 +208,7 @@ The build applies the rules in this order:
 
 ## Many rules for one object
 
-The build does not join or refuse two rules for one road. It applies every rule in the order of the file. Where two rules set the same thing, the later rule wins. The panel writes one rule for each object, so two rules for one road come only from a file that you edit or join by hand.
+The build does not join or refuse two rules for one road. It applies every rule in the order of the file. Where two rules set the same thing, the later rule wins. The panel writes one rule for each object, so two rules for one road come only from a file that you edit or join by hand. When you pick such an object in the panel, a box tells you how many rules it has, and **Edit it** joins them into one (see [An object that is already in your changes](edit-osm.md#an-object-that-is-already-in-your-changes)).
 
 | What the rules set | Two or more rules for one way |
 |---|---|

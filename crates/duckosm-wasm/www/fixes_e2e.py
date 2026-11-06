@@ -32,6 +32,13 @@ def built(page):
                            "!document.getElementById('step7-card').classList.contains('off')", timeout=600_000)
 
 
+def edit_it(page, box="#fix-inchg"):
+    """The object of the tab is in the changes: the box asks first (duckOSM #12). Press Edit it, so that the form opens."""
+    if page.is_visible(f"{box} [data-ask=edit]"):
+        page.click(f"{box} [data-ask=edit]")
+        page.wait_for_function(f"document.querySelector('{box}').hidden", timeout=10_000)
+
+
 def text(page):
     return page.evaluate("window.fixesPanel.text() ?? ''")
 
@@ -87,12 +94,16 @@ with sync_playwright() as p:
     page.click("#step7")
     assert all(page.is_visible(f"#fix-tab-{t}") for t in ("road", "building", "node", "turns", "new", "changes")), "the six tabs"
     assert page.get_attribute("#fix-tab-road", "aria-selected") == "true", "the panel opens on the Road tab"
-    # the panel hides (the map takes its place) and the button at the corner shows it again, with the tab and the picks as they were
+    # the hide button of the panel closes the editor first (Kaveh: a road stayed picked behind the hidden panel), then the map takes
+    # the panel's place; the button at the corner shows the steps again, and card 7 opens the editor again
     page.click("#fix-hide")
     page.wait_for_function("document.getElementById('sb').classList.contains('hidden')")
-    assert page.is_visible("#sb-show") and page.evaluate("document.body.classList.contains('editing-fixes')")
+    assert page.is_visible("#sb-show") and not page.evaluate("document.body.classList.contains('editing-fixes')"), "the hide button closes the editor"
+    assert page.evaluate("(window.duckMap.getSource('fix-sel')?._data?.features || []).length") == 0, "nothing stays picked on the map"
     page.click("#sb-show")
     page.wait_for_function("!document.getElementById('sb').classList.contains('hidden')")
+    assert page.is_visible("#sb .sb-body") and not page.is_visible("#fix-panel"), "the steps show again"
+    page.click("#step7")
     assert page.is_visible("#fix-panel") and page.get_attribute("#fix-tab-road", "aria-selected") == "true"
     assert not page.is_visible("#fix-walls-all"), "the walls check box is only in the Building tab"
 
@@ -275,9 +286,30 @@ with sync_playwright() as p:
     page.evaluate(f"window.fixesPanel.select('building', 'relation', {rel[0]['building_id']})")
     page.wait_for_function("document.querySelectorAll('#fix-form .wallrow').length >= 5", timeout=20_000)
     assert page.evaluate("[...document.querySelectorAll('#fix-form .wallrow select[data-wall]')].some((s) => s.value === 'court')"), "the courtyard walls have the type court"
-    page.evaluate(f"window.fixesPanel.select('building', 'way', {b['osm_id']})")
-    page.wait_for_function("document.querySelectorAll('#fix-form .wallrow').length >= 3", timeout=20_000)
     print(f"a building that is a relation ({rel[0]['building_id']}): walls with court walls for the courtyard")
+    # the building of the rules above is in the changes: picked again, a box asks Edit it or Delete it, and the form waits (Kaveh, duckOSM #12)
+    pick_b = lambda: page.evaluate(f"window.fixesPanel.select('building', 'way', {b['osm_id']})")
+    pick_b()
+    page.wait_for_selector("#fix-inchg:not([hidden]) [data-ask=edit]", timeout=20_000)
+    box = page.inner_text("#fix-inchg")
+    assert "in your changes" in box and page.is_visible("#fix-inchg [data-ask=delete]"), box
+    n = page.evaluate("window.fixesPanel.count()")
+    page.click("#fix-inchg [data-ask=delete]")                        # Delete it: the records go, and the form has the OSM data
+    page.wait_for_function(f"window.fixesPanel.count() < {n}", timeout=10_000)
+    assert "building:levels: '7'" not in text(page), "Delete it removes the records of the building"
+    page.click("#fix-tab-changes")
+    page.click("#fix-undo")                                          # Undo brings them back
+    page.wait_for_function(f"window.fixesPanel.count() === {n}", timeout=10_000)
+    assert "building:levels: '7'" in text(page), "Undo brings the records back"
+    page.click("#fix-tab-building")
+    if page.is_visible("#fix-unselect"):
+        page.click("#fix-unselect")                                  # the box keeps an answer while the same object stays picked
+    pick_b()
+    page.wait_for_selector("#fix-inchg:not([hidden]) [data-ask=edit]", timeout=20_000)
+    page.click("#fix-inchg [data-ask=edit]")                          # Edit it: the form opens with the values of the records
+    page.wait_for_function("document.getElementById('fix-inchg').hidden && document.querySelectorAll('#fix-form .wallrow').length >= 3", timeout=20_000)
+    assert page.input_value("#fixf-building_levels") == "7", "Edit it opens the form with the record's values"
+    print(f"the box: building {b['osm_id']} is in the changes; Delete it removes its records, Undo brings them back, Edit it opens the form with floors 7")
 
     # select each wall: a row of the list, the bar (Next, Previous, Unselect), and a click on the wall on the map
     assert "No wall is selected" in page.inner_text("#fix-wallpos")
@@ -414,6 +446,7 @@ with sync_playwright() as p:
 
     # the one Build button waits while a tab has edits that are not in the changes
     page.click("#fix-tab-road")
+    edit_it(page)                                  # the road of the tab is in the changes: the box asks first
     page.fill("#fixf-lanes", "9")
     assert page.is_visible("#fix-tab-road .dot")
     page.click("#fix-tab-changes")
@@ -483,6 +516,7 @@ with sync_playwright() as p:
     # a click on the new road in the Changes tab opens it in the New road tab, for edit (its points stay)
     page.click("#fix-tab-changes")
     page.click("#fix-list .chg[data-newway]")
+    edit_it(page, "#fix-new-inchg")                # the new road is in the changes: the box asks first
     assert page.get_attribute("#fix-tab-new", "aria-selected") == "true" and page.is_visible("#fix-drawbox") and page.input_value("#fixn-name") == "Test Lane"
     assert page.inner_text("#fix-draw-done") == "Update change" and page.is_visible("#fix-new-del") and not page.is_visible("#fix-draw-undo")
     page.wait_for_function("window.fixesPanel.drawn().sel > 0", timeout=20_000)

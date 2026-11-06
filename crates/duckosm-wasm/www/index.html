@@ -821,7 +821,8 @@ function showPanel(on, remember = true) {
 }
 if (kept("duckosm.panel") === "collapsed" && !phone.matches) showPanel(false);
 phone.addEventListener("change", () => { if (phone.matches) showPanel(true, false); });
-$("sb-hide").onclick = $("fix-hide").onclick = () => showPanel(false);      // the second is in the header of the Edit OSM data panel, which has no top row
+$("sb-hide").onclick = () => showPanel(false);
+$("fix-hide").onclick = () => { closeFixes(); showPanel(false); };      // the hide button of Edit OSM data closes the editor first, so no road stays selected behind the hidden panel
 $("sb-show").onclick = () => { showPanel(true); $("sb-hide").focus(); };
 // the sheet and the panel move in a transition (0.15 s): each frame of it gives the padding, and its end gives the last one, also when the main
 // thread is busy

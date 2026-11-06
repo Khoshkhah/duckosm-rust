@@ -15,7 +15,7 @@ The panel has a header, six tabs and a bar of buttons at the bottom of each tab.
 | Part | What it does |
 |---|---|
 | **Steps** (top left) | Closes the panel and shows the steps. Your picks go away. They come back when you open the panel again. |
-| **Hide panel** (top right) | Gives the map the whole width. The button at the corner of the map shows the panel again. |
+| **Hide panel** (top right) | Closes the editor, as **Steps** does, and gives the map the whole width. No object stays picked on the map. The button at the corner of the map shows the panel again. |
 | **Add to changes** | Keeps your edits in the list of changes. Until you press it, the edit is a draft. |
 | **Reset form** | Drops the draft. |
 | **Remove from changes** | Takes the rule of this object out of the list. |
@@ -23,6 +23,15 @@ The panel has a header, six tabs and a bar of buttons at the bottom of each tab.
 | **Review changes** | Opens the tab **Changes**. |
 
 A field that you change gets an amber mark and a ↺ button. Press ↺ to take the change back.
+
+### An object that is already in your changes
+
+When you pick an object that already has a record in your changes (a road, a building, a wall, a node, a turn or a new road), a box shows over the form, and the form waits:
+
+- **Edit it** opens the form with the values of the record. Your next change goes into that record.
+- **Delete it** removes the record from your changes, and the form opens with the OSM data of the object. **Undo** in the tab **Changes** brings the record back.
+
+A file that you load can have two or more records for one object. The box then says how many there are. **Edit it** joins them into one record in the order of the file: for the same key, the later record wins, as in the build. So the result of the build does not change. **Delete it** removes all of them. The tab **Changes** marks an object with more than one record, for example "2 rules".
 
 ![The panel hidden: the map has the whole width](../img/dashboard/23-fix-panel-hidden.png)
 

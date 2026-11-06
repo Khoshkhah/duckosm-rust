@@ -7,6 +7,7 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ### Changed
 
+- **Edit OSM data: one record for each object** (Kaveh). The page takes duckOSM `b3f9289` (duckOSM #12 and #13). When you pick an object that already has a record in your changes, a box asks **Edit it** or **Delete it**. Two or more records of one object (from a loaded file) are joined in file order, as the build applies them, and the tab Changes marks them. The hide button of the panel closes the editor first, so no road stays picked behind the hidden panel. The engine code is the same as at `a37901b`.
 - **Step 5 always has the .yaml button** (Kaveh). After a build with fixes it gives the fixes of that build, as before. After a build with no fixes it gives an empty fixes file (`overrides: []`, `new_ways: []`, `turn_restrictions: []`, with three comment lines) to start from. Before, the button showed only after a build with fixes. Test: `fixes_e2e.py`.
 
 ### Fixed
