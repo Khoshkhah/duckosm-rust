@@ -14,6 +14,8 @@ The roads of the result light on the map.
 3. Write your query in the SQL line.
 4. Press **Ctrl+Enter**, or click **Run**.
 
+![The data dock under the map: the SQL line, the table of the result, and its roads light on the map](../img/dashboard/41-dock-table.png)
+
 Write the name of a table with its network, for example `driving.edges`. **Tables** in the dock lists all the tables ([The tables](tables.md)).
 
 ```sql
@@ -33,7 +35,11 @@ Only one `SELECT` or `WITH` statement runs. The dock refuses a statement that ch
 | **Colour ▾** | Gives one color to the roads for each value of a text column. |
 | **Focus ▾** | Keeps the roads of the table. The other roads fade or hide. |
 
+![The same result as a bar chart: the number of edges of each road class](../img/dashboard/42-dock-chart.png)
+
 ## Ask the data
+
+![Ask in the panel: the key note, the example questions and the question box](../img/dashboard/43-ask.png)
 
 1. Get a free key from an AI service, for example [Google Gemini](https://aistudio.google.com/apikey) or [Groq](https://console.groq.com/keys).
 2. Click the card **Ask the data**.

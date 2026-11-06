@@ -5,6 +5,10 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ## Not released
 
+### Changed
+
+- **roadstyle `ad2daa99` (#58):** the chart of the data dock has Kind, X and Y in a column at its left, SVG in its corner, larger pies and bars that fit; the dock's buttons are in joined groups, and the dock has a help window. The manual's pictures show this look: the roads in the theme High saturation, the overview maps tilted with the buildings in 3D, and three new pictures of the dock and Ask.
+
 ### Added
 
 - **Ask and the data dock** (roadstyle `1e18b632`). **Query the tables** in card 5 opens the data dock under the map: SQL on the tables of the build, the roads of the result light on the map, and Colour, Focus and a chart. The card **Ask the data** opens Ask: a question in words with your own key of a free AI service. The panel has roadstyle's card look. Test: `ask_e2e.py` (a computer and a phone).

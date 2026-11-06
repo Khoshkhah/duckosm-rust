@@ -44,7 +44,10 @@ def shot(page, name, selector=None, **kw):
     path = out / f"{name}.png"
     page.wait_for_timeout(400)
     if selector:
+        # a picture of one card: no scroll fade of the panel at its edges (the fade is a hint that more is above or below, not part of the card)
+        page.evaluate("document.querySelectorAll('#sb .sb-body').forEach((b) => b.style.setProperty('mask-image', 'none') || b.style.setProperty('-webkit-mask-image', 'none'))")
         page.locator(selector).first.screenshot(path=str(path))
+        page.evaluate("document.querySelectorAll('#sb .sb-body').forEach((b) => { b.style.removeProperty('mask-image'); b.style.removeProperty('-webkit-mask-image'); })")
         trim_bottom(path)
     else:
         page.screenshot(path=str(path), **kw)
@@ -124,6 +127,13 @@ with sync_playwright() as p:
     page.wait_for_function("!document.getElementById('run').hasAttribute('aria-busy') && !document.getElementById('step7-card').classList.contains('off')", timeout=600_000)
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=600_000)
     shot(page, "09-build-done", "#step4-card")
+    # the roads in roadstyle's theme High saturation (Kaveh): the pictures of the map show its strong colors
+    page.click("#step9")
+    page.wait_for_selector("#design-panel", state="visible")
+    page.click("#design-pane [data-look=highsat]")
+    page.evaluate("window.designPanel.flush()")
+    page.wait_for_function("!window.mapDrawing && /shows this design/.test(window.designPanel.state())", timeout=180_000)
+    page.click("#design-back")
     unfold(page, "step5-card")
     shot(page, "10-result", "#step5-card")
     page.click("#files-box summary")                                   # the list scrolls in the picture, as on the page (Kaveh: the full list was too tall)
@@ -140,6 +150,11 @@ with sync_playwright() as p:
     print("wrote", out / "40-export-map.svg")
     page.set_viewport_size({"width": 1400, "height": 900})
     page.evaluate("rs.sections.fold('step10', true); document.getElementById('step5-card').scrollIntoView({block: 'start'})")   # the panel shows steps 5 and 6, not the card Export
+    page.evaluate("duckMap.jumpTo({center: [7.4246, 43.7384], zoom: 15, pitch: 55, bearing: -20})")   # the map tilted, the buildings in 3D (Kaveh)
+    page.evaluate("""() => { const b = [...document.querySelectorAll('#rs-toolbar button')].find((x) => /buildings/i.test(x.title || x.getAttribute('aria-label') || ''));
+        if (b && !b.disabled && !b.classList.contains('rs-on')) b.click(); }""")
+    page.wait_for_function("!window.duckMap.isMoving() && window.duckMap.loaded()")
+    page.wait_for_timeout(2500)
     shot(page, "12-map-after-build")
 
     # the bar of tools and the base-map box
@@ -149,7 +164,7 @@ with sync_playwright() as p:
     bar = page.locator("#rs-toolbar").bounding_box()                  # the bar with 220 px of the map at its left, 20 px above and under it
     x, top = bar["x"] - 220, max(0, bar["y"] - 20)
     shot(page, "13-bar", None, clip={"x": x, "y": top, "width": 1400 - x, "height": min(900 - top, bar["height"] + 40)})
-    page.evaluate("duckMap.jumpTo({center: [7.4246, 43.7384], zoom: 15, padding: {left: 0}})")
+    page.evaluate("duckMap.jumpTo({center: [7.4246, 43.7384], zoom: 15, padding: {left: 0}, pitch: 55, bearing: -20})")
     page.click("#rs-toolbar .bm-ctrl .bm-icon")
     shot(page, "14-base-map-box")
     page.keyboard.press("Escape")
@@ -160,8 +175,27 @@ with sync_playwright() as p:
     shot(page, "15-dark")
     page.evaluate("rsSetTheme('light')")
 
+    # Ask and the data dock (manual/ask.md): Query the tables in card 5, the table and the chart of its start query, and Ask
+    page.evaluate("duckMap.jumpTo({center: [7.4246, 43.7384], zoom: 14.5, pitch: 0, bearing: 0})")
+    page.evaluate("rs.sections.fold('step5', false)")
+    page.click("#query-tables")
+    page.evaluate("window.dataPart.run()")
+    page.wait_for_function("window.dataPart.result() && window.dataPart.result().rows.length > 0", timeout=120_000)
+    page.wait_for_timeout(2000)
+    shot(page, "41-dock-table")
+    page.evaluate("window.dataPart.view('chart')")
+    page.wait_for_timeout(2000)
+    shot(page, "42-dock-chart")
+    page.evaluate("window.askPart.open()")
+    page.locator(".rs-ask .rs-chip").first.wait_for(state="visible")
+    page.wait_for_timeout(1000)
+    shot(page, "43-ask")
+    page.evaluate("window.askPart.close(); window.dataPart.view('table'); window.dataPart.close()")
+    page.wait_for_timeout(800)
+
     # card 7: the Edit OSM data panel, one picture for each tab
     unfold(page, "step7-card")
+    page.evaluate("duckMap.jumpTo({pitch: 0, bearing: 0})")                    # the editors from straight above: they show exact objects
     shot(page, "16-fix-card", "#step7-card")
     page.click("#step7")
     page.wait_for_selector("#fix-panel", state="visible")
@@ -278,7 +312,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(1500)
     page.evaluate("document.querySelector('#design-pane .fix-group, #design-pane #mine-list').scrollIntoView()")
     shot(page, "34-design-your-themes")
-    page.click("#design-pane [data-look=light]")
+    page.click("#design-pane [data-look=highsat]")
     page.evaluate("window.designPanel.flush()")
     page.wait_for_function("!window.mapDrawing && /shows this design/.test(window.designPanel.state())", timeout=180_000)
     page.click("#design-back")
