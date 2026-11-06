@@ -71,6 +71,13 @@ with sync_playwright() as p:
     if "folded" in (page.get_attribute("#step7-card", "class") or ""):
         page.click("#step7")
     assert "No fixes" in page.inner_text("#fix-sum")
+    # card 5 has the .yaml button after a build with no fixes too: an empty fixes file to start from, that the panel can load
+    assert not page.evaluate("document.getElementById('fixesyaml').hidden"), "the .yaml button shows after a build with no fixes"
+    with page.expect_download() as dl:
+        page.evaluate("document.getElementById('fixesyaml').click()")
+    empty = pathlib.Path(dl.value.path()).read_text()
+    assert dl.value.suggested_filename == "osm_fixes.yaml" and "overrides: []" in empty and "turn_restrictions: []" in empty, empty[:200]
+    assert page.evaluate("(t) => { const d = jsyaml.load(t); return Array.isArray(d.overrides) && !d.overrides.length && Array.isArray(d.new_ways); }", empty), "the empty file reads as YAML"
 
     # the panel is the page's one panel; ← Steps brings the steps back
     page.click("#step7")
@@ -644,7 +651,7 @@ with sync_playwright() as p:
     kind = rows(page, f"SELECT map_extract(tags, 'highway')[1] AS h FROM features.traffic WHERE osm_id = {j['id']}")
     assert kind and kind[0]["h"] == "traffic_signals", ("the new signal is in features.traffic", kind)
     # card 5 has the fixes file of this build (.yaml)
-    assert not page.evaluate("document.getElementById('fixesyaml').hidden"), "the .yaml button shows after a build with fixes"
+    assert not page.evaluate("document.getElementById('fixesyaml').hidden"), "the .yaml button shows after a build with fixes"  # it shows after every build
     with page.expect_download() as dl:
         page.evaluate("document.getElementById('fixesyaml').click()")
     body = pathlib.Path(dl.value.path()).read_text()

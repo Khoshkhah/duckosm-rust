@@ -7,7 +7,7 @@ The fixes file is a YAML file of rules. Each rule corrects one error in the OSM 
 The file goes around the editing cycle in four steps:
 
 1. **You make the rules in the panel.** The panel [Edit OSM data](edit-osm.md) keeps your rules in your browser, for each area. **Build again** in the tab **Changes** builds with them at once, with no file.
-2. **You download the file.** The button **Download** in the tab **Changes** writes your rules to `osm_fixes.yaml`. After a build that used fixes, [step 5](result.md) also has a button **.yaml**, which downloads the rules of that build. After a build with no fixes, step 5 has no **.yaml** button.
+2. **You download the file.** The button **Download** in the tab **Changes** writes your rules to `osm_fixes.yaml`. The button **.yaml** of [step 5](result.md) downloads the rules of the last build. After a build with no fixes, it downloads an empty fixes file (`overrides: []`, `new_ways: []`, `turn_restrictions: []`) to start from.
 3. **You load the file again.** The field **Fixes** of [step 4](build.md) takes a `.yaml` or `.yml` file. The rules of the file replace the rules in the panel, and the next build uses them.
 4. **duckOSM reads the same file.** `duckosm build --fixes osm_fixes.yaml` applies it on the command line. In a duckOSM configuration file, the key is `osm_overrides`.
 

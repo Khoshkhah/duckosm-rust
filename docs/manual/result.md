@@ -19,7 +19,7 @@ Card 5 has three parts:
 | **.zip** | All tables as Parquet files | Open them in Python, QGIS, DuckDB or Spark. |
 | **.duckdb** | One DuckDB database | Open it with the DuckDB CLI or Python. |
 | **.osm.pbf** | The OSM data of the area, cut from the region file | Build again with no big file. Shows only when the build cut the data. |
-| **.yaml** | The fixes of this build ([its format](fixes-file.md)) | Use it in the next build. Shows only when the build had fixes. |
+| **.yaml** | The fixes of this build ([its format](fixes-file.md)). After a build with no fixes: an empty fixes file to start from | Use it in the next build, or add rules to it. |
 
 ### Query the tables
 

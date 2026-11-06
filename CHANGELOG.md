@@ -5,6 +5,10 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ## Not released
 
+### Changed
+
+- **Step 5 always has the .yaml button** (Kaveh). After a build with fixes it gives the fixes of that build, as before. After a build with no fixes it gives an empty fixes file (`overrides: []`, `new_ways: []`, `turn_restrictions: []`, with three comment lines) to start from. Before, the button showed only after a build with fixes. Test: `fixes_e2e.py`.
+
 ### Fixed
 
 - **Edit OSM data: no list row under the bar, and the junctions of the Turn tab are a dropdown list** (Kaveh's screenshots). The page takes duckOSM `a37901b` (duckOSM #11): the bar of each tab sticks to the bottom edge of the panel, and the junctions at the end of a road are one dropdown list. The engine code is the same as at `e1a2519`. Tests: `fixes_e2e.py` (the dropdown list and no gap under the bar) and `phone_fixes_e2e.py`.
