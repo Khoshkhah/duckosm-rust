@@ -125,7 +125,8 @@ def run(browser, phone):
     vis = lambda: page.evaluate("['h3-grid', 'h3-fill', 'h3-hover', 'h3-line'].map((l) => duckMap.getLayoutProperty(l, 'visibility') ?? 'visible')")  # noqa: E731
     assert row.count() == 1 and row.evaluate("(c) => c.checked && !c.disabled") and set(vis()) == {"visible"}, (row.count(), vis())
     row.evaluate("(c) => c.click()")
-    page.wait_for_function("duckMap.getLayoutProperty('h3-grid', 'visibility') === 'none'", timeout=10_000)
+    # hidden, and the map painted again: the drawn hexagons go one frame after the layout changes
+    page.wait_for_function("duckMap.getLayoutProperty('h3-grid', 'visibility') === 'none' && duckMap.queryRenderedFeatures({layers: ['h3-grid']}).length === 0", timeout=10_000)
     assert set(vis()) == {"none"} and page.evaluate("duckMap.queryRenderedFeatures({layers: ['h3-grid']}).length") == 0, vis()
     row.evaluate("(c) => c.click()")
     page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['h3-grid']}).length > 10", timeout=20_000)
@@ -137,7 +138,7 @@ def run(browser, phone):
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "sideways scroll"
     # Unselect is off at the start: the normal cursor, no tooltip (one button for the cells and the area: Unselect)
     look = page.evaluate("(() => { const b = document.querySelector('#step1-card .area-clear'), c = getComputedStyle(b), h = document.getElementById('h3-hint').getBoundingClientRect(); return {disabled: b.disabled, cursor: c.cursor, title: b.title, opacity: c.opacity}; })()")
-    assert look == {"disabled": True, "cursor": "default", "title": "", "opacity": "1"}, look
+    assert look == {"disabled": True, "cursor": "default", "title": "", "opacity": "0.5"}, look      # the disabled look of a plain button in the panel
     assert "Click a hexagon" in text()
     level(9)
     show(page, *MONACO, 13.5 if phone else 14.5)    # on a phone, six cells around one fit in the 390 px
