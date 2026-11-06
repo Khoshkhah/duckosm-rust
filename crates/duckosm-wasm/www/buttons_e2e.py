@@ -95,6 +95,12 @@ def run(browser, name, dark=False, **context):
     page.wait_for_function("!document.getElementById('step5-card').classList.contains('off')", timeout=900_000)
     page.wait_for_function("!document.getElementById('run').disabled", timeout=300_000)       # the build ends after the tables are in the cards
     on("run", "buildhint")
+    # the download buttons of card 5 (.zip, .duckdb, .osm.pbf, .yaml) fit in the card: none is cut at its edge (Kaveh: .yaml was cut)
+    page.evaluate("rs.sections.fold('step5', false)")
+    cut = page.evaluate("""() => { const card = document.getElementById('step5-card').getBoundingClientRect();
+      return [...document.querySelectorAll('#step5-card .dl .btn')].filter((b) => b.offsetParent).filter((b) => { const r = b.getBoundingClientRect();
+        return r.left < card.left - 0.5 || r.right > card.right + 0.5 || b.scrollWidth > b.clientWidth + 1; }).map((b) => b.textContent.trim()); }""")
+    assert not cut, ("a download button of card 5 is cut", cut)
     # the map: Show on map is off while the draw runs (the roads draw after the build), Edit levels waits for it
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=600_000)
     on("show", "show-why")

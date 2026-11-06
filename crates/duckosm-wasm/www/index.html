@@ -109,7 +109,7 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   .step .line { margin: 0; }
   .step h3 { display: inline; margin: 0; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
   .step details > summary:has(h3) { color: var(--muted); }
-  .dl { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; margin-top: 10px; }
+  .dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }      /* two buttons in a row: four (.zip, .duckdb, .osm.pbf, .yaml) do not fit in one row of the panel */
   .dl [hidden] { display: none; }
   .dl .btn { padding: 0 8px; font-size: 12.5px; white-space: nowrap; }
   /* the panel's icons; not the map's, the bar's and the floating windows' own SVGs (roadstyle's) */
