@@ -78,6 +78,7 @@ nav:
       - "Step 8: Edit levels": manual/edit-levels.md
       - "Step 9: Edit design": manual/edit-design.md
       - "Step 10: Export": manual/export.md
+      - Ask and query the data: manual/ask.md
       - The tables: manual/tables.md
       - The roads: manual/roads.md
   - Get started:
