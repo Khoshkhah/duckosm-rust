@@ -243,7 +243,9 @@ with sync_playwright() as p:
     page.wait_for_timeout(4000)                                                           # the satellite tiles
     assert page.evaluate("window.designPanel.get().roads.opacity") == {"fill": 0.6, "casing": 0.85, "outline": True} and alpha() == 0
     spot = page.evaluate("""() => { const m = window.duckMap, c = m.getCanvas().getBoundingClientRect();
-        const fillAt = (x, y) => m.queryRenderedFeatures([x, y], { layers: ['rs-roads-simple'] }).some((f) => f.properties.__rs_k === 1);
+        // one road only: where two roads overlap, both fills at 40 percent mix in (the map is behind the panel card since roadstyle 1e18b632)
+        const fillAt = (x, y) => { const fs = m.queryRenderedFeatures([x, y], { layers: ['rs-roads-simple'] }), ids = new Set(fs.map((f) => f.id ?? f.properties.edge_id));
+          return ids.size === 1 && fs.some((f) => f.properties.__rs_k === 1); };
         for (let y = 120; y < 800; y += 6) for (let x = 460; x < 1300; x += 6) {
           let ok = true;
           for (let dy = -7; dy <= 7 && ok; dy += 7) for (let dx = -7; dx <= 7 && ok; dx += 7) ok = fillAt(x + dx, y + dy);

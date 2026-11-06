@@ -5,6 +5,10 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ## Not released
 
+### Added
+
+- **Ask and the data dock** (roadstyle `1e18b632`). **Query the tables** in card 5 opens the data dock under the map: SQL on the tables of the build, the roads of the result light on the map, and Colour, Focus and a chart. The card **Ask the data** opens Ask: a question in words with your own key of a free AI service. The panel has roadstyle's card look. Test: `ask_e2e.py` (a computer and a phone).
+
 ### Documentation
 
 - **The manual: Ask and query the data** (`docs/manual/ask.md`): the data dock (SQL on the tables of a build, the light on the map, Colour, Focus and the chart), and Ask (a question in words with your own key of a free AI service). The README has a line about it.

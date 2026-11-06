@@ -510,6 +510,7 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
 <section id="step5-card" class="step" aria-labelledby="step5">
   <h2 id="step5"><span class="n">5</span>The result</h2>
   <div id="resultline"></div>
+  <button id="query-tables" class="btn" type="button" style="width:100%;margin:8px 0 0">Query the tables</button>
   <div class="dl"><button id="zip" class="btn" aria-label="Download all the tables as a zip"><svg><use href="#i-download"/></svg>.zip</button><button id="duckdb" class="btn" aria-label="Download the .duckdb database"><svg><use href="#i-download"/></svg>.duckdb</button><button id="cutpbf" class="btn" hidden aria-label="Download the cut area as an .osm.pbf file"><svg><use href="#i-download"/></svg>.osm.pbf</button><button id="fixesyaml" class="btn" aria-label="Download the fixes file (.yaml) of this build"><svg><use href="#i-download"/></svg>.yaml</button></div>
   <details id="files-box"><summary><h3>Each table</h3></summary>
     <p class="small muted"><a id="reference" target="_blank" rel="noopener">The columns of each table</a></p>
@@ -575,6 +576,8 @@ import * as designLib from "./map/roadstyle/dashboard/design/design.js";      //
 import { designPanel as rsDesignPanel } from "./map/roadstyle/dashboard/design/design_panel.js";   // roadstyle's design panel (card 9, roadstyle docs/guides/design-panel.md)
 import * as tileProfile from "./app/profile.js";
 import { rsDashboard } from "./map/roadstyle/dashboard/index.js";   // roadstyle's map dashboard (copied by build.sh at ROADSTYLE_COMMIT)
+import { dataDock } from "./map/roadstyle/dashboard/data/data_dock.js";   // roadstyle's data dock (the SQL line and the wide table under the map)
+import { askPanel } from "./map/roadstyle/dashboard/ask/ask_panel.js";   // roadstyle's Ask (an AI agent with the person's own key)
 import { rsFirstPaint } from "./map/roadstyle/dashboard/template.js";   // the classes of <html> before the first paint
 
 const $ = (id) => document.getElementById(id);
@@ -2470,6 +2473,41 @@ function onBuild() {
   fixNote({ why: "Building the networks again with the fixes…" });
   $("run").click();
 }
+
+// ---- Ask and the data dock (roadstyle, docs/guides/ask.md and data-dock.md): the page gives its DuckDB; roadstyle has the dock, the
+// table, the chart, the light on the map and the agent. "Query the tables" (card 5) opens the dock; the card "Ask the data" opens Ask.
+let builtOnce, builtNow = new Promise((ok) => { builtOnce = ok; });
+document.addEventListener("duckosm:built", () => builtOnce());
+const ABOUT = { edges: "One row is one direction of a road (an edge), with its length, speed, cost and OSM tags.", nodes: "The junctions and the ends of the roads.",
+  edge_graph: "The legal turns: one row for each move from an edge to the next edge.", restrictions: "The OSM turn restrictions.",
+  private_edges: "The roads that this network keeps out: private, forbidden or bus only." };
+const sqlCell = (v) => v == null ? null : typeof v === "bigint" || typeof v === "number" || typeof v === "boolean" || typeof v === "string" ? v
+  : v instanceof Uint8Array ? v : JSON.stringify(v, (k, x) => (typeof x === "bigint" ? x.toString() : x));
+const dataPart = dataDock({
+  query: async (sql) => {
+    const res = await duck.query(sql), columns = res.schema.fields.map((f) => ({ name: f.name, type: String(f.type) }));
+    return { columns, rows: res.toArray().map((r) => columns.map((c) => sqlCell(r[c.name]))) };
+  },
+  schema: async () => {
+    const tables = duck.tables.filter((t) => t.mode !== "features").map((t) => ({ name: `${t.mode}.${t.table}`, rows: t.rows, about: ABOUT[t.table] ?? "" }));
+    const main = tables.find((t) => t.name === "driving.edges") ?? tables.find((t) => t.name.endsWith(".edges"));
+    if (main) {
+      const [schemaName, table] = main.name.split(".");
+      const cols = (await duck.query(`SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = '${schemaName}' AND table_name = '${table}'`)).toArray();
+      Object.assign(main, { main: true, columns: cols.map((c) => ({ name: c.column_name, type: c.data_type })) });
+    }
+    return { tables };
+  },
+  ready: builtNow,
+  roadsBy: (sql, column) => `SELECT DISTINCT edge_id FROM driving.edges WHERE "${column}" IN (SELECT "${column}" FROM (${sql}))`,
+  sql: "SELECT highway, count(*) AS edges, round(sum(length_m) / 1000, 1) AS km FROM driving.edges GROUP BY highway ORDER BY edges DESC",
+});
+$("query-tables").onclick = () => dataPart.open();
+const askPart = askPanel({ data: dataPart, dialect: "DuckDB",
+  about: "The road networks of one area, built by duckOSM from OpenStreetMap. Each network is a schema: driving, walking and cycling. In a network, edges has one row for each direction of a road; edge_id is its id, osm_id the OSM way. The map draws the roads by edge_id.",
+  examples: ["Which one-way roads have no name?", "How many km of road does each class have?", "Which primary roads are longer than 300 m?"] });
+window.dataPart = dataPart; window.askPart = askPart;   // for the tests
+rs.sections.add({ id: "ask", label: "Ask the data", note: "A question about the roads, in words", open: () => askPart.open(), icon: "ask", background: true, after: "step6" });
 
 // ---- card 9: the design (docs/app.md, "Step 9: design"). The panel is roadstyle's design panel (map/roadstyle/dashboard/design/, roadstyle
 // docs/guides/design-panel.md): it draws into the page's panel (#sb), owns the design and paints the ground, the layers and the opacity of the roads.
