@@ -510,7 +510,7 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
 <section id="step5-card" class="step" aria-labelledby="step5">
   <h2 id="step5"><span class="n">5</span>The result</h2>
   <div id="resultline"></div>
-  <div class="dl"><button id="zip" class="btn" aria-label="Download all the tables as a zip"><svg><use href="#i-download"/></svg>.zip</button><button id="duckdb" class="btn" aria-label="Download the .duckdb database"><svg><use href="#i-download"/></svg>.duckdb</button><button id="cutpbf" class="btn" hidden aria-label="Download the cut area as an .osm.pbf file"><svg><use href="#i-download"/></svg>.osm.pbf</button><button id="fixesyaml" class="btn" hidden aria-label="Download the fixes file (.yaml) that this build used"><svg><use href="#i-download"/></svg>.yaml</button></div>
+  <div class="dl"><button id="zip" class="btn" aria-label="Download all the tables as a zip"><svg><use href="#i-download"/></svg>.zip</button><button id="duckdb" class="btn" aria-label="Download the .duckdb database"><svg><use href="#i-download"/></svg>.duckdb</button><button id="cutpbf" class="btn" hidden aria-label="Download the cut area as an .osm.pbf file"><svg><use href="#i-download"/></svg>.osm.pbf</button><button id="fixesyaml" class="btn" aria-label="Download the fixes file (.yaml) of this build"><svg><use href="#i-download"/></svg>.yaml</button></div>
   <details id="files-box"><summary><h3>Each table</h3></summary>
     <p class="small muted"><a id="reference" target="_blank" rel="noopener">The columns of each table</a></p>
     <div id="files" class="pg-scroll"></div>
@@ -2784,7 +2784,6 @@ let builtFixes = null;                           // the text of the fixes that t
 let savedCut = null;                             // the slug of a restored area that has a cut file in the browser storage (duck.cut is null then)
 function files() {
   $("cutpbf").hidden = !(duck.cut || savedCut);
-  $("fixesyaml").hidden = !builtFixes;
   urls.forEach(URL.revokeObjectURL);
   urls = [];
   const modes = [...new Set(duck.tables.map((t) => t.mode))].filter((m) => m !== "features");
@@ -2807,9 +2806,17 @@ function files() {
       }).join("") + "</div></div>" : "");
 }
 $("reference").href = duck.REFERENCE;
+// the .yaml button shows after every build (Kaveh): the fixes of the build, or, after a build with no fixes, an empty fixes file to start from
+const EMPTY_FIXES = `# duckOSM fixes file (osm_fixes.yaml). The build of this area had no fixes, so this file has no rules.
+# Add rules in the panel Edit OSM data, or write them here, then load the file in step 4 (Fixes).
+# The format: https://khoshkhah.github.io/duckosm-studio/manual/manual/fixes-file/
+overrides: []
+new_ways: []
+turn_restrictions: []
+`;
 $("fixesyaml").onclick = () => {
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([builtFixes ?? ""], { type: "text/yaml" }));
+  a.href = URL.createObjectURL(new Blob([builtFixes || EMPTY_FIXES], { type: "text/yaml" }));
   a.download = "osm_fixes.yaml";
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href));
