@@ -143,11 +143,13 @@ with sync_playwright() as p:
     shot(page, "12-map-after-build")
 
     # the bar of tools and the base-map box
-    page.evaluate("duckMap.jumpTo({center: [7.4246, 43.7384], zoom: 15})")
-    page.wait_for_timeout(2000)
-    bar = page.locator("#rs-toolbar").bounding_box()                  # the bar is in the middle of the right edge: the picture is around it
-    top = max(0, bar["y"] - 120)
-    shot(page, "13-bar", None, clip={"x": 1100, "y": top, "width": 300, "height": min(900 - top, bar["height"] + 240)})
+    page.evaluate("duckMap.jumpTo({center: [7.4246, 43.7384], zoom: 15.5, padding: {left: 900}})")   # Monaco's roads just left of the bar
+    page.wait_for_function("!window.duckMap.isMoving()")
+    page.wait_for_timeout(2500)
+    bar = page.locator("#rs-toolbar").bounding_box()                  # the bar with 220 px of the map at its left, 20 px above and under it
+    x, top = bar["x"] - 220, max(0, bar["y"] - 20)
+    shot(page, "13-bar", None, clip={"x": x, "y": top, "width": 1400 - x, "height": min(900 - top, bar["height"] + 40)})
+    page.evaluate("duckMap.jumpTo({center: [7.4246, 43.7384], zoom: 15, padding: {left: 0}})")
     page.click("#rs-toolbar .bm-ctrl .bm-icon")
     shot(page, "14-base-map-box")
     page.keyboard.press("Escape")
