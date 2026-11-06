@@ -1,8 +1,5 @@
 # Ask and query the data
 
-!!! note
-    Ask and the data dock are not on the live page yet. They come with the next update of the page.
-
 After a build, you can look at the tables in the page with no download:
 
 - **Query the tables** (card 5): write SQL.
