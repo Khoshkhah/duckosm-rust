@@ -19,16 +19,7 @@ In SQL, write the schema and the table: `driving.edges`. In the `.zip`, the file
 
 ## How the tables join
 
-```mermaid
-flowchart LR
-    W["ways<br/>osm_id"] --> E["edges<br/>edge_id, osm_id, source, target"]
-    N["nodes<br/>node_id"] -- "source, target" --> E
-    E -- "from_edge, to_edge" --> G["edge_graph"]
-    E -- "from_edge_id, to_edge_id" --> R["turn_restrictions"]
-    E -- "edge_id" --> L["lane_profile"]
-    E -- "edge_id" --> V["visualization.edge_levels"]
-    E -- "edge_id" --> BR["bus.route_edges"]
-```
+![How the tables join: edges in the middle; each box names the key of its join](../img/tables.svg)
 
 Three keys join the tables:
 

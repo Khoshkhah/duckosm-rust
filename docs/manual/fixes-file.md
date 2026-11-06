@@ -4,19 +4,12 @@ The fixes file is a YAML file of rules. Each rule corrects one error in the OSM 
 
 ## Where the file comes from and where it goes
 
-```mermaid
-flowchart LR
-    P["Step 7: Edit OSM data<br/>(the panel)"] -- "Download" --> F["osm_fixes.yaml"]
-    R["Step 5: the button .yaml"] --> F
-    F -- "Step 4: Fixes" --> P
-    P -- "Build again" --> B["the build of the page"]
-    F -- "duckosm build --fixes" --> D["duckOSM"]
-```
+The file goes around the editing cycle in four steps:
 
-- **The panel writes it.** The panel [Edit OSM data](edit-osm.md) keeps your rules in your browser, for each area. The button **Download** in the tab **Changes** writes them to `osm_fixes.yaml`.
-- **Step 5 gives it back.** The button **.yaml** of [step 5](result.md) downloads the fixes file that the last build used.
-- **Step 4 loads it.** The field **Fixes** of [step 4](build.md) takes a `.yaml` or `.yml` file. The rules of the file replace the rules in the panel. The build then reads the rules from the panel.
-- **duckOSM reads it.** `duckosm build --fixes osm_fixes.yaml` applies the same file. In a duckOSM configuration file, the key is `osm_overrides`.
+1. **You make the rules in the panel.** The panel [Edit OSM data](edit-osm.md) keeps your rules in your browser, for each area. **Build again** in the tab **Changes** builds with them at once, with no file.
+2. **You download the file.** The button **Download** in the tab **Changes** writes your rules to `osm_fixes.yaml`. After a build that used fixes, [step 5](result.md) also has a button **.yaml**, which downloads the rules of that build. After a build with no fixes, step 5 has no **.yaml** button.
+3. **You load the file again.** The field **Fixes** of [step 4](build.md) takes a `.yaml` or `.yml` file. The rules of the file replace the rules in the panel, and the next build uses them.
+4. **duckOSM reads the same file.** `duckosm build --fixes osm_fixes.yaml` applies it on the command line. In a duckOSM configuration file, the key is `osm_overrides`.
 
 The page reads the file into the panel, and writes it again from the rules. So the page does not keep the comments of a file that you load, and it writes the keys in its own order.
 
