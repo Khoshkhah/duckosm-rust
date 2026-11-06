@@ -23,7 +23,7 @@ Card 5 has three parts:
 
 ### Query the tables
 
-Download the **.duckdb** file and open it with DuckDB (the CLI or Python). Write the name of a table with its network, for example `driving.edges`. Some examples:
+To query the tables in the page, see [Ask and query the data](ask.md). To query them in your own tools, download the **.duckdb** file and open it with DuckDB (the CLI or Python). Write the name of a table with its network, for example `driving.edges`. Some examples:
 
 ```sql
 -- the length of the roads of each class, in km

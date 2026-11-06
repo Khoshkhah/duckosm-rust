@@ -24,6 +24,7 @@ Build a routable road network from OpenStreetMap in your browser. Fix the OSM da
 - **A stable `edge_id`:** a hash of the OSM way and its two end nodes. The same road has the same `edge_id` in each build.
 - **The tables of [duckOSM](https://github.com/Khoshkhah/duckOSM):** the same Rust engine, the same rows.
 - **Speed:** Estonia builds in 19 seconds.
+- **Ask the data:** query the tables with SQL in the page, or ask a question in words with your own key of a free AI service. The roads of the result light on the map.
 - **Exports:** PMTiles, MBTiles, GeoPackage with a QGIS style, GeoJSON, kepler.gl, MATSim and SUMO.
 
 ## Documents

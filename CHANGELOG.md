@@ -5,6 +5,10 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ## Not released
 
+### Documentation
+
+- **The manual: Ask and query the data** (`docs/manual/ask.md`): the data dock (SQL on the tables of a build, the light on the map, Colour, Focus and the chart), and Ask (a question in words with your own key of a free AI service). The README has a line about it.
+
 ### Fixed
 
 - **The download buttons of card 5 are two in a row** (Kaveh: `.yaml` was cut at the edge of the card). Since step 5 always has `.yaml` (#91), four buttons did not fit in one row. Test: `buttons_e2e.py` checks that no button of card 5 is cut, on a computer and on a phone.
