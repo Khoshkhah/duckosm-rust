@@ -213,6 +213,23 @@ The build applies the rules in this order:
 
 `remove`, `keep_nodes`, `tags` and `extra.tag_edits` do not act on a way of `new_ways`, because the new ways come after them. The keys of step 5 also act on a new way.
 
+## Many rules for one object
+
+The build does not join or refuse two rules for one road. It applies every rule in the order of the file. Where two rules set the same thing, the later rule wins. The panel writes one rule for each object, so two rules for one road come only from a file that you edit or join by hand.
+
+| What the rules set | Two or more rules for one way |
+|---|---|
+| `remove: true` | If one rule removes the way, the build removes it first. The other rules for the way then do nothing. |
+| `tags` | Each rule sets its tags in the order of the file. For the same key, the later rule wins. Different keys add up. |
+| `extra.tag_edits` | They come after all the `tags` of `overrides`, so a tag edit wins over `tags` for the same key. Two tag edits act in the order of the file. In one edit, `set` acts first and `delete` second, so a key in both is deleted. |
+| `keep_nodes` | They act in order. The second rule cuts what the first rule kept, and only when its two nodes are still on the way, in that order. |
+| `oneway`, `lanes`, `lanes_forward`, `lanes_backward`, `layer` | They act for each network, in the order of the file. For the same key, the later rule wins. A key that the later rule does not have keeps the value of the earlier rule. |
+| `exclude_modes` | If one rule removes the way from a network, the way is not in that network. |
+| `new_ways` | Two new ways with the same `id` stop the build with an error. |
+| `turn_restrictions` | Two rules for the same turn give two turn restrictions. |
+
+An example: rule 1 has `lanes: 2` and `tags: {name: "A"}`, and rule 2 has `tags: {name: "B", surface: asphalt}`. The road gets 2 lanes, the name B and the surface asphalt.
+
 ## A rule for an object that is not in the area
 
 One fixes file can hold the rules of many areas. A rule for an object that is not in the area does nothing, and the build gives no error. This is true for each kind of rule:

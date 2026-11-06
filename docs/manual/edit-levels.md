@@ -3,7 +3,6 @@
 Card 8 opens roadstyle's level editor for the roads that you built. Use it when two roads cross or meet on the map and the wrong road is on top. The editor is a panel. It takes the place of the steps.
 
 ![The level editor: two roads are picked, and the apply bar has one change](../img/dashboard/36-levels-editor.png)
-<!-- retake: after roadstyle #40 (Edit design) lands, if the panel changes -->
 
 ## What a level is
 

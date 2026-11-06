@@ -3,7 +3,6 @@
 Card 10 gives the network and its map to other software. It is gray until a build ends. The page makes each file in your browser from the tables. Press **Download** for the format that you want.
 
 ![Card 10: the formats of the export, in groups](../img/dashboard/11b-export.png)
-<!-- retake: after duckosm-rust #76 and roadstyle #39 (the export redesign) -->
 
 The card has four groups: **Tiles**, **Network**, **Visualization** and **Simulation**. In **Network**, pick **Driving**, **Walking** or **Cycling**. The group shows when you built more than one network. The network sets the files of **Visualization** and **Simulation**. The tiles do not use it.
 
