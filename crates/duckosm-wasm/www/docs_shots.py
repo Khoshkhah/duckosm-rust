@@ -126,29 +126,28 @@ with sync_playwright() as p:
     shot(page, "09-build-done", "#step4-card")
     unfold(page, "step5-card")
     shot(page, "10-result", "#step5-card")
-    page.add_style_tag(content=".pg-scroll { max-height: none !important; }")       # the lists show in full in the pictures
-    page.set_viewport_size({"width": 1400, "height": 2600})
-    page.click("#files-box summary")
+    page.click("#files-box summary")                                   # the list scrolls in the picture, as on the page (Kaveh: the full list was too tall)
     shot(page, "38-each-table", "#files-box")
     page.click("#files-box summary")
-    page.set_viewport_size({"width": 1400, "height": 900})
-    page.evaluate("document.querySelectorAll('style').forEach((el) => { if (el.textContent.includes('.pg-scroll { max-height: none')) el.remove(); })")
     unfold(page, "step6-card")
     shot(page, "11-visualization", "#step6-card")
     unfold(page, "step10-card")
-    page.set_viewport_size({"width": 1400, "height": 3600})      # the card is taller than the panel (14 formats)
-    shot(page, "11b-export", "#step10-card")
+    page.evaluate("document.getElementById('step10-card').scrollIntoView({block: 'start'})")   # the window with the top of the card; the card scrolls in the panel
+    shot(page, "11b-export")
     with page.expect_download(timeout=120_000) as d:                   # a file that the card made: the map image (SVG)
         page.click("#export-list [data-fmt=svg]")
     d.value.save_as(out / "40-export-map.svg")
     print("wrote", out / "40-export-map.svg")
     page.set_viewport_size({"width": 1400, "height": 900})
+    page.evaluate("rs.sections.fold('step10', true); document.getElementById('step5-card').scrollIntoView({block: 'start'})")   # the panel shows steps 5 and 6, not the card Export
     shot(page, "12-map-after-build")
 
     # the bar of tools and the base-map box
     page.evaluate("duckMap.jumpTo({center: [7.4246, 43.7384], zoom: 15})")
     page.wait_for_timeout(2000)
-    shot(page, "13-bar", None, clip={"x": 1100, "y": 0, "width": 300, "height": 700})
+    bar = page.locator("#rs-toolbar").bounding_box()                  # the bar is in the middle of the right edge: the picture is around it
+    top = max(0, bar["y"] - 120)
+    shot(page, "13-bar", None, clip={"x": 1100, "y": top, "width": 300, "height": min(900 - top, bar["height"] + 240)})
     page.click("#rs-toolbar .bm-ctrl .bm-icon")
     shot(page, "14-base-map-box")
     page.keyboard.press("Escape")
@@ -206,8 +205,7 @@ with sync_playwright() as p:
     page.click("#fix-hide")
     page.wait_for_timeout(800)
     shot(page, "23-fix-panel-hidden")
-    page.click("#sb-show")
-    page.click("#fix-back")
+    page.click("#sb-show")                                              # the hide button closed the editor first: the panel shows the steps
 
     # card 8: the level editor with two joined roads picked (road 1 red, road 2 blue)
     page.click("#step8")
@@ -234,9 +232,7 @@ with sync_playwright() as p:
     shot(page, "26-design-card", "#step9-card")
     page.click("#step9")
     page.wait_for_selector("#design-panel", state="visible")
-    page.set_viewport_size({"width": 1400, "height": 3600})       # the Theme tab has 33 themes: a tall window shows them all
-    shot(page, "27-design-theme")
-    page.set_viewport_size({"width": 1400, "height": 900})
+    shot(page, "27-design-theme")                                      # the first themes; the list scrolls in the panel
     page.click("#design-tab-roads")
     shot(page, "28-design-roads")
     page.click("#design-tab-text")
@@ -278,10 +274,8 @@ with sync_playwright() as p:
     page.evaluate("window.designPanel.flush()")
     page.wait_for_function("!window.mapDrawing && /shows this design/.test(window.designPanel.state())", timeout=180_000)
     page.wait_for_timeout(1500)
-    page.set_viewport_size({"width": 1400, "height": 1750})
     page.evaluate("document.querySelector('#design-pane .fix-group, #design-pane #mine-list').scrollIntoView()")
     shot(page, "34-design-your-themes")
-    page.set_viewport_size({"width": 1400, "height": 900})
     page.click("#design-pane [data-look=light]")
     page.evaluate("window.designPanel.flush()")
     page.wait_for_function("!window.mapDrawing && /shows this design/.test(window.designPanel.state())", timeout=180_000)
