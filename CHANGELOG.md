@@ -5,6 +5,10 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ## Not released
 
+### Fixed
+
+- **The download buttons of card 5 are two in a row** (Kaveh: `.yaml` was cut at the edge of the card). Since step 5 always has `.yaml` (#91), four buttons did not fit in one row. Test: `buttons_e2e.py` checks that no button of card 5 is cut, on a computer and on a phone.
+
 ### Changed
 
 - **Edit OSM data: one record for each object** (Kaveh). The page takes duckOSM `b3f9289` (duckOSM #12 and #13). When you pick an object that already has a record in your changes, a box asks **Edit it** or **Delete it**. Two or more records of one object (from a loaded file) are joined in file order, as the build applies them, and the tab Changes marks them. The hide button of the panel closes the editor first, so no road stays picked behind the hidden panel. The engine code is the same as at `a37901b`.
