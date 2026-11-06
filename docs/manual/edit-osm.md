@@ -3,14 +3,12 @@
 Card 7 opens the panel **Edit OSM data**. Use it to find and fix errors in the OSM data of your area. A fix is a rule that you add to a list. A rule changes nothing until you build again. [The editing cycle](cycle.md) shows where this step is.
 
 ![Card 7: Edit OSM data, with the number of fixes under its title](../img/dashboard/16-fix-card.png)
-<!-- retake: after the duckOSM PR that moves Edit OSM data into duckOSM -->
 
 The card is gray until a build has made the tables that the panel needs. Build with **Layers** on to get walls and doors.
 
 ## The panel
 
 ![The panel with the Road tab: a road is picked on the map](../img/dashboard/17-fix-road.png)
-<!-- retake: after the duckOSM PR that moves Edit OSM data into duckOSM -->
 
 The panel has a header, six tabs and a bar of buttons at the bottom of each tab.
 
@@ -27,7 +25,6 @@ The panel has a header, six tabs and a bar of buttons at the bottom of each tab.
 A field that you change gets an amber mark and a ↺ button. Press ↺ to take the change back.
 
 ![The panel hidden: the map has the whole width](../img/dashboard/23-fix-panel-hidden.png)
-<!-- retake: after the duckOSM PR that moves Edit OSM data into duckOSM -->
 
 ## Road
 
@@ -42,7 +39,6 @@ The tags `highway`, `access`, `foot`, `bicycle`, `oneway`, `maxspeed` and `lanes
 ## Building
 
 ![The Building tab with numbered walls on the map](../img/dashboard/18-fix-building.png)
-<!-- retake: after the duckOSM PR that moves Edit OSM data into duckOSM -->
 
 Click a building. To see the walls of all buildings in view, turn on **Show the walls of all buildings in view** (zoom 16 or more). The form has the levels, the height, the roof shape, the roof color and the materials. Below the form are the walls and the doors.
 
@@ -85,7 +81,6 @@ Check the walls that say "guess" or "no street seen". [wall-types.md](https://gi
 ## Node
 
 ![The Node tab: a junction with the kind Traffic signals](../img/dashboard/19-fix-node.png)
-<!-- retake: after the duckOSM PR that moves Edit OSM data into duckOSM -->
 
 A node is one point of OSM. Here it is a traffic signal, a crossing, a stop sign, a give-way sign, a bus stop or a junction of roads. The map shows signals and crossings as dots from zoom 14, and junctions (gray dots) from zoom 16. Click a dot, or type the node ID.
 
@@ -99,12 +94,11 @@ The field **Kind** offers only the kinds that the node can have. The reason show
 ## Turn
 
 ![The Turn tab: junctions, roads that leave, and the rules](../img/dashboard/20-fix-turn.png)
-<!-- retake: after the duckOSM PR that moves Edit OSM data into duckOSM -->
 
 A turn rule says that a driver cannot make a turn at a junction, or must make it. The rules are for the driving network.
 
 1. Click the road that the turn starts on, or type its way ID. Press **Find turns**.
-2. The list **Junctions at the end of the road** shows each junction and how many roads leave it. Click one to pick it.
+2. The dropdown list **Junction at the end of the road** has each junction and how many roads leave it. The first one is the junction with the most roads that leave it. Pick another one in the list to see its roads.
 3. The map shows the start road (blue), the junction (a ring) and the roads that leave it (green). Point at a row to outline its road.
 4. For each road that leaves, choose **Allowed**, **No** or **Only**. The page finds the way of the turn (left, right, straight on or U-turn).
 5. Press **Add to changes**. All your rules are added at once.
@@ -114,14 +108,12 @@ The list **Roads that arrive at this junction** has the roads that you can use a
 ## New road
 
 ![The New road tab](../img/dashboard/21-fix-new-road.png)
-<!-- retake: after the duckOSM PR that moves Edit OSM data into duckOSM -->
 
 Draw a road that OSM does not have. Click points on the map. A click near a junction joins it. Set the kind, the name, the one-way rule and more. Then finish. The road is a rule [`new_ways`](fixes-file.md#new_ways-new-roads) in the fixes file. You can edit a new road again from the tab **Changes**.
 
 ## Changes
 
 ![The Changes tab: the list of all the rules](../img/dashboard/22-fix-changes.png)
-<!-- retake: after the duckOSM PR that moves Edit OSM data into duckOSM -->
 
 The list has all your rules: roads, buildings, walls, nodes, other objects, turn rules and new roads. The tab shows the number of changes.
 

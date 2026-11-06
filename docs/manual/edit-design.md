@@ -3,7 +3,6 @@
 Card 9 sets the look of the map and the profile of the tile files. It is on at all times. It does not wait for a build. Click the card to open the panel. The panel takes the place of the steps.
 
 ![Card 9: the name of the design and the tile profile](../img/dashboard/26-design-card.png)
-<!-- retake: after roadstyle #40 (Edit design moves into roadstyle) -->
 
 The line under the title is the name of the design and the name of the tile profile. **Steps** goes back to the steps. **Hide panel** gives the map the whole width.
 
@@ -24,7 +23,6 @@ Most changes keep the tiles of the map, so they are fast. A new theme of Monaco 
 ## Theme
 
 ![The Theme tab with the ready themes](../img/dashboard/27-design-theme.png)
-<!-- retake: after roadstyle #40 (Edit design moves into roadstyle) -->
 
 A theme is a full set of values: the colors and widths of the roads, the text, the boundary, the colors of the base map, the ground and the layers. One click on a theme replaces the style. After that, you can change any value in the other tabs. The design then shows as "custom". A theme keeps your tile profile.
 
@@ -47,19 +45,16 @@ To find a theme, type words in **Search themes**. Or press a filter: **All**, **
 **Preview on** changes only the map under the roads: **Checkerboard**, **Blank**, **OpenFreeMap** or **Satellite**. It is the same choice as the base-map box of the bar. A transparent ground shows the color of the map container on the Blank base map. Pick a base map to see the roads on it.
 
 ![The theme Roads ghost on the satellite base map](../img/dashboard/35-design-ghost.png)
-<!-- retake: after roadstyle #40 (Edit design moves into roadstyle) -->
 
 ### The roads overlay
 
 ![The theme Roads overlay on the satellite base map](../img/dashboard/33-design-overlay.png)
-<!-- retake: after roadstyle #40 (Edit design moves into roadstyle) -->
 
 **Roads overlay** shows only the roads, the street names and the casings. The fill has 60 percent opacity and the casing has 85 percent, so the map under the roads shows through. Put the overlay on a light map, a dark map, the satellite map, or a map with 3D buildings.
 
 ### Your themes
 
 ![The Theme tab with Your themes](../img/dashboard/34-design-your-themes.png)
-<!-- retake: after roadstyle #40 (Edit design moves into roadstyle) -->
 
 1. Pick a ready theme. Change it in the other tabs.
 2. Type a name in **Your themes** (1 to 40 characters). Press **Save as a theme**.
@@ -74,12 +69,10 @@ The check box **Keep the tile profile in the theme** is off by default. Turn it 
 **Download** saves the design as one `.design.json` file. **Load a file** reads such a file. **Reset** goes back to the Light style and keeps the tile profile.
 
 ![The map in the Dark theme](../img/dashboard/32-design-dark-map.png)
-<!-- retake: after roadstyle #40 (Edit design moves into roadstyle) -->
 
 ## Roads
 
 ![The Roads tab](../img/dashboard/28-design-roads.png)
-<!-- retake: after roadstyle #40 (Edit design moves into roadstyle) -->
 
 - **Colors.** Each of the 14 classes has a color for the fill and one for the casing. The other classes keep the colors of the theme. The casing is the outline of the road. A link road has the colors of its class.
 - **Width.** A factor scales the width of a group at all zooms. A factor of 2 doubles the width. The groups are: motorway and trunk, primary, secondary, tertiary, residential and unclassified, living street, service, pedestrian, and footway, path, cycleway and track.
@@ -92,7 +85,6 @@ The check box **Keep the tile profile in the theme** is off by default. Turn it 
 ## Text
 
 ![The Text tab](../img/dashboard/29-design-text.png)
-<!-- retake: after roadstyle #40 (Edit design moves into roadstyle) -->
 
 - **Street names.** Color, halo (color, width and opacity), size and first zoom. The names of small roads show two zooms after the first zoom.
 - **One-way arrows.** Color, opacity, size and first zoom. The switch that turns the arrows on is in the base-map box.
@@ -100,7 +92,6 @@ The check box **Keep the tile profile in the theme** is off by default. Turn it 
 ## Layers
 
 ![The Layers tab](../img/dashboard/30-design-layers.png)
-<!-- retake: after roadstyle #40 (Edit design moves into roadstyle) -->
 
 The tab has these parts:
 
@@ -115,7 +106,6 @@ A layer that the build does not have shows "(not in this build)" and you cannot 
 ## Tiles
 
 ![The Tiles tab](../img/dashboard/31-design-tiles.png)
-<!-- retake: after roadstyle #40 (Edit design moves into roadstyle) -->
 
 The tile profile sets what the tile files of [step 10](export.md) hold. Four ready profiles fill the fields:
 
