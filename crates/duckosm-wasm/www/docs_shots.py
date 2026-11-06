@@ -77,7 +77,10 @@ with sync_playwright() as p:
 
     # 1. the page at the start: the OpenFreeMap base map, the panel with the steps, the bar of tools
     page.wait_for_timeout(2500)
+    page.set_viewport_size({"width": 1400, "height": 1000})       # all ten cards: at 900 the card Export was cut
+    page.wait_for_timeout(1000)
     shot(page, "01-start")
+    page.set_viewport_size({"width": 1400, "height": 900})
 
     # card 1: the four ways to choose an area
     unfold(page, "step1-card")
