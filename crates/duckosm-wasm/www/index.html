@@ -2533,6 +2533,10 @@ document.addEventListener("rs:stylechange", () => {
   $("mapnote").textContent = `${num(roadCount[$("mapmode").value] ?? 0)} roads, drawn in ${num((performance.now() - restyleT0) / 1000, 2)} s (a new look on the same tiles)`;
   restyleT0 = null;
 });
+// the walls of the buildings for roadstyle's 3D walls (card 9, Layers: 3D walls), after each draw: the heights follow the look of the draw
+document.addEventListener("duckosm:drawn", () => {
+  duck.wallsData($("mapmode").value).then((fc) => window.rsSetWalls?.(fc)).catch((e) => console.warn("the walls of the buildings were not drawn:", e.message));
+});
 async function redrawDesign(text, draw) {
   duck.setLookText(text);                            // the next draw reads this look (null: the page's look)
   if (restyleT0 != null && window.lastRestyle === "same tiles") window.lastRestyle = "other layers";

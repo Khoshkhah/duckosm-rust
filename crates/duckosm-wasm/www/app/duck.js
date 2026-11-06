@@ -523,6 +523,39 @@ export async function roadsStyle(mode, name, keep = []) {
   return { style: inFormat(out.style), roadTable, roadsSeconds, styleSeconds: out.seconds, memoryMiB: out.memoryMiB, liveMiB: out.liveMiB };
 }
 
+// The walls of the buildings for roadstyle's 3D walls (rsSetWalls, map/roadstyle/dashboard/walls.js): each wall of main.building_faces with its type and
+// outward direction, and the roof of each building that has walls. The heights come from roadstyle's rule of the tiles (buildingHeights) on the
+// buildings rows of the draw's features.parquet and the look now, so a wall has the height of its building. null: no walls or no buildings.
+export async function wallsData(mode) {
+  if (!tables.some((t) => t.mode === "main" && t.table === "building_faces")) return null;
+  const inputs = await prepareRoads(mode);
+  if (!inputs.features) return null;
+  const name = "walls_features.parquet", rs = await roadstyle();
+  await loadSpatial();
+  await db.registerFileBuffer(name, inputs.features.slice());
+  let roofs;
+  try {
+    // ponytail: a way and a relation with the same id share their walls; the faces have building_type, features.parquet has no osm_type
+    roofs = await rows(`SELECT b.osm_id, b.kind, b.height, b.levels, b.roof_levels, b.min_height, b.min_level, ST_AsGeoJSON(ST_GeomFromWKB(b.geometry)) AS g
+      FROM read_parquet('${name}') b WHERE b.layer = 'buildings' AND TRY_CAST(b.osm_id AS BIGINT) IN (SELECT building_id FROM main.building_faces)`);
+  } finally { await db.dropFile(name).catch(() => {}); }
+  const look = rs.Look.fromJson(await lookNowText());
+  let hb;
+  try { hb = JSON.parse(rs.buildingHeights(look, JSON.stringify(roofs.map((r) => [r.height, r.levels, r.roof_levels, r.kind, r.min_height, r.min_level])))); }
+  finally { look.free(); }
+  const of = new Map(), features = [];
+  roofs.forEach((r, i) => {
+    if (of.has(r.osm_id)) return;                 // the first row of a building (features.parquet's order)
+    of.set(r.osm_id, hb[i]);
+    features.push({ type: "Feature", properties: { height: hb[i][0], base: hb[i][1] }, geometry: JSON.parse(r.g) });
+  });
+  for (const w of await rows("SELECT CAST(building_id AS VARCHAR) AS id, face_type, azimuth_deg, ST_AsGeoJSON(geometry) AS g FROM main.building_faces")) {
+    const h = of.get(w.id);
+    if (h) features.push({ type: "Feature", properties: { type: w.face_type, height: h[0], base: h[1], azimuth: w.azimuth_deg }, geometry: JSON.parse(w.g) });
+  }
+  return { type: "FeatureCollection", features };
+}
+
 // A new look over the map that the worker holds (roadstyle's LiveMap.setLook, docs/design/restyle_without_retile.md): the new style when the map keeps
 // its tiles; null when the look needs new tiles (draw again), or when no map is drawn. The look is the one of setLookText (none: pageLookText).
 export async function setLook() {
