@@ -571,6 +571,7 @@ window.duckApi = duck;   // for the tests (drawLaps, tileStats)
 import * as regions from "./app/regions.js";
 import * as areaStore from "./app/area_store.js";
 import { initFixesPanel } from "./duckosm/fixes_editor/fixes_panel.js";   // duckOSM's fixes editor (copied by build.sh at the engine's rev)
+import { rsSelectBoxes } from "./map/roadstyle/dashboard/selectbox.js";   // roadstyle's select box: the look of the lists that the fixes editor draws
 import * as exporter from "./app/export.js";
 import * as designLib from "./map/roadstyle/dashboard/design/design.js";      // roadstyle's design model: the boundary defaults and the changes of a design
 import { designPanel as rsDesignPanel } from "./map/roadstyle/dashboard/design/design_panel.js";   // roadstyle's design panel (card 9, roadstyle docs/guides/design-panel.md)
@@ -2458,7 +2459,7 @@ const osmIdOf = (row) => { const p = window.RS_SIDE?.props?.[row]; return Array.
 const fixNoteNow = { sum: "No fixes.", why: "" };
 function fixNote(part) { Object.assign(fixNoteNow, part); $("fix-sum").textContent = [fixNoteNow.sum, fixNoteNow.why].filter(Boolean).join(" "); }
 try {
-  fixesPanel = await initFixesPanel($("fix-panel"), { duck, map, status, yaml: jsyaml, roadIdOfRow: osmIdOf, areaKey: () => $("name").value.trim(), onChange: (text) => fixNote({ sum: text }),
+  fixesPanel = await initFixesPanel($("fix-panel"), { duck, map, status, yaml: jsyaml, selectBoxes: rsSelectBoxes, roadIdOfRow: osmIdOf, areaKey: () => $("name").value.trim(), onChange: (text) => fixNote({ sum: text }),
     onBuild, changesNote: "To load a file, use <b>Fixes</b> in step 4." });
   fixesPanel.restore();                           // the changes of this area name from the last visit (the panel keeps them in this browser)
   $("name").addEventListener("change", () => fixesPanel?.restore());
