@@ -28,7 +28,7 @@ def run(browser, name, **context):
     page = browser.new_context(**context).new_page()
     page.on("pageerror", lambda e: errors.append(f"{name}: {e}"))
     page.goto(url)
-    page.wait_for_function("window.mapReady && window.dataPart && window.askPart", timeout=120_000)
+    page.wait_for_function("window.mapReady", timeout=120_000)
     tap = page.tap if phone else page.click
     page.set_input_files("#file", str(ROOT / "tests/data/monaco.geojson"))
     page.wait_for_function("window.areas >= 1", timeout=60_000)
@@ -38,8 +38,11 @@ def run(browser, name, **context):
 
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=600_000)   # the roads on the map
     # the dock: the start query runs on the tables of the build
+    # no dock until Ask or Query the tables opens it (Kaveh, 2026-11-06: no SQL panel outside Ask)
+    assert not page.evaluate("!!document.getElementById('rs-dock') || document.documentElement.classList.contains('rs-dock-has')"), f"{name}: a dock before its first use"
     page.evaluate("rs.sections.fold('step5', false)")
     tap("#query-tables")
+    page.wait_for_function("document.documentElement.classList.contains('rs-dock-has')", timeout=10_000)
     page.evaluate("window.dataPart.run()")                             # the start text of the SQL line; the person presses Run
     page.wait_for_function("window.dataPart.result() && window.dataPart.result().rows.length > 0", timeout=120_000)
     r = page.evaluate("(() => { const r = window.dataPart.result(); return {cols: r.columns.map((c) => c.name), rows: r.rows.length}; })()")

@@ -2483,7 +2483,9 @@ const ABOUT = { edges: "One row is one direction of a road (an edge), with its l
   private_edges: "The roads that this network keeps out: private, forbidden or bus only." };
 const sqlCell = (v) => v == null ? null : typeof v === "bigint" || typeof v === "number" || typeof v === "boolean" || typeof v === "string" ? v
   : v instanceof Uint8Array ? v : JSON.stringify(v, (k, x) => (typeof x === "bigint" ? x.toString() : x));
-const dataPart = dataDock({
+// the dock and Ask start at their first use: a new dock puts its "Data" bar under the map at once (Kaveh, 2026-11-06: no SQL panel outside Ask)
+let dataPart, askPart;
+const data = () => dataPart ??= dataDock({
   query: async (sql) => {
     const res = await duck.query(sql), columns = res.schema.fields.map((f) => ({ name: f.name, type: String(f.type) }));
     return { columns, rows: res.toArray().map((r) => columns.map((c) => sqlCell(r[c.name]))) };
@@ -2502,12 +2504,12 @@ const dataPart = dataDock({
   roadsBy: (sql, column) => `SELECT DISTINCT edge_id FROM driving.edges WHERE "${column}" IN (SELECT "${column}" FROM (${sql}))`,
   sql: "SELECT highway, count(*) AS edges, round(sum(length_m) / 1000, 1) AS km FROM driving.edges GROUP BY highway ORDER BY edges DESC",
 });
-$("query-tables").onclick = () => dataPart.open();
-const askPart = askPanel({ data: dataPart, dialect: "DuckDB",
+$("query-tables").onclick = () => data().open();
+const ask = () => askPart ??= askPanel({ data: data(), dialect: "DuckDB",
   about: "The road networks of one area, built by duckOSM from OpenStreetMap. Each network is a schema: driving, walking and cycling. In a network, edges has one row for each direction of a road; edge_id is its id, osm_id the OSM way. The map draws the roads by edge_id.",
   examples: ["Which one-way roads have no name?", "How many km of road does each class have?", "Which primary roads are longer than 300 m?"] });
-window.dataPart = dataPart; window.askPart = askPart;   // for the tests
-rs.sections.add({ id: "ask", label: "Ask the data", note: "A question about the roads, in words", open: () => askPart.open(), icon: "ask", background: true, after: "step6" });
+Object.defineProperties(window, { dataPart: { get: data }, askPart: { get: ask } });   // for the tests
+rs.sections.add({ id: "ask", label: "Ask the data", note: "A question about the roads, in words", open: () => ask().open(), icon: "ask", background: true, after: "step6" });
 
 // ---- card 9: the design (docs/app.md, "Step 9: design"). The panel is roadstyle's design panel (map/roadstyle/dashboard/design/, roadstyle
 // docs/guides/design-panel.md): it draws into the page's panel (#sb), owns the design and paints the ground, the layers and the opacity of the roads.
