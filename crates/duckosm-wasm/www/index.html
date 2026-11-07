@@ -2385,12 +2385,20 @@ const fixesText = () => fixesPanel?.text() ?? null;
 const loadFixesText = (text) => fixesPanel?.load(text);
 // a road's OSM ID from a row of the dashboard's road table (the road's row -> its OSM ID)
 const osmIdOf = (row) => { const p = window.RS_SIDE?.props?.[row]; return Array.isArray(p) ? p[ROAD_KEYS.indexOf("osm_id")] : p?.osm_id; };
+// the rows of an OSM way (the editor's highlight sets): an index of the road table, made again when the table changes (a new build, the level editor)
+let wayRows = null, wayProps = null;
+const roadRows = (id) => {
+  const props = window.RS_SIDE?.props;
+  if (!props) return [];
+  if (props !== wayProps) { wayProps = props; wayRows = new Map(); props.forEach((_, i) => { const k = Number(osmIdOf(i)); wayRows.has(k) ? wayRows.get(k).push(i) : wayRows.set(k, [i]); }); }
+  return wayRows.get(Number(id)) ?? [];
+};
 // the note of card 7: the changes, and whether the networks were built with them
 const fixNoteNow = { sum: "No fixes.", why: "" };
 function fixNote(part) { Object.assign(fixNoteNow, part); $("fix-sum").textContent = [fixNoteNow.sum, fixNoteNow.why].filter(Boolean).join(" "); }
 try {
   const frame = (opts) => { const f = rs.frame({ ...opts, panel: $("sb"), back: "Steps" }); f.addEventListener("back", closeFixes); return f; };
-  fixesPanel = await initFixesPanel({ frame, duck, map, status, yaml: jsyaml, roadIdOfRow: osmIdOf, areaKey: () => $("name").value.trim(), onChange: (text) => fixNote({ sum: text }),
+  fixesPanel = await initFixesPanel({ frame, duck, map, status, yaml: jsyaml, roadIdOfRow: osmIdOf, roadRows, areaKey: () => $("name").value.trim(), onChange: (text) => fixNote({ sum: text }),
     onBuild, changesNote: "To load a file, use <b>Fixes</b> in step 4." });
   fixesPanel.restore();                           // the changes of this area name from the last visit (the panel keeps them in this browser)
   $("name").addEventListener("change", () => fixesPanel?.restore());

@@ -59,7 +59,7 @@ with sync_playwright() as p:
     page.wait_for_function("window.mapReady && window.timings && window.timings.duckdbStart", timeout=120_000)
     page.evaluate("localStorage.clear()")
 
-    # the card: number 10, ready before a build, with its own button; the panel has five tabs, the header, and the bar
+    # the card: number 10, ready before a build, with its own button; the panel has six tabs, the header, and the bar
     card = page.locator("#step9-card")
     assert card.count() == 1 and page.text_content("#step9-card .rs-sec-title").strip() == "Edit design" and page.text_content("#step9-card .n") == "9"
     assert "off" not in (page.get_attribute("#step9-card", "class") or ""), "the design needs no build"
@@ -393,7 +393,7 @@ with sync_playwright() as p:
                      fillColor: m.getPaintProperty('area-fill', 'fill-color'), opacity: m.getPaintProperty('area-fill', 'fill-opacity') }; }""")
     tiles_url = lambda: page.evaluate("window.duckMap.getStyle().sources['rs-roads'].tiles[0]")
     page.click("#design-tab-layers")
-    assert page.locator("#design-pane h3").first.text_content() == "Show these layers"
+    assert page.locator("#design-pane .rs-card-title").first.text_content() == "Show these layers"
     gen = tiles_url()
     b0 = page.evaluate("window.designPanel.get().boundary")
     assert bpaint()["color"] == b0["color"] == "#7cc4ff" and bpaint()["line"] == "visible" and bpaint()["fill"] == "none", ("the Dark theme has its boundary; the fill hides while the roads show", bpaint())
@@ -542,7 +542,7 @@ with sync_playwright() as p:
     page.click("#design-tab-roads")
     set_input(page, "[data-p='roads.fill.primary']", "#123456")
     page.click("#design-tab-theme")
-    assert "custom" in page.locator("#design-pane .fsec", has_text="Your themes").first.text_content()
+    assert "custom" in page.locator("#design-pane .rs-sec-box", has_text="Your themes").first.text_content()
     page.fill("#mine-name", "")
     page.click("#mine-save")
     assert "Give the theme a name" in page.text_content("#mine-msg") and page.locator("#design-pane [data-mine]").count() == 0, "an empty name is refused"
@@ -557,7 +557,7 @@ with sync_playwright() as p:
     page.click("#design-tab-roads")
     set_input(page, "[data-p='roads.fill.primary']", "#654321")
     page.click("#design-tab-theme")
-    assert 'Update "My print"' in page.locator("#design-pane .fsec", has_text="Your themes").first.text_content()
+    assert 'Update "My print"' in page.locator("#design-pane .rs-sec-box", has_text="Your themes").first.text_content()
     page.fill("#mine-name", "my PRINT")
     page.click("#mine-save")
     assert "Replace it?" in page.text_content("#design-pane") and stored()[0]["design"]["roads"]["fill"]["primary"] == "#123456", "nothing is replaced before the answer"
