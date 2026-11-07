@@ -21,8 +21,9 @@ with sync_playwright() as p:
     page.fill("#fixf-lanes", "5"); page.click("#fix-save"); page.wait_for_timeout(300)
     def check(tab):
         page.evaluate(f"window.fixesPanel.tab('{tab}')"); page.wait_for_timeout(500)
-        m = page.evaluate("""() => { const b = document.querySelector('#fix-panel .fix-body'), r = document.getElementById('fix-panel').getBoundingClientRect();
-            const wide = [...document.querySelectorAll('#fix-panel *')].filter((e) => e.offsetParent && e.getBoundingClientRect().right > r.right + 1).map((e) => e.id || e.className || e.tagName).slice(0, 4);
+        m = page.evaluate("""() => { const b = document.getElementById('fix-body'), r = document.getElementById('fix-panel').getBoundingClientRect();
+            // (the tab row of roadstyle's frame is one row that scrolls sideways on a phone: its tabs can be past the edge)
+            const wide = [...document.querySelectorAll('#fix-panel *')].filter((e) => e.offsetParent && !e.closest('#fix-tabs') && e.getBoundingClientRect().right > r.right + 1).map((e) => e.id || e.className || e.tagName).slice(0, 4);
             return {scrollW: b.scrollWidth, clientW: b.clientWidth, docW: document.documentElement.scrollWidth, inner: innerWidth, wide}; }""")
         page.screenshot(path=str(out / f"phone-{tab}.png"))
         assert m["scrollW"] <= m["clientW"] + 1 and m["docW"] <= m["inner"] + 1 and not m["wide"], (tab, m)

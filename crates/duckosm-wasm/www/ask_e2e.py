@@ -56,9 +56,9 @@ def run(browser, name, **context):
     # Ask: the key note and the examples, and one left edge for the head row and the body
     page.evaluate("window.askPart.open()")
     page.wait_for_function("window.askPart.isOpen()", timeout=10_000)
-    page.locator(".rs-ask .rs-chip").first.wait_for(state="visible")
+    page.locator(".rs-ask .rs-ask-q").first.wait_for(state="visible")
     assert "key" in page.inner_text(".rs-ask-need").lower(), "Ask says that it needs a key"
-    head, body = page.evaluate(EDGE, ".rs-ask-who"), page.evaluate(EDGE, ".rs-ask-hint, .rs-ask .rs-chip")
+    head, body = page.evaluate(EDGE, ".rs-ask-who"), page.evaluate(EDGE, ".rs-ask-hint, .rs-ask .rs-ask-q")
     assert head and body and abs(head[0] - body[0]) <= 1, ("the head row and the body of Ask start at the same left edge", head, body)
     page.screenshot(path=str(out / f"{name}-2-ask.png"))
     if phone:

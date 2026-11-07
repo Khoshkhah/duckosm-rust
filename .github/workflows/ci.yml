@@ -53,3 +53,10 @@ jobs:
             case ${f##*/} in visualization_metadata_main.parquet|edge_levels_meta_visualization.parquet) continue;; esac
             cmp $f $t/duckosm-wasm-native/${f##*/}
           done
+      # The page uses roadstyle's parts for every control (parts_e2e.py): Monaco is built in the page, and each control of the panel, of the
+      # export list and of card 7 must change its look under the pointer, in the light and the dark theme
+      - name: Every control of the page has roadstyle's hover (Playwright, Monaco)
+        run: |
+          pip install playwright==1.60.0
+          python3 -m playwright install --with-deps chromium
+          cd crates/duckosm-wasm/www && python3 parts_e2e.py "$RUNNER_TEMP/out-parts"

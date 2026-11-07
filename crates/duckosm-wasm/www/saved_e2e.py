@@ -83,8 +83,8 @@ with sync_playwright() as p:
     row = page.locator("#areas-card .saved-area")
     # the row: the whole name, the date and size on one line, a pill that says that the map opens fast, two buttons of one size, and a tint under the pointer
     assert page.evaluate("(() => { const n = document.querySelector('#areas-card .sa-name'); return n.scrollWidth <= n.clientWidth + 1 && getComputedStyle(n).textOverflow !== 'ellipsis'; })()"), "the name is not cut"
-    assert "Opens fast" in page.inner_text("#areas-card .sa-pill") and page.evaluate("(() => { const [a, b] = [...document.querySelectorAll('#areas-card .sa-actions .btn')].map((x) => x.getBoundingClientRect()); return Math.abs(a.width - b.width) < 1 && Math.abs(a.height - b.height) < 1; })()"), "Open and Delete have one size"
-    assert "sidewalk rule" not in page.inner_text("#areas-card") and page.locator("#areas-card .sa-chip").count() >= 1 and page.locator("#areas-card .sa-chip svg").count() == page.locator("#areas-card .sa-chip").count() and "roads" in page.get_attribute("#areas-card .sa-chip", "title"), "the chips list the networks with an icon, not the build log"
+    assert "Opens fast" in page.text_content("#areas-card .rs-chip.accent") and page.evaluate("(() => { const [a, b] = [...document.querySelectorAll('#areas-card .sa-actions button')].map((x) => x.getBoundingClientRect()); return Math.abs(a.width - b.width) < 1 && Math.abs(a.height - b.height) < 1; })()"), ("Open and Delete have one size", page.evaluate("[...document.querySelectorAll('#areas-card .sa-actions button')].map((x) => [x.textContent, x.getBoundingClientRect().width, x.getBoundingClientRect().height, getComputedStyle(x).padding, getComputedStyle(x).fontSize])"))
+    assert "sidewalk rule" not in page.inner_text("#areas-card") and page.locator("#areas-card .sa-nets .rs-chip").count() >= 1 and page.locator("#areas-card .sa-nets .rs-chip svg").count() == page.locator("#areas-card .sa-nets .rs-chip").count() and "roads" in page.get_attribute("#areas-card .sa-nets .rs-chip", "title"), "the chips list the networks with an icon, not the build log"
     page.mouse.move(5, 5)
     still = row.evaluate("(r) => getComputedStyle(r).backgroundColor")
     row.hover()
@@ -135,7 +135,7 @@ with sync_playwright() as p:
     assert int(n) == 0, "the old walking tables came back"
 
     # an area with a buffer: the restore gives the same grown area, not an area grown twice
-    km2 = lambda pg: float(pg.inner_text("#summary .stat b").replace(",", ""))
+    km2 = lambda pg: float(pg.inner_text("#summary .rs-kpi-val").replace(",", ""))
     page.close()
     page = open_page(ctx)
     page.set_input_files("#file", str(DATA / "monaco.geojson"))

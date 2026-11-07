@@ -319,8 +319,8 @@ dependencies = [
 
 [[package]]
 name = "duckosm-build"
-version = "0.6.1"
-source = "git+https://github.com/Khoshkhah/duckOSM.git?rev=b3f928968011cfff81bbe4e57fb1b9cafaa2f00a#b3f928968011cfff81bbe4e57fb1b9cafaa2f00a"
+version = "0.7.0"
+source = "git+https://github.com/Khoshkhah/duckOSM.git?rev=39ba8656c6fece5d30deb994a64bf6f3edd06ea7#39ba8656c6fece5d30deb994a64bf6f3edd06ea7"
 dependencies = [
  "duckosm-core",
  "duckosm-parquet",
@@ -333,8 +333,8 @@ dependencies = [
 
 [[package]]
 name = "duckosm-core"
-version = "0.6.1"
-source = "git+https://github.com/Khoshkhah/duckOSM.git?rev=b3f928968011cfff81bbe4e57fb1b9cafaa2f00a#b3f928968011cfff81bbe4e57fb1b9cafaa2f00a"
+version = "0.7.0"
+source = "git+https://github.com/Khoshkhah/duckOSM.git?rev=39ba8656c6fece5d30deb994a64bf6f3edd06ea7#39ba8656c6fece5d30deb994a64bf6f3edd06ea7"
 dependencies = [
  "miniz_oxide 0.8.9",
  "osmpbf",
@@ -346,8 +346,8 @@ dependencies = [
 
 [[package]]
 name = "duckosm-parquet"
-version = "0.6.1"
-source = "git+https://github.com/Khoshkhah/duckOSM.git?rev=b3f928968011cfff81bbe4e57fb1b9cafaa2f00a#b3f928968011cfff81bbe4e57fb1b9cafaa2f00a"
+version = "0.7.0"
+source = "git+https://github.com/Khoshkhah/duckOSM.git?rev=39ba8656c6fece5d30deb994a64bf6f3edd06ea7#39ba8656c6fece5d30deb994a64bf6f3edd06ea7"
 dependencies = [
  "arrow-array",
  "arrow-schema",

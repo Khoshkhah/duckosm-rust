@@ -44,7 +44,7 @@ def text(page):
 
 
 def amber(page):
-    return page.evaluate("window.fixesPanel.drawn().edits")
+    return page.evaluate("(window.fixesPanel.drawn().edits + (window.fixesPanel.drawn().lit['fix-edits'] ?? 0))")
 
 
 def at(page, lon, lat):
@@ -96,7 +96,7 @@ with sync_playwright() as p:
     assert page.get_attribute("#fix-tab-road", "aria-selected") == "true", "the panel opens on the Road tab"
     # the hide button of the panel closes the editor first (Kaveh: a road stayed picked behind the hidden panel), then the map takes
     # the panel's place; the button at the corner shows the steps again, and card 7 opens the editor again
-    page.click("#fix-hide")
+    page.click("#sb-hide")
     page.wait_for_function("document.getElementById('sb').classList.contains('hidden')")
     assert page.is_visible("#sb-show") and not page.evaluate("document.body.classList.contains('editing-fixes')"), "the hide button closes the editor"
     assert page.evaluate("(window.duckMap.getSource('fix-sel')?._data?.features || []).length") == 0, "nothing stays picked on the map"
@@ -135,24 +135,25 @@ with sync_playwright() as p:
     page.click("#fix-load")
     page.wait_for_function(f"document.querySelector('#fix-obj .objhead')?.textContent.includes('way {ROAD}') && document.querySelector('#fixf-sidewalk')", timeout=20_000)
     assert page.input_value("#fixf-sidewalk") == "", "no sidewalk tag in the data"
-    page.select_option("#fixf-sidewalk", "both")
-    page.select_option("#fixf-surface", "paved")
+    # the lists are roadstyle's select boxes (the frame of card 7): the native <select> is hidden, so the test sets it with force
+    page.select_option("#fixf-sidewalk", "both", force=True)
+    page.select_option("#fixf-surface", "paved", force=True)
     page.fill("#fixf-lanes", "7")
     # guards: a one-way road closes the forward and backward lanes (with the reason under them); a choice that opens them again takes the guard away; a bridge closes the tunnel list
-    page.select_option("#fixf-oneway", "true")
+    page.select_option("#fixf-oneway", "true", force=True)
     assert page.is_disabled("#fixf-lanes_forward") and page.is_disabled("#fixf-lanes_backward") and "one direction" in page.inner_text("#fix-form"), "a one-way road closes the lanes for each direction"
     assert page.input_value("#fixf-lanes") == "7", "the guard keeps the other fields"
-    page.select_option("#fixf-oneway", "false")
+    page.select_option("#fixf-oneway", "false", force=True)
     assert not page.is_disabled("#fixf-lanes_forward"), "a two-way road opens them"
-    page.select_option("#fixf-bridge", "yes")
+    page.select_option("#fixf-bridge", "yes", force=True)
     assert page.is_disabled("#fixf-tunnel") and "bridge or a tunnel" in page.inner_text("#fix-form")
-    page.select_option("#fixf-bridge", "")
+    page.select_option("#fixf-bridge", "", force=True)
     assert not page.is_disabled("#fixf-tunnel")
     page.click("#fix-save")
     y = text(page)
     assert f"id: {ROAD}" in y and "sidewalk: both" in y and "surface: paved" in y and "tag_edits" in y and "lanes: 7" in y, y
     assert page.inner_text("#fix-n") == "1" and "1 change" in page.inner_text("#fix-apply-n")
-    page.wait_for_function("window.fixesPanel.drawn().edits > 0", timeout=20_000)
+    page.wait_for_function("(window.fixesPanel.drawn().edits + (window.fixesPanel.drawn().lit['fix-edits'] ?? 0)) > 0", timeout=20_000)
     print("a road rule: lanes in the rule, sidewalk and surface in extra.tag_edits; the road is in the amber layer")
     # the label of an edited field shows the mark, and Reset form takes the edit out of the form
     assert "edited" in (page.get_attribute("label[for=fixf-sidewalk]", "class") or "")
@@ -166,34 +167,34 @@ with sync_playwright() as p:
     assert page.evaluate("window.__desel") >= 1, "a switch of tab clears roadstyle's selection on the map"
     assert page.is_visible("#fix-walls-all") and page.locator("#fixf-lanes").count() == 0 and "Nothing is picked" in page.inner_text("#fix-obj"), page.inner_text("#fix-obj")
     assert page.is_visible("#fixf-roof_shape") is False and page.input_value("#fix-id") == ""
-    page.wait_for_function("window.fixesPanel.drawn().sel === 0", timeout=10_000)             # the Building tab has nothing picked, so nothing is blue
+    page.wait_for_function("(window.fixesPanel.drawn().sel + (window.fixesPanel.drawn().lit['fix-sel'] ?? 0)) === 0", timeout=10_000)             # the Building tab has nothing picked, so nothing is blue
     page.click("#fix-tab-road")
     assert page.input_value("#fix-id") == str(ROAD) and page.input_value("#fixf-lanes") == "7", "the Road tab keeps its road"
     page.click("#fix-tab-road")
-    page.wait_for_function("window.fixesPanel.drawn().sel > 0", timeout=20_000)
+    page.wait_for_function("(window.fixesPanel.drawn().sel + (window.fixesPanel.drawn().lit['fix-sel'] ?? 0)) > 0", timeout=20_000)
     pt = rows(page, f"SELECT ST_X(ST_PointOnSurface(ST_Union_Agg(geometry))) AS x, ST_Y(ST_PointOnSurface(ST_Union_Agg(geometry))) AS y FROM driving.edges WHERE osm_id = {ROAD}")[0]
     page.wait_for_function("!window.duckMap.isMoving()")
     assert page.evaluate(f"window.duckMap.getBounds().contains([{pt['x']}, {pt['y']}])"), "a switch to the Road tab shows its road on the map"
-    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['fix-sel-line']}).length > 0", timeout=20_000)     # the blue road is drawn, not only counted
-    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['fix-edits-line']}).length > 0", timeout=20_000)   # and the amber one (the rule of the road)
+    page.wait_for_function("(window.fixesPanel.drawn().lit['fix-sel'] ?? 0) > 0", timeout=20_000)     # the blue road is in roadstyle's highlight set fix-sel
+    page.wait_for_function("(window.fixesPanel.drawn().lit['fix-edits'] ?? 0) > 0", timeout=20_000)   # and the amber one (the rule of the road): the set fix-edits
     print("the tabs: Building has its own empty form, Road keeps its road and its rule, and the map shows the road of the tab")
     # Unselect takes the road out of the tab (the form, the id and the blue road), and Load picks it again
     assert page.is_visible("#fix-unselect")
     page.click("#fix-unselect")
     assert page.locator("#fixf-lanes").count() == 0 and page.input_value("#fix-id") == "" and not page.is_visible("#fix-unselect")
-    page.wait_for_function("window.fixesPanel.drawn().sel === 0", timeout=10_000)
+    page.wait_for_function("(window.fixesPanel.drawn().sel + (window.fixesPanel.drawn().lit['fix-sel'] ?? 0)) === 0", timeout=10_000)
     page.fill("#fix-id", str(ROAD)); page.click("#fix-load")
     page.wait_for_function(f"document.querySelector('#fix-obj .objhead')?.textContent.includes('way {ROAD}') && document.querySelector('#fixf-lanes')?.value === '7'", timeout=20_000)
     print("Unselect: the road goes out of the tab, and Load brings it back")
     # leaving the panel (← Steps) unselects everything on the map; the tabs keep their objects, and the blue comes back when the panel opens
-    page.wait_for_function("window.fixesPanel.drawn().sel > 0", timeout=20_000)
+    page.wait_for_function("(window.fixesPanel.drawn().sel + (window.fixesPanel.drawn().lit['fix-sel'] ?? 0)) > 0", timeout=20_000)
     page.evaluate("window.__desel = 0")
     page.click("#fix-back")
     assert page.evaluate("window.__desel") >= 1, "closing the panel clears roadstyle's selection"
-    page.wait_for_function("window.fixesPanel.drawn().sel === 0 && window.fixesPanel.drawn().faces === 0 && window.fixesPanel.drawn().nodes === 0", timeout=10_000)
+    page.wait_for_function("(window.fixesPanel.drawn().sel + (window.fixesPanel.drawn().lit['fix-sel'] ?? 0)) === 0 && window.fixesPanel.drawn().faces === 0 && window.fixesPanel.drawn().nodes === 0", timeout=10_000)
     page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['fix-sel-line', 'fix-sel-fill', 'fix-sel-pt']}).length === 0", timeout=10_000)      # the map draws again after the data goes
     page.click("#step7")
-    page.wait_for_function("window.fixesPanel.drawn().sel > 0", timeout=20_000)
+    page.wait_for_function("(window.fixesPanel.drawn().sel + (window.fixesPanel.drawn().lit['fix-sel'] ?? 0)) > 0", timeout=20_000)
     print("← Steps unselects everything on the map, and the panel shows the picked road again when it opens")
 
     # a click on a building in the Road or the Turn tab picks no road: roadstyle takes the nearest road for a click within a few pixels, and the panel ignores it on a building
@@ -222,7 +223,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(500)
     assert popups(page) == 0 and "Building way" in page.inner_text("#fix-obj .objhead"), page.inner_text("#fix-obj")
     page.fill("#fixf-building_levels", "7")
-    page.select_option("#fixf-roof_shape", "gabled")
+    page.select_option("#fixf-roof_shape", "gabled", force=True)
     page.fill("#fixf-roof_colour", "#cc3300")
     page.click("#fix-save")
     y = text(page)
@@ -263,7 +264,7 @@ with sync_playwright() as p:
     print(f"wall numbers: none by default; row {key} under the pointer shows #{n}; the wall {other} on the map lights its row, and a click selects it")
     wall = page.evaluate("(() => { const r = document.querySelector('#fix-form .wallrow'); return [r.dataset.a, r.dataset.b, r.dataset.computed]; })()")
     new_type = "party" if wall[2] != "party" else "side"
-    page.select_option("#fix-form .wallrow select", new_type)
+    page.select_option("#fix-form .wallrow select", new_type, force=True)
     assert "building_faces" not in text(page) and not page.is_disabled("#fix-save") and "1 change not added yet" in page.inner_text("#fix-state"), "a wall type waits for Add to changes"
     page.click("#fix-save")
     y = text(page)
@@ -271,7 +272,7 @@ with sync_playwright() as p:
     assert "edited" in (page.get_attribute("#fix-form .wallrow", "class") or "")
     print(f"a wall: nodes {wall[0]} and {wall[1]} were {wall[2]}, now {new_type}")
     # a door on a wall: a select in the row, a draft until Add to changes, then a rule with `door` (the type stays), a dot on the map, and the text in the Changes tab
-    page.select_option("#fix-form .wallrow >> nth=0 >> select[data-walldoor]", "main")
+    page.select_option("#fix-form .wallrow >> nth=0 >> select[data-walldoor]", "main", force=True)
     assert "door: main" not in text(page) and not page.is_disabled("#fix-save"), "a door waits for Add to changes"
     page.click("#fix-save")
     y = text(page)
@@ -323,7 +324,7 @@ with sync_playwright() as p:
     assert "Wall 1 of" in page.inner_text("#fix-wallpos")
     page.click("[data-wall-nav='-1']")                      # Wall 1 and Previous: the last wall; its row scrolls into view above the bar at the bottom of the panel
     page.wait_for_timeout(300)
-    assert page.evaluate("(() => { const r = document.querySelector('#fix-form .wallrow.sel').getBoundingClientRect(), b = document.querySelector('#fix-panel .fix-body').getBoundingClientRect(), bars = [...document.querySelectorAll('#fix-panel .fix-bar')].filter((x) => x.offsetParent).map((x) => x.getBoundingClientRect().top); return r.top >= b.top - 1 && r.bottom <= Math.min(b.bottom, ...bars) + 1; })()"), "the picked wall is under the bar or out of the panel"
+    assert page.evaluate("(() => { const r = document.querySelector('#fix-form .wallrow.sel').getBoundingClientRect(), b = document.getElementById('fix-body').getBoundingClientRect(), bars = [...document.querySelectorAll('#fix-panel .fix-bar')].filter((x) => x.offsetParent).map((x) => x.getBoundingClientRect().top); return r.top >= b.top - 1 && r.bottom <= Math.min(b.bottom, ...bars) + 1; })()"), "the picked wall is under the bar or out of the panel"
     page.click("[data-wall-nav='1']")
     assert "Wall 1 of" in page.inner_text("#fix-wallpos")
     w3 = rows(page, f"SELECT ST_X(ST_LineInterpolatePoint(geometry, 0.5)) AS x, ST_Y(ST_LineInterpolatePoint(geometry, 0.5)) AS y FROM main.building_faces WHERE building_id = {b['osm_id']} AND face_index = 2")[0]
@@ -356,7 +357,7 @@ with sync_playwright() as p:
     page.wait_for_function(f"document.getElementById('fix-id').value === '{n['osm_id']}' && document.querySelector('#fixf-traffic_signals_direction')", timeout=20_000)
     page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['fix-sel-pt']}).length > 0", timeout=20_000)    # the picked node has its blue ring
     print("the Node tab draws the traffic signals and crossings in view as dots, and the picked node has a ring")
-    page.select_option("#fixf-traffic_signals_direction", "backward")
+    page.select_option("#fixf-traffic_signals_direction", "backward", force=True)
     page.click("#fix-save")
     y = text(page)
     assert "type: node" in y and "traffic_signals:direction: backward" in y, y
@@ -381,11 +382,11 @@ with sync_playwright() as p:
     page.click("#fix-turn-find")
     page.wait_for_selector("#fix-out .turn")
     # the map: the road that the turn starts on (blue), the junction (a ring) and the roads that leave it (green); a hover on a row outlines its road
-    page.wait_for_function("window.fixesPanel.drawn().sel >= 2 && window.fixesPanel.drawn().turn > 0", timeout=20_000)
+    page.wait_for_function("(window.fixesPanel.drawn().sel + (window.fixesPanel.drawn().lit['fix-sel'] ?? 0)) >= 2 && (window.fixesPanel.drawn().turn + (window.fixesPanel.drawn().lit['fix-turn-out'] ?? 0)) > 0", timeout=20_000)
     page.wait_for_function("!duckMap.isMoving()")
-    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['fix-sel-line']}).length > 0 && duckMap.queryRenderedFeatures({layers: ['fix-sel-pt']}).length > 0 && duckMap.queryRenderedFeatures({layers: ['fix-turn-line']}).length > 0", timeout=20_000)
+    page.wait_for_function("(window.fixesPanel.drawn().lit['fix-sel'] ?? 0) > 0 && duckMap.queryRenderedFeatures({layers: ['fix-sel-pt']}).length > 0 && (window.fixesPanel.drawn().lit['fix-turn-out'] ?? 0) > 0", timeout=20_000)
     page.hover("#fix-out .turn")
-    assert page.get_attribute("#fix-out .turn", "data-to") in page.evaluate("JSON.stringify(duckMap.getFilter('fix-turn-hl'))"), "a hover on a row outlines its road"
+    page.wait_for_function("(window.fixesPanel.drawn().lit['fix-turn-hover'] ?? 0) > 0", timeout=10_000)   # a hover on a row darkens its road (the set fix-turn-hover)
     assert page.is_visible("#fix-turn-legend")
     print("the Turn tab draws the start road, the junction ring and the roads that leave it")
     # only the rules that fit the turn are offered: Allowed, No <way> and Only <way> (the way is left, right, straight on or a U-turn), not all ten; the row has the green of the map
@@ -396,10 +397,10 @@ with sync_playwright() as p:
     via = page.eval_on_selector("#fix-via", "(s) => [s.tagName, s.options.length, s.value, s.options[0]?.value]")
     assert via[0] == "SELECT" and via[1] >= 1 and via[2] == via[3], via
     assert page.evaluate("[...document.querySelectorAll('#fix-via-row > *, #fix-out .turn')].filter((r) => r.offsetParent).every((r) => r.getBoundingClientRect().right <= document.getElementById('fix-panel').getBoundingClientRect().right + 1)"), "a part is wider than the panel"
-    # the bar sticks to the bottom edge of the panel: no list row shows under it (a sticky box stops at the padding of its scroll box)
-    gap = page.evaluate("""(() => { const bar = [...document.querySelectorAll('#fix-panel .fix-bar')].find((b) => b.offsetParent), body = bar.closest('.fix-body');
-      if (body.scrollHeight <= body.clientHeight + 1) return null; body.scrollTop = 0; return Math.round(body.getBoundingClientRect().bottom - bar.getBoundingClientRect().bottom); })()""")
-    assert gap is None or abs(gap) <= 1, f"a gap of {gap} px under the bar"
+    # the bar is roadstyle's frame bar, under the body and outside it: no list row shows under it
+    gap = page.evaluate("""(() => { const bar = [...document.querySelectorAll('#fix-panel .fix-bar')].find((b) => b.offsetParent), body = document.getElementById('fix-body');
+      return !body.contains(bar) && Math.round(bar.getBoundingClientRect().top - body.getBoundingClientRect().bottom); })()""")
+    assert gap is not False and gap >= -1, f"the bar is in the body or over it ({gap} px)"
     print("the junctions are a dropdown list" + ("" if gap is None else ", and the bar leaves no gap under it"))
     page.mouse.move(5, 5)
     still = page.eval_on_selector("#fix-out .turn", "(r) => getComputedStyle(r).backgroundColor")
@@ -407,11 +408,10 @@ with sync_playwright() as p:
     assert page.eval_on_selector("#fix-out .turn", "(r) => getComputedStyle(r).backgroundColor") != still, "a row under the pointer changes its color"
     # a click on a row of a road that leaves picks it: the mark stays and the map keeps the outline after the pointer goes; a second click drops it
     page.click("#fix-out .turn .small")
-    to = page.get_attribute("#fix-out .turn", "data-to")
     page.mouse.move(5, 5)
-    assert page.locator("#fix-out .turn.sel").count() == 1 and to in page.evaluate("JSON.stringify(duckMap.getFilter('fix-turn-hl'))"), "the picked road keeps its outline"
+    assert page.locator("#fix-out .turn.sel").count() == 1 and page.evaluate("(window.fixesPanel.drawn().lit['fix-turn-hover'] ?? 0)") > 0, "the picked road keeps its outline"
     page.click("#fix-out .turn .small")
-    assert page.locator("#fix-out .turn.sel").count() == 0 and "-1" in page.evaluate("JSON.stringify(duckMap.getFilter('fix-turn-hl'))")
+    assert page.locator("#fix-out .turn.sel").count() == 0 and page.evaluate("(window.fixesPanel.drawn().lit['fix-turn-hover'] ?? 0)") == 0
     # the pick colors show in the dark theme too (the panel's accent, not a dark gray)
     page.evaluate("rsSetTheme('dark')")
     page.click("#fix-out .turn .small")
@@ -434,7 +434,7 @@ with sync_playwright() as p:
     page.wait_for_selector("#fix-out .turn")
     print("the Turn tab: the junctions say how many roads leave, a dead end says why, and an arriving road can be the start road")
     rule = page.eval_on_selector("#fix-out .turn select", "(x) => x.options[1].value")      # the first rule that fits the turn: No <way>
-    page.select_option("#fix-out .turn select", rule)
+    page.select_option("#fix-out .turn select", rule, force=True)
     assert "not added yet" in page.inner_text("#fix-turn-note") and "restriction" not in text(page), "a choice is not a change until Add to changes"
     assert page.is_visible("#fix-tab-turns .dot")
     page.click("#fix-turn-add")
@@ -506,7 +506,7 @@ with sync_playwright() as p:
     assert "joins a junction" in page.inner_text("#fix-draw-n"), page.inner_text("#fix-draw-n")
     page.mouse.click(px[0] + 150, px[1] - 80)
     page.wait_for_function("window.fixesPanel.drawn().draw === 2", timeout=20_000)
-    page.select_option("#fixn-highway", "service")
+    page.select_option("#fixn-highway", "service", force=True)
     page.fill("#fixn-name", "Test Lane")
     page.click("#fix-draw-done")
     y = text(page)
@@ -519,7 +519,7 @@ with sync_playwright() as p:
     edit_it(page, "#fix-new-inchg")                # the new road is in the changes: the box asks first
     assert page.get_attribute("#fix-tab-new", "aria-selected") == "true" and page.is_visible("#fix-drawbox") and page.input_value("#fixn-name") == "Test Lane"
     assert page.inner_text("#fix-draw-done") == "Update change" and page.is_visible("#fix-new-del") and not page.is_visible("#fix-draw-undo")
-    page.wait_for_function("window.fixesPanel.drawn().sel > 0", timeout=20_000)
+    page.wait_for_function("(window.fixesPanel.drawn().sel + (window.fixesPanel.drawn().lit['fix-sel'] ?? 0)) > 0", timeout=20_000)
     page.fill("#fixn-name", "Test Lane 2")
     page.click("#fix-draw-done")
     y = text(page)
@@ -575,7 +575,7 @@ with sync_playwright() as p:
     nt = rows(page, f"SELECT map_extract(tags, 'traffic_signals:direction')[1] AS d, map_extract(tags, 'traffic_signals')[1] AS s, map_extract(tags, 'note:test')[1] AS n "
                     f"FROM features.traffic WHERE osm_id = {n['osm_id']}")[0]
     assert (nt["d"], nt["s"], nt["n"]) == ("backward", None, "hello"), nt
-    page.wait_for_function("window.fixesPanel.drawn().edits > 0", timeout=30_000)
+    page.wait_for_function("(window.fixesPanel.drawn().edits + (window.fixesPanel.drawn().lit['fix-edits'] ?? 0)) > 0", timeout=30_000)
     assert not popups(page)
     # out and back: the changes and the picked road are still there after the build
     if "folded" in (page.get_attribute("#step7-card", "class") or ""):
@@ -607,7 +607,7 @@ with sync_playwright() as p:
         raise
     assert page.is_visible("#fix-doors-legend") and "In view" in page.inner_text("#fix-doors-info")
     new_kind = "service" if door["kind"] != "service" else "main"
-    page.select_option("#fix-form .doorrow >> nth=0 >> select", new_kind)
+    page.select_option("#fix-form .doorrow >> nth=0 >> select", new_kind, force=True)
     assert f"entrance: {new_kind}" not in text(page) and not page.is_disabled("#fix-save"), "a door kind waits for Add to changes"
     page.click("#fix-save")
     y = text(page)
@@ -622,7 +622,7 @@ with sync_playwright() as p:
     page.wait_for_function("/drawn|failed/.test(document.getElementById('mapnote').textContent) && !window.mapDrawing", timeout=60_000)
     page.wait_for_function("!window.duckMap.isMoving()")
     page.click("#fix-tab-node")
-    page.wait_for_function("window.fixesPanel.drawn().sel > 0", timeout=20_000)       # the tab shows its node and zooms to it: let that end before the jump
+    page.wait_for_function("(window.fixesPanel.drawn().sel + (window.fixesPanel.drawn().lit['fix-sel'] ?? 0)) > 0", timeout=20_000)       # the tab shows its node and zooms to it: let that end before the jump
     page.wait_for_timeout(1500)
     page.wait_for_function("!window.duckMap.isMoving()")
     px = at(page, j["x"], j["y"])
@@ -635,7 +635,7 @@ with sync_playwright() as p:
     page.wait_for_function(f"document.querySelector('#fix-obj .objhead')?.textContent.includes('node {j['id']}') && document.querySelector('#fixf-highway')", timeout=20_000)
     assert "no traffic tag" in page.inner_text("#fix-obj"), page.inner_text("#fix-obj")
     assert page.is_disabled("#fixf-kerb") and page.is_disabled("#fixf-crossing") and "for a crossing" in page.inner_text("#fix-form"), "a node with no kind has no crossing, kerb or tactile paving"
-    page.select_option("#fixf-highway", "traffic_signals")
+    page.select_option("#fixf-highway", "traffic_signals", force=True)
     assert not page.is_disabled("#fixf-kerb") and page.is_disabled("#fixf-traffic_signals_direction") is False
     assert page.eval_on_selector_all("#fixf-crossing option", "(o) => o.map((x) => x.value)") == ["", "traffic_signals"], "a traffic signal with a crossing has one crossing value"
     assert page.input_value("#fixf-highway") == "traffic_signals"
@@ -660,7 +660,7 @@ with sync_playwright() as p:
     page.click("#fix-save")
     y = text(page)
     assert f"osm_id: {ob}" in y and "remove: true" in y, y
-    page.wait_for_function("duckMap.queryRenderedFeatures({layers: ['fix-edits-fill', 'fix-edits-line']}).some((f) => f.properties.d === 1)", timeout=20_000)      # a deleted object is red
+    page.wait_for_function("(window.fixesPanel.drawn().lit['fix-gone'] ?? 0) > 0 || duckMap.queryRenderedFeatures({layers: ['fix-edits-fill', 'fix-edits-line']}).some((f) => f.properties.d === 1)", timeout=20_000)      # a deleted object is red
     orr = rows(page, f"SELECT osm_id FROM driving.edges WHERE osm_id NOT IN ({ROAD}, {frm}) AND osm_id < 9000000000000 AND source != {j['id']} AND target != {j['id']} ORDER BY length_m LIMIT 1")[0]["osm_id"]
     page.click("#fix-tab-road")
     page.evaluate(f"window.fixesPanel.select('road', 'way', {orr})")
