@@ -68,15 +68,12 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   body { font: 14px/1.45 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--fg); background: var(--bg); }
   #map { position: fixed; inset: 0; }
   /* the part of the map that the panel and the bar leave free (freeInsets() in the script sets --free-l, --free-r, --free-b) */
-  /* the map while a draw runs: a light veil over the whole map (also the strip beside the bar), and a spinner with the draw's step (showRoads)
-     in the part of the map that the panel, the bar or the phone's sheet leave free */
-  #mapbusy { position: fixed; inset: 0; box-sizing: border-box; padding: var(--free-t, 0px) var(--free-r, 0px) var(--free-b, 0px) var(--free-l, 0px); z-index: 1; display: flex; flex-direction: column; align-items: center;
-    justify-content: center; gap: 10px; background: color-mix(in srgb, var(--bg) 40%, transparent); pointer-events: none; }
+  /* the map while a draw runs: a light veil over the whole map (also the strip beside the bar), and roadstyle's ring (rs-spinner) with the draw's step
+     (showRoads) in the part of the map that the panel, the bar or the phone's sheet leave free */
+  #mapbusy { position: fixed; inset: 0; box-sizing: border-box; padding: var(--free-t, 0px) var(--free-r, 0px) var(--free-b, 0px) var(--free-l, 0px); z-index: 1; display: flex; align-items: center;
+    justify-content: center; background: color-mix(in srgb, var(--bg) 40%, transparent); pointer-events: none; }
   #mapbusy[hidden] { display: none; }
-  #mapbusy .spin { width: 34px; height: 34px; border-radius: 50%; border: 4px solid var(--line); border-top-color: var(--fg); animation: spin 0.8s linear infinite; }
-  #mapbusy span { background: var(--bg); color: var(--fg); padding: 6px 12px; border-radius: 99px; font-size: 13px; box-shadow: var(--shadow); }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce) { #mapbusy .spin { animation-duration: 3s; } }
+  #mapbusy > span { display: flex; align-items: center; gap: 8px; background: var(--bg); color: var(--fg); padding: 6px 12px; border-radius: 99px; font-size: 13px; box-shadow: var(--shadow); }
   /* the panel's shell (position, tokens, the hide and show buttons with their icons: the markup of roadstyle's template) is dashboard.css. Here: the title of the panel. */
   /* the panel's title: h2 (roadstyle's help window puts its "?" in it); the buttons of the title row */
   .sb-top h2 { margin: 0; font-size: 16px; letter-spacing: -0.01em; text-transform: none; color: var(--fg); display: block; }
@@ -87,9 +84,7 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   .step > .rs-sec-hd .rs-sec-title:disabled { cursor: default; color: var(--muted); }
   .step > .rs-sec-hd .after { font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); }
   .step > .rs-sec-hd .done { color: var(--accent); font-size: 13px; font-weight: 700; text-transform: none; }
-  .step > .rs-sec-hd .icon-btn { display: grid; place-items: center; width: 22px; height: 22px; margin: -3px 0; padding: 0; flex: none; }   /* the card's own button (the zoom to the area): a plain button of the size of roadstyle's "?" */
-  .step > .rs-sec-hd .icon-btn svg { width: 16px; height: 16px; }
-  .step.off > .rs-sec-hd .icon-btn, .step.off > .rs-sec-hd .rs-help-btn { opacity: 0.5; }
+  .step.off > .rs-sec-hd :is(.rs-icon-btn, .rs-help-btn) { opacity: 0.5; }
   .step.off { background: var(--surface); }
   .step.off .n { background: var(--line); color: var(--muted); }
   /* the panel's sections give their text the ink (dashboard.css); the muted lines of the cards stay muted */
@@ -97,16 +92,8 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   .sb-top p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
   /* the panel's type: the cards' own sizes (roadstyle's template sets 13px for its controls) */
   :where(#sb) h2 { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 10px; }
-  /* a plain button and a filled one (sb-primary) are roadstyle's. roadstyle has the look of a plain <button> in the panel only in its page template
-     (templates/dashboard.html: `#sb button`), and a host page has no template: these are the template's rules, with no weight (:where), so each
-     part of roadstyle keeps its own look. The template has no look for a disabled button and no busy mark: the page gives them here. */
-  :where(#sb button) { padding: 5px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); cursor: pointer; font: inherit; }
-  :where(#sb button:is(:hover, :focus-visible):not(:disabled)) { border-color: var(--accent); color: var(--accent); background: var(--rs-hover-bg); }
-  :where(#sb button:disabled) { opacity: 0.5; cursor: default; }
+  /* a plain button, a filled one (sb-primary), a red one (sb-danger), a disabled one and a busy one (rs.busy) are roadstyle's (dashboard.css) */
   #sb .step-body button:has(> svg):not(.rs-sel-btn) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }      /* an icon and a word in one line */
-  #sb button.busy svg { display: none; }
-  #sb button.busy::after { content: ""; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--muted); animation: spin 0.8s linear infinite; }
-  .icon-btn:disabled { visibility: hidden; }
   .step-body { display: flex; flex-direction: column; gap: 10px; }
   .step-body > * { margin-top: 0 !important; margin-bottom: 0 !important; }
   .step .n { width: 20px; height: 20px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 11px; flex: none; }
@@ -118,8 +105,7 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   .dl [hidden] { display: none; }
   .dl button { padding: 6px 8px; white-space: nowrap; }
   /* the panel's icons; not the map's, the bar's and the floating windows' own SVGs (roadstyle's) */
-  :is(#sb, #mapbusy) svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
-  #sb .field input[type=search] { padding-left: 36px; }
+  #sb svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
   #sb .sb-top svg { width: 16px; height: 16px; stroke-width: 1.8; }
   a { color: var(--accent); }
   .muted { color: var(--muted); }
@@ -137,16 +123,12 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   #sb .step-body .rs-tab { flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; }
   #sb .step-body .rs-tab svg { width: 16px; height: 16px; }
 
+  /* the search field is one field: the search icon at the left, the "What is here?" button (rs.toggle) at the right. roadstyle's search field
+     (rs.search) has no place for an icon button in the field yet: until it has one, the field is the page's own. */
   .field { position: relative; }
   .field > svg { position: absolute; left: 11px; top: 9px; color: var(--muted); pointer-events: none; }
-  input[type=search], input[type=text] { font: inherit; color: var(--fg); background: var(--bg); width: 100%; height: 36px; border: 1px solid var(--line); border-radius: 9px; padding: 0 10px; }
-  input[type=search] { padding-left: 36px; }
-  /* the search field is one field: the search icon at the left, the "What is here?" icon button at the right */
-  .field input[type=search] { padding-right: 40px; }
+  #sb .field input[type=search] { height: 36px; padding: 0 40px 0 36px; }
   #sb .here { position: absolute; right: 4px; top: 4px; width: 28px; height: 28px; display: grid; place-items: center; padding: 0; }
-  /* "What is here?" is on: the filled look of roadstyle's selected tab (roadstyle has no toggle button) */
-  #sb .here[aria-pressed=true] { background: var(--accent-fill); border-color: var(--accent-fill); color: #fff; }
-  input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
   /* the matches are roadstyle's option rows (rs-opt); the rest of the address: at most two lines in the card; the whole address is in the title */
   #found { margin-top: 10px; }
@@ -154,31 +136,18 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   #found .rs-chip { justify-self: start; }
 
   .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
-  /* the drawing tools: the shapes are one mode (roadstyle's switch, rs-seg), then the plain buttons Merge, Delete and Clear; each has its label and its tooltip */
-  .toolbox { display: flex; align-items: center; gap: 6px; }
-  #sb .toolbox .rs-seg { flex: 1; margin: 0; }
-  .toolbox > button { flex: none; width: 34px; height: 32px; padding: 0; }
   #h3-panel .rs-sel { margin-bottom: 8px; }
   .h3-box { padding: 9px 11px; background: var(--bg); border-radius: 9px; font-size: 12.5px; color: var(--muted); }
   .h3-box p { margin: 0; }
   .h3-box #h3-grid-note:not(:empty) { margin-top: 4px; }
   #hint { margin: 0; padding: 9px 11px; background: var(--bg); border-radius: 9px; font-size: 12.5px; color: var(--muted); }
 
-  /* the GeoJSON file: a plain button (roadstyle has no drop zone; a file also drops on the map) */
-  #sb #drop { display: grid; place-items: center; gap: 6px; width: 100%; padding: 22px 14px; text-align: center; }
-  #drop svg { width: 28px; height: 28px; }
-
-  .empty { padding: 18px 14px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; font-size: 13px; }
   .source { margin-top: 8px; font-size: 12.5px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
-  .error { color: var(--error); }
 
-  /* the extracts are roadstyle's option rows (rs-opt), with Get or Use and the download at the end; a download: a line of its own under the name */
+  /* the extracts are roadstyle's option rows (rs-opt), with Get or Use and the download at the end; a download: roadstyle's bar (rs.progress) and Cancel under the name */
   #extracts .rs-opt { align-items: center; }
   #extracts .rs-opt > button { padding: 5px 9px; }
-  #extracts .prog { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
-  #extracts .prog .bar { flex: 1; min-width: 40px; height: 6px; border-radius: 3px; background: var(--surface); overflow: hidden; }
-  #extracts .prog .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.15s; }
-  #extracts .got { font-size: 12px; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #extracts .prog { display: grid; grid-template-columns: minmax(40px, 1fr) auto; align-items: end; gap: 8px; margin-top: 4px; }
   #kept { margin-top: 12px; display: grid; gap: 4px; }
   #kept .k { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
   #kept .k span { flex: 1; min-width: 0; }
@@ -193,14 +162,8 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   #export-list .exp > small { grid-column: 1 / -1; color: var(--mut); line-height: 1.35; }      /* the note under the name and the button: the full width (the box of the section takes room) */
   #export-seg button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
   #export-seg button svg { width: 16px; height: 16px; }
-  #export-list .imgw { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; }
-  #export-list .exp .rs-opt { grid-column: 1 / -1; }
-  #export-list .imgw input[type=number] { width: 80px; }        /* the width of a picture */
+  #export-list .exp :is(.imgw, .rs-opt, .chk) { grid-column: 1 / -1; }      /* the width of a picture (rs.number), the options and the check line (rs-status) */
   #export-list .zoomrow { padding: 4px 0 8px; display: grid; gap: 6px; }
-  #export-list .zoomrow input[type=number] { width: 58px; }
-  #export-list .chk { grid-column: 1 / -1; font-size: 12px; line-height: 1.35; }
-  #export-list .chk.ok { color: #15803d; }
-  #export-list .chk.bad { color: var(--error, #b91c1c); }
   /* card 7 opens duckOSM's fixes editor in roadstyle's editor frame: its look is the frame's and duckosm/fixes_editor/fixes_panel.css */
   .grid2 [hidden] { display: none; }
   /* a file to select: a plain button with the name of the file (the file input is hidden) */
@@ -216,7 +179,6 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   #step4-card .pick { margin-bottom: 0; }
   #step4-card .progress { margin: 0; }
   #step4-card .steplog th, #step4-card .steplog td { padding: 3px 4px; }
-  .pg-scroll { max-height: 220px; overflow: auto; }
   /* the table of the networks: roadstyle's table, with no row that acts */
   #resultline .rs-table tbody tr { cursor: default; }
   #resultline .rs-table tbody tr:hover { background: none; }
@@ -240,8 +202,7 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   /* the time cell: a bar for the share of the slowest step */
   .steplog td.t { background: linear-gradient(to left, color-mix(in srgb, var(--accent) 22%, transparent) var(--w), transparent var(--w)); }
   .grid2 { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; }
-  select, textarea { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 9px; }
-  select { height: 34px; padding: 0 8px; }
+  textarea { color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 9px; }
   textarea { width: 100%; padding: 8px 10px; font: 12.5px/1.4 ui-monospace, monospace; resize: vertical; }
   /* one block for each table: its name, what it holds, and a link for each mode */
   #files .tb { padding: 8px 0; border-top: 1px solid var(--line); font-size: 12.5px; }
@@ -255,8 +216,6 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
     background: var(--surface); text-decoration: none; font-variant-numeric: tabular-nums; }
   #files .layers a span { color: var(--muted); font-size: 11.5px; }
 
-  #status { position: fixed; left: calc(var(--free-l, 0px) + (100% - var(--free-l, 0px) - var(--free-r, 0px)) / 2); top: 14px; transform: translateX(-50%); z-index: 9; background: var(--fg); color: var(--bg); padding: 7px 14px; border-radius: 99px; font-size: 13px; box-shadow: var(--shadow); }
-  #status:empty { display: none; }
   body.picking #map canvas { cursor: crosshair; }
   body.h3 #map canvas { cursor: pointer; }
   /* the level editor holds the page's one panel: roadstyle's editor hides the steps (.sb-body) and the title; the footer goes too */
@@ -264,13 +223,11 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
     /* a phone: roadstyle's phone form (the bar at the top, the panel as a bottom sheet with three heights: closed, 40 %, full). The page itself
        never scrolls. The map's padding follows the sheet (padMap() in the script), so the area stays above it. */
     html, body { overflow: hidden; overscroll-behavior: none; }
-    #status { top: calc(var(--rs-top, 52px) + 6px); }
     #sb .sb-body { overscroll-behavior: contain; }
     .sb-top p { display: none; }
-    #sb .step-body button:not(.rs-sel-btn), #sb .rs-tab, input[type=search], input[type=text] { min-height: 44px; }
+    #sb .step-body button:is(:not([class*="rs-"]), .rs-toggle):not(.here), #sb .rs-tab, #sb :is(input[type=text], .field input[type=search]) { min-height: 44px; }      /* plain buttons; roadstyle's parts have their own phone sizes */
     .field > svg { top: 13px; }
-    #sb .here { width: 36px; height: 36px; min-height: 0; top: 4px; }
-    #sb .toolbox button { min-height: 44px; }
+    #sb .here { width: 36px; height: 36px; }
   }
 /* a saved area is a roadstyle option row (rs-opt): the name, the date and the size, a chip for each network, then Open and Delete */
 .saved-area .sa-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
@@ -311,9 +268,7 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
 </svg>
 
 <div id="map" role="region" aria-label="Map of the area"></div>
-<div id="mapbusy" hidden><div class="spin"></div><span id="mapbusy-text"></span></div>
-<!-- the level editor's bar on a phone (card 7): the counts, Apply and Close stay in view -->
-<div id="status" role="status" aria-live="polite"></div>
+<div id="mapbusy" hidden><span><span class="rs-spinner"></span><span id="mapbusy-text"></span></span></div>
 
 <div id="sb" data-theme="light" role="complementary" aria-label="duckOSM">
 <div class="sb-card">
@@ -342,14 +297,12 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
 </section>
 
 <section id="draw" role="tabpanel" aria-labelledby="tab-draw" hidden>
-  <div class="toolbox" role="toolbar" aria-label="Drawing tools">
-    <div class="rs-seg" role="group" aria-label="The shape to draw">
+  <div class="rs-toolrow" role="toolbar" aria-label="Drawing tools">
     <button data-mode="rectangle" aria-pressed="false" aria-keyshortcuts="R" aria-label="Rectangle" title="Rectangle (R)"><svg><use href="#i-rect"/></svg></button>
     <button data-mode="polygon" aria-pressed="false" aria-keyshortcuts="P" aria-label="Polygon" title="Polygon (P)"><svg><use href="#i-poly"/></svg></button>
     <button data-mode="circle" aria-pressed="false" aria-keyshortcuts="C" aria-label="Circle" title="Circle (C)"><svg><use href="#i-circle"/></svg></button>
     <button data-mode="freehand" aria-pressed="false" aria-keyshortcuts="F" aria-label="Freehand" title="Freehand (F)"><svg><use href="#i-free"/></svg></button>
     <button data-mode="select" aria-pressed="false" aria-keyshortcuts="S" aria-label="Select, move or change a shape" title="Select, move or change a shape (S)"><svg><use href="#i-select"/></svg></button>
-    </div>
     <button id="merge" disabled aria-label="Merge the shapes that overlap" title="Merge the shapes that overlap"><svg><use href="#i-merge"/></svg></button>
     <button id="delete" disabled aria-label="Delete the selected shape" aria-keyshortcuts="Delete" title="Delete the selected shape (Delete)"><svg><use href="#i-trash"/></svg></button>
     <button id="clear" aria-label="Delete all shapes" title="Delete all shapes"><svg><use href="#i-x"/></svg></button>
@@ -358,11 +311,7 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
 </section>
 
 <section id="file-panel" role="tabpanel" aria-labelledby="tab-file" hidden>
-  <button id="drop" type="button" data-file="file">
-    <svg><use href="#i-upload"/></svg>
-    <span><strong>Select a GeoJSON file</strong> or drop it on the map</span>
-  </button>
-  <input id="file" type="file" accept=".geojson,.json" hidden>
+  <div id="drop"></div>
 </section>
 
 <section id="h3-panel" role="tabpanel" aria-labelledby="tab-h3" hidden>
@@ -373,7 +322,7 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
 <div class="area-acts"><button class="area-clear" type="button" disabled aria-label="Unselect the area">Unselect</button></div>
 <div id="areas-src" hidden>
   <p class="small muted" style="margin:0 0 8px">Built areas kept in this browser (OPFS). Open an area to load its tables and map with no build.</p>
-  <div id="saved-areas-list" style="display:flex;flex-direction:column;gap:8px;max-height:420px;overflow-y:auto">
+  <div id="saved-areas-list" class="rs-scroll" style="display:flex;flex-direction:column;gap:8px">
     <p class="small muted">Checking saved areas…</p>
   </div>
 </div>
@@ -381,10 +330,9 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
 </section>
 
 <section id="step2-card" class="step" aria-labelledby="step2">
-<h2 id="step2"><span class="n">2</span>The area
-  <button id="zoom-area" class="icon-btn" disabled title="Zoom to the area" aria-label="Zoom to the area"><svg><use href="#i-zoom"/></svg></button></h2>
+<h2 id="step2"><span class="n">2</span>The area</h2>
 <input id="name" type="text" aria-label="Name of the area" placeholder="Name">
-<label class="small muted" for="buffer" style="display:flex;align-items:center;gap:8px;margin-top:8px">Buffer around the area (m)<input id="buffer" type="number" min="0" max="50000" step="50" value="0" inputmode="numeric" style="width:96px;margin-left:auto"></label>
+<div id="buffer-field"></div>
 <div id="summary" aria-live="polite"></div>
 <div class="area-acts"><button id="save" type="button" disabled aria-label="Download the boundary (GeoJSON)"><svg><use href="#i-download"/></svg>Boundary</button><button class="area-clear" type="button" disabled aria-label="Unselect the area">Unselect</button></div>
 </section>
@@ -429,7 +377,7 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   <div class="build-go"><button id="run" class="sb-primary" disabled>Build<svg><use href="#i-arrow"/></svg></button>
   <p id="buildhint" class="why" aria-live="polite"></p></div>
   <p id="buildstatus" class="progress" aria-live="polite"></p>
-  <div id="buildinfo" class="pg-scroll">
+  <div id="buildinfo" class="rs-scroll">
   <details id="builddetails" class="drow" hidden><summary>Build details</summary><table class="steplog"><tbody></tbody></table></details>
   <details id="steplog" class="drow" hidden><summary>Time and memory of each step</summary>
     <table class="steplog"><thead><tr><th>Step</th><th>Time (s)</th><th>Memory (MiB)</th></tr></thead><tbody></tbody>
@@ -445,7 +393,7 @@ if (["localhost", "127.0.0.1"].includes(location.hostname)) {
   <div class="dl"><button id="zip" aria-label="Download all the tables as a zip"><svg><use href="#i-download"/></svg>.zip</button><button id="duckdb" aria-label="Download the .duckdb database"><svg><use href="#i-download"/></svg>.duckdb</button><button id="cutpbf" hidden aria-label="Download the cut area as an .osm.pbf file"><svg><use href="#i-download"/></svg>.osm.pbf</button><button id="fixesyaml" aria-label="Download the fixes file (.yaml) of this build"><svg><use href="#i-download"/></svg>.yaml</button></div>
   <details id="files-box"><summary><h3>Each table</h3></summary>
     <p class="small muted"><a id="reference" target="_blank" rel="noopener">The columns of each table</a></p>
-    <div id="files" class="pg-scroll"></div>
+    <div id="files" class="rs-scroll"></div>
   </details>
 </section>
 
@@ -513,13 +461,14 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
 const icon = (name) => `<svg><use href="#i-${name}"/></svg>`;
 const num = (x, d = 0) => x.toLocaleString("en", { maximumFractionDigits: d });
-let found = [], area = null, extracts = null, cover = [], statusTimer;
+let found = [], area = null, extracts = null, cover = [];
 
-// a short message on top of the map; it goes away after some seconds
+// a short message over the map: roadstyle's toast (rs.toast). It goes away after ms (0: it stays until the next message); "" closes it.
+let toast = null, toastText = "";
 function status(text, ms = 4000) {
-  $("status").textContent = text;
-  clearTimeout(statusTimer);
-  if (ms) statusTimer = setTimeout(() => ($("status").textContent = ""), ms);
+  toast?.close();
+  toast = null; toastText = text;
+  if (text) toast = rs.toast(esc(text), { ms });
 }
 
 // the list of Geofabrik's extracts (tools/make_geofabrik_index.py), loaded once
@@ -612,6 +561,12 @@ const rs = rsDashboard(map, { style: null, prefix: "rs-", tiles: true,
   basemaps, ontop: host.ontop, basemap_switcher: true,
   select_color: "#7c4dff",   // the look's theme.selection.select
   street_view: "window", street_view_key: localKeys.google ?? "", mapillary_token: localKeys.mapillary ?? "", google_3d: true, dashboard: host.dashboard });
+// roadstyle's parts in the cards (roadstyle docs/guides/dashboard-parts.md). Each input keeps the id that the page code and the tests use.
+const here = rs.toggle($("here"), (on) => { if (on) tool(null); picking(on); });      // "What is here?": on until the click on the map
+const drop = rs.drop($("drop"), { accept: ".geojson,.json", text: "Drop a GeoJSON file here or on the map, or <u>choose a file</u>", onFiles: (f) => openFile(f[0]), onClear: () => unselectArea() });
+$("drop").querySelector("input").id = "file";
+const bufferNum = rs.number($("buffer-field"), { label: "Buffer around the area", unit: "m", min: 0, max: 50000, step: 50, value: 0, onChange: () => rebuffer() });
+$("buffer-field").querySelector("input").id = "buffer";
 // no road popup or selection while the user draws a shape or picks a point (the dashboard has its own click on the roads)
 document.addEventListener("rs:select", () => {
   if ($("draw").hidden && $("here").getAttribute("aria-pressed") !== "true") return;
@@ -731,7 +686,6 @@ const fitTo = (g, { ifHidden = false } = {}) => loaded.then(() => {
 });
 const showExtract = (f) => { setData("extract", f); if (f) fitTo(f.geometry); };
 const zoomToArea = () => area && fitTo(geometry(area.polys));
-$("zoom-area").onclick = zoomToArea;
 
 // ---- the panel and the theme; both kept in the storage of the browser ----
 // The theme is roadstyle's one value (data-rs-theme on <html>, set by the theme button of the bar). The page keeps it for the next visit, and
@@ -790,7 +744,7 @@ function unselectArea() {
   picked = null;
   preview(null);
   try { draw.clear(); } catch { /* no shape */ }
-  $("file").value = "";
+  drop.clear();
   $("name").value = "";
   clearArea();
   status("The area is unselected.");
@@ -869,7 +823,8 @@ async function setArea(polys, props, { zoom = true, findExtracts = true } = {}) 
 
 // a change of the buffer makes the area again from its base shape (the map stays where it is)
 let bufferTimer;
-$("buffer").oninput = () => { clearTimeout(bufferTimer); bufferTimer = setTimeout(() => area && setArea(area.base, area.props, { zoom: false }), 500); };
+function rebuffer() { clearTimeout(bufferTimer); bufferTimer = setTimeout(() => area && setArea(area.base, area.props, { zoom: false }), 500); }
+$("buffer").oninput = rebuffer;      // typing; the - and + buttons of the field call rebuffer too
 
 // a click on an extract shows it (the map zooms out to it); a second click hides it, and the map goes back to
 // the area
@@ -958,7 +913,7 @@ let typing, asking;
 const h3Ids = (q) => { const t = q.split(/[\s,;]+/).filter(Boolean); return t.length && t.every((x) => /^[0-9a-f]{15}$/i.test(x)) ? t.map((x) => x.toLowerCase()) : null; };
 async function h3Search(q) {
   asking?.abort();
-  const say = (t, bad = true) => ($("found").innerHTML = `<p class="small${bad ? " error" : " muted"}">${esc(t)}</p>`);
+  const say = (t, bad = true) => ($("found").innerHTML = bad ? `<p class="rs-status error"><span>${esc(t)}</span></p>` : `<p class="small muted">${esc(t)}</p>`);
   let h3;
   try { h3 = await h3Lib(); } catch (e) { return say(`H3 did not load: ${e.message}`); }
   const ids = [...new Set(h3Ids(q))];
@@ -990,7 +945,7 @@ async function search() {
     list(feats);
     boundaries(feats);
   } catch (e) {
-    if (!mine.signal.aborted) $("found").innerHTML = `<p class="small error">The search failed: ${esc(e.message)}</p>`;
+    if (!mine.signal.aborted) $("found").innerHTML = `<p class="rs-status error"><span>The search failed: ${esc(e.message)}</span></p>`;
   }
 }
 $("search").onsubmit = (ev) => { ev.preventDefault(); search(); };
@@ -998,15 +953,10 @@ $("q").oninput = () => { clearTimeout(typing); typing = setTimeout(search, 300);
 
 // what is here: the areas at 5 levels around the point that the user clicks
 function picking(on) {
-  $("here").setAttribute("aria-pressed", on);
+  here.set(on, true);
   document.body.classList.toggle("picking", on);
-  if (on) status("Click a point on the map.", 0); else if ($("status").textContent.startsWith("Click a point")) status("");
+  if (on) status("Click a point on the map.", 0); else if (toastText.startsWith("Click a point")) status("");
 }
-$("here").onclick = () => {
-  const on = $("here").getAttribute("aria-pressed") !== "true";
-  if (on) tool(null);
-  picking(on);
-};
 map.on("click", async (ev) => {
   if ($("here").getAttribute("aria-pressed") !== "true") return;
   picking(false);
@@ -1017,7 +967,7 @@ map.on("click", async (ev) => {
       for (const f of await nominatim("reverse", { lat: lat.toFixed(6), lon: lon.toFixed(6), zoom }))
         if (!got.some((g) => g.properties.osm_id === f.properties.osm_id && g.properties.osm_type === f.properties.osm_type)) got.push(f);
       list(got);
-    } catch (e) { $("found").insertAdjacentHTML("beforeend", `<p class="small error">${esc(e.message)}</p>`); }
+    } catch (e) { $("found").insertAdjacentHTML("beforeend", `<p class="rs-status error"><span>${esc(e.message)}</span></p>`); }
   }
 });
 
@@ -1040,7 +990,7 @@ function boundaryFailed(input, box, text) {
   input.checked = false;
   status(text, 8000);
   $("found-err")?.remove();
-  $("found").insertAdjacentHTML("beforeend", `<p class="small error" id="found-err">${esc(text)} Select the place again to ask again, or <a href="#" role="button" id="use-box">use the box of the place</a>.</p>`);
+  $("found").insertAdjacentHTML("beforeend", `<p class="rs-status error" id="found-err"><span>${esc(text)} Select the place again to ask again, or <a href="#" role="button" id="use-box">use the box of the place</a>.</span></p>`);
   $("use-box").onclick = (e) => {
     e.preventDefault();
     $("found-err")?.remove();
@@ -1149,15 +1099,12 @@ async function openFile(file) {
   try { await setArea(...readGeoJSON(await file.text(), file.name)); }
   catch (e) { status(`The file is not usable: ${e.message}`, 8000); }
 }
-$("file").onchange = () => {
-  if ($("file").files[0]) openFile($("file").files[0]);
-  $("file").value = "";  // the same file can then be selected again
-};
 addEventListener("dragover", (ev) => { ev.preventDefault(); document.body.classList.add("dragging"); });
 addEventListener("dragleave", (ev) => ev.relatedTarget || document.body.classList.remove("dragging"));
 addEventListener("drop", (ev) => {
   ev.preventDefault();
   document.body.classList.remove("dragging");
+  if (ev.target.closest?.(".rs-drop")) return;     // the drop zone of the File tab opens it (rs.drop)
   if (ev.dataTransfer.files[0]) openFile(ev.dataTransfer.files[0]);
 });
 
@@ -1341,12 +1288,11 @@ function missingInput() {
 }
 function canBuild() {
   const missing = building ? "" : missingInput();
+  rs.busy($("run"), building);
   $("run").disabled = building || !!missing;
   $("save").disabled = !area;
   // the reason is the text under the buttons (not a tooltip); GeoJSON needs only the area. While it builds, the button has a spinner and the progress is in the map's busy box (progress())
   $("buildhint").textContent = building ? "" : missing || "";
-  $("run").classList.toggle("busy", building);
-  $("run").toggleAttribute("aria-busy", building);
   refreshSteps();
 }
 for (const id of ["pbf", "fixes"]) $(id).onchange = () => {
@@ -1361,7 +1307,7 @@ $("region").onchange = () => {
 };
 
 // ---- step 3: a region file kept in the browser (app/regions.js, docs/relay.md): Get downloads an extract through the relay one time
-let regionFile = null, regionKept = null, keptRegions = [], getting = null;    // getting: {id, abort} during a download
+let regionFile = null, regionKept = null, keptRegions = [], getting = null, dlBar = null;    // getting: {id, abort} during a download; dlBar: its bar (rs.progress)
 function mb(b) { return num(b / 2 ** 20, b < 10 * 2 ** 20 ? 1 : 0); }
 function setRegion(file, label) {
   regionFile = file;
@@ -1378,8 +1324,7 @@ function renderExtracts() {
   if (area?.props.area_km2 == null) return;   // the list is empty or "Finding the files…" until the files are known
   $("extracts").innerHTML = cover.length ? cover.map((x, i) => {
     const k = keptRegions.find((r) => r.id === x.id), inUse = k && regionKept === k.id;
-    const prog = getting?.id === x.id ? `<span class="prog"><span class="bar"><i id="bar"></i></span><span class="got" id="got">0 %</span>` +
-      `<button type="button" data-cancel>Cancel</button></span>` : "";
+    const prog = getting?.id === x.id ? `<span class="prog"><span id="dlbar"></span><button type="button" data-cancel>Cancel</button></span>` : "";
     const what = getting?.id === x.id ? ""
       : k ? `<button type="button" data-use="${i}"${inUse ? " disabled" : ""}>${inUse ? "In use" : "Use"}</button>`
       : regions.relay ? `<button type="button" data-get="${i}"${getting ? " disabled" : ""}>Get</button>` : "";
@@ -1387,11 +1332,12 @@ function renderExtracts() {
       `<span><b>${esc(x.name)}</b><small>${k ? `kept · ${mb(k.size)} MB · ${day(k.modified)}` : `${esc(x.id)} · ${num(Math.round(x.km2))} km²`}</small>${prog}</span>${what}` +
       `<button type="button" class="ex-dl" data-dl="${esc(x.pbf)}" title="Download ${esc(x.name)} (.osm.pbf) to this computer" aria-label="Download ${esc(x.name)}">${icon("download")}</button></label>`;
   }).join("") : `<p class="small muted">No Geofabrik file covers the area. Use the Overpass tab or the planet file.</p>`;
+  dlBar = $("dlbar") ? rs.progress($("dlbar"), { label: "Download" }) : null;
 }
 function renderKept() {
   $("kept").innerHTML = keptRegions.length ? `<p class="small muted" style="margin:0">Kept in this browser:</p>` + keptRegions.map((k) =>
     `<div class="k"><span>${esc(k.name)} · ${mb(k.size)} MB · ${day(k.modified)}</span>` +
-    `<button type="button" data-del="${esc(k.id)}" title="Delete it from this browser">Delete</button></div>`).join("") : "";
+    `<button type="button" class="sb-danger" data-del="${esc(k.id)}" title="Delete it from this browser">Delete</button></div>`).join("") : "";
 }
 async function refreshKept() {
   try { keptRegions = await regions.kept(); } catch (e) { keptRegions = []; }   // no storage (for example a private window)
@@ -1405,10 +1351,9 @@ async function get(x) {
   let last = 0;
   try {
     const k = await regions.download(x, (got, total) => {
-      if (performance.now() - last < 150 || !$("got")) return;
+      if (performance.now() - last < 150 || !dlBar) return;
       last = performance.now();
-      $("got").textContent = total ? `${Math.floor((100 * got) / total)} % · ${mb(got)} of ${mb(total)} MB` : `${mb(got)} MB`;
-      if (total) $("bar").style.width = `${(100 * got) / total}%`;
+      dlBar.set(total ? got / total : null, total ? `${Math.floor((100 * got) / total)} % · ${mb(got)} of ${mb(total)} MB` : `${mb(got)} MB`);
     }, abort.signal);
     getting = null;
     await refreshKept();
@@ -1431,7 +1376,7 @@ $("extracts").addEventListener("click", (ev) => {
 });
 $("kept").onclick = async (ev) => {
   const id = ev.target.closest("button[data-del]")?.dataset.del;
-  if (!id) return;
+  if (!id || !await rs.confirm({ title: "Delete the file?", text: `${esc(keptRegions.find((k) => k.id === id)?.name ?? id)} goes from this browser. Get it again to use it.`, ok: "Delete", danger: true })) return;
   await regions.remove(id);
   if (regionKept === id) { regionKept = null; regionFile = null; $("region-name").textContent = "Select a region file (.osm.pbf)"; }
   await refreshKept();
@@ -1469,7 +1414,7 @@ async function restoreSavedArea(slug) {
     const b = meta.boundary;
     if (b?.geometry && Array.isArray(b.geometry)) {
       // the shape as chosen and its buffer, so the grown area is made again and not grown twice (a save with no `base` is already grown)
-      $("buffer").value = b.base ? b.properties?.buffer_m || 0 : 0;
+      bufferNum.set(b.base ? b.properties?.buffer_m || 0 : 0, true);
       await setArea(b.base || b.geometry, b.properties || {}, { zoom: true, findExtracts: false });
     }
 
@@ -1552,7 +1497,7 @@ async function renderSavedAreasList() {
           ${networks(a.summary) ? `<span class="sa-nets" aria-label="Roads of each network">${networks(a.summary)}</span>` : ""}
           <span class="sa-actions">
             <button type="button" class="sb-primary load-saved-area-btn" data-slug="${esc(a.slug)}">Open</button>
-            <button type="button" class="del-saved-area-btn" data-slug="${esc(a.slug)}">Delete</button>
+            <button type="button" class="sb-danger del-saved-area-btn" data-slug="${esc(a.slug)}">Delete</button>
           </span>
         </span></label>
       `;
@@ -1579,20 +1524,15 @@ async function renderSavedAreasList() {
     });
     container.querySelectorAll(".del-saved-area-btn").forEach((btn) => {
       btn.onclick = async () => {
-        if (btn.dataset.armed !== "1") {                         // the first click asks, in place; it goes back after 4 seconds
-          btn.dataset.armed = "1"; btn.textContent = "Delete? Click again";
-          clearTimeout(btn._t); btn._t = setTimeout(() => { btn.dataset.armed = ""; btn.textContent = "Delete"; }, 4000);
-          return;
-        }
-        clearTimeout(btn._t);
-        const slug = btn.dataset.slug;
+        const slug = btn.dataset.slug, name = list.find((a) => a.slug === slug)?.name || slug;
+        if (!await rs.confirm({ title: `Delete ${name}?`, text: "Its tables, its map and its design go from this browser. You cannot undo this.", ok: "Delete", danger: true })) return;
         await areaStore.deleteArea(slug);
         if (localStorage.getItem("duckosm.lastArea") === slug) localStorage.removeItem("duckosm.lastArea");
         renderSavedAreasList();
       };
     });
   } catch (e) {
-    container.innerHTML = `<p class="small error">Failed to list saved areas: ${esc(e.message)}</p>`;
+    container.innerHTML = `<p class="rs-status error"><span>Failed to list saved areas: ${esc(e.message)}</span></p>`;
   }
 }
 
@@ -2229,7 +2169,7 @@ document.addEventListener("rs:sectionchange", (e) => {
   touched = true;
 });
 for (const old of [...document.querySelectorAll("section.step")]) {
-  const h = old.querySelector(":scope > h2"), n = +h.querySelector(".n").textContent, own = h.querySelector(".icon-btn");
+  const h = old.querySelector(":scope > h2"), n = +h.querySelector(".n").textContent;
   const label = h.textContent.trim().replace(/^\d+/, "").trim(), body = document.createElement("div");
   body.className = "step-body";
   while (h.nextSibling) body.append(h.nextSibling);
@@ -2242,9 +2182,9 @@ for (const old of [...document.querySelectorAll("section.step")]) {
   const title = hd.querySelector(".rs-sec-title");
   title.id = `step${n}`;
   title.insertAdjacentHTML("beforebegin", `<span class="n">${n}</span>`);
+  if (n === 2) Object.assign(rs.sections.button(`step${n}`, { icon: icon("zoom"), title: "Zoom to the area", onClick: zoomToArea }), { id: "zoom-area", disabled: true });
   title.insertAdjacentHTML("afterend", `<span class="after" id="step${n}-why"></span>`);
-  const chev = hd.querySelector(":scope > svg");        // the title row: the number, the title, the reason of a card that is off, the card's own button (the zoom to the area, card 2), the done mark, roadstyle's "?" (help button), the chevron
-  if (own) chev.before(own);
+  const chev = hd.querySelector(":scope > svg");        // the title row: the number, the title, the reason of a card that is off, the card's own button (the zoom to the area, card 2: rs.sections.button), the done mark, roadstyle's "?" (help button), the chevron
   chev.insertAdjacentHTML("beforebegin", '<span class="done" hidden title="Done">✓</span>');
   if (n in CARD_HELP) chev.before(rs.help.button(c, { ...CARD_HELP[n], button: `Help: ${label}` }));
   old.remove();
@@ -2270,11 +2210,17 @@ const EXPORT_GROUPS = {
 function paintExport() {
   const modes = exportModes(), was = $("export-mode").value;
   $("export-mode").value = modes.includes(was) ? was : modes[0] ?? "";
-  const zoomRow = '<div class="zoomrow"><p class="small muted" id="export-profile"></p><div class="rs-opts"><label class="rs-opt"><input type="checkbox" id="export-full"><span><b>Layer edges</b><small>Every road of every network, with the columns of the profile.</small></span></label></div><span class="small">Zoom from <input id="export-zmin" type="number" min="0" max="18" value="0" aria-label="The lowest zoom"> to <input id="export-zmax" type="number" min="0" max="18" value="14" aria-label="The highest zoom"></span><div class="rs-opts"><label class="rs-opt"><input type="checkbox" id="export-auto"><span>The highest zoom that fits the limit</span></label></div><span id="export-tiles" class="small"></span><a href="#" id="export-design" role="button">Edit the tile profile (step 9) →</a></div>';
+  const zoomRow = '<div class="zoomrow"><p class="small muted" id="export-profile"></p><div class="rs-opts"><label class="rs-opt"><input type="checkbox" id="export-full"><span><b>Layer edges</b><small>Every road of every network, with the columns of the profile.</small></span></label></div><div id="export-zmin-f"></div><div id="export-zmax-f"></div><div class="rs-opts"><label class="rs-opt"><input type="checkbox" id="export-auto"><span>The highest zoom that fits the limit</span></label></div><span id="export-tiles" class="small"></span><a href="#" id="export-design" role="button">Edit the tile profile (step 9) →</a></div>';
   const network = `<section class="rs-sec-box expsec"><h3>Network</h3><p>The files below use one network.</p><div class="rs-seg" id="export-seg" role="radiogroup" aria-label="Network of the files">${modes.map((m) => `<button type="button" role="radio" data-m="${m}" aria-checked="${m === $("export-mode").value}"${m === $("export-mode").value ? ' class="on"' : ""}>${icon(({ driving: "car", walking: "walk", cycling: "bike" })[m] ?? "arrow")}${m[0].toUpperCase() + m.slice(1)}</button>`).join("")}</div></section>`;
-  const row = (f) => `<div class="exp"><b>${esc(f.title)}</b><button type="button" data-fmt="${f.id}"${f.tiles || f.needsMap ? " data-tiles" : ""}>Download</button><small>${esc(f.note)}</small>${f.width ? '<label class="small imgw">Width <input type="number" class="export-img-w" min="500" max="8000" step="100" value="2400" aria-label="Width of the picture in pixels"> px</label><label class="rs-opt"><input type="checkbox" class="export-img-t"><span>Transparent background</span></label>' : ""}${f.merge ? '<label class="rs-opt"><input type="checkbox" class="export-merge"><span>One feature for a two-way road (the center lines, no look)</span></label>' : ""}</div>`;
+  const row = (f) => `<div class="exp"><b>${esc(f.title)}</b><button type="button" data-fmt="${f.id}"${f.tiles || f.needsMap ? " data-tiles" : ""}>Download</button><small>${esc(f.note)}</small>${f.width ? '<div class="imgw"></div><label class="rs-opt"><input type="checkbox" class="export-img-t"><span>Transparent background</span></label>' : ""}${f.merge ? '<label class="rs-opt"><input type="checkbox" class="export-merge"><span>One feature for a two-way road (the center lines, no look)</span></label>' : ""}</div>`;
   const section = (g) => `<section class="rs-sec-box expsec"><h3>${EXPORT_GROUPS[g][0]}</h3><p>${EXPORT_GROUPS[g][1]}</p>${g === "Tiles" ? zoomRow : ""}${exporter.FORMATS.filter((f) => f.group === g).map(row).join("")}</section>`;
   $("export-list").innerHTML = section("Tiles") + (modes.length > 1 ? network : "") + section("Visualization") + section("Simulation");
+  const zoom = (k, label, value) => { const f = rs.number($(`export-z${k}-f`), { label, min: 0, max: 18, value, onChange: zoomChanged }); $(`export-z${k}-f`).querySelector("input").id = `export-z${k}`; return f; };
+  zoomNums = [zoom("min", "Lowest zoom", 0), zoom("max", "Highest zoom", 14)];
+  for (const el of $("export-list").querySelectorAll(".imgw")) {
+    rs.number(el, { label: "Width of the picture", unit: "px", min: 500, max: 8000, step: 100, value: 2400 });
+    el.querySelector("input").classList.add("export-img-w");
+  }
   paintTileCount();
 }
 $("export-list").addEventListener("click", (e) => {
@@ -2284,6 +2230,8 @@ $("export-list").addEventListener("click", (e) => {
   for (const x of $("export-seg").children) { x.setAttribute("aria-checked", x === b); x.classList.toggle("on", x === b); }
   exportBox = null; paintTileCount();
 });
+let zoomNums = [];                                  // the two zoom fields of card 10 (rs.number)
+const zoomChanged = () => patchProfile({ minzoom: +$("export-zmin").value || 0, maxzoom: +$("export-zmax").value || 0 });
 // the tiles of the map (card 6): the sources of the map's style, in MVT; the box is the extent of the network; the zooms are the two numbers of the card
 let exportBox = null;
 async function exportExtent() {
@@ -2317,8 +2265,8 @@ async function paintTileCount() {
   let box;
   try { box = await exportExtent(); } catch (e) { out.textContent = `The extent of the network is not known: ${e.message}`; return; }
   const [lo, hi] = profileZooms(box, p);
-  $("export-zmin").value = lo; $("export-zmax").value = hi;
-  $("export-zmax").disabled = p.auto;
+  zoomNums[0].set(lo, true); zoomNums[1].set(hi, true);
+  for (const x of $("export-zmax-f").querySelectorAll("input, button")) x.disabled = p.auto;      // rs.number has no disabled state: its input and its - and + buttons
   const n = exporter.tileCount(box, lo, hi), bad = n > p.maxTiles;
   out.textContent = bad ? `${num(n)} tiles: too many (at most ${num(p.maxTiles)}). Use fewer zooms or raise the limit in step 9.` : `${num(n)} tiles.`;
   tileCount = { text: out.textContent, bad };
@@ -2329,7 +2277,7 @@ async function paintTileCount() {
 // the card's own fields are the profile's fields: a change goes to the profile (step 9), which keeps it and tells the card
 $("export-list").addEventListener("input", (e) => {
   const p = profile();
-  if (e.target.id === "export-zmin" || e.target.id === "export-zmax") patchProfile({ minzoom: +$("export-zmin").value || 0, maxzoom: +$("export-zmax").value || 0 });
+  if (e.target.id === "export-zmin" || e.target.id === "export-zmax") zoomChanged();
   if (e.target.id === "export-full") patchProfile({ layers: { ...p.layers, edges: e.target.checked } });
   if (e.target.id === "export-auto") patchProfile({ auto: e.target.checked });
 });
@@ -2340,7 +2288,7 @@ $("export-list").addEventListener("click", async (e) => {
   const b = e.target.closest("[data-fmt]");
   if (!b || b.disabled) return;
   const f = exporter.FORMATS.find((x) => x.id === b.dataset.fmt), mode = $("export-mode").value;
-  b.disabled = true; $("export-status").textContent = `Making ${f.title}…`;
+  rs.busy(b, true); $("export-status").textContent = `Making ${f.title}…`;
   try {
     const t0 = performance.now();
     let ctx = { look: await exportLook(), rsLook: duck.exportRoadLook, imageWidth: Math.min(8000, Math.max(500, +b.closest(".exp").querySelector(".export-img-w")?.value || 2400)), transparent: !!b.closest(".exp").querySelector(".export-img-t")?.checked, mergeTwoWay: !!b.closest(".exp").querySelector(".export-merge")?.checked };         // the colors and widths of the map, for the styles of the files
@@ -2364,13 +2312,13 @@ $("export-list").addEventListener("click", async (e) => {
     exported = true; refreshSteps();
     const chk = await exporter.verify(f.id, r, { query: exportQuery, mode, modes: exportModes() });
     b.closest(".exp").querySelector(".chk")?.remove();
-    b.closest(".exp").insertAdjacentHTML("beforeend", `<small class="chk ${chk.ok ? "ok" : "bad"}">${chk.ok ? "✓ Checked: " : "✗ Problem: "}${esc(chk.text)}</small>`);
+    b.closest(".exp").insertAdjacentHTML("beforeend", `<div class="rs-status chk ${chk.ok ? "ok" : "error"}"><span>${chk.ok ? "Checked: " : "Problem: "}${esc(chk.text)}</span></div>`);
     window.lastCheck = chk;
     $("export-status").textContent = `${r.name}: ${num(r.rows)} ${f.tiles ? "tiles" : "edges"}, ${num(r.blob.size / 1024, 0)} KB, ${num((performance.now() - t0) / 1000, 1)} s.`;
     window.lastExport = { name: r.name, size: r.blob.size, rows: r.rows, connections: r.connections, layers: r.layers, min: r.min, max: r.max };       // for export_e2e.py
   } catch (err) {
     $("export-status").textContent = `The export failed: ${err.message}`;
-  } finally { b.disabled = false; }
+  } finally { rs.busy(b, false); }
 });
 document.addEventListener("duckosm:built", paintExport);
 stepsReady = true;

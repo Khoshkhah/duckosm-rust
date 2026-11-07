@@ -53,7 +53,7 @@ url = f"http://127.0.0.1:{server.server_address[1]}/index.html"
 
 
 def shown_km2(page):
-    return float(page.inner_text("#summary .stat b").replace(",", ""))
+    return float(page.inner_text("#summary .rs-kpi-val").replace(",", ""))
 
 
 with sync_playwright() as p:
