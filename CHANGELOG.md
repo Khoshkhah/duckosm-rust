@@ -7,10 +7,15 @@ All versions are on the GitHub Releases page of `Khoshkhah/duckosm-rust`. There 
 
 ### Changed
 
+- **Every control of the page and of card 7 uses roadstyle's dashboard parts** (roadstyle `35a9da22`, duckOSM `39ba8656`): the buttons, the select lists, the tabs, the option rows, the chips and the cards, each with its hover. Card 7 opens in roadstyle's editor frame (`rs.frame`). The page's own CSS went from 308 to 238 lines. Test: `parts_e2e.py` (in CI) finds each control with no hover.
+- **Card 7 colours the roads with roadstyle's highlight sets**: the picked road is blue, the changes are amber, the deleted roads are red and the roads of a turn are green, on the road's own fill. The page gives the editor `roadRows(osmId)`. On a road or a one-way list, **Yes, reverse** makes the road one-way against its drawn direction (`oneway=-1`).
+- **The Settings box has "Toolbar place"** (roadstyle #65): the toolbar can be at the start, the middle or the end of its edge.
 - **roadstyle `ad2daa99` (#58):** the chart of the data dock has Kind, X and Y in a column at its left, SVG in its corner, larger pies and bars that fit; the dock's buttons are in joined groups, and the dock has a help window. The manual's pictures show this look: the roads in the theme High saturation, the overview maps tilted with the buildings in 3D, and three new pictures of the dock and Ask.
 
 ### Added
 
+- **The 3D walls by type** (card 9, Layers tab, **3D walls**; roadstyle #70): each wall of a building shows in the color of its type (front, back, side, party wall, courtyard wall) and the roof in its own color. The page gives the walls from `main.building_faces` (`duck.wallsData()`). Off by default.
+- **Ask: three example questions that draw a chart** (a bar chart of the km of road in each class, a histogram of the road lengths, a pie chart of the one-way and the two-way roads).
 - **Ask and the data dock** (roadstyle `1e18b632`). **Query the tables** in card 5 opens the data dock under the map: SQL on the tables of the build, the roads of the result light on the map, and Colour, Focus and a chart. The card **Ask the data** opens Ask: a question in words with your own key of a free AI service. The panel has roadstyle's card look. Test: `ask_e2e.py` (a computer and a phone).
 
 ### Documentation
