@@ -69,13 +69,13 @@ def run(browser, name, dark=False, **context):
     # the data file: Build is on, and it looks like a primary button
     page.set_input_files("#region", str(ROOT / "tests/data/monaco_sample.osm.pbf"))
     l = on("run", "buildhint")
-    assert l["bg"] != b0["bg"], "Build looks different when it is on"
+    assert (l["bg"], l["opacity"]) != (b0["bg"], b0["opacity"]), "Build looks different when it is on (roadstyle dims a disabled button)"
     page.screenshot(path=str(out / f"{name}-3-ready.png"))
     # building: Build is off with its reason
     tap("#run")
     l = look("run")
-    assert l["disabled"] and l["cursor"] == "default" and not l["title"], ("Build is off while it builds", l)
-    assert page.evaluate("document.getElementById('run').classList.contains('busy')"), "Build shows a spinner while it builds"
+    assert l["disabled"] and l["cursor"] == "progress" and not l["title"], ("Build is off while it builds (roadstyle's busy button)", l)
+    assert page.evaluate("document.getElementById('run').classList.contains('rs-busy')"), "Build shows roadstyle's ring while it builds (rs.busy)"
     assert why("buildhint") == "", ("no text line under Build while it builds", why("buildhint"))
     # the progress of the build is in one place (the map's busy box): during the build only one visible element says "Building", and it is in #mapbusy
     says = "[...document.querySelectorAll('body *')].filter((e) => !e.children.length && /\\bbuilding\\b/i.test(e.textContent) && e.tagName !== 'TD' && e.getBoundingClientRect().height > 0).map((e) => !!e.closest('#mapbusy'))"

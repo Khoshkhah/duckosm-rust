@@ -155,14 +155,19 @@ with sync_playwright() as p:
     # the card folds when an area is chosen (the restore chose one); the page has no Saved tab
     assert "folded" in (page.get_attribute("#areas-card", "class") or ""), "the list folds when an area is chosen"
     assert page.locator("#tab-saved").count() == 0
-    # Delete asks for a second click on the same button, in place; then the area is gone
+    # Delete (the red button, sb-danger) asks in roadstyle's confirm dialog: Cancel keeps the area, Delete deletes it
     page.click("#areas-card .rs-sec-title")               # open the card again
     page.click("#areas-card .del-saved-area-btn")
-    assert "Click again" in page.inner_text("#areas-card .del-saved-area-btn") and len(saved(page)) == 1, "one click does not delete"
+    page.wait_for_selector("dialog.rs-dialog[open]")
+    assert len(saved(page)) == 1, "the click only asks"
+    page.click("dialog.rs-dialog button:not(.sb-danger)")  # Cancel
+    page.wait_for_selector("dialog.rs-dialog", state="detached")
+    assert len(saved(page)) == 1, "Cancel keeps the area"
     page.click("#areas-card .del-saved-area-btn")
+    page.click("dialog.rs-dialog button.sb-danger")
     page.wait_for_function("document.getElementById('areas-card').hidden", timeout=20_000)
     assert saved(page) == [], saved(page)
-    print("Delete: the first click asks in place, the second deletes the area, and the card goes when no area is left")
+    print("Delete: the confirm dialog asks, Cancel keeps the area, Delete deletes it, and the card goes when no area is left")
     browser.close()
 
 assert not errors, errors
