@@ -38,7 +38,8 @@ with sync_playwright() as p:
         page.wait_for_timeout(500)
         m = page.evaluate("""() => {
             const b = document.querySelector('#design-panel .rs-dz-body'), r = document.getElementById('design-panel').getBoundingClientRect();
-            const wide = [...document.querySelectorAll('#design-panel *')].filter((e) => e.offsetParent && e.getBoundingClientRect().right > r.right + 1).map((e) => e.id || e.className || e.tagName).slice(0, 4);
+            // the tab row scrolls to the side by design (roadstyle's frame.js): its tabs are not counted
+            const wide = [...document.querySelectorAll('#design-panel *')].filter((e) => e.offsetParent && !e.closest('#design-tabs') && e.getBoundingClientRect().right > r.right + 1).map((e) => e.id || e.className || e.tagName).slice(0, 4);
             const tabs = document.querySelector('#design-tabs').getBoundingClientRect(), bar = document.querySelector('#design-panel .rs-dz-bar').getBoundingClientRect();
             return {scrollW: b.scrollWidth, clientW: b.clientWidth, docW: document.documentElement.scrollWidth, inner: innerWidth, wide,
                     tabsIn: tabs.left >= 0 && tabs.right <= innerWidth, barIn: bar.bottom <= innerHeight + 1 && bar.height > 0, tabTexts: [...document.querySelectorAll('#design-panel [role=tab]')].every((t) => t.scrollWidth <= t.clientWidth + 1)};
@@ -50,7 +51,7 @@ with sync_playwright() as p:
     page.fill("#mine-name", "Phone theme")
     page.evaluate("document.getElementById('mine-save').click()")           # a saved theme: its card has three buttons that must fit
     page.wait_for_selector("[data-mine=phone-theme]")
-    for t in ("theme", "roads", "text", "layers", "tiles"):
+    for t in ("theme", "roads", "bridges", "text", "layers", "tiles"):
         print(t, check(t))
     assert not errs, errs
     b.close()
