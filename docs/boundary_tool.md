@@ -28,7 +28,7 @@ the user cannot see the area before the build.
 
 ## The layout
 
-On a computer, the map fills the window. A panel of 370 px is on the left side, over the map, from the top to
+On a computer, the map fills the window. A panel of roadstyle's standard width (400 px) is on the left side, over the map, from the top to
 the bottom of the window. Kaveh asked for a more professional design after the first version (2026-10-22), so
 the panel has three numbered steps:
 

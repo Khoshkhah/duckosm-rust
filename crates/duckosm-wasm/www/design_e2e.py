@@ -69,7 +69,8 @@ with sync_playwright() as p:
     page.click("#step9")
     # roadstyle's design panel (map/roadstyle/dashboard/design/): its title goes into the page's title row, before the page's hide button
     assert page.is_visible("#design-panel") and not page.is_visible("#fix-panel") and not page.is_visible("#step1-card")
-    assert page.locator("#design-panel [role=tab]").count() == 5 and page.text_content("#sb .rs-dz-title .t") == "Edit design"
+    assert page.locator("#design-panel [role=tab]").all_text_contents() == ["Theme", "Roads", "Bridges & tunnels", "Text", "Layers", "Tiles"]
+    assert page.text_content("#sb .rs-dz-title .t") == "Edit design"
     assert page.is_visible("#design-back") and page.is_visible("#sb-hide") and page.is_visible("#design-changes")
     page.click("#design-back")
     assert not page.is_visible("#design-panel") and page.is_visible("#step9-card"), "Steps comes back to the steps"

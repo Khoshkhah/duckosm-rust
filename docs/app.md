@@ -84,7 +84,7 @@ and `docs/guides/dashboard-layout.md`). The page uses the template `dashboard` w
   value in the page.
 - **The options of the dashboard** are in `map/roadstyle/host_options.json` (roadstyle's file, copied by `build.sh` at
   `ROADSTYLE_COMMIT`): the typed `dashboard`, its `first_paint`, the `basemaps` and the `ontop`, as a page that roadstyle writes has them.
-  The page fetches the file (with a `preload` link) before it makes the map, and gives it only its own: the panel 370 px wide, with no hidden
+  The page fetches the file (with a `preload` link) before it makes the map, and gives it only its own: no hidden
   section (the page has none of roadstyle's own sections), and the active base map. `rsFirstPaint` sets the classes of `<html>` and
   the panel's width. The panel is hidden (`visibility`) until then, so no frame shows another form. The page has no copy of the defaults and
   no copy of the panel's shell rules (position, tokens, title row, hide and show buttons): they are in `dashboard.css`. The page keeps the
